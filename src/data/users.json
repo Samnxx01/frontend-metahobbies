@@ -1,0 +1,26 @@
+[
+    {
+        "id": 1,
+        "name": "María López",
+        "email": "maria@example.com",
+        "role": "cliente"
+    },
+    {
+        "id": 2,
+        "name": "Luis Gómez",
+        "email": "luis@example.com",
+        "role": "afiliado"
+    },
+    {
+        "id": 3,
+        "name": "Admin User",
+        "email": "admin@mabs.com",
+        "role": "admin"
+    },
+    {
+        "id": 4,
+        "name": "Carlos Ruiz",
+        "email": "carlos@example.com",
+        "role": "cliente"
+    }
+]

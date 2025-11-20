@@ -1,0 +1,72 @@
+[
+    {
+        "id": 1,
+        "name": "Labial Mate",
+        "price": 25000,
+        "stock": 120,
+        "category": "Maquillaje"
+    },
+    {
+        "id": 2,
+        "name": "Base Hidratante",
+        "price": 48000,
+        "stock": 60,
+        "category": "Maquillaje"
+    },
+    {
+        "id": 3,
+        "name": "Brocha Profesional",
+        "price": 15000,
+        "stock": 200,
+        "category": "Brochas"
+    },
+    {
+        "id": 4,
+        "name": "Paleta Sombras",
+        "price": 78000,
+        "stock": 40,
+        "category": "Maquillaje"
+    },
+    {
+        "id": 5,
+        "name": "Delineador Liquido",
+        "price": 18000,
+        "stock": 90,
+        "category": "Maquillaje"
+    },
+    {
+        "id": 6,
+        "name": "Esponja Difuminadora",
+        "price": 8000,
+        "stock": 150,
+        "category": "Herramientas"
+    },
+    {
+        "id": 7,
+        "name": "Polvo Compacto",
+        "price": 22000,
+        "stock": 75,
+        "category": "Maquillaje"
+    },
+    {
+        "id": 8,
+        "name": "Sombra Individual",
+        "price": 9000,
+        "stock": 300,
+        "category": "Maquillaje"
+    },
+    {
+        "id": 9,
+        "name": "Spray Fijador",
+        "price": 32000,
+        "stock": 55,
+        "category": "Cuidado"
+    },
+    {
+        "id": 10,
+        "name": "Corrector",
+        "price": 27000,
+        "stock": 80,
+        "category": "Maquillaje"
+    }
+]
