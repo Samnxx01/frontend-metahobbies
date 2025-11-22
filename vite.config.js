@@ -13,7 +13,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'https://server-mabs-xo9s.onrender.com',
+        target: 'https://server-mabs-xo9s.onrender.com/api/',
         changeOrigin: true,
         secure: false
       }

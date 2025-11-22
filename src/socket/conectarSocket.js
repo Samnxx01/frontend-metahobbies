@@ -9,7 +9,7 @@ export const conectarSocket = () => {
         return null;
     }
 
-    const socket = io("https://server-mabs-xo9s.onrender.com", {
+    const socket = io("https://server-mabs-xo9s.onrender.com/api/", {
         auth: { token },
         transports: ["websocket"],
         reconnection: true,
