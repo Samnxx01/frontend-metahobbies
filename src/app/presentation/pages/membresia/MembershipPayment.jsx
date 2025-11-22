@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { useMembership } from '../../../providers/MembershipProvider'; // Asumiendo que esta ruta sigue siendo válida
+import { generateCheckout } from '@/lib/wompi/generateCheckout';
 
 // Shadcn UI components
 import { Button } from "@/components/ui/button";
@@ -12,7 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Loader2, Check } from 'lucide-react';
 
 const steps = ['Información Personal', 'Resumen', 'Pago'];
-const MEMBERSHIP_PRICE = 'COP $200,000';
+const MEMBERSHIP_PRICE = 1500;
 
 // Componente utilitario para campos de formulario
 const FormField = ({ id, label, value, onChange, type = 'text', required = false, placeholder = '' }) => (
@@ -146,8 +147,10 @@ export default function MembershipPayment() {
     const renderStepContent = (step) => {
         switch (step) {
             case 0:
+                // ...existing code...
                 return (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6"> {/* Reemplaza Grid container spacing={3} */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                        {/* ...campos personales... */}
                         <FormField
                             id="nombre"
                             label="Nombre"
@@ -181,16 +184,34 @@ export default function MembershipPayment() {
                                 onChange={(e) => handleFormChange('personalInfo', 'telefono', e.target.value)}
                             />
                         </div>
+                        <div className="sm:col-span-2">
+                            <FormField
+                                id="legalId"
+                                label="Identificación (Legal ID)"
+                                required
+                                value={formData.personalInfo.legalId || ''}
+                                onChange={(e) => handleFormChange('personalInfo', 'legalId', e.target.value)}
+                            />
+                        </div>
+                        <div className="sm:col-span-2">
+                            <FormField
+                                id="legalIdType"
+                                label="Tipo de Identificación (ID Type)"
+                                required
+                                value={formData.personalInfo.legalIdType || ''}
+                                onChange={(e) => handleFormChange('personalInfo', 'legalIdType', e.target.value)}
+                                placeholder="CC, CE, NIT, etc."
+                            />
+                        </div>
                     </div>
                 );
             case 1:
+                // ...existing code...
                 return (
-                    <div className="space-y-4"> {/* Reemplaza Box con my: 2 */}
+                    <div className="space-y-4">
                         <h3 className="text-xl font-semibold mb-4">
                             Resumen de la Membresía
                         </h3>
-
-                        {/* Reemplaza Paper variant="outlined" */}
                         <div className="border rounded-lg p-4 bg-card shadow-sm">
                             <p className="text-lg font-semibold mb-1">
                                 Membresía Premium
@@ -198,66 +219,43 @@ export default function MembershipPayment() {
                             <p className="text-muted-foreground">• Acceso a descuentos exclusivos</p>
                             <p className="text-muted-foreground">• Programa de referidos</p>
                             <p className="text-muted-foreground">• Ganancias por referencias</p>
-
-                            <div className="h-px bg-border my-4" /> {/* Reemplaza Divider */}
-
-                            <div className="flex justify-between items-center"> {/* Reemplaza Box con display: flex */}
+                            <div className="h-px bg-border my-4" />
+                            <div className="flex justify-between items-center">
                                 <p className="text-lg font-bold">Total:</p>
                                 <p className="text-xl font-bold text-primary">
-                                    {MEMBERSHIP_PRICE}
+                                    COP ${MEMBERSHIP_PRICE.toLocaleString('es-CO')}
                                 </p>
                             </div>
                         </div>
                     </div>
                 );
             case 2:
+                // Solo botón para llamar a generateCheckout
                 return (
-                    <div className="space-y-6">
-                        <h3 className="text-xl font-semibold mb-4">
-                            Información de Pago
-                        </h3>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6"> {/* Reemplaza Grid container spacing={3} */}
-                            <div className="sm:col-span-2">
-                                <FormField
-                                    id="cardNumber"
-                                    label="Número de Tarjeta"
-                                    required
-                                    placeholder="4111 1111 1111 1111"
-                                    value={formData.paymentInfo.cardNumber}
-                                    onChange={(e) => handleFormChange('paymentInfo', 'cardNumber', e.target.value)}
-                                />
-                            </div>
-                            <FormField
-                                id="expiryDate"
-                                label="Fecha de Vencimiento"
-                                required
-                                placeholder="MM/AA"
-                                value={formData.paymentInfo.expiryDate}
-                                onChange={(e) => handleFormChange('paymentInfo', 'expiryDate', e.target.value)}
-                            />
-                            <FormField
-                                id="cvv"
-                                label="CVV"
-                                required
-                                placeholder="123"
-                                value={formData.paymentInfo.cvv}
-                                onChange={(e) => handleFormChange('paymentInfo', 'cvv', e.target.value)}
-                            />
-                            <div className="sm:col-span-2">
-                                <FormField
-                                    id="cardName"
-                                    label="Nombre en la Tarjeta"
-                                    required
-                                    value={formData.paymentInfo.cardName}
-                                    onChange={(e) => handleFormChange('paymentInfo', 'cardName', e.target.value)}
-                                />
-                            </div>
-                        </div>
-                        <div className="mt-6 p-4 bg-muted/60 rounded-lg"> {/* Reemplaza Box con estilos de advertencia */}
-                            <p className="text-sm text-muted-foreground">
-                                Este es un pago simulado para propósitos de demostración. Puedes usar cualquier número de tarjeta válido.
-                            </p>
-                        </div>
+                    <div className="flex flex-col items-center justify-center space-y-6">
+                        <Button
+                            size="lg"
+                            className="w-full max-w-xs"
+                            onClick={() => {
+                                generateCheckout({
+                                    currency: 'COP',
+                                    amountInCents: MEMBERSHIP_PRICE * 100, // Puedes ajustar según MEMBERSHIP_PRICE
+                                    reference: `membership-${formData.personalInfo.legalId}`,
+                                    redirectUrl: 'https://transaction-redirect.wompi.co/check',
+                                    customerData: {
+                                        email: formData.personalInfo.email,
+                                        fullName: `${formData.personalInfo.nombre} ${formData.personalInfo.apellido}`,
+                                        phoneNumber: formData.personalInfo.telefono,
+                                        phoneNumberPrefix: '+57',
+                                        legalId: formData.personalInfo.legalId || '',
+                                        legalIdType: formData.personalInfo.legalIdType || 'CC'
+                                    },
+
+                                });
+                            }}
+                        >
+                            Pagar Membresía
+                        </Button>
                     </div>
                 );
             default:

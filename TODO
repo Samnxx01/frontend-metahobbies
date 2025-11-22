@@ -1,0 +1,58 @@
+julianazange@gmail.com
+Julian123
+
+credit card expire date
+bg black 80 => white, dark: custom
+
+set global theme
+
+create membership change url
+backend security endpoint
+
+referral id get by url param use navigate
+
+pse requiere ip y otros campos
+https://docs.wompi.co/en/docs/colombia/metodos-de-pago/#pse\
+
+widget integration
+https://docs.wompi.co/en/docs/colombia/widget-checkout-web/#widget-checkout
+
+{
+  "data": {
+    "id": "1292-1602113476-10985",
+    "created_at": "2018-07-01 23:49:45 UTC",
+    "amount_in_cents": 3000000,
+    "status": "PENDING",
+    "reference": "TUPtdnVugyU40XlkhixhhGE6uYV2gh89",
+    "customer_email": "juan@example.com",
+    "currency": "COP",
+    "payment_method_type": "NEQUI",
+    "payment_method": {
+      "type": "NEQUI",
+      "phone_number": 573109990001
+    },
+    "shipping_address": {
+      "address_line_1": "Calle 45 23 - 10",
+      "country": "CO",
+      "region": "Cundinamarca",
+      "city": "Bogotá",
+      "phone_number": 573307654321
+    },
+    "redirect_url": "http://mitienda.com.co/pago/redirect",
+    "payment_link_id": null
+  }
+}
+
+
+
+
+widget wompi
+https://docs.wompi.co/en/docs/colombia/widget-checkout-web/#step-by-step
+\
+
+generate on server
+https://docs.wompi.co/en/docs/colombia/widget-checkout-web/#step-3-generate-an-integrity-signature
+
+signature, reference (verification of referral, client etc)
+assign membership
+
