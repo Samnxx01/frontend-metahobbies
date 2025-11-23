@@ -2,7 +2,7 @@ import { conectarSocket } from '../../socket/conectarSocket';
 import { apiFetch } from './api';
 
 export const login = async (loginData) => {
-    const resp = await apiFetch('https://server-mabs-xo9s.onrender.com/api/login/cliente', {
+    const resp = await apiFetch('/api/login/cliente', {
         method: 'POST',
         body: loginData
     });
@@ -19,7 +19,7 @@ export const login = async (loginData) => {
 };
 
 export const registerCliente = async (registerData) => {
-    return apiFetch('https://server-mabs-xo9s.onrender.com/api/registro/cliente', {
+    return apiFetch('/api/registro/cliente', {
         method: 'POST',
         body: registerData
     });

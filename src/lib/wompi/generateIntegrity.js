@@ -1,0 +1,15 @@
+// Computes SHA-256 integrity hex for Wompi signature
+// Input: reference (string), amountInCents (number), currency (string), integritySecret (string)
+export async function computeIntegrity({ reference, amountInCents, currency, integritySecret }) {
+  if (!reference || typeof amountInCents === 'undefined' || !currency || !integritySecret) {
+    throw new Error('Missing parameters to compute integrity signature');
+  }
+
+  // Construir la cadena: "<Reference><Amount><Currency><IntegritySecret>"
+  const cadenaConcatenada = `${reference}${amountInCents}${currency}${integritySecret}`;
+  const encoded = new TextEncoder().encode(cadenaConcatenada);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', encoded);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const integrity = hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+  return integrity;
+}

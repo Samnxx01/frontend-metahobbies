@@ -1,9 +1,8 @@
-import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
 import path from "path";
 
 export default defineConfig({
-
   plugins: [react()],
   resolve: {
     alias: {
@@ -12,11 +11,11 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      '/api': {
-        target: 'https://server-mabs-xo9s.onrender.com/api/',
+      "/api": {
+        target: "https://server-mabs-xo9s.onrender.com/",
         changeOrigin: true,
-        secure: false
-      }
-    }
-  }
+        secure: false,
+      },
+    },
+  },
 });

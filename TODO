@@ -56,3 +56,18 @@ https://docs.wompi.co/en/docs/colombia/widget-checkout-web/#step-3-generate-an-i
 signature, reference (verification of referral, client etc)
 assign membership
 
+
+
+
+Abrir url /token de referido  url param
+tomar datos form, enviar token por header
+verificar si se puede crear, middleware, membresia, generar signature, enlace de referido, crear membresia pago pendiente
+proceder checkout
+esperar webhooks
+
+
+
+
+
+
+

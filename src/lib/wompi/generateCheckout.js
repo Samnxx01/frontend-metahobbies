@@ -9,6 +9,8 @@
  * @param {Object} [params.shippingAddress]
  */
 
+import { computeIntegrity } from './generateIntegrity';
+
 export async function generateCheckout({
   currency,
   amountInCents,
@@ -16,6 +18,7 @@ export async function generateCheckout({
   redirectUrl,
   customerData = {},
    taxInCents,
+  signature: providedSignature,
 }) {
   const publicKey = import.meta.env.VITE_WOMPI_PUBLIC_KEY;
   const integritySecret = import.meta.env.VITE_WOMPI_INTEGRITY_SECRET;
@@ -26,40 +29,45 @@ export async function generateCheckout({
       "No se encontró la variable de entorno VITE_WOMPI_PUBLIC_KEY"
     );
   }
-  if (!integritySecret) {
-    throw new Error("Falta el parámetro integritySecret para la firma");
+  // integritySecret is only required if a signature is not provided by the server
+  if (!providedSignature && !integritySecret) {
+    throw new Error("Falta el parámetro integritySecret para la firma y no se proporcionó una firma desde el servidor");
   }
   if (!window.WidgetCheckout) {
     throw new Error(
       "WidgetCheckout no está disponible en window. Asegúrate de cargar el script https://checkout.wompi.co/widget.js antes de llamar a esta función."
     );
   }
+  let integrity = null;
+  if (providedSignature) {
+    // Accept either a string or an object like { integrity }
+    if (typeof providedSignature === 'string') {
+      integrity = providedSignature;
+    } else if (providedSignature.integrity) {
+      integrity = providedSignature.integrity;
+    }
+  } else {
+    integrity = await computeIntegrity({ reference, amountInCents, currency, integritySecret });
+  }
 
-  // Construir la cadena para la firma
-  //   "<Reference><Amount><Currency><IntegritySecret>"
-  const cadenaConcatenada = `${reference}${amountInCents}${currency}${integritySecret}`;
-  const encondedText = new TextEncoder().encode(cadenaConcatenada);
-  const hashBuffer = await crypto.subtle.digest("SHA-256", encondedText);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  const integrity = hashArray
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-  console.log(cadenaConcatenada);
   console.log({
     currency,
     amountInCents,
     reference,
     publicKey: publicKey,
-  signature: {integrity},  
+    signature: { integrity },
     taxInCents,
     customerData,
   });
-   const checkout = new window.WidgetCheckout({
+  // redirectUrl may be used by your backend flow; log it to avoid unused variable lint
+  console.log('redirectUrl:', redirectUrl);
+
+  const checkout = new window.WidgetCheckout({
     currency,
     amountInCents,
     reference,
     publicKey: publicKey,
-  signature: {integrity},  
+    signature: { integrity },
     taxInCents,
     customerData,
   });

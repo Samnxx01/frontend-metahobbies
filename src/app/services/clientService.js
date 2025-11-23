@@ -1,7 +1,7 @@
 import { apiFetch } from './api';
 
 export const registerClient = async (clientData) => {
-    const data = await apiFetch('https://server-mabs-xo9s.onrender.com/api/registro/client', {
+    const data = await apiFetch('/api/registro/client', {
         method: 'POST',
         body: clientData,
     });
@@ -9,7 +9,7 @@ export const registerClient = async (clientData) => {
 };
 
 export const uploadProfileImage = async (userId, formData) => {
-    const data = await apiFetch(`https://server-mabs-xo9s.onrender.com/api/imgPerfil/${userId}`, {
+    const data = await apiFetch(`/api/imgPerfil/${userId}`, {
         method: 'POST',
         body: formData,
     });
@@ -18,7 +18,7 @@ export const uploadProfileImage = async (userId, formData) => {
 
 export const getAllProfileImages = async () => {
     try {
-        const data = await apiFetch('https://server-mabs-xo9s.onrender.com/api/imgPerfil', {
+        const data = await apiFetch('/api/imgPerfil', {
             method: 'GET',
         });
 
@@ -61,7 +61,7 @@ export const fetchProfileImageBlob = async (imageId) => {
         if (!imageId) {
             throw new Error('ImageId no proporcionado');
         }
-        const response = await apiFetch(`https://server-mabs-xo9s.onrender.com/api/imgPerfil/ver/${imageId}`, {
+        const response = await apiFetch(`/api/imgPerfil/ver/${imageId}`, {
             method: 'GET',
             responseType: 'raw'
         });
@@ -129,7 +129,7 @@ export const getProfileImageDirectUrl = async (userId) => {
 
     try {
         const imageId = await getUserProfileImageId(userId);
-        return `https://server-mabs-xo9s.onrender.com/api/imgPerfil/ver/${imageId}`;
+        return `/api/imgPerfil/ver/${imageId}`;
     } catch (error) {
         if (error.message === 'NO_IMAGE') {
             return null;
@@ -146,7 +146,7 @@ export const getProfileImageURL = async (userId) => {
 
     try {
         const imageId = await getUserProfileImageId(userId);
-        return `https://server-mabs-xo9s.onrender.com/api/imgPerfil/ver/${imageId}`;
+        return `/api/imgPerfil/ver/${imageId}`;
     } catch (error) {
         if (error.message === 'NO_IMAGE') {
             return '';
@@ -157,7 +157,7 @@ export const getProfileImageURL = async (userId) => {
 };
 
 export const updatePassword = async (userId, passwordData) => {
-    const data = await apiFetch(`https://server-mabs-xo9s.onrender.com/api/actualizar/password/${userId}`, {
+    const data = await apiFetch(`/api/actualizar/password/${userId}`, {
         method: 'PUT',
         body: passwordData,
     });
