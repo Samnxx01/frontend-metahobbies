@@ -39,16 +39,7 @@ export default function WelcomeModal() {
             */}
             <DialogContent className="p-0 border-none w-[95%] sm:w-[80%] md:max-w-[800px] max-h-[90vh] overflow-hidden">
 
-                {/* Botón de cierre - Reemplaza IconButton */}
-                <Button
-                    onClick={handleClose}
-                    className="absolute right-2 top-2 rounded-full p-2 h-auto w-auto text-gray-500 hover:bg-gray-100 z-10"
-                    variant="ghost" // Estilo de botón sin fondo
-                >
-                    <X className="h-5 w-5" /> {/* Reemplaza Close icon */}
-                    <span className="sr-only">Cerrar</span>
-                </Button>
-
+              
                 {/* Grid Container de MUI se reemplaza por un Grid de Tailwind */}
                 <div className="grid grid-cols-1 md:grid-cols-2">
 
