@@ -1,37 +1,68 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import * as authService from '../services/authService'; // Importa todos los exports
-import { desconectadoUsu } from '../../socket/conectarSocket';
+import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import * as authService from '../services/authService';
+import { desconectadoUsu } from '../socket';
+import type { User } from '../../types/common';
+
+// Interfaces para los tipos de datos
+interface LoginCredentials {
+    email: string;
+    password: string;
+}
+
+interface LoginResponse {
+    msg: string;
+    usuario: User;
+    token: string;
+    requiereActualizacion?: boolean;
+}
+
+interface AuthContextType {
+    user: User | null;
+    token: string | null;
+    isAuthenticated: boolean;
+    login: (credentials: LoginCredentials) => Promise<LoginResponse>;
+    logout: () => void;
+}
+
+interface AuthProviderProps {
+    children: ReactNode;
+}
 
 // 1. Crear el Contexto
-const AuthContext = createContext(null);
+const AuthContext = createContext<AuthContextType | null>(null);
 
 // 2. Crear el Proveedor (Provider)
-export const AuthProvider = ({ children }) => {
-    const [user, setUser] = useState(null);
-    const [token, setToken] = useState(() => localStorage.getItem('token'));
-    const [loading, setLoading] = useState(true);
+export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
+    const [user, setUser] = useState<User | null>(null);
+    const [token, setToken] = useState<string | null>(() => localStorage.getItem('token'));
+    const [loading, setLoading] = useState<boolean>(true);
 
     // Cargar usuario desde localStorage al iniciar
     useEffect(() => {
         const userJson = localStorage.getItem('user');
         if (userJson) {
-            setUser(JSON.parse(userJson));
+            try {
+                setUser(JSON.parse(userJson) as User);
+            } catch (error) {
+                console.error('Error parsing user from localStorage:', error);
+                localStorage.removeItem('user');
+            }
         }
         setLoading(false);
     }, []);
 
     // --- NUEVA FUNCIÓN DE LOGIN UNIFICADA ---
-    const login = async (credentials) => {
+    const login = async (credentials: LoginCredentials): Promise<LoginResponse> => {
         try {
             // 1. Llamamos a la ÚNICA función del servicio
-            const response = await authService.login(credentials);
+            const response = await authService.login(credentials) as LoginResponse;
 
             // 2. Si la API devuelve el token y el usuario...
             if (response.token && response.usuario) {
 
                 // 3. Normalizamos el 'rol' para que el resto de la app (como routeService)
                 //    pueda leer 'role' (inglés) de forma consistente.
-                const userToSave = {
+                const userToSave: User = {
                     ...response.usuario,
                     role: response.usuario.rol // Creamos 'role' a partir de 'rol'
                 };
@@ -52,9 +83,8 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
-    const logout = () => {
+    const logout = (): void => {
         try {
-
             localStorage.removeItem("token");
             localStorage.removeItem("user");
             desconectadoUsu();
@@ -67,7 +97,7 @@ export const AuthProvider = ({ children }) => {
     };
 
     // 3. Valor que se pasa a los componentes hijos
-    const value = {
+    const value: AuthContextType = {
         user,
         token,
         isAuthenticated: !!token,
@@ -84,7 +114,7 @@ export const AuthProvider = ({ children }) => {
 };
 
 // 4. Hook personalizado para consumir el contexto
-export const useAuth = () => {
+export const useAuth = (): AuthContextType => {
     const context = useContext(AuthContext);
     if (!context) {
         throw new Error('useAuth debe ser usado dentro de un AuthProvider');

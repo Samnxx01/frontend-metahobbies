@@ -1,6 +1,20 @@
 import { apiFetch } from './api';
+import type { UserId, ImageId, ApiResponse } from '../../types/common';
 
-export const registerClient = async (clientData) => {
+interface ClientData {
+    nombre?: string;
+    apellido?: string;
+    email: string;
+    password: string;
+    telefono?: string;
+    direccion?: string;
+}
+
+interface UploadImageResponse extends ApiResponse {
+    imageId?: ImageId;
+}
+
+export const registerClient = async (clientData: ClientData): Promise<ApiResponse> => {
     const data = await apiFetch('/api/registro/client', {
         method: 'POST',
         body: clientData,
@@ -8,7 +22,7 @@ export const registerClient = async (clientData) => {
     return data;
 };
 
-export const uploadProfileImage = async (userId, formData) => {
+export const uploadProfileImage = async (userId: UserId, formData: FormData): Promise<UploadImageResponse> => {
     const data = await apiFetch(`/api/imgPerfil/${userId}`, {
         method: 'POST',
         body: formData,
@@ -32,7 +46,7 @@ export const getAllProfileImages = async () => {
     }
 };
 
-export const getUserProfileImageId = async (userId) => {
+export const getUserProfileImageId = async (userId: UserId): Promise<ImageId> => {
     try {
         const images = await getAllProfileImages();
 
@@ -56,7 +70,7 @@ export const getUserProfileImageId = async (userId) => {
     }
 };
 
-export const fetchProfileImageBlob = async (imageId) => {
+export const fetchProfileImageBlob = async (imageId: ImageId): Promise<Blob> => {
     try {
         if (!imageId) {
             throw new Error('ImageId no proporcionado');
@@ -99,7 +113,7 @@ export const fetchProfileImageBlob = async (imageId) => {
     }
 };
 
-export const getProfileImageBlobUrl = async (userId) => {
+export const getProfileImageBlobUrl = async (userId: UserId): Promise<string | null> => {
     if (!userId) {
         return null;
     }
@@ -114,7 +128,7 @@ export const getProfileImageBlobUrl = async (userId) => {
         const blobUrl = URL.createObjectURL(imageBlob);
         return blobUrl;
     } catch (error) {
-        if (error.message === 'NO_IMAGE') {
+        if (error instanceof Error && error.message === 'NO_IMAGE') {
             return null;
         }
         console.error('Error al crear Blob URL:', error);
@@ -122,7 +136,7 @@ export const getProfileImageBlobUrl = async (userId) => {
     }
 };
 
-export const getProfileImageDirectUrl = async (userId) => {
+export const getProfileImageDirectUrl = async (userId: UserId): Promise<string | null> => {
     if (!userId) {
         return null;
     }
@@ -131,7 +145,7 @@ export const getProfileImageDirectUrl = async (userId) => {
         const imageId = await getUserProfileImageId(userId);
         return `/api/imgPerfil/ver/${imageId}`;
     } catch (error) {
-        if (error.message === 'NO_IMAGE') {
+        if (error instanceof Error && error.message === 'NO_IMAGE') {
             return null;
         }
         console.error('Error al obtener URL directa:', error);
@@ -139,7 +153,7 @@ export const getProfileImageDirectUrl = async (userId) => {
     }
 };
 
-export const getProfileImageURL = async (userId) => {
+export const getProfileImageURL = async (userId: UserId): Promise<string> => {
     if (!userId) {
         return '';
     }
@@ -148,7 +162,7 @@ export const getProfileImageURL = async (userId) => {
         const imageId = await getUserProfileImageId(userId);
         return `/api/imgPerfil/ver/${imageId}`;
     } catch (error) {
-        if (error.message === 'NO_IMAGE') {
+        if (error instanceof Error && error.message === 'NO_IMAGE') {
             return '';
         }
         console.error('Error al obtener URL de imagen:', error);
@@ -156,7 +170,7 @@ export const getProfileImageURL = async (userId) => {
     }
 };
 
-export const updatePassword = async (userId, passwordData) => {
+export const updatePassword = async (userId: UserId, passwordData: { currentPassword: string; newPassword: string }): Promise<ApiResponse> => {
     const data = await apiFetch(`/api/actualizar/password/${userId}`, {
         method: 'PUT',
         body: passwordData,

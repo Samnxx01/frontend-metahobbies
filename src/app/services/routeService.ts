@@ -1,7 +1,7 @@
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
 export const getAuthorizedRoutes = async () => {
-    const user = JSON.parse(localStorage.getItem('user'));
+    const userJson = localStorage.getItem('user');
+    const user = userJson ? JSON.parse(userJson) : null;
 
     if (user?.role === 'ADMIN' || user?.role === 'DESARROLLADOR') {
         return {

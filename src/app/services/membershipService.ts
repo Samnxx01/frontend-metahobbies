@@ -1,5 +1,26 @@
 import { apiFetch } from './api';
+import type { UserId, ApiResponse, CurrentMembershipData } from '../../types/common';
 
+export interface PaymentData {
+    amountInCents: number;
+    customerEmail: string;
+    reference: string;
+}
+
+export interface PaymentResponseData {
+    referencia: string;
+    correoCliente: string;
+    usuarioId: UserId;
+    membresiaId: string;
+    wompiTransactionId: string;
+    wompiStatusInicial: string;
+    wompiLink: string;
+}
+
+export interface MembershipPaymentResponse extends ApiResponse {
+    msg: string;
+    data: PaymentResponseData;
+}
 /**
  * Processes the membership payment through Wompi.
  * This function communicates with the backend to create a Wompi payment transaction
@@ -12,7 +33,7 @@ import { apiFetch } from './api';
  * @param {string} token - The user's auth token.
  * @returns {Promise<{ wompiRedirectUrl: string }>} The response from the server containing the Wompi URL.
  */
-export const processMembershipPayment = async (paymentData, token) => {
+export const processMembershipPayment = async (paymentData: PaymentData, token: string): Promise<MembershipPaymentResponse> => {
     const data = await apiFetch('/pagos/crear-transaccion-wompi', {
         method: 'POST',
         headers: {
@@ -24,10 +45,19 @@ export const processMembershipPayment = async (paymentData, token) => {
 };
 
 /**
+ * Extracts the Wompi payment link from the membership payment response.
+ * @param {MembershipPaymentResponse} paymentResponse - The payment response from the API.
+ * @returns {string} The Wompi payment link.
+ */
+export const getWompiLinkFromResponse = (paymentResponse: MembershipPaymentResponse): string => {
+    return paymentResponse.data.wompiLink;
+};
+
+/**
  * Redirects the user to the Wompi payment gateway.
  * @param {string} wompiRedirectUrl - The URL to redirect to.
  */
-export const redirectToWompi = (wompiRedirectUrl) => {
+export const redirectToWompi = (wompiRedirectUrl: string) => {
     if (wompiRedirectUrl) {
         window.location.href = wompiRedirectUrl;
     } else {
@@ -45,7 +75,13 @@ export const redirectToWompi = (wompiRedirectUrl) => {
  * @param {string} metasploitToken - The custom security token for the 'metasploit' header.
  * @returns {Promise<any>} The response from the server.
  */
-export const createMembershipParametrization = async (parametrizationData, metasploitToken) => {
+export interface MembershipParametrizationData {
+    nombreMembresia: string;
+    descripcion: string;
+    precioMembresia: number;
+}
+
+export const createMembershipParametrization = async (parametrizationData: MembershipParametrizationData, metasploitToken: string): Promise<ApiResponse> => {
     const data = await apiFetch('/membresia/seguridad/crear/parametrizacion/membresia', {
         method: 'POST',
         headers: {
@@ -59,9 +95,9 @@ export const createMembershipParametrization = async (parametrizationData, metas
 /**
  * Gets the current user's membership data.
  * This is a placeholder and returns mock data.
- * @returns {Promise<any>} The membership data.
+ * @returns {Promise<CurrentMembershipData>} The membership data.
  */
-export const getCurrentMembership = async () => {
+export const getCurrentMembership = async (): Promise<CurrentMembershipData> => {
     console.log('Fetching current membership data (mocked)');
     // Simulate an API call
     await new Promise(resolve => setTimeout(resolve, 500));

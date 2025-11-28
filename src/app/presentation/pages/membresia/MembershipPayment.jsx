@@ -5,7 +5,7 @@ import { useMembership } from '../../../providers/MembershipProvider';
 // step content and checkout handled in separate component
 import CustomStepper from '@/components/common/CustomStepper';
 import MembershipStepContent from '@/components/membership/MembershipStepContent';
-import { useMembershipPaymentForm } from '@/hooks/useMembershipPaymentForm';
+import { useMembershipPaymentForm } from '@/app/hooks/useMembershipPaymentForm';
 import React, { useState, useEffect } from 'react';
 // Shadcn UI components
 import { Button } from "@/components/ui/button";

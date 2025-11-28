@@ -1,6 +1,14 @@
-// Computes SHA-256 integrity hex for Wompi signature
-// Input: reference (string), amountInCents (number), currency (string), integritySecret (string)
-export async function computeIntegrity({ reference, amountInCents, currency, integritySecret }) {
+import type { IntegrityParams } from '@/lib/types/wompi';
+
+/**
+ * Computes SHA-256 integrity hex for Wompi signature
+ */
+export async function computeIntegrity({ 
+  reference, 
+  amountInCents, 
+  currency, 
+  integritySecret 
+}: IntegrityParams): Promise<string> {
   if (!reference || typeof amountInCents === 'undefined' || !currency || !integritySecret) {
     throw new Error('Missing parameters to compute integrity signature');
   }

@@ -6,24 +6,25 @@ import {
     updateUser as updateUserService,  // Renombramos para evitar colisión
     deactivateUser as deactivateUserService // Renombramos para evitar colisión
 } from '../services/adminService';
+import type { UserId } from '../../types/common';
 
 export const useUsers = () => {
     const [users, setUsers] = useState([]);
     // --- Estados de LISTAR ---
     const [loadingList, setLoadingList] = useState(true);
-    const [errorList, setErrorList] = useState(null);
+    const [errorList, setErrorList] = useState<Error | null>(null);
 
     // --- Estados de CREAR ---
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [submitError, setSubmitError] = useState(null);
+    const [submitError, setSubmitError] = useState<Error | null>(null);
 
     // --- Estados de ACTUALIZAR ---
     const [isUpdating, setIsUpdating] = useState(false);
-    const [updateError, setUpdateError] = useState(null);
+    const [updateError, setUpdateError] = useState<Error | null>(null);
 
     // --- Estados de BORRAR ---
     const [isDeleting, setIsDeleting] = useState(false);
-    const [deleteError, setDeleteError] = useState(null);
+    const [deleteError, setDeleteError] = useState<Error | null>(null);
 
 
     // --- LÓGICA DE LISTAR (fetchUsers) ---
@@ -34,7 +35,7 @@ export const useUsers = () => {
             const data = await listUsers();
             setUsers(data?.usuarios || []);
         } catch (err) {
-            setErrorList(err);
+            setErrorList(err as Error);
         } finally {
             setLoadingList(false);
         }
@@ -45,7 +46,7 @@ export const useUsers = () => {
     }, [fetchUsers]);
 
     // --- LÓGICA DE CREAR (createUser) ---
-    const createUser = async (adminData) => {
+    const createUser = async (adminData: any) => {
         try {
             setIsSubmitting(true);
             setSubmitError(null);
@@ -54,14 +55,14 @@ export const useUsers = () => {
             setIsSubmitting(false);
             return data;
         } catch (err) {
-            setSubmitError(err);
+            setSubmitError(err as Error);
             setIsSubmitting(false);
             throw err;
         }
     };
 
     // --- LÓGICA DE ACTUALIZAR (updateUser) ---
-    const updateUser = async (userId, userData) => {
+    const updateUser = async (userId: UserId, userData: any) => {
         try {
             setIsUpdating(true);
             setUpdateError(null);
@@ -71,14 +72,14 @@ export const useUsers = () => {
             setIsUpdating(false);
             return data;
         } catch (err) {
-            setUpdateError(err);
+            setUpdateError(err as Error);
             setIsUpdating(false);
             throw err;
         }
     };
 
     // --- LÓGICA DE BORRAR (deleteUser) ---
-    const deleteUser = async (userId) => {
+    const deleteUser = async (userId: UserId) => {
         try {
             setIsDeleting(true);
             setDeleteError(null);
@@ -87,7 +88,7 @@ export const useUsers = () => {
             await fetchUsers(); // Refrescar la lista
             setIsDeleting(false);
         } catch (err) {
-            setDeleteError(err);
+            setDeleteError(err as Error);
             setIsDeleting(false);
             throw err;
         }

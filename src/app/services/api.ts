@@ -1,9 +1,21 @@
-export const apiFetch = async (endpoint, options = {}) => {
-    const token = localStorage.getItem('token');
+export type ResponseType = 'raw' | string;
+export type ApiHeaders = Record<string, string>;
 
-    const defaultHeaders = {
+export type ApiOptions = Omit<RequestInit, 'body' | 'headers'> & {
+    body?: unknown;
+    headers?: ApiHeaders;
+    responseType?: ResponseType;
+};
+
+export const apiFetch = async (
+    endpoint: string,
+    options: ApiOptions
+): Promise<any | Response | null> => {
+    const token: string | null = localStorage.getItem('token');
+
+    const defaultHeaders: ApiHeaders = {
         'Content-Type': 'application/json',
-        'metasplot': token,
+        'metasplot': token as string,
         ...options.headers,
     };
 
@@ -21,11 +33,11 @@ export const apiFetch = async (endpoint, options = {}) => {
     }
 
     if (options.body instanceof FormData) {
-        delete options.headers['Content-Type'];
+        delete (options.headers as ApiHeaders)['Content-Type'];
     }
 
     try {
-        const response = await fetch(endpoint, options);
+        const response: Response = await fetch(endpoint, options as RequestInit);
         if (options.responseType === 'raw') {
             if (!response.ok) {
                 throw new Error(response.statusText || 'Error de red en respuesta raw');
@@ -33,7 +45,7 @@ export const apiFetch = async (endpoint, options = {}) => {
             return response;
         }
 
-        const contentType = response.headers.get("content-type");
+        const contentType: string | null = response.headers.get("content-type");
         if (!contentType || !contentType.includes("application/json")) {
 
             if (!response.ok) {
@@ -42,7 +54,7 @@ export const apiFetch = async (endpoint, options = {}) => {
             return null;
         }
 
-        const data = await response.json();
+        const data: any = await response.json();
 
         if (!response.ok) {
             throw new Error(data.msg || data.message || 'Error desconocido de la API');
@@ -50,7 +62,7 @@ export const apiFetch = async (endpoint, options = {}) => {
 
         return data;
 
-    } catch (error) {
+    } catch (error: any) {
         console.error(`Error en fetch a ${endpoint}:`, error.message);
         throw error;
     }
