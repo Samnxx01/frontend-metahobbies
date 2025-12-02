@@ -260,28 +260,3 @@ npm run preview  # Preview del build
 npm run lint     # Verificar código con ESLint
 ```
 
-## Contribución
-
-Para contribuir al proyecto:
-
-1. Fork el repositorio
-2. Crea una rama para tu feature (`git checkout -b feature/nueva-funcionalidad`)
-3. Commit tus cambios (`git commit -m 'Añadir nueva funcionalidad'`)
-4. Push a la rama (`git push origin feature/nueva-funcionalidad`)
-5. Abre un Pull Request
-
-## Convenciones de Código
-
-- Componentes en PascalCase
-- Archivos de servicios en camelCase
-- Uso de TypeScript para nuevos componentes
-- Props interfaces definidas para todos los componentes
-- Comentarios en español para mejor comprensión del equipo
-
-## Soporte y Contacto
-
-Para preguntas o soporte, contacta al equipo de desarrollo.
-
----
-
-**Desarrollado con dedicación para ofrecer la mejor experiencia en comercio electrónico de productos de belleza.**
