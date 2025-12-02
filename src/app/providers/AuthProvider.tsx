@@ -5,7 +5,7 @@ import type { User } from '../../types/common';
 
 // Interfaces para los tipos de datos
 interface LoginCredentials {
-    email: string;
+    correo: string;
     password: string;
 }
 

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { conectarSocket, desconectadoUsu, getSocket } from './socketService';
 import { socketEmitters, socketListeners, socketCleanup } from './socketEvents';
-import type { SocketStatus, SocketEventCallback } from './socketTypes';
+import type { SocketStatus } from './socketTypes';
 import type { Socket } from 'socket.io-client';
 
 // Hook return interface

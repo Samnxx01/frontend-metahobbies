@@ -80,7 +80,7 @@ export interface CartSummary {
 
 // User interface
 export interface User {
-  id: UserId;
+ _id: UserId;
   nombre: string;
   apellido: string;
   correo: string;

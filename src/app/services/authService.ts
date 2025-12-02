@@ -3,7 +3,7 @@ import { apiFetch } from './api';
 import type { User, ApiResponse } from '../../types/common';
 
 interface LoginData {
-    email: string;
+    correo: string;
     password: string;
 }
 

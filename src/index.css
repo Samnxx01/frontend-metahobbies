@@ -3,6 +3,67 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 328 78% 54%; /* Tickle Me Pink #F7854F */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 30 85% 76%; /* Sunset #F4CC98 */
+    --secondary-foreground: 328 78% 54%;
+    --muted: 345 100% 95%; /* Blush #FBD9E5 */
+    --muted-foreground: 328 47% 45%;
+    --accent: 335 55% 70%; /* Cherry Blossom #FBD9E5 */
+    --accent-foreground: 328 78% 54%;
+    --destructive: 339 75% 53%; /* Raspberry Rose #C43670 */
+    --destructive-foreground: 0 0% 100%;
+    --border: 345 100% 95%;
+    --input: 345 100% 95%;
+    --ring: 328 78% 54%;
+    --radius: 0.5rem;
+    
+    /* Colores adicionales de la paleta */
+    --tickle-pink: 328 78% 54%; /* #F7854F */
+    --champagne: 14 89% 62%; /* #FDF4EB */
+    --blush: 345 100% 95%; /* #FBD9E5 */
+    --cherry-blossom: 335 55% 70%; /* #FBD9E5 */
+    --raspberry-rose: 339 75% 53%; /* #C43670 */
+    --sunset: 30 91% 70%; /* #F5CC97 */
+  }
+
+  .dark {
+    --background: 328 35% 12%; /* Tono oscuro basado en raspberry rose */
+    --foreground: 345 100% 95%;
+    --card: 328 30% 15%;
+    --card-foreground: 345 100% 95%;
+    --popover: 328 30% 15%;
+    --popover-foreground: 345 100% 95%;
+    --primary: 328 78% 54%; /* Tickle Me Pink mantiene su vibración */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 30 60% 45%; /* Sunset oscuro #F4CC98 */
+    --secondary-foreground: 345 100% 95%;
+    --muted: 328 25% 20%;
+    --muted-foreground: 335 55% 70%;
+    --accent: 335 55% 50%;
+    --accent-foreground: 345 100% 95%;
+    --destructive: 339 75% 53%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 328 25% 25%;
+    --input: 328 25% 25%;
+    --ring: 335 55% 70%;
+    
+    /* Colores adicionales para dark mode */
+    --tickle-pink: 328 78% 54%;
+    --champagne: 14 50% 35%; /* Versión más oscura */
+    --blush: 345 40% 25%;
+    --cherry-blossom: 335 55% 50%;
+    --raspberry-rose: 339 75% 53%;
+    --sunset: 30 60% 45%; /* Versión más oscura */
+  }
+
   html {
     font-family: 'Poppins', system-ui, sans-serif;
   }
@@ -12,3 +73,116 @@
 [data-radix-sheet-overlay] {
   background-color: transparent !important;
 }
+
+/* SweetAlert2 Light Mode Styles */
+.light-swal-popup {
+  background-color: #fff !important;
+  color: #545454 !important;
+  border: 1px solid #e5e7eb !important;
+}
+
+.light-swal-title {
+  color: #1f2937 !important;
+}
+
+.light-swal-text {
+  color: #6b7280 !important;
+}
+
+.light-swal-confirm {
+  background-color: #3085d6 !important;
+  color: white !important;
+  border: none !important;
+  box-shadow: 0 2px 8px rgba(48, 133, 214, 0.4) !important;
+  font-weight: 500 !important;
+}
+
+.light-swal-confirm:hover {
+  background-color: #2774c2 !important;
+  box-shadow: 0 4px 12px rgba(48, 133, 214, 0.6) !important;
+}
+
+.light-swal-cancel {
+  background-color: #d33 !important;
+  color: white !important;
+  border: none !important;
+  box-shadow: 0 2px 8px rgba(221, 51, 51, 0.4) !important;
+  font-weight: 500 !important;
+}
+
+.light-swal-cancel:hover {
+  background-color: #c22 !important;
+  box-shadow: 0 4px 12px rgba(221, 51, 51, 0.6) !important;
+}
+
+/* SweetAlert2 Dark Mode Styles */
+.dark .dark-swal-popup {
+  background-color: hsl(var(--card)) !important;
+  color: hsl(var(--foreground)) !important;
+  border: 1px solid hsl(var(--border)) !important;
+}
+
+.dark .dark-swal-title {
+  color: hsl(var(--foreground)) !important;
+}
+
+.dark .dark-swal-text {
+  color: hsl(var(--muted-foreground)) !important;
+}
+
+.dark .dark-swal-confirm {
+  background-color: #3085d6 !important;
+  color: white !important;
+  border: none !important;
+  box-shadow: 0 2px 8px rgba(48, 133, 214, 0.4) !important;
+  font-weight: 500 !important;
+}
+
+.dark .dark-swal-confirm:hover {
+  background-color: #2774c2 !important;
+  box-shadow: 0 4px 12px rgba(48, 133, 214, 0.6) !important;
+}
+
+.dark .dark-swal-cancel {
+  background-color: #d33 !important;
+  color: white !important;
+  border: none !important;
+  box-shadow: 0 2px 8px rgba(221, 51, 51, 0.4) !important;
+  font-weight: 500 !important;
+}
+
+.dark .dark-swal-cancel:hover {
+  background-color: #c22 !important;
+  box-shadow: 0 4px 12px rgba(221, 51, 51, 0.6) !important;
+}
+
+.dark .swal2-icon.swal2-warning {
+  border-color: #f8bb86 !important;
+  color: #f8bb86 !important;
+}
+
+.dark .swal2-icon.swal2-info {
+  border-color: #3fc3ee !important;
+  color: #3fc3ee !important;
+}
+
+.dark .swal2-icon.swal2-error {
+  border-color: #f27474 !important;
+}
+
+.dark .swal2-icon.swal2-error [class^='swal2-x-mark-line'] {
+  background-color: #f27474 !important;
+}
+
+.dark .swal2-icon.swal2-success {
+  border-color: #a5dc86 !important;
+}
+
+.dark .swal2-icon.swal2-success [class^='swal2-success-line'] {
+  background-color: #a5dc86 !important;
+}
+
+.dark .swal2-icon.swal2-success .swal2-success-ring {
+  border-color: rgba(165, 220, 134, 0.3) !important;
+}
+

@@ -1,11 +1,9 @@
 import { createMembership } from '@/lib/membership/createMembership';
 import type { 
-  PersonalInfo, 
-  MembershipCheckoutOptions, 
+   MembershipCheckoutOptions, 
   CheckoutParams,
   CreateMembershipResponse,
-  LegalIdType 
-} from '@/lib/types/wompi';
+  } from '@/lib/types/wompi';
 
 /**
  * Encapsula la lógica de validación, petición al backend y construcción 
@@ -50,10 +48,10 @@ export async function initiateMembershipCheckout({
     customerData: {
       email,
       fullName: `${nombre} ${apellido}`.trim(),
-      phoneNumber: telefono,
+      phone_number: telefono??'',
       phoneNumberPrefix: '+57',
-      legalId: legalId || '',
-      legalIdType: legalIdType || 'CC',
+      legal_id: legalId || '',
+      legal_id_type: legalIdType || 'CC',
     },
   };
 
