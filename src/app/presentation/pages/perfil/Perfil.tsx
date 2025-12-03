@@ -4,15 +4,15 @@ import { toast } from 'react-toastify';
 
 // Importar servicios y providers con la ruta relativa ajustada
 import { useAuth } from '../../../providers/AuthProvider';
-import { uploadProfileImage, getProfileImageBlobUrl } from '../../../services/clientService';
-import type { User } from '../../../../types/common';
+import { uploadProfileImage, getProfileImageBlobUrl, getClientProfile, updateClientProfile } from '../../../services/clientService';
+import PerfilClienteForm from '../../components/perfil/PerfilClienteForm';
+import DireccionEnvioForm from '../../components/perfil/DireccionEnvioForm';
+import type { User, ClientProfile } from '../../../../types/common';
 
 // Shadcn UI components
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import {
     Dialog,
@@ -24,7 +24,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 
 // Lucide icons
-import { Camera, MapPin, User as UserIcon, Edit, Save, X, Trash2, ArrowLeft, LogOut, AlertTriangle, Loader2, Building, Calendar } from 'lucide-react';
+import { Camera, MapPin, User as UserIcon, Trash2, ArrowLeft, LogOut, AlertTriangle, Loader2, Building, Calendar } from 'lucide-react';
 
 // --- INTERFACES ---
 
@@ -36,17 +36,6 @@ interface NavItemProps {
     setActiveNavItem: (key: string) => void;
 }
 
-interface FieldDisplayProps {
-    id: string;
-    name: string;
-    label: string;
-    defaultValue: string;
-    readOnly: boolean;
-    inputRef?: React.RefObject<HTMLInputElement | null>;
-    type?: string;
-}
-
-// --- CONSTANTES ---
 const CONFIRM_LOGOUT_TITLE = 'Cerrar Sesión';
 const CONFIRM_LOGOUT_MESSAGE = '¿Estás seguro de que quieres cerrar tu sesión actual?';
 
@@ -69,15 +58,11 @@ export default function Perfil(): React.ReactElement {
 
     // --- ESTADOS DE GESTIÓN DE UI Y DATOS ---
     const [localUser, setLocalUser] = useState<User>(user || DEFAULT_USER_DATA);
-    const [isEditingPersonal, setIsEditingPersonal] = useState<boolean>(false);
-    const [isEditingAddress, setIsEditingAddress] = useState<boolean>(false);
     const [activeNavItem, setActiveNavItem] = useState<string>('personal');
+    const [clientProfile, setClientProfile] = useState<ClientProfile | null>(null);
     
-    // Refs para inputs no controlados
-    const nombreRef = useRef<HTMLInputElement>(null);
-    const correoRef = useRef<HTMLInputElement>(null);
-    const telefonoRef = useRef<HTMLInputElement>(null);
-    const direccionRef = useRef<HTMLInputElement>(null);
+    // Refs para archivo de foto
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Estados de Foto de Perfil
     const [openPhotoDialog, setOpenPhotoDialog] = useState<boolean>(false);
@@ -131,46 +116,30 @@ export default function Perfil(): React.ReactElement {
         };
     }, [user?._id, cacheBuster]);
 
+    // --- LÓGICA DE CARGA DEL PERFIL DEL CLIENTE ---
+    useEffect(() => {
+        let isMounted = true;
+
+        const loadClientProfile = async () => {
+            if (!user?._id) return;
+
+            try {
+                const profile = await getClientProfile(user._id);
+                if (isMounted && profile) {
+                    setClientProfile(profile);
+                }
+            } catch (error) {
+                console.error('Error al cargar perfil del cliente:', error);
+            }
+        };
+
+        loadClientProfile();
+        return () => {
+            isMounted = false;
+        };
+    }, [user?._id]);
+
     // --- HANDLERS DE EDICIÓN DE DATOS ---
-
-    const handleEditPersonal = () => {
-        setIsEditingPersonal(true);
-    };
-
-    const handleSavePersonal = () => {
-        const nombre = nombreRef.current?.value || '';
-        const correo = correoRef.current?.value || '';
-        const telefono = telefonoRef.current?.value || '';
-        
-        setLocalUser(prev => ({ 
-            ...prev, 
-            nombre,
-            correo,
-            telefono
-        }));
-        setIsEditingPersonal(false);
-        toast.success("Información personal actualizada.");
-    };
-
-    const handleCancelPersonal = () => {
-        setIsEditingPersonal(false);
-        // Los inputs se resetearán automáticamente al valor de localUser cuando cambie isEditingPersonal
-    };
-
-    const handleEditAddress = () => {
-        setIsEditingAddress(true);
-    };
-
-    const handleSaveAddress = () => {
-        const direccion = direccionRef.current?.value || '';
-        setLocalUser(prev => ({ ...prev, direccion }));
-        setIsEditingAddress(false);
-        toast.success("Dirección de envío actualizada.");
-    };
-
-    const handleCancelAddress = () => {
-        setIsEditingAddress(false);
-    };
 
     // --- LOGOUT Y FOTO DE PERFIL ---
 
@@ -204,7 +173,7 @@ export default function Perfil(): React.ReactElement {
         setIsUploading(true);
         setOpenPhotoDialog(false);
         const formData = new FormData();
-        formData.append('img', imageFile);
+        formData.append('archivo', imageFile);
 
         try {
             await uploadProfileImage(user._id, formData);
@@ -223,7 +192,10 @@ export default function Perfil(): React.ReactElement {
         setPreviewImage(null);
         setImageFile(null);
         setOpenPhotoDialog(false);
-        toast.success("Foto de perfil eliminada.");
+        if (fileInputRef.current) {
+            fileInputRef.current.value = "";
+        }
+        toast.info("Selección de imagen cancelada.");
     };
 
     // --- COMPONENTES AUXILIARES ---
@@ -241,27 +213,16 @@ export default function Perfil(): React.ReactElement {
         </Button>
     );
 
-    const FieldDisplay: React.FC<FieldDisplayProps> = ({ id, name, label, defaultValue, readOnly, inputRef, type = 'text' }) => (
-        <div className="space-y-1">
-            <Label htmlFor={id} className="text-foreground">{label}</Label>
-            <Input
-                ref={inputRef}
-                id={id}
-                name={name}
-                type={type}
-                defaultValue={defaultValue}
-                readOnly={readOnly}
-                key={`${id}-${readOnly}`}
-                className={readOnly 
-                    ? "border-none shadow-none text-base pl-0 h-auto bg-transparent focus-visible:ring-0 text-foreground" 
-                    : "text-base bg-background border-border text-foreground"
-                }
-            />
-        </div>
-    );
-
     return (
         <div className="min-h-screen bg-background flex flex-col items-center py-6 md:py-10 px-4">
+            {/* Hidden file input */}
+            <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleFileSelect}
+                style={{ display: 'none' }}
+            />
             <div className="w-full max-w-5xl">
 
                 {/* Header del Perfil */}
@@ -293,16 +254,16 @@ export default function Perfil(): React.ReactElement {
                                 size="icon"
                                 className="absolute bottom-0 right-0 h-8 w-8 md:h-9 md:w-9 rounded-full bg-background border border-border shadow-sm 
                                     opacity-0 group-hover:opacity-100 transition-opacity duration-200"
-                                onClick={() => setOpenPhotoDialog(true)}
+                                onClick={() => fileInputRef.current?.click()}
                             >
                                 <Camera className="h-3 w-3 md:h-4 md:w-4 text-muted-foreground" />
                                 <span className="sr-only">Cambiar foto</span>
                             </Button>
                         </div>
                         <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-1">{localUser.nombre}</h1>
-                        <p className="text-xs md:text-sm text-muted-foreground">
+                        <div className="text-xs md:text-sm text-muted-foreground">
                             Miembro desde {localUser.fechaCreacion ? new Date(localUser.fechaCreacion).toLocaleDateString('es-ES', { month: 'long', year: 'numeric' }) : 'N/A'} • Rol: <Badge variant="secondary" className="ml-1">{localUser.rol}</Badge>
-                        </p>
+                        </div>
                     </CardContent>
                 </Card>
 
@@ -372,90 +333,31 @@ export default function Perfil(): React.ReactElement {
 
                         {/* --- Tarjeta de Información Personal --- */}
                         {activeNavItem === 'personal' && (
-                            <Card className="shadow-sm border-border bg-card">
-                                <CardHeader className="flex flex-col md:flex-row md:items-center justify-between pb-2 space-y-2 md:space-y-0">
-                                    <CardTitle className="text-lg md:text-xl font-semibold flex items-center gap-2 text-foreground">
-                                        <UserIcon className="h-5 w-5 text-primary" /> Información Personal
-                                    </CardTitle>
-                                    {!isEditingPersonal ? (
-                                        <Button variant="outline" size="sm" onClick={handleEditPersonal}>
-                                            <Edit className="h-4 w-4 mr-2" /> Editar
-                                        </Button>
-                                    ) : (
-                                        <div className="flex gap-2">
-                                            <Button variant="outline" size="sm" onClick={handleCancelPersonal}>
-                                                <X className="h-4 w-4 mr-2" /> Cancelar
-                                            </Button>
-                                            <Button size="sm" onClick={handleSavePersonal}>
-                                                <Save className="h-4 w-4 mr-2" /> Guardar
-                                            </Button>
-                                        </div>
-                                    )}
-                                </CardHeader>
-                                <CardContent className="space-y-4 pt-4">
-                                    <FieldDisplay 
-                                        id="nombre" 
-                                        name="nombre" 
-                                        label="Nombre Completo" 
-                                        defaultValue={localUser.nombre} 
-                                        readOnly={!isEditingPersonal} 
-                                        inputRef={nombreRef}
-                                    />
-                                    <FieldDisplay 
-                                        id="correo" 
-                                        name="correo" 
-                                        label="Correo Electrónico" 
-                                        defaultValue={localUser.correo} 
-                                        readOnly={true} 
-                                        inputRef={correoRef}
-                                        type="email" 
-                                    />
-                                    <FieldDisplay 
-                                        id="telefono" 
-                                        name="telefono" 
-                                        label="Teléfono" 
-                                        defaultValue={localUser.telefono || ''} 
-                                        readOnly={!isEditingPersonal} 
-                                        inputRef={telefonoRef}
-                                        type="tel" 
-                                    />
-                                </CardContent>
-                            </Card>
+                            <PerfilClienteForm
+                                profile={clientProfile}
+                                onProfileUpdate={async (updatedProfile) => {
+                                    setClientProfile(updatedProfile);
+                                    if (user?._id) {
+                                        try {
+                                            const response = await updateClientProfile(user._id, updatedProfile);
+                                            if (response && response.success) {
+                                                toast.success('Perfil actualizado correctamente.');
+                                            }
+                                        } catch (error) {
+                                            console.error('Error al actualizar perfil:', error);
+                                            toast.error('Error al actualizar el perfil.');
+                                        }
+                                    }
+                                }}
+                            />
                         )}
 
                         {/* --- Tarjeta de Dirección de Envío --- */}
                         {activeNavItem === 'address' && (
-                            <Card className="shadow-sm border-border bg-card">
-                                <CardHeader className="flex flex-col md:flex-row md:items-center justify-between pb-2 space-y-2 md:space-y-0">
-                                    <CardTitle className="text-lg md:text-xl font-semibold flex items-center gap-2 text-foreground">
-                                        <MapPin className="h-5 w-5 text-primary" /> Dirección de Envío
-                                    </CardTitle>
-                                    {!isEditingAddress ? (
-                                        <Button variant="outline" size="sm" onClick={handleEditAddress}>
-                                            <Edit className="h-4 w-4 mr-2" /> Editar
-                                        </Button>
-                                    ) : (
-                                        <div className="flex gap-2">
-                                            <Button variant="outline" size="sm" onClick={handleCancelAddress}>
-                                                <X className="h-4 w-4 mr-2" /> Cancelar
-                                            </Button>
-                                            <Button size="sm" onClick={handleSaveAddress}>
-                                                <Save className="h-4 w-4 mr-2" /> Guardar
-                                            </Button>
-                                        </div>
-                                    )}
-                                </CardHeader>
-                                <CardContent className="space-y-4 pt-4">
-                                    <FieldDisplay 
-                                        id="direccion" 
-                                        name="direccion" 
-                                        label="Dirección Completa" 
-                                        defaultValue={localUser.direccion || ''} 
-                                        readOnly={!isEditingAddress} 
-                                        inputRef={direccionRef}
-                                    />
-                                </CardContent>
-                            </Card>
+                            <DireccionEnvioForm
+                                localUser={localUser}
+                                onUserUpdate={setLocalUser}
+                            />
                         )}
 
                         {/* Sección de Foto de Perfil */}
@@ -464,7 +366,7 @@ export default function Perfil(): React.ReactElement {
                                 <p className="text-base md:text-lg text-muted-foreground">
                                     Haz clic en el botón de la cámara sobre tu foto de perfil para actualizarla, o usa el botón de abajo.
                                 </p>
-                                <Button className="mt-4" onClick={() => setOpenPhotoDialog(true)}>
+                                <Button className="mt-4" onClick={() => fileInputRef.current?.click()}>
                                     <Camera className="h-4 w-4 mr-2" /> Abrir Gestor de Fotos
                                 </Button>
                             </Card>
@@ -535,18 +437,6 @@ export default function Perfil(): React.ReactElement {
                                     <Loader2 className="h-8 w-8 md:h-10 md:w-10 text-white animate-spin" />
                                 </div>
                             )}
-                        </div>
-                        <div className="grid w-full max-w-xs items-center gap-1.5 mx-auto">
-                            <Label htmlFor="picture" className="text-foreground">
-                                Subir una nueva foto
-                            </Label>
-                            <Input 
-                                id="picture" 
-                                type="file" 
-                                onChange={handleFileSelect} 
-                                accept="image/*"
-                                className="bg-background border-border text-foreground"
-                            />
                         </div>
                         <p className="text-xs text-muted-foreground mt-2">
                             Asegúrate que la imagen sea clara y tenga un buen enfoque.

@@ -42,7 +42,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         const userJson = localStorage.getItem('user');
         if (userJson) {
             try {
-                setUser(JSON.parse(userJson) as User);
+                const userFromStorage = JSON.parse(userJson);
+                const userToSave: User = {
+                    ...userFromStorage,
+                    _id: userFromStorage.id || userFromStorage._id, 
+                };
+                setUser(userToSave);
             } catch (error) {
                 console.error('Error parsing user from localStorage:', error);
                 localStorage.removeItem('user');
@@ -65,7 +70,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                 const userToSave: User = {
                     ...response.usuario,
                     role: response.usuario.rol // Creamos 'role' a partir de 'rol'
-                };
+                 };
 
                 // 4. Guardamos todo en localStorage y en el estado
                 localStorage.setItem('token', response.token);

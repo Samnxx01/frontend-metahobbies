@@ -21,6 +21,7 @@ import GestionCategorias from '@/app/presentation/pages/admin/GestionCategorias'
 import Login from '@/app/presentation/pages/login/Login';
 import Registro from '@/app/presentation/pages/registro/Registro';
 import RecuperarContrasena from '@/app/presentation/pages/recuperar-contrasena/RecuperarContrasena';
+import CambiarContrasena from '@/app/presentation/pages/recuperar-contrasena/CambiarContrasena';
 import Contacto from '@/app/presentation/pages/contacto/Contacto';
 import { MembershipRoutes } from './MembershipRoutes';
 import GestionProductos from '../presentation/pages/admin/GestionProductos';
@@ -50,6 +51,7 @@ const componentMap: ComponentMapType = {
     Login,
     Registro,
     RecuperarContrasena,
+    CambiarContrasena,
     DashboardAdmin,
     GestionProductos,
     GestionUsuarios,
@@ -137,6 +139,7 @@ export default function LayoutRoutes(): ReactElement {
                 <Route path="login" element={<Login />} />
                 <Route path="registro" element={<Registro />} />
                 <Route path="recuperar-contrasena" element={<RecuperarContrasena />} />
+                <Route path="recuperar/:token" element={<CambiarContrasena />} />
             </Route>
 
             {user && authorizedRoutes?.adminRoutes && (
