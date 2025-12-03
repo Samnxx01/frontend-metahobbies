@@ -80,7 +80,9 @@ export default function Perfil(): React.ReactElement {
         return <></>; 
     }
 
-    // Sincronizar localUser con el AuthProvider.user
+    // --- SINCRONIZACIÓN DE USUARIO ---
+    // Mantiene localUser actualizado cuando cambia el usuario en AuthProvider
+    // Esto permite que los cambios de sesión se reflejen inmediatamente en la UI
     useEffect(() => {
         if (user) {
             setLocalUser(user);
@@ -88,28 +90,47 @@ export default function Perfil(): React.ReactElement {
     }, [user]);
 
     // --- LÓGICA DE CARGA DE IMAGEN DEL SERVIDOR ---
+    // Este useEffect se ejecuta cuando:
+    // 1. El componente se monta por primera vez
+    // 2. Cambia el userId (cuando el usuario inicia sesión o cambia)
+    // 3. Cambia cacheBuster (después de subir una nueva imagen)
     useEffect(() => {
+        // Flag para prevenir actualizaciones de estado después del desmontaje
         let isMounted = true;
 
         const loadImage = async () => {
+            // Validar que exista un userId antes de intentar cargar la imagen
             if (!user?._id) return;
 
+            // Indicar que la imagen está cargando
             setImageLoading(true);
+            
+            // Liberar memoria del blob URL anterior si existe
+            // Esto previene memory leaks al limpiar URLs de blob previas
             if (profileImageBlobUrl) URL.revokeObjectURL(profileImageBlobUrl);
 
             try {
+                // Obtener la imagen del servidor como blob URL
+                // getProfileImageBlobUrl hace: getUserProfileImageId -> fetchProfileImageBlob -> createObjectURL
                 const blobUrl = await getProfileImageBlobUrl(user._id);
+                
+                // Solo actualizar estado si el componente sigue montado
                 if (isMounted) setProfileImageBlobUrl(blobUrl);
             } catch (error) {
+                // En caso de error (ej: sin imagen), establecer null
                 setProfileImageBlobUrl(null);
             } finally {
+                // Desactivar indicador de carga solo si el componente sigue montado
                 if (isMounted) setImageLoading(false);
             }
         };
 
         loadImage();
+        
+        // Cleanup function: se ejecuta cuando el componente se desmonta o antes de re-ejecutar el efecto
         return () => {
             isMounted = false;
+            // Liberar memoria del blob URL para prevenir memory leaks
             if (profileImageBlobUrl && profileImageBlobUrl.startsWith('blob:')) {
                 URL.revokeObjectURL(profileImageBlobUrl);
             }
@@ -117,14 +138,22 @@ export default function Perfil(): React.ReactElement {
     }, [user?._id, cacheBuster]);
 
     // --- LÓGICA DE CARGA DEL PERFIL DEL CLIENTE ---
+    // Carga los datos del perfil del cliente desde el backend
+    // Se ejecuta cuando el componente se monta o cuando cambia el userId
     useEffect(() => {
+        // Flag para prevenir actualizaciones de estado después del desmontaje
         let isMounted = true;
 
         const loadClientProfile = async () => {
+            // Validar que exista un userId antes de hacer la petición
             if (!user?._id) return;
 
             try {
+                // Llamar al servicio para obtener el perfil del cliente
+                // Endpoint: GET /api/perfil/cliente/{userId}
                 const profile = await getClientProfile(user._id);
+                
+                // Solo actualizar estado si el componente sigue montado y hay datos
                 if (isMounted && profile) {
                     setClientProfile(profile);
                 }
@@ -134,6 +163,8 @@ export default function Perfil(): React.ReactElement {
         };
 
         loadClientProfile();
+        
+        // Cleanup function: previene actualizaciones de estado después del desmontaje
         return () => {
             isMounted = false;
         };
@@ -156,45 +187,73 @@ export default function Perfil(): React.ReactElement {
         }
     };
 
+    // --- HANDLER: SELECCIÓN DE ARCHIVO DE IMAGEN ---
+    // Se ejecuta cuando el usuario selecciona una imagen desde el input file
     const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (file) {
+            // Crear blob URL temporal para previsualizar la imagen
             setPreviewImage(URL.createObjectURL(file));
+            // Guardar el archivo en el estado para subirlo después
             setImageFile(file);
+            // Abrir el diálogo de confirmación con la previsualización
             setOpenPhotoDialog(true);
         }
     };
 
+    // --- HANDLER: SUBIR IMAGEN AL SERVIDOR ---
+    // Se ejecuta cuando el usuario confirma la subida en el diálogo
     const handleUploadImage = async () => {
+        // Validar que exista archivo e userId antes de proceder
         if (!imageFile || !user?._id) {
             toast.error('Error: No se seleccionó ningún archivo.');
             return;
         }
+        
+        // Activar indicador de carga
         setIsUploading(true);
+        // Cerrar el diálogo de confirmación
         setOpenPhotoDialog(false);
+        
+        // Crear FormData con el archivo
+        // La clave 'archivo' debe coincidir con el nombre esperado por el backend
         const formData = new FormData();
         formData.append('archivo', imageFile);
 
         try {
+            // Subir imagen al servidor
+            // Endpoint: PUT /api/actualizar/imgPerfil/{userId}
             await uploadProfileImage(user._id, formData);
+            
+            // Actualizar cacheBuster para forzar recarga de la imagen
+            // Esto dispara el useEffect de carga de imagen
             setCacheBuster(Date.now());
+            
             toast.success('Foto de perfil actualizada.');
         } catch (error) {
             toast.error((error as Error).message || 'Error al subir la imagen.');
         } finally {
+            // Limpiar estados de carga y preview
             setIsUploading(false);
             setPreviewImage(null);
             setImageFile(null);
         }
     };
 
+    // --- HANDLER: CANCELAR SELECCIÓN DE IMAGEN ---
+    // Se ejecuta cuando el usuario cancela el diálogo de confirmación
     const handleDeletePhoto = () => {
+        // Limpiar estados de preview
         setPreviewImage(null);
         setImageFile(null);
+        // Cerrar el diálogo
         setOpenPhotoDialog(false);
+        
+        // Resetear el input file para permitir seleccionar el mismo archivo nuevamente
         if (fileInputRef.current) {
             fileInputRef.current.value = "";
         }
+        
         toast.info("Selección de imagen cancelada.");
     };
 

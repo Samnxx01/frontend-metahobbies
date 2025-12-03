@@ -6,15 +6,38 @@ import { Label } from '@/components/ui/label';
 import { UserIcon, Edit, Save, X } from 'lucide-react';
 import { ClientProfile } from '@/types/common';
 
+/**
+ * Props del componente PerfilClienteForm
+ * @property {ClientProfile | null} profile - Datos del perfil del cliente (null durante la carga)
+ * @property {function} onProfileUpdate - Callback que se ejecuta cuando se guardan los cambios
+ */
 interface PerfilClienteFormProps {
     profile: ClientProfile | null;
     onProfileUpdate: (updatedProfile: ClientProfile) => void;
 }
 
+/**
+ * Componente PerfilClienteForm
+ * 
+ * Formulario para visualizar y editar el perfil del cliente.
+ * Maneja 9 campos editables y permite guardar/cancelar cambios.
+ * 
+ * Campos editables:
+ * - Información personal: nombre_cliente, apellido, documento, teléfono, género, fecha_nacimiento
+ * - Ubicación: país, departamento, ciudad
+ * 
+ * Características:
+ * - Modo lectura/edición con estado local (isEditing)
+ * - Inputs no controlados usando refs para mejor rendimiento
+ * - Validación y parseo de campos numéricos (documento, teléfono)
+ * - Estado de carga mientras se obtienen datos del servidor
+ */
 export default function PerfilClienteForm({
     profile,
     onProfileUpdate,
 }: PerfilClienteFormProps) {
+    // --- ESTADO DE CARGA ---
+    // Si profile es null, mostrar estado de carga mientras se obtienen los datos del servidor
     if (!profile) {
         return (
             <Card className="shadow-sm border-border bg-card">
@@ -30,39 +53,70 @@ export default function PerfilClienteForm({
         );
     }
 
+    // --- ESTADO LOCAL ---
+    // isEditing: controla si el formulario está en modo lectura o edición
     const [isEditing, setIsEditing] = useState(false);
+    
+    // --- REFS PARA INPUTS NO CONTROLADOS ---
+    // Usamos refs en lugar de estado controlado para mejor rendimiento
+    // y para evitar re-renders innecesarios en cada keystroke
+    
+    // Refs para información personal
     const nombreRef = React.useRef<HTMLInputElement>(null);
     const apellidoRef = React.useRef<HTMLInputElement>(null);
     const documentoRef = React.useRef<HTMLInputElement>(null);
     const telefonoRef = React.useRef<HTMLInputElement>(null);
     const generioRef = React.useRef<HTMLInputElement>(null);
     const fechaNacimientoRef = React.useRef<HTMLInputElement>(null);
+    
+    // Refs para ubicación
     const paisRef = React.useRef<HTMLInputElement>(null);
     const departamentoRef = React.useRef<HTMLInputElement>(null);
     const ciudadRef = React.useRef<HTMLInputElement>(null);
 
+    // --- HANDLER: ACTIVAR MODO EDICIÓN ---
+    // Cambia el formulario de modo lectura a modo edición
     const handleEdit = () => {
         setIsEditing(true);
     };
 
+    // --- HANDLER: GUARDAR CAMBIOS ---
+    // Recopila los valores de todos los refs, construye el objeto actualizado
+    // y lo envía al componente padre a través del callback onProfileUpdate
     const handleSave = () => {
+        // Construir objeto con los valores actualizados
         const updatedProfile: ClientProfile = {
+            // Mantener todos los campos del perfil original
             ...profile,
+            
+            // Campos de texto: usar valor del ref o mantener el valor original
             nombre_cliente: nombreRef.current?.value || profile.nombre_cliente,
             apellido: apellidoRef.current?.value || profile.apellido,
-            documentoIntentidad: parseInt(documentoRef.current?.value || String(profile.documentoIntentidad), 10),
-            telefono: parseInt(telefonoRef.current?.value || String(profile.telefono), 10),
             genero: generioRef.current?.value || profile.genero,
             fecha_nacimiento: fechaNacimientoRef.current?.value || profile.fecha_nacimiento,
+            
+            // Campos numéricos: parsear a número con parseInt
+            // Si el campo está vacío, usar el valor original convertido a string
+            documentoIntentidad: parseInt(documentoRef.current?.value || String(profile.documentoIntentidad), 10),
+            telefono: parseInt(telefonoRef.current?.value || String(profile.telefono), 10),
+            
+            // Campos de ubicación: usar valor del ref o mantener el valor original
             paisId: paisRef.current?.value || profile.paisId,
             departamentoId: departamentoRef.current?.value || profile.departamentoId,
             ciudadId: ciudadRef.current?.value || profile.ciudadId,
         };
 
+        // Enviar datos actualizados al componente padre
+        // El padre se encarga de llamar al servicio y actualizar el backend
         onProfileUpdate(updatedProfile);
+        
+        // Volver a modo lectura
         setIsEditing(false);
     };
 
+    // --- HANDLER: CANCELAR EDICIÓN ---
+    // Descarta los cambios y vuelve a modo lectura
+    // Los inputs se resetean automáticamente al cambiar la key basada en isEditing
     const handleCancel = () => {
         setIsEditing(false);
     };
