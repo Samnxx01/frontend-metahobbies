@@ -1,0 +1,287 @@
+# ============================================
+# RUTAS PÚBLICAS (PUBLIC - PublicLayout)
+# ============================================
+
+# 1. Home (/)
+curl -X POST http://localhost:3000/api/seguridad/rutas/crear \
+-H "Content-Type: application/json" \
+-H "Authorization: Bearer YOUR_TOKEN" \
+-d '{
+  "name": "Inicio",
+  "path": "/",
+  "component": "Home",
+  "layout": "PublicLayout",
+  "icon": null,
+  "allowedRoles": ["690d3e1c3e66a2cb4f838d79"],
+  "estadoRuta": true,
+  "accessType": "6918857f5fc8260c8fcf875b",
+  "order": 0
+}'
+
+# 2. Productos
+curl -X POST http://localhost:3000/api/seguridad/rutas/crear \
+-H "Content-Type: application/json" \
+-H "Authorization: Bearer YOUR_TOKEN" \
+-d '{
+  "name": "Productos",
+  "path": "productos",
+  "component": "Productos",
+  "layout": "PublicLayout",
+  "icon": null,
+  "allowedRoles": ["690d3e1c3e66a2cb4f838d79"],
+  "estadoRuta": true,
+  "accessType": "6918857f5fc8260c8fcf875b",
+  "order": 1
+}'
+
+# 3. Detalle Producto
+curl -X POST http://localhost:3000/api/seguridad/rutas/crear \
+-H "Content-Type: application/json" \
+-H "Authorization: Bearer YOUR_TOKEN" \
+-d '{
+  "name": "Detalle Producto",
+  "path": "producto/:id",
+  "component": "DetalleProducto",
+  "layout": "PublicLayout",
+  "icon": null,
+  "allowedRoles": ["690d3e1c3e66a2cb4f838d79"],
+  "estadoRuta": true,
+  "accessType": "6918857f5fc8260c8fcf875b",
+  "order": 2
+}'
+
+# 4. Carrito
+curl -X POST http://localhost:3000/api/seguridad/rutas/crear \
+-H "Content-Type: application/json" \
+-H "Authorization: Bearer YOUR_TOKEN" \
+-d '{
+  "name": "Carrito",
+  "path": "carrito",
+  "component": "Carrito",
+  "layout": "PublicLayout",
+  "icon": null,
+  "allowedRoles": ["690d3e1c3e66a2cb4f838d79"],
+  "estadoRuta": true,
+  "accessType": "6918857f5fc8260c8fcf875b",
+  "order": 3
+}'
+
+# 5. Contacto
+curl -X POST http://localhost:3000/api/seguridad/rutas/crear \
+-H "Content-Type: application/json" \
+-H "Authorization: Bearer YOUR_TOKEN" \
+-d '{
+  "name": "Contacto",
+  "path": "contacto",
+  "component": "Contacto",
+  "layout": "PublicLayout",
+  "icon": null,
+  "allowedRoles": ["690d3e1c3e66a2cb4f838d79"],
+  "estadoRuta": true,
+  "accessType": "6918857f5fc8260c8fcf875b",
+  "order": 4
+}'
+
+# ============================================
+# RUTAS PÚBLICAS (PUBLIC - AuthLayout)
+# ============================================
+
+# 6. Login
+curl -X POST http://localhost:3000/api/seguridad/rutas/crear \
+-H "Content-Type: application/json" \
+-H "Authorization: Bearer YOUR_TOKEN" \
+-d '{
+  "name": "Login",
+  "path": "login",
+  "component": "Login",
+  "layout": "AuthLayout",
+  "icon": null,
+  "allowedRoles": ["690d3e1c3e66a2cb4f838d79"],
+  "estadoRuta": true,
+  "accessType": "6918857f5fc8260c8fcf875b",
+  "order": 5
+}'
+
+# 7. Registro
+curl -X POST http://localhost:3000/api/seguridad/rutas/crear \
+-H "Content-Type: application/json" \
+-H "Authorization: Bearer YOUR_TOKEN" \
+-d '{
+  "name": "Registro",
+  "path": "registro",
+  "component": "Registro",
+  "layout": "AuthLayout",
+  "icon": null,
+  "allowedRoles": ["690d3e1c3e66a2cb4f838d79"],
+  "estadoRuta": true,
+  "accessType": "6918857f5fc8260c8fcf875b",
+  "order": 6
+}'
+
+# 8. Recuperar Contraseña
+curl -X POST http://localhost:3000/api/seguridad/rutas/crear \
+-H "Content-Type: application/json" \
+-H "Authorization: Bearer YOUR_TOKEN" \
+-d '{
+  "name": "Recuperar Contraseña",
+  "path": "recuperar-contrasena",
+  "component": "RecuperarContrasena",
+  "layout": "AuthLayout",
+  "icon": null,
+  "allowedRoles": ["690d3e1c3e66a2cb4f838d79"],
+  "estadoRuta": true,
+  "accessType": "6918857f5fc8260c8fcf875b",
+  "order": 7
+}'
+
+# ============================================
+# RUTAS PRIVADAS (PRIVATE - PublicLayout)
+# ============================================
+
+# 9. Perfil (requiere autenticación)
+curl -X POST http://localhost:3000/api/seguridad/rutas/crear \
+-H "Content-Type: application/json" \
+-H "Authorization: Bearer YOUR_TOKEN" \
+-d '{
+  "name": "Perfil",
+  "path": "perfil",
+  "component": "Perfil",
+  "layout": "PublicLayout",
+  "icon": null,
+  "allowedRoles": ["690d3e1c3e66a2cb4f838d79"],
+  "estadoRuta": true,
+  "accessType": "6918857f5fc8260c8fcf875b",
+  "order": 8
+}'
+
+# 10. Checkout (requiere autenticación)
+curl -X POST http://localhost:3000/api/seguridad/rutas/crear \
+-H "Content-Type: application/json" \
+-H "Authorization: Bearer YOUR_TOKEN" \
+-d '{
+  "name": "Checkout",
+  "path": "checkout",
+  "component": "Checkout",
+  "layout": "PublicLayout",
+  "icon": null,
+  "allowedRoles": ["690d3e1c3e66a2cb4f838d79"],
+  "estadoRuta": true,
+  "accessType": "6918857f5fc8260c8fcf875b",
+  "order": 9
+}'
+
+# 11. Cambiar Contraseña (requiere autenticación con token)
+curl -X POST http://localhost:3000/api/seguridad/rutas/crear \
+-H "Content-Type: application/json" \
+-H "Authorization: Bearer YOUR_TOKEN" \
+-d '{
+  "name": "Cambiar Contraseña",
+  "path": "recuperar/:token",
+  "component": "CambiarContrasena",
+  "layout": "AuthLayout",
+  "icon": null,
+  "allowedRoles": ["690d3e1c3e66a2cb4f838d79"],
+  "estadoRuta": true,
+  "accessType": "6918857f5fc8260c8fcf875b",
+  "order": 10
+}'
+
+# ============================================
+# RUTAS PRIVADAS (PRIVATE - AdminLayout)
+# ============================================
+
+# 12. Dashboard Admin
+curl -X POST http://localhost:3000/api/seguridad/rutas/crear \
+-H "Content-Type: application/json" \
+-H "Authorization: Bearer YOUR_TOKEN" \
+-d '{
+  "name": "Dashboard",
+  "path": "dashboard",
+  "component": "DashboardAdmin",
+  "layout": "AdminLayout",
+  "icon": "LayoutDashboard",
+  "allowedRoles": ["690d3e1c3e66a2cb4f838d79"],
+  "estadoRuta": true,
+  "accessType": "6918857f5fc8260c8fcf875b",
+  "order": 11
+}'
+
+# 13. Gestión Productos
+curl -X POST http://localhost:3000/api/seguridad/rutas/crear \
+-H "Content-Type: application/json" \
+-H "Authorization: Bearer YOUR_TOKEN" \
+-d '{
+  "name": "Gestión Productos",
+  "path": "productos",
+  "component": "GestionProductos",
+  "layout": "AdminLayout",
+  "icon": "Package",
+  "allowedRoles": ["690d3e1c3e66a2cb4f838d79"],
+  "estadoRuta": true,
+  "accessType": "6918857f5fc8260c8fcf875b",
+  "order": 12
+}'
+
+# 14. Gestión Categorías
+curl -X POST http://localhost:3000/api/seguridad/rutas/crear \
+-H "Content-Type: application/json" \
+-H "Authorization: Bearer YOUR_TOKEN" \
+-d '{
+  "name": "Gestión Categorías",
+  "path": "categorias",
+  "component": "GestionCategorias",
+  "layout": "AdminLayout",
+  "icon": "Tags",
+  "allowedRoles": ["690d3e1c3e66a2cb4f838d79"],
+  "estadoRuta": true,
+  "accessType": "6918857f5fc8260c8fcf875b",
+  "order": 13
+}'
+
+# 15. Gestión Usuarios
+curl -X POST http://localhost:3000/api/seguridad/rutas/crear \
+-H "Content-Type: application/json" \
+-H "Authorization: Bearer YOUR_TOKEN" \
+-d '{
+  "name": "Gestión Usuarios",
+  "path": "usuarios",
+  "component": "GestionUsuarios",
+  "layout": "AdminLayout",
+  "icon": "Users",
+  "allowedRoles": ["690d3e1c3e66a2cb4f838d79"],
+  "estadoRuta": true,
+  "accessType": "6918857f5fc8260c8fcf875b",
+  "order": 14
+}'
+
+# 16. Pedidos Admin
+curl -X POST http://localhost:3000/api/seguridad/rutas/crear \
+-H "Content-Type: application/json" \
+-H "Authorization: Bearer YOUR_TOKEN" \
+-d '{
+  "name": "Pedidos",
+  "path": "pedidos",
+  "component": "PedidosAdmin",
+  "layout": "AdminLayout",
+  "icon": "ShoppingCart",
+  "allowedRoles": ["690d3e1c3e66a2cb4f838d79"],
+  "estadoRuta": true,
+  "accessType": "6918857f5fc8260c8fcf875b",
+  "order": 15
+}'
+
+# 17. Configuración Admin
+curl -X POST http://localhost:3000/api/seguridad/rutas/crear \
+-H "Content-Type: application/json" \
+-H "Authorization: Bearer YOUR_TOKEN" \
+-d '{
+  "name": "Configuración",
+  "path": "configuracion",
+  "component": "ConfiguracionAdmin",
+  "layout": "AdminLayout",
+  "icon": "Settings",
+  "allowedRoles": ["690d3e1c3e66a2cb4f838d79"],
+  "estadoRuta": true,
+  "accessType": "6918857f5fc8260c8fcf875b",
+  "order": 16
+}'
