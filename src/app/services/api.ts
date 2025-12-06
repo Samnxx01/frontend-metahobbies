@@ -15,7 +15,7 @@ export const apiFetch = async (
 
     const defaultHeaders: ApiHeaders = {
         'Content-Type': 'application/json',
-        'metasplot': token as string,
+        'metasploit': token as string,
         ...options.headers,
     };
 

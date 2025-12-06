@@ -64,15 +64,17 @@ const DEFAULT_USER_DATA: User = {
 };
 
 export default function Perfil(): React.ReactElement {
-    const { user, logout } = useAuth();
+    const { user, logout, isAuthenticated, loading } = useAuth();
     const navigate = useNavigate();
+
+
 
     // --- ESTADOS DE GESTIÓN DE UI Y DATOS ---
     const [localUser, setLocalUser] = useState<User>(user || DEFAULT_USER_DATA);
     const [isEditingPersonal, setIsEditingPersonal] = useState<boolean>(false);
     const [isEditingAddress, setIsEditingAddress] = useState<boolean>(false);
     const [activeNavItem, setActiveNavItem] = useState<string>('personal');
-    
+
     // Refs para inputs no controlados
     const nombreRef = useRef<HTMLInputElement>(null);
     const correoRef = useRef<HTMLInputElement>(null);
@@ -90,10 +92,38 @@ export default function Perfil(): React.ReactElement {
     const [imageLoading, setImageLoading] = useState<boolean>(false);
 
     // Redirección si el usuario no existe
-    if (!user) { 
-        navigate('/login'); 
-        return <></>; 
+    if (loading) {
+        return <div>Cargando usuario...</div>;
     }
+
+    if (!user) {
+        navigate('/login');
+        return <></>;
+    }
+
+    useEffect(() => {
+        console.log("🔥 useEffect ejecutado");
+
+        if (loading) {
+            console.log("⏳ loading = true → no cargo imagen todavía");
+            return;
+        }
+
+        if (!isAuthenticated) {
+            console.log("🚫 Usuario NO autenticado");
+            return;
+        }
+
+        if (!user?._id) {
+            console.log("⛔ user._id NO existe todavía");
+            return;
+        }
+
+        console.log("📸 Usuario listo, cargando imagen:", user._id);
+
+        // aquí llamas tu loadImage()
+    }, [loading, isAuthenticated, user?._id]);
+
 
     // Sincronizar localUser con el AuthProvider.user
     useEffect(() => {
@@ -104,33 +134,43 @@ export default function Perfil(): React.ReactElement {
 
     // --- LÓGICA DE CARGA DE IMAGEN DEL SERVIDOR ---
     useEffect(() => {
-        let isMounted = true;
+  console.log("=== EFECTO IMAGEN ===");
+  console.log("loading:", loading);
+  console.log("isAuthenticated:", isAuthenticated);
 
-        const loadImage = async () => {
-            if (!user?._id) return;
+  if (loading) {
+    console.log("STOP → loading true");
+    return;
+  }
 
-            setImageLoading(true);
-            if (profileImageBlobUrl) URL.revokeObjectURL(profileImageBlobUrl);
+  if (!isAuthenticated) {
+    console.log("STOP → usuario NO auth");
+    return;
+  }
 
-            try {
-                const blobUrl = await getProfileImageBlobUrl(user._id);
-                if (isMounted) setProfileImageBlobUrl(blobUrl);
-            } catch (error) {
-                setProfileImageBlobUrl(null);
-            } finally {
-                if (isMounted) setImageLoading(false);
-            }
-        };
+  let isMounted = true;
 
-        loadImage();
-        return () => {
-            isMounted = false;
-            if (profileImageBlobUrl && profileImageBlobUrl.startsWith('blob:')) {
-                URL.revokeObjectURL(profileImageBlobUrl);
-            }
-        };
-    }, [user?._id, cacheBuster]);
+  const loadImage = async () => {
+    try {
+      console.log("🔥 Llamando a getProfileImageBlobUrl()");
+      setImageLoading(true);
+      const blobUrl = await getProfileImageBlobUrl();  // ⬅️ aquí pega a /api/imgPerfil/ver
+      console.log("✅ blobUrl:", blobUrl);
+      if (isMounted) setProfileImageBlobUrl(blobUrl);
+    } catch (err) {
+      console.error("❌ Error cargando imagen:", err);
+      if (isMounted) setProfileImageBlobUrl(null);
+    } finally {
+      if (isMounted) setImageLoading(false);
+    }
+  };
 
+  loadImage();
+
+  return () => {
+    isMounted = false;
+  };
+}, [loading, isAuthenticated, cacheBuster]); // ⬅️ sin user._id
     // --- HANDLERS DE EDICIÓN DE DATOS ---
 
     const handleEditPersonal = () => {
@@ -141,9 +181,9 @@ export default function Perfil(): React.ReactElement {
         const nombre = nombreRef.current?.value || '';
         const correo = correoRef.current?.value || '';
         const telefono = telefonoRef.current?.value || '';
-        
-        setLocalUser(prev => ({ 
-            ...prev, 
+
+        setLocalUser(prev => ({
+            ...prev,
             nombre,
             correo,
             telefono
@@ -175,7 +215,7 @@ export default function Perfil(): React.ReactElement {
     // --- LOGOUT Y FOTO DE PERFIL ---
 
     const confirmLogout = () => setOpenConfirmDialog(true);
-    
+
     const handlePerformLogout = async () => {
         setOpenConfirmDialog(false);
         try {
@@ -197,17 +237,19 @@ export default function Perfil(): React.ReactElement {
     };
 
     const handleUploadImage = async () => {
-        if (!imageFile || !user?._id) {
+        if (!imageFile) {
             toast.error('Error: No se seleccionó ningún archivo.');
             return;
         }
+
         setIsUploading(true);
         setOpenPhotoDialog(false);
+
         const formData = new FormData();
         formData.append('img', imageFile);
 
         try {
-            await uploadProfileImage(user._id, formData);
+            await uploadProfileImage(formData);
             setCacheBuster(Date.now());
             toast.success('Foto de perfil actualizada.');
         } catch (error) {
@@ -231,9 +273,8 @@ export default function Perfil(): React.ReactElement {
     const NavItem: React.FC<NavItemProps> = ({ icon: Icon, label, itemKey, activeNavItem, setActiveNavItem }) => (
         <Button
             variant={activeNavItem === itemKey ? 'default' : 'ghost'}
-            className={`w-full justify-start text-left font-semibold ${
-                activeNavItem === itemKey ? '' : 'text-muted-foreground hover:bg-muted'
-            }`}
+            className={`w-full justify-start text-left font-semibold ${activeNavItem === itemKey ? '' : 'text-muted-foreground hover:bg-muted'
+                }`}
             onClick={() => setActiveNavItem(itemKey)}
         >
             <Icon className="h-4 w-4 mr-3" />
@@ -252,8 +293,8 @@ export default function Perfil(): React.ReactElement {
                 defaultValue={defaultValue}
                 readOnly={readOnly}
                 key={`${id}-${readOnly}`}
-                className={readOnly 
-                    ? "border-none shadow-none text-base pl-0 h-auto bg-transparent focus-visible:ring-0 text-foreground" 
+                className={readOnly
+                    ? "border-none shadow-none text-base pl-0 h-auto bg-transparent focus-visible:ring-0 text-foreground"
                     : "text-base bg-background border-border text-foreground"
                 }
             />
@@ -270,11 +311,12 @@ export default function Perfil(): React.ReactElement {
                         <div className="relative mb-4 group">
                             <Avatar className="h-24 w-24 md:h-32 md:w-32 border-4 border-background shadow-lg">
                                 <AvatarImage
-                                    src={previewImage || profileImageBlobUrl || undefined}
+                                    key={previewImage || profileImageBlobUrl}
+                                    src={previewImage || profileImageBlobUrl || ""}
                                     alt={localUser.nombre}
                                     onError={(e) => {
-                                        const target = e.target as HTMLImageElement;
-                                        target.src = "https://placehold.co/120x120/E8E8E8/5C5C5C?text=U";
+                                        (e.target as HTMLImageElement).src =
+                                            "https://placehold.co/120x120/E8E8E8/5C5C5C?text=U";
                                     }}
                                 />
                                 <AvatarFallback className="bg-primary/20 text-primary text-2xl md:text-3xl font-bold">
@@ -322,38 +364,38 @@ export default function Perfil(): React.ReactElement {
                             <Separator className="bg-border" />
                         </CardHeader>
                         <CardContent className="space-y-1 p-4">
-                            <NavItem 
-                                icon={UserIcon} 
-                                label="Información Personal" 
-                                itemKey="personal" 
+                            <NavItem
+                                icon={UserIcon}
+                                label="Información Personal"
+                                itemKey="personal"
                                 activeNavItem={activeNavItem}
                                 setActiveNavItem={setActiveNavItem}
                             />
-                            <NavItem 
-                                icon={MapPin} 
-                                label="Direcciones de Envío" 
-                                itemKey="address" 
+                            <NavItem
+                                icon={MapPin}
+                                label="Direcciones de Envío"
+                                itemKey="address"
                                 activeNavItem={activeNavItem}
                                 setActiveNavItem={setActiveNavItem}
                             />
-                            <NavItem 
-                                icon={Camera} 
-                                label="Foto de Perfil" 
-                                itemKey="photo" 
+                            <NavItem
+                                icon={Camera}
+                                label="Foto de Perfil"
+                                itemKey="photo"
                                 activeNavItem={activeNavItem}
                                 setActiveNavItem={setActiveNavItem}
                             />
-                            <NavItem 
-                                icon={Building} 
-                                label="Membresía" 
-                                itemKey="membership" 
+                            <NavItem
+                                icon={Building}
+                                label="Membresía"
+                                itemKey="membership"
                                 activeNavItem={activeNavItem}
                                 setActiveNavItem={setActiveNavItem}
                             />
-                            <NavItem 
-                                icon={Calendar} 
-                                label="Historial de Pedidos" 
-                                itemKey="history" 
+                            <NavItem
+                                icon={Calendar}
+                                label="Historial de Pedidos"
+                                itemKey="history"
                                 activeNavItem={activeNavItem}
                                 setActiveNavItem={setActiveNavItem}
                             />
@@ -393,31 +435,31 @@ export default function Perfil(): React.ReactElement {
                                     )}
                                 </CardHeader>
                                 <CardContent className="space-y-4 pt-4">
-                                    <FieldDisplay 
-                                        id="nombre" 
-                                        name="nombre" 
-                                        label="Nombre Completo" 
-                                        defaultValue={localUser.nombre} 
-                                        readOnly={!isEditingPersonal} 
+                                    <FieldDisplay
+                                        id="nombre"
+                                        name="nombre"
+                                        label="Nombre Completo"
+                                        defaultValue={localUser.nombre}
+                                        readOnly={!isEditingPersonal}
                                         inputRef={nombreRef}
                                     />
-                                    <FieldDisplay 
-                                        id="correo" 
-                                        name="correo" 
-                                        label="Correo Electrónico" 
-                                        defaultValue={localUser.correo} 
-                                        readOnly={true} 
+                                    <FieldDisplay
+                                        id="correo"
+                                        name="correo"
+                                        label="Correo Electrónico"
+                                        defaultValue={localUser.correo}
+                                        readOnly={true}
                                         inputRef={correoRef}
-                                        type="email" 
+                                        type="email"
                                     />
-                                    <FieldDisplay 
-                                        id="telefono" 
-                                        name="telefono" 
-                                        label="Teléfono" 
-                                        defaultValue={localUser.telefono || ''} 
-                                        readOnly={!isEditingPersonal} 
+                                    <FieldDisplay
+                                        id="telefono"
+                                        name="telefono"
+                                        label="Teléfono"
+                                        defaultValue={localUser.telefono || ''}
+                                        readOnly={!isEditingPersonal}
                                         inputRef={telefonoRef}
-                                        type="tel" 
+                                        type="tel"
                                     />
                                 </CardContent>
                             </Card>
@@ -446,12 +488,12 @@ export default function Perfil(): React.ReactElement {
                                     )}
                                 </CardHeader>
                                 <CardContent className="space-y-4 pt-4">
-                                    <FieldDisplay 
-                                        id="direccion" 
-                                        name="direccion" 
-                                        label="Dirección Completa" 
-                                        defaultValue={localUser.direccion || ''} 
-                                        readOnly={!isEditingAddress} 
+                                    <FieldDisplay
+                                        id="direccion"
+                                        name="direccion"
+                                        label="Dirección Completa"
+                                        defaultValue={localUser.direccion || ''}
+                                        readOnly={!isEditingAddress}
                                         inputRef={direccionRef}
                                     />
                                 </CardContent>
@@ -540,10 +582,10 @@ export default function Perfil(): React.ReactElement {
                             <Label htmlFor="picture" className="text-foreground">
                                 Subir una nueva foto
                             </Label>
-                            <Input 
-                                id="picture" 
-                                type="file" 
-                                onChange={handleFileSelect} 
+                            <Input
+                                id="picture"
+                                type="file"
+                                onChange={handleFileSelect}
                                 accept="image/*"
                                 className="bg-background border-border text-foreground"
                             />
@@ -562,8 +604,8 @@ export default function Perfil(): React.ReactElement {
                         >
                             <Trash2 className="h-4 w-4 mr-2" /> Eliminar
                         </Button>
-                        <Button 
-                            onClick={handleUploadImage} 
+                        <Button
+                            onClick={handleUploadImage}
                             disabled={isUploading || !imageFile}
                             className="w-full md:w-auto"
                         >

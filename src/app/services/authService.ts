@@ -40,7 +40,7 @@ interface RegisterClienteResponse {
 }
 
 export const registerCliente = async (registerData: RegisterClienteData): Promise<RegisterClienteResponse> => {
-    return apiFetch('/api/registro/cliente', {
+    return apiFetch('/api/registro/client', {
         method: 'POST',
         body: registerData
     });

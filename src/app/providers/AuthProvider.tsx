@@ -22,6 +22,7 @@ interface AuthContextType {
     isAuthenticated: boolean;
     login: (credentials: LoginCredentials) => Promise<LoginResponse>;
     logout: () => void;
+    loading: boolean;
 }
 
 interface AuthProviderProps {
@@ -101,6 +102,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         user,
         token,
         isAuthenticated: !!token,
+        loading,
         login, // <-- La nueva función
         logout
         // Ya no existen loginAdmin ni loginClient

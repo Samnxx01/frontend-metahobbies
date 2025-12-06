@@ -6,6 +6,7 @@ interface ClientData {
     apellido?: string;
     email: string;
     password: string;
+    rol: string
     telefono?: string;
     direccion?: string;
 }
@@ -14,19 +15,33 @@ interface UploadImageResponse extends ApiResponse {
     imageId?: ImageId;
 }
 
-export const registerClient = async (clientData: ClientData): Promise<ApiResponse> => {
+export const registerClient = async (
+    clientData: ClientData & { correo?: string; fecha_nacimiento?: string }
+): Promise<ApiResponse> => {
+
+    const payload = {
+        correo: clientData.email,               // backend espera 'correo'
+        password: clientData.password,          // correcto
+        rol: clientData.rol || "CLIENTE",       // lo usa tu BD
+    };
+
     const data = await apiFetch('/api/registro/client', {
         method: 'POST',
-        body: clientData,
+        body: payload,
     });
+
     return data;
 };
 
-export const uploadProfileImage = async (userId: UserId, formData: FormData): Promise<UploadImageResponse> => {
-    const data = await apiFetch(`/api/imgPerfil/${userId}`, {
-        method: 'POST',
+export const uploadProfileImage = async (
+    formData: FormData
+): Promise<UploadImageResponse> => {
+
+    const data = await apiFetch(`/api/actualizar/imgPerfil`, {
+        method: 'PUT',
         body: formData,
     });
+
     return data;
 };
 
@@ -70,85 +85,27 @@ export const getUserProfileImageId = async (userId: UserId): Promise<ImageId> =>
     }
 };
 
-export const fetchProfileImageBlob = async (imageId: ImageId): Promise<Blob> => {
-    try {
-        if (!imageId) {
-            throw new Error('ImageId no proporcionado');
-        }
-        const response = await apiFetch(`/api/imgPerfil/ver/${imageId}`, {
-            method: 'GET',
-            responseType: 'raw'
-        });
-        if (response instanceof Response) {
-            if (!response.ok) {
-                if (response.status === 404) {
-                    throw new Error('NO_IMAGE');
-                }
+export const fetchProfileImageBlob = async (): Promise<Blob> => {
+    const response = await apiFetch("/api/imgPerfil/ver", {
+        method: "GET",
+        responseType: "raw"
+    });
 
-                let errorText = response.statusText;
-                try {
-                    const errorBody = await response.json();
-                    if (errorBody && errorBody.msg) {
-                        errorText = errorBody.msg;
-                    }
-                } catch (e) {
-                    // No se pudo parsear el JSON del error
-                }
-                throw new Error(errorText || `Error ${response.status}`);
-            }
-
-            const blob = await response.blob();
-
-            if (blob.size === 0) {
-                throw new Error('NO_IMAGE');
-            }
-            return blob;
-        } else {
-            return response;
-        }
-
-    } catch (error) {
-        console.error('Error en fetchProfileImageBlob:', error);
-        throw error;
+    if (!(response instanceof Response)) {
+        throw new Error("INVALID_RESPONSE");
     }
+
+    if (response.status === 404) throw new Error("NO_IMAGE");
+    if (!response.ok) throw new Error("IMAGE_FETCH_ERROR");
+
+    return await response.blob();
 };
 
-export const getProfileImageBlobUrl = async (userId: UserId): Promise<string | null> => {
-    if (!userId) {
-        return null;
-    }
-
+export const getProfileImageBlobUrl = async (): Promise<string | null> => {
     try {
-        const imageId = await getUserProfileImageId(userId);
-        const imageBlob = await fetchProfileImageBlob(imageId);
-
-        if (!(imageBlob instanceof Blob)) {
-            throw new Error('Blob inválido');
-        }
-        const blobUrl = URL.createObjectURL(imageBlob);
-        return blobUrl;
-    } catch (error) {
-        if (error instanceof Error && error.message === 'NO_IMAGE') {
-            return null;
-        }
-        console.error('Error al crear Blob URL:', error);
-        return null;
-    }
-};
-
-export const getProfileImageDirectUrl = async (userId: UserId): Promise<string | null> => {
-    if (!userId) {
-        return null;
-    }
-
-    try {
-        const imageId = await getUserProfileImageId(userId);
-        return `/api/imgPerfil/ver/${imageId}`;
-    } catch (error) {
-        if (error instanceof Error && error.message === 'NO_IMAGE') {
-            return null;
-        }
-        console.error('Error al obtener URL directa:', error);
+        const blob = await fetchProfileImageBlob();
+        return URL.createObjectURL(blob);
+    } catch {
         return null;
     }
 };
