@@ -112,24 +112,3 @@ export interface ProfileImage {
   usuario: UserId;
   url?: string;
 }
-
-// Tipos para perfil de cliente
-export interface ClientProfile {
-  _id?: string;
-  nombre_cliente: string;
-  apellido: string;
-  regisUsuario?: string; // ObjectId reference to RegisUsu
-  tipoDeIntendidad?: string; // ObjectId reference to tipoDocumento
-  documentoIntentidad: number;
-  genero?: string;
-  nacionalidad?: string; // ObjectId reference to nacionalidad
-  prefijo?: string; // ObjectId reference to prefijoPaisesTel
-  telefono: number;
-  fecha_nacimiento: string; // ISO date string from backend
-  paisId?: string;
-  departamentoId?: string;
-  ciudadId?: string;
-  createdAt?: string;
-  updatedAt?: string;
-  saldoComisiones?: number;
-}

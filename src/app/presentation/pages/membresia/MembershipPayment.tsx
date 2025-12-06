@@ -13,7 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2 } from 'lucide-react';
 
 const steps = [
-    { title: 'Email' },
+    { title: 'Información Personal' },
     { title: 'Resumen' },
     { title: 'Pago' }
 ];
@@ -46,19 +46,21 @@ export default function MembershipPayment(): React.ReactElement {
         handleFormChange,
         handleNext,
         handleBack,
-        handlePayment,
     } = useMembershipPaymentForm({
         initialFormData: {
             personalInfo: {
+                nombre: '',
+                apellido: '',
                 email: '',
+                telefono: '',
+                legalId: '',
+                legalIdType: '',
             },
             paymentInfo: {
-                paymentMethod: '',
-                nequiPhone: '',
                 cardNumber: '',
-                cardName: '',
                 expiryDate: '',
-                cvv: ''
+                cvv: '',
+                cardName: ''
             }
         },
         steps,
@@ -97,7 +99,6 @@ export default function MembershipPayment(): React.ReactElement {
                                     variant="outline"
                                     onClick={handleBack}
                                     className="min-w-[100px]"
-                                    disabled={loading}
                                 >
                                     Atrás
                                 </Button>
@@ -105,20 +106,22 @@ export default function MembershipPayment(): React.ReactElement {
                                 <div />
                             )}
                             
-                            <Button
-                                onClick={activeStep === steps.length - 1 ? handlePayment : handleNext}
-                                disabled={loading}
-                                className="min-w-[120px]"
-                            >
-                                {loading ? (
-                                    <>
-                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                        Procesando...
-                                    </>
-                                ) : (
-                                    activeStep === steps.length - 1 ? 'Pagar Membresía' : 'Siguiente'
-                                )}
-                            </Button>
+                            {activeStep !== steps.length - 1 && (
+                                <Button
+                                    onClick={handleNext}
+                                    disabled={loading}
+                                    className="min-w-[120px]"
+                                >
+                                    {loading ? (
+                                        <>
+                                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                            Procesando...
+                                        </>
+                                    ) : (
+                                        'Siguiente'
+                                    )}
+                                </Button>
+                            )}
                         </div>
                     </CardContent>
                 </Card>

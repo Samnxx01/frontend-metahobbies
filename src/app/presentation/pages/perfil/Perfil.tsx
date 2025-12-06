@@ -4,15 +4,15 @@ import { toast } from 'react-toastify';
 
 // Importar servicios y providers con la ruta relativa ajustada
 import { useAuth } from '../../../providers/AuthProvider';
-import { uploadProfileImage, getProfileImageBlobUrl, getClientProfile, updateClientProfile } from '../../../services/clientService';
-import PerfilClienteForm from '../../components/perfil/PerfilClienteForm';
-import DireccionEnvioForm from '../../components/perfil/DireccionEnvioForm';
-import type { User, ClientProfile } from '../../../../types/common';
+import { uploadProfileImage, getProfileImageBlobUrl } from '../../../services/clientService';
+import type { User } from '../../../../types/common';
 
 // Shadcn UI components
-import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import {
     Dialog,
@@ -24,7 +24,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 
 // Lucide icons
-import { Camera, MapPin, User as UserIcon, Trash2, ArrowLeft, LogOut, AlertTriangle, Loader2, Building, Calendar } from 'lucide-react';
+import { Camera, MapPin, User as UserIcon, Edit, Save, X, Trash2, ArrowLeft, LogOut, AlertTriangle, Loader2, Building, Calendar } from 'lucide-react';
 
 // --- INTERFACES ---
 
@@ -36,6 +36,17 @@ interface NavItemProps {
     setActiveNavItem: (key: string) => void;
 }
 
+interface FieldDisplayProps {
+    id: string;
+    name: string;
+    label: string;
+    defaultValue: string;
+    readOnly: boolean;
+    inputRef?: React.RefObject<HTMLInputElement | null>;
+    type?: string;
+}
+
+// --- CONSTANTES ---
 const CONFIRM_LOGOUT_TITLE = 'Cerrar Sesión';
 const CONFIRM_LOGOUT_MESSAGE = '¿Estás seguro de que quieres cerrar tu sesión actual?';
 
@@ -60,20 +71,15 @@ export default function Perfil(): React.ReactElement {
 
     // --- ESTADOS DE GESTIÓN DE UI Y DATOS ---
     const [localUser, setLocalUser] = useState<User>(user || DEFAULT_USER_DATA);
+    const [isEditingPersonal, setIsEditingPersonal] = useState<boolean>(false);
+    const [isEditingAddress, setIsEditingAddress] = useState<boolean>(false);
     const [activeNavItem, setActiveNavItem] = useState<string>('personal');
-<<<<<<< HEAD
 
     // Refs para inputs no controlados
     const nombreRef = useRef<HTMLInputElement>(null);
     const correoRef = useRef<HTMLInputElement>(null);
     const telefonoRef = useRef<HTMLInputElement>(null);
     const direccionRef = useRef<HTMLInputElement>(null);
-=======
-    const [clientProfile, setClientProfile] = useState<ClientProfile | null>(null);
-    
-    // Refs para archivo de foto
-    const fileInputRef = useRef<HTMLInputElement>(null);
->>>>>>> cbbf943aa7af4df81d10afc3d96bba0b72bacb07
 
     // Estados de Foto de Perfil
     const [openPhotoDialog, setOpenPhotoDialog] = useState<boolean>(false);
@@ -90,7 +96,6 @@ export default function Perfil(): React.ReactElement {
         return <div>Cargando usuario...</div>;
     }
 
-<<<<<<< HEAD
     if (!user) {
         navigate('/login');
         return <></>;
@@ -121,11 +126,6 @@ export default function Perfil(): React.ReactElement {
 
 
     // Sincronizar localUser con el AuthProvider.user
-=======
-    // --- SINCRONIZACIÓN DE USUARIO ---
-    // Mantiene localUser actualizado cuando cambia el usuario en AuthProvider
-    // Esto permite que los cambios de sesión se reflejen inmediatamente en la UI
->>>>>>> cbbf943aa7af4df81d10afc3d96bba0b72bacb07
     useEffect(() => {
         if (user) {
             setLocalUser(user);
@@ -133,12 +133,7 @@ export default function Perfil(): React.ReactElement {
     }, [user]);
 
     // --- LÓGICA DE CARGA DE IMAGEN DEL SERVIDOR ---
-    // Este useEffect se ejecuta cuando:
-    // 1. El componente se monta por primera vez
-    // 2. Cambia el userId (cuando el usuario inicia sesión o cambia)
-    // 3. Cambia cacheBuster (después de subir una nueva imagen)
     useEffect(() => {
-<<<<<<< HEAD
   console.log("=== EFECTO IMAGEN ===");
   console.log("loading:", loading);
   console.log("isAuthenticated:", isAuthenticated);
@@ -177,62 +172,11 @@ export default function Perfil(): React.ReactElement {
   };
 }, [loading, isAuthenticated, cacheBuster]); // ⬅️ sin user._id
     // --- HANDLERS DE EDICIÓN DE DATOS ---
-=======
-        // Flag para prevenir actualizaciones de estado después del desmontaje
-        let isMounted = true;
 
-        const loadImage = async () => {
-            // Validar que exista un userId antes de intentar cargar la imagen
-            if (!user?._id) return;
+    const handleEditPersonal = () => {
+        setIsEditingPersonal(true);
+    };
 
-            // Indicar que la imagen está cargando
-            setImageLoading(true);
-            
-            // Liberar memoria del blob URL anterior si existe
-            // Esto previene memory leaks al limpiar URLs de blob previas
-            if (profileImageBlobUrl) URL.revokeObjectURL(profileImageBlobUrl);
-
-            try {
-                // Obtener la imagen del servidor como blob URL
-                // getProfileImageBlobUrl hace: getUserProfileImageId -> fetchProfileImageBlob -> createObjectURL
-                const blobUrl = await getProfileImageBlobUrl(user._id);
-                
-                // Solo actualizar estado si el componente sigue montado
-                if (isMounted) setProfileImageBlobUrl(blobUrl);
-            } catch (error) {
-                // En caso de error (ej: sin imagen), establecer null
-                setProfileImageBlobUrl(null);
-            } finally {
-                // Desactivar indicador de carga solo si el componente sigue montado
-                if (isMounted) setImageLoading(false);
-            }
-        };
-
-        loadImage();
-        
-        // Cleanup function: se ejecuta cuando el componente se desmonta o antes de re-ejecutar el efecto
-        return () => {
-            isMounted = false;
-            // Liberar memoria del blob URL para prevenir memory leaks
-            if (profileImageBlobUrl && profileImageBlobUrl.startsWith('blob:')) {
-                URL.revokeObjectURL(profileImageBlobUrl);
-            }
-        };
-    }, [user?._id, cacheBuster]);
-
-    // --- LÓGICA DE CARGA DEL PERFIL DEL CLIENTE ---
-    // Carga los datos del perfil del cliente desde el backend
-    // Se ejecuta cuando el componente se monta o cuando cambia el userId
-    useEffect(() => {
-        // Flag para prevenir actualizaciones de estado después del desmontaje
-        let isMounted = true;
->>>>>>> cbbf943aa7af4df81d10afc3d96bba0b72bacb07
-
-        const loadClientProfile = async () => {
-            // Validar que exista un userId antes de hacer la petición
-            if (!user?._id) return;
-
-<<<<<<< HEAD
     const handleSavePersonal = () => {
         const nombre = nombreRef.current?.value || '';
         const correo = correoRef.current?.value || '';
@@ -247,31 +191,26 @@ export default function Perfil(): React.ReactElement {
         setIsEditingPersonal(false);
         toast.success("Información personal actualizada.");
     };
-=======
-            try {
-                // Llamar al servicio para obtener el perfil del cliente
-                // Endpoint: GET /api/perfil/cliente/{userId}
-                const profile = await getClientProfile(user._id);
-                
-                // Solo actualizar estado si el componente sigue montado y hay datos
-                if (isMounted && profile) {
-                    setClientProfile(profile);
-                }
-            } catch (error) {
-                console.error('Error al cargar perfil del cliente:', error);
-            }
-        };
 
-        loadClientProfile();
-        
-        // Cleanup function: previene actualizaciones de estado después del desmontaje
-        return () => {
-            isMounted = false;
-        };
-    }, [user?._id]);
->>>>>>> cbbf943aa7af4df81d10afc3d96bba0b72bacb07
+    const handleCancelPersonal = () => {
+        setIsEditingPersonal(false);
+        // Los inputs se resetearán automáticamente al valor de localUser cuando cambie isEditingPersonal
+    };
 
-    // --- HANDLERS DE EDICIÓN DE DATOS ---
+    const handleEditAddress = () => {
+        setIsEditingAddress(true);
+    };
+
+    const handleSaveAddress = () => {
+        const direccion = direccionRef.current?.value || '';
+        setLocalUser(prev => ({ ...prev, direccion }));
+        setIsEditingAddress(false);
+        toast.success("Dirección de envío actualizada.");
+    };
+
+    const handleCancelAddress = () => {
+        setIsEditingAddress(false);
+    };
 
     // --- LOGOUT Y FOTO DE PERFIL ---
 
@@ -288,90 +227,45 @@ export default function Perfil(): React.ReactElement {
         }
     };
 
-    // --- HANDLER: SELECCIÓN DE ARCHIVO DE IMAGEN ---
-    // Se ejecuta cuando el usuario selecciona una imagen desde el input file
     const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (file) {
-            // Crear blob URL temporal para previsualizar la imagen
             setPreviewImage(URL.createObjectURL(file));
-            // Guardar el archivo en el estado para subirlo después
             setImageFile(file);
-            // Abrir el diálogo de confirmación con la previsualización
             setOpenPhotoDialog(true);
         }
     };
 
-    // --- HANDLER: SUBIR IMAGEN AL SERVIDOR ---
-    // Se ejecuta cuando el usuario confirma la subida en el diálogo
     const handleUploadImage = async () => {
-<<<<<<< HEAD
         if (!imageFile) {
             toast.error('Error: No se seleccionó ningún archivo.');
             return;
         }
 
-=======
-        // Validar que exista archivo e userId antes de proceder
-        if (!imageFile || !user?._id) {
-            toast.error('Error: No se seleccionó ningún archivo.');
-            return;
-        }
-        
-        // Activar indicador de carga
->>>>>>> cbbf943aa7af4df81d10afc3d96bba0b72bacb07
         setIsUploading(true);
-        // Cerrar el diálogo de confirmación
         setOpenPhotoDialog(false);
-<<<<<<< HEAD
 
-=======
-        
-        // Crear FormData con el archivo
-        // La clave 'archivo' debe coincidir con el nombre esperado por el backend
->>>>>>> cbbf943aa7af4df81d10afc3d96bba0b72bacb07
         const formData = new FormData();
-        formData.append('archivo', imageFile);
+        formData.append('img', imageFile);
 
         try {
-<<<<<<< HEAD
             await uploadProfileImage(formData);
-=======
-            // Subir imagen al servidor
-            // Endpoint: PUT /api/actualizar/imgPerfil/{userId}
-            await uploadProfileImage(user._id, formData);
-            
-            // Actualizar cacheBuster para forzar recarga de la imagen
-            // Esto dispara el useEffect de carga de imagen
->>>>>>> cbbf943aa7af4df81d10afc3d96bba0b72bacb07
             setCacheBuster(Date.now());
-            
             toast.success('Foto de perfil actualizada.');
         } catch (error) {
             toast.error((error as Error).message || 'Error al subir la imagen.');
         } finally {
-            // Limpiar estados de carga y preview
             setIsUploading(false);
             setPreviewImage(null);
             setImageFile(null);
         }
     };
 
-    // --- HANDLER: CANCELAR SELECCIÓN DE IMAGEN ---
-    // Se ejecuta cuando el usuario cancela el diálogo de confirmación
     const handleDeletePhoto = () => {
-        // Limpiar estados de preview
         setPreviewImage(null);
         setImageFile(null);
-        // Cerrar el diálogo
         setOpenPhotoDialog(false);
-        
-        // Resetear el input file para permitir seleccionar el mismo archivo nuevamente
-        if (fileInputRef.current) {
-            fileInputRef.current.value = "";
-        }
-        
-        toast.info("Selección de imagen cancelada.");
+        toast.success("Foto de perfil eliminada.");
     };
 
     // --- COMPONENTES AUXILIARES ---
@@ -388,7 +282,6 @@ export default function Perfil(): React.ReactElement {
         </Button>
     );
 
-<<<<<<< HEAD
     const FieldDisplay: React.FC<FieldDisplayProps> = ({ id, name, label, defaultValue, readOnly, inputRef, type = 'text' }) => (
         <div className="space-y-1">
             <Label htmlFor={id} className="text-foreground">{label}</Label>
@@ -408,18 +301,8 @@ export default function Perfil(): React.ReactElement {
         </div>
     );
 
-=======
->>>>>>> cbbf943aa7af4df81d10afc3d96bba0b72bacb07
     return (
         <div className="min-h-screen bg-background flex flex-col items-center py-6 md:py-10 px-4">
-            {/* Hidden file input */}
-            <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleFileSelect}
-                style={{ display: 'none' }}
-            />
             <div className="w-full max-w-5xl">
 
                 {/* Header del Perfil */}
@@ -452,16 +335,16 @@ export default function Perfil(): React.ReactElement {
                                 size="icon"
                                 className="absolute bottom-0 right-0 h-8 w-8 md:h-9 md:w-9 rounded-full bg-background border border-border shadow-sm 
                                     opacity-0 group-hover:opacity-100 transition-opacity duration-200"
-                                onClick={() => fileInputRef.current?.click()}
+                                onClick={() => setOpenPhotoDialog(true)}
                             >
                                 <Camera className="h-3 w-3 md:h-4 md:w-4 text-muted-foreground" />
                                 <span className="sr-only">Cambiar foto</span>
                             </Button>
                         </div>
                         <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-1">{localUser.nombre}</h1>
-                        <div className="text-xs md:text-sm text-muted-foreground">
+                        <p className="text-xs md:text-sm text-muted-foreground">
                             Miembro desde {localUser.fechaCreacion ? new Date(localUser.fechaCreacion).toLocaleDateString('es-ES', { month: 'long', year: 'numeric' }) : 'N/A'} • Rol: <Badge variant="secondary" className="ml-1">{localUser.rol}</Badge>
-                        </div>
+                        </p>
                     </CardContent>
                 </Card>
 
@@ -531,7 +414,6 @@ export default function Perfil(): React.ReactElement {
 
                         {/* --- Tarjeta de Información Personal --- */}
                         {activeNavItem === 'personal' && (
-<<<<<<< HEAD
                             <Card className="shadow-sm border-border bg-card">
                                 <CardHeader className="flex flex-col md:flex-row md:items-center justify-between pb-2 space-y-2 md:space-y-0">
                                     <CardTitle className="text-lg md:text-xl font-semibold flex items-center gap-2 text-foreground">
@@ -581,31 +463,10 @@ export default function Perfil(): React.ReactElement {
                                     />
                                 </CardContent>
                             </Card>
-=======
-                            <PerfilClienteForm
-                                profile={clientProfile}
-                                token={localStorage.getItem('token') || ''}
-                                onProfileUpdate={async (updatedProfile) => {
-                                    setClientProfile(updatedProfile);
-                                    if (user?._id) {
-                                        try {
-                                            const response = await updateClientProfile(user._id, updatedProfile);
-                                            if (response && response.success) {
-                                                toast.success('Perfil actualizado correctamente.');
-                                            }
-                                        } catch (error) {
-                                            console.error('Error al actualizar perfil:', error);
-                                            toast.error('Error al actualizar el perfil.');
-                                        }
-                                    }
-                                }}
-                            />
->>>>>>> cbbf943aa7af4df81d10afc3d96bba0b72bacb07
                         )}
 
                         {/* --- Tarjeta de Dirección de Envío --- */}
                         {activeNavItem === 'address' && (
-<<<<<<< HEAD
                             <Card className="shadow-sm border-border bg-card">
                                 <CardHeader className="flex flex-col md:flex-row md:items-center justify-between pb-2 space-y-2 md:space-y-0">
                                     <CardTitle className="text-lg md:text-xl font-semibold flex items-center gap-2 text-foreground">
@@ -637,12 +498,6 @@ export default function Perfil(): React.ReactElement {
                                     />
                                 </CardContent>
                             </Card>
-=======
-                            <DireccionEnvioForm
-                                localUser={localUser}
-                                onUserUpdate={setLocalUser}
-                            />
->>>>>>> cbbf943aa7af4df81d10afc3d96bba0b72bacb07
                         )}
 
                         {/* Sección de Foto de Perfil */}
@@ -651,7 +506,7 @@ export default function Perfil(): React.ReactElement {
                                 <p className="text-base md:text-lg text-muted-foreground">
                                     Haz clic en el botón de la cámara sobre tu foto de perfil para actualizarla, o usa el botón de abajo.
                                 </p>
-                                <Button className="mt-4" onClick={() => fileInputRef.current?.click()}>
+                                <Button className="mt-4" onClick={() => setOpenPhotoDialog(true)}>
                                     <Camera className="h-4 w-4 mr-2" /> Abrir Gestor de Fotos
                                 </Button>
                             </Card>
@@ -723,7 +578,6 @@ export default function Perfil(): React.ReactElement {
                                 </div>
                             )}
                         </div>
-<<<<<<< HEAD
                         <div className="grid w-full max-w-xs items-center gap-1.5 mx-auto">
                             <Label htmlFor="picture" className="text-foreground">
                                 Subir una nueva foto
@@ -736,8 +590,6 @@ export default function Perfil(): React.ReactElement {
                                 className="bg-background border-border text-foreground"
                             />
                         </div>
-=======
->>>>>>> cbbf943aa7af4df81d10afc3d96bba0b72bacb07
                         <p className="text-xs text-muted-foreground mt-2">
                             Asegúrate que la imagen sea clara y tenga un buen enfoque.
                         </p>

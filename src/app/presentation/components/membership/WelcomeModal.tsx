@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 // Importar componentes de Shadcn
 import {
@@ -9,45 +9,18 @@ import { Button } from "@/components/ui/button";
 
 import type { WelcomeModalProps } from '@/types/components';
 
-interface ModalContent {
-    title: string;
-    subtitle: string;
-    body: string;
-    price: string;
-    buttonText: string;
-    buttonLink: string;
-    imageUrl: string;
-}
-
 export default function WelcomeModal({
     open: controlledOpen,
     onClose,
     membershipType = "estándar"
 }: Partial<WelcomeModalProps> = {}): React.ReactElement {
     const navigate = useNavigate();
+    // Shadcn Dialog maneja el estado 'open' internamente si usas onOpenChange,
+    // pero mantenemos el estado local para la apertura inicial.
     const [internalOpen, setInternalOpen] = useState<boolean>(true);
-    const [modalContent, setModalContent] = useState<ModalContent | null>(null);
     
     // Use controlled open state if provided, otherwise use internal state
     const isOpen = controlledOpen !== undefined ? controlledOpen : internalOpen;
-
-    useEffect(() => {
-        // Simular obtención de datos (hardcoded)
-        const fetchModalContent = () => {
-            const content: ModalContent = {
-                title: "🎉 ¡Oferta Especial de Lanzamiento!",
-                subtitle: "Obtén <span class='text-primary font-bold'>50% de descuento</span> en tu primera membresía",
-                body: `Aprovecha esta promoción exclusiva por tiempo limitado. Únete ahora a nuestra membresía ${membershipType} y empieza a disfrutar de todos los beneficios desde el primer día.`,
-                price: "COP $100,000",
-                buttonText: "Aprovechar Oferta Ahora",
-                buttonLink: "/productos",
-                imageUrl: "/public/assets/images/products/product2.png"
-            };
-            setModalContent(content);
-        };
-
-        fetchModalContent();
-    }, [membershipType]);
 
     const handleClose = (): void => {
         if (onClose) {
@@ -59,9 +32,7 @@ export default function WelcomeModal({
 
     const handleAcquire = (): void => {
         handleClose();
-        if (modalContent?.buttonLink) {
-            navigate(modalContent.buttonLink);
-        }
+        navigate('/membresia/pago');
     };
 
     const handleOpenChange = (open: boolean): void => {
@@ -69,10 +40,6 @@ export default function WelcomeModal({
             handleClose();
         }
     };
-
-    if (!modalContent) {
-        return <></>;
-    }
 
     // La lógica de Modal, Backdrop, y Transitions se maneja de forma nativa por Dialog
     return (
@@ -92,40 +59,39 @@ export default function WelcomeModal({
                     {/* Imagen lado izquierdo - Reemplaza Grid item md={6} xs={12} y Box */}
                     <div className="h-[200px] md:h-[400px] w-full bg-cover bg-center"
                         style={{
-                            backgroundImage: `url(${modalContent.imageUrl})`,
+                            backgroundImage: 'url(/assets/images/membership-banner.jpg)',
                         }}
                     />
 
                     {/* Contenido lado derecho - Reemplaza Grid item md={6} xs={12} y Box */}
-                    <div className="p-6 sm:p-8 flex flex-col justify-center">
+                    <div className="p-6 sm:p-8 flex flex-col justify-center"> {/* Ajustamos padding si es necesario */}
 
-                        {/* Título Principal */}
+                        {/* Título Principal - Reemplaza Typography variant="h4" */}
                         <h2 className="mb-3 text-3xl font-bold text-primary">
-                            {modalContent.title}
+                            ¡Adquiere tu Membresía!
                         </h2>
 
-                        {/* Subtítulo */}
-                        <p 
-                            className="mb-3 text-lg font-medium"
-                            dangerouslySetInnerHTML={{ __html: modalContent.subtitle }}
-                        />
+                        {/* Subtítulo - Reemplaza Typography variant="h6" */}
+                        <p className="mb-3 text-lg font-medium">
+                            Empieza a ganar <span className="text-primary font-bold">25% de ganancias</span> por ventas
+                        </p>
 
-                        {/* Descripción */}
+                        {/* Descripción - Reemplaza Typography con estilos custom */}
                         <p className="mb-4 text-muted-foreground text-lg">
-                            {modalContent.body}
+                            Únete a nuestro exclusivo programa de membresía {membershipType} y comienza a generar ingresos mientras recomiendas nuestros productos.
                         </p>
 
-                        {/* Precio */}
+                        {/* Precio - Reemplaza Typography variant="h5" */}
                         <p className="mb-6 text-2xl font-semibold text-primary">
-                            {modalContent.price}
+                            COP $200,000
                         </p>
 
-                        {/* Botón */}
+                        {/* Botón - Reemplaza Button */}
                         <Button
                             onClick={handleAcquire}
                             className="w-full py-6 text-lg font-semibold rounded-lg"
                         >
-                            {modalContent.buttonText}
+                            Adquirir Membresía
                         </Button>
                     </div>
                 </div>
