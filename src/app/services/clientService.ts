@@ -1,5 +1,5 @@
 import { apiFetch } from './api';
-import type { UserId, ImageId, ApiResponse } from '../../types/common';
+import type { UserId, ImageId, ApiResponse, ClientProfile } from '../../types/common';
 
 interface ClientData {
     nombre?: string;
@@ -33,11 +33,16 @@ export const registerClient = async (
     return data;
 };
 
+<<<<<<< HEAD
 export const uploadProfileImage = async (
     formData: FormData
 ): Promise<UploadImageResponse> => {
 
     const data = await apiFetch(`/api/actualizar/imgPerfil`, {
+=======
+export const uploadProfileImage = async (userId: UserId, formData: FormData): Promise<UploadImageResponse> => {
+    const data = await apiFetch(`/api/actualizar/imgPerfil/${userId}`, {
+>>>>>>> cbbf943aa7af4df81d10afc3d96bba0b72bacb07
         method: 'PUT',
         body: formData,
     });
@@ -131,6 +136,43 @@ export const updatePassword = async (userId: UserId, passwordData: { currentPass
     const data = await apiFetch(`/api/actualizar/password/${userId}`, {
         method: 'PUT',
         body: passwordData,
+    });
+    return data;
+};
+
+export const getClientProfile = async (userId: UserId): Promise<ClientProfile | null> => {
+    // Mock data para pruebas
+    return {
+        nombre_cliente: "Juan",
+        apellido: "Pérez",
+        documentoIntentidad: 12345678,
+        telefono: 3001234567,
+        genero: "Masculino",
+        fecha_nacimiento: "1990-01-15",
+        paisId: "Colombia",
+        departamentoId: "Cundinamarca",
+        ciudadId: "Bogotá"
+    };
+    
+    try {
+        const data = await apiFetch(`/api/perfil/cliente/${userId}`, {
+            method: 'GET',
+        });
+        
+        if (data && data.data) {
+            return data.data as ClientProfile;
+        }
+        return null;
+    } catch (error) {
+        console.error('Error al obtener perfil del cliente:', error);
+        return null;
+    }
+};
+
+export const updateClientProfile = async (userId: UserId, profile: ClientProfile): Promise<ApiResponse> => {
+    const data = await apiFetch(`/api/actualizar/perfil/cliente/${userId}`, {
+        method: 'PUT',
+        body: profile,
     });
     return data;
 };

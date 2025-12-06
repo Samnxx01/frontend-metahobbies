@@ -1,7 +1,7 @@
 import { Routes, Route, useLocation } from 'react-router-dom';
 import { useState, useEffect, ReactElement } from 'react';
 import { useAuth } from '@/app/providers/AuthProvider';
-import { getAuthorizedRoutes } from '@/app/services/routeService';
+import { getCategorizedRoutes, type CategorizedRoutes, type RouteData } from '@/app/services/routeService';
 import { useLoading } from '@/app/providers/LoadingProvider';
 
 import PublicLayout from '@/app/presentation/layouts/PublicLayout';
@@ -21,21 +21,12 @@ import GestionCategorias from '@/app/presentation/pages/admin/GestionCategorias'
 import Login from '@/app/presentation/pages/login/Login';
 import Registro from '@/app/presentation/pages/registro/Registro';
 import RecuperarContrasena from '@/app/presentation/pages/recuperar-contrasena/RecuperarContrasena';
+import CambiarContrasena from '@/app/presentation/pages/recuperar-contrasena/CambiarContrasena';
 import Contacto from '@/app/presentation/pages/contacto/Contacto';
 import { MembershipRoutes } from './MembershipRoutes';
 import GestionProductos from '../presentation/pages/admin/GestionProductos';
 
-// Types for route system
-interface RouteConfig {
-    path: string;
-    component: string;
-    children?: RouteConfig[];
-}
-
-interface AuthorizedRoutes {
-    adminRoutes?: RouteConfig[];
-}
-
+// Types for component map
 type ComponentMapType = {
     [key: string]: React.ComponentType<any>;
 };
@@ -50,6 +41,7 @@ const componentMap: ComponentMapType = {
     Login,
     Registro,
     RecuperarContrasena,
+    CambiarContrasena,
     DashboardAdmin,
     GestionProductos,
     GestionUsuarios,
@@ -60,7 +52,7 @@ const componentMap: ComponentMapType = {
 };
 
 export default function LayoutRoutes(): ReactElement {
-    const [authorizedRoutes, setAuthorizedRoutes] = useState<AuthorizedRoutes | null>(null);
+    const [authorizedRoutes, setAuthorizedRoutes] = useState<CategorizedRoutes | null>(null);
     const { user } = useAuth();
     const { showLoading, hideLoading } = useLoading();
     const location = useLocation();
@@ -71,43 +63,37 @@ export default function LayoutRoutes(): ReactElement {
         return () => clearTimeout(timer);
     }, [location.pathname, showLoading, hideLoading]);
 
+    // Cargar rutas categorizadas desde el backend
     useEffect(() => {
         const loadRoutes = async (): Promise<void> => {
             try {
-                const routes = await getAuthorizedRoutes();
-                setAuthorizedRoutes(routes as AuthorizedRoutes);
+                // Obtener rutas separadas por tipo de acceso
+                const routes = await getCategorizedRoutes();
+                setAuthorizedRoutes(routes);
             } catch (error) {
                 console.error('Error cargando rutas:', error);
-                setAuthorizedRoutes(null);
+                setAuthorizedRoutes({
+                    publicRoutes: [],
+                    privateRoutes: []
+                });
             }
         };
 
-        if (user) {
-            loadRoutes();
-        } else {
-            // Use setTimeout to avoid synchronous state update in effect
-            setTimeout(() => setAuthorizedRoutes(null), 0);
-        }
+        // Cargar rutas siempre (tanto para usuarios autenticados como no autenticados)
+        // El backend filtra según el rol y permisos
+        loadRoutes();
     }, [user]);
 
-    if (!authorizedRoutes && user) {
+    if (!authorizedRoutes) {
         return <div>Cargando rutas...</div>;
     }
 
-    const renderRoutes = (routes: RouteConfig[]): ReactElement[] => {
+    const renderRoutes = (routes: RouteData[]): ReactElement[] => {
         return routes.map((route) => {
             const Component = componentMap[route.component];
             if (!Component) {
                 console.warn(`Componente no encontrado: ${route.component}`);
                 return null;
-            }
-
-            if (route.children) {
-                return (
-                    <Route key={route.path} path={route.path} element={<Component />}>
-                        {renderRoutes(route.children)}
-                    </Route>
-                );
             }
 
             return (
@@ -122,27 +108,50 @@ export default function LayoutRoutes(): ReactElement {
 
     return (
         <Routes>
+            {/* Rutas públicas desde el backend */}
             <Route element={<PublicLayout />}>
-                <Route index element={<Home />} />
-                <Route path="productos" element={<Productos />} />
+                {renderRoutes(authorizedRoutes.publicRoutes)}
+                {/* Rutas hardcoded temporalmente hasta que estén en el backend */}
+              
+              {/*    <Route path="productos" element={<Productos />} />  */}
                 <Route path="producto/:id" element={<DetalleProducto />} />
                 <Route path="carrito" element={<Carrito />} />
                 <Route path="checkout" element={<Checkout />} />
-                <Route path="contacto" element={<Contacto />} />
+            {/*     <Route path="contacto" element={<Contacto />} /> */}
                 <Route path="membresia/*" element={<MembershipRoutes />} />
                 {user && <Route path="perfil" element={<Perfil />} />}
             </Route>
 
+            {/* Rutas de autenticación */}
             <Route element={<AuthLayout />}>
                 <Route path="login" element={<Login />} />
                 <Route path="registro" element={<Registro />} />
                 <Route path="recuperar-contrasena" element={<RecuperarContrasena />} />
+                <Route path="recuperar/:token" element={<CambiarContrasena />} />
             </Route>
 
-            {user && authorizedRoutes?.adminRoutes && (
-                <Route path="/admin" element={<AdminLayout />}>
-                    {renderRoutes(authorizedRoutes.adminRoutes)}
-                </Route>
+            {/* Rutas privadas desde el backend */}
+            {/* Incluye rutas de usuario autenticado y rutas de administración */}
+            {user && (authorizedRoutes.privateRoutes.length > 0 || authorizedRoutes.publicRoutes.length > 0) && (
+                <>
+                    {/* Rutas privadas con PublicLayout (ej: Perfil, Checkout) */}
+                    {authorizedRoutes.publicRoutes
+                        .filter(route => route.layout === 'PublicLayout')
+                        .length > 0 && (
+                        <Route element={<PublicLayout />}>
+                            {renderRoutes(authorizedRoutes.privateRoutes.filter(route => route.layout === 'PublicLayout'))}
+                        </Route>
+                    )}
+                    
+                    {/* Rutas privadas con AdminLayout (ej: Dashboard, Gestiones) */}
+                    {authorizedRoutes.privateRoutes
+                        .filter(route => route.layout === 'AdminLayout')
+                        .length > 0 && (
+                        <Route path="/admin" element={<AdminLayout />}>
+                            {renderRoutes(authorizedRoutes.privateRoutes.filter(route => route.layout === 'AdminLayout'))}
+                        </Route>
+                    )}
+                </>
             )}
         </Routes>
     );

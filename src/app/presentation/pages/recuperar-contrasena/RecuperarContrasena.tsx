@@ -1,8 +1,12 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { toast } from 'react-toastify';
+
+// Services
+import { requestPasswordRecovery } from '../../../services/authService';
 
 // Shadcn UI components
 import { Button } from '@/components/ui/button';
@@ -18,37 +22,46 @@ import {
 import { Input } from '@/components/ui/input';
 
 // Lucide icons
-import { Mail } from 'lucide-react';
+import { Mail, Loader2 } from 'lucide-react';
 
 const LOGO_URL = '/assets/logo.png';
 
 // Definición del esquema Zod
 const recoverySchema = z.object({
-    email: z.string().email('Debe ser un correo electrónico válido'),
+    correo: z.string().email('Debe ser un correo electrónico válido'),
 });
 
 interface RecoveryFormData {
-    email: string;
+    correo: string;
 }
 
 export default function RecuperarContrasena(): React.ReactElement {
     const navigate = useNavigate();
+    const [isLoading, setIsLoading] = useState<boolean>(false);
 
     // Inicializar useForm con el resolver de Zod
     const form = useForm<RecoveryFormData>({
         resolver: zodResolver(recoverySchema),
         defaultValues: {
-            email: '',
+            correo: '',
         }
     });
 
     // Obtener handleSubmit de la instancia de form
     const { handleSubmit } = form;
 
-    const onSubmit = (data: RecoveryFormData): void => {
-        console.log('Datos de recuperación:', data);
-        alert('Se ha enviado un enlace de recuperación a tu correo.');
-        navigate('/login');
+    const onSubmit = async (data: RecoveryFormData): Promise<void> => {
+        setIsLoading(true);
+        try {
+            const response = await requestPasswordRecovery(data);
+            toast.success(response.msg || 'Se ha enviado un enlace de recuperación a tu correo.');
+            form.reset();
+            setTimeout(() => navigate('/login'), 2000);
+        } catch (error: any) {
+            toast.error(error.message || 'Error al solicitar recuperación de contraseña.');
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     return (
@@ -90,7 +103,7 @@ export default function RecuperarContrasena(): React.ReactElement {
                             {/* Campo de Email */}
                             <FormField
                                 control={form.control}
-                                name="email"
+                                name="correo"
                                 render={({ field }) => (
                                     <FormItem>
                                         <FormLabel className="text-foreground">Correo electrónico</FormLabel>
@@ -110,9 +123,17 @@ export default function RecuperarContrasena(): React.ReactElement {
                             {/* Botón de Enviar */}
                             <Button
                                 type="submit"
-                                className="w-full h-12 text-base font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+                                disabled={isLoading}
+                                className="w-full h-12 text-base font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
                             >
-                                Enviar enlace de recuperación
+                                {isLoading ? (
+                                    <>
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                        Enviando...
+                                    </>
+                                ) : (
+                                    'Enviar enlace de recuperación'
+                                )}
                             </Button>
 
                             {/* Enlace de Navegación */}

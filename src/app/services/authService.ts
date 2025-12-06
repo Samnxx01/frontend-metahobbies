@@ -45,3 +45,42 @@ export const registerCliente = async (registerData: RegisterClienteData): Promis
         body: registerData
     });
 };
+
+interface RecoveryPasswordData {
+    correo: string;
+}
+
+interface RecoveryPasswordResponse extends ApiResponse {
+    msg: string;
+}
+
+export const requestPasswordRecovery = async (data: RecoveryPasswordData): Promise<RecoveryPasswordResponse> => {
+    return apiFetch('/api/recuperacion/seguridad/password/todos', {
+        method: 'POST',
+        body: data
+    });
+};
+
+interface ResetPasswordData {
+    correo: string;
+    password: string;
+}
+
+interface ResetPasswordResponse extends ApiResponse {
+    msg: string;
+}
+
+export const resetPassword = async (correo: string, password: string, token: string): Promise<ResetPasswordResponse> => {
+    const headers: Record<string, string> = {
+        'Authorization': `Bearer ${token}`
+    };
+    
+    return apiFetch('/api/recuperacion/seguridad/cambio/password/todos', {
+        method: 'POST',
+        body: {
+            correo,
+            password
+        },
+        headers
+    });
+};

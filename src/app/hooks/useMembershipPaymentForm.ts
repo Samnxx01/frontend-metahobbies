@@ -3,17 +3,19 @@ import { toast } from "react-toastify";
 
 // Interface for personal info step
 interface PersonalInfo {
-  nombre: string;
-  apellido: string;
   email: string;
-  telefono: string;
-  legalId: string;
-  legalIdType: string;
 }
 
 // Interface for payment info step
 interface PaymentInfo {
-  [key: string]: string;
+  paymentMethod: 'nequi' | 'card' | '';
+  // Nequi fields
+  nequiPhone?: string;
+  // Card fields
+  cardNumber?: string;
+  cardName?: string;
+  expiryDate?: string;
+  cvv?: string;
 }
 
 // Interface for the complete form data
@@ -86,40 +88,175 @@ export function useMembershipPaymentForm({
   const validateStep = (step: number): boolean => {
     switch (step) {
       case 0: {
-        const { nombre, apellido, email, telefono, legalId, legalIdType } = formData.personalInfo;
-        const allFilled = [nombre, apellido, email, telefono, legalId, legalIdType].every(v => v.trim() !== "");
+        const { email } = formData.personalInfo;
         const emailRegex = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
-        const emailValid = emailRegex.test(email);
-        const telefonoValid = /^\d+$/.test(telefono);
-        const legalIdValid = /^\d+$/.test(legalId);
-        return allFilled && emailValid && telefonoValid && legalIdValid;
+        return email.trim() !== "" && emailRegex.test(email);
       }
       case 1:
         return true;
-      case 2:
-        return Object.values(formData.paymentInfo).every(value => value.trim() !== "");
+      case 2: {
+        const { paymentMethod, nequiPhone, cardNumber, cardName, expiryDate, cvv } = formData.paymentInfo;
+        if (!paymentMethod) return false;
+        
+        if (paymentMethod === 'nequi') {
+          // Validar teléfono colombiano: debe empezar con 3 y tener 10 dígitos
+          const colombiaPhoneRegex = /^3\d{9}$/;
+          return !!nequiPhone && colombiaPhoneRegex.test(nequiPhone);
+        }
+        
+        if (paymentMethod === 'card') {
+          return !!cardNumber && !!cardName && !!expiryDate && !!cvv &&
+                 cardNumber.trim() !== "" && cardName.trim() !== "" &&
+                 expiryDate.trim() !== "" && cvv.trim() !== "";
+        }
+        
+        return false;
+      }
       default:
         return true;
     }
   };
 
+  const getValidationErrorMessage = (step: number): string => {
+    switch (step) {
+      case 0: {
+        const { email } = formData.personalInfo;
+        if (!email.trim()) {
+          return "Por favor ingresa tu correo electrónico";
+        }
+        const emailRegex = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+        if (!emailRegex.test(email)) {
+          return "Por favor ingresa un correo electrónico válido";
+        }
+        return "Por favor completa la información de usuario";
+      }
+      case 2: {
+        const { paymentMethod, nequiPhone } = formData.paymentInfo;
+        if (!paymentMethod) {
+          return "Por favor selecciona un método de pago";
+        }
+        
+        if (paymentMethod === 'nequi') {
+          if (!nequiPhone) {
+            return "Por favor ingresa tu número de teléfono Nequi";
+          }
+          const colombiaPhoneRegex = /^3\d{9}$/;
+          if (!colombiaPhoneRegex.test(nequiPhone)) {
+            return "Por favor ingresa un número de teléfono colombiano válido (debe empezar con 3 y tener 10 dígitos)";
+          }
+        }
+        
+        if (paymentMethod === 'card') {
+          return "Por favor completa todos los datos de la tarjeta";
+        }
+        
+        return "Por favor completa la información de pago";
+      }
+      default:
+        return "Por favor completa todos los campos requeridos";
+    }
+  };
+
   const handlePayment = async (): Promise<void> => {
     if (!validateStep(activeStep)) {
-      toast.error("Por favor completa todos los campos requeridos");
+      toast.error(getValidationErrorMessage(activeStep));
       return;
     }
+
+    // Verificar que existe el token de referido
+    if (!token || token.trim() === '') {
+      toast.error("No se encontró el token de referido. Por favor verifica el enlace de invitación.");
+      return;
+    }
+
     setLoading(true);
     try {
-      await purchaseMembership(
-        token,
-        formData.personalInfo.email,
-        "Bearer placeholder-token"
+      let paymentData: any = {
+        emailInvitado: formData.personalInfo.email,
+      };
+
+      // Preparar datos según el método de pago
+      if (formData.paymentInfo.paymentMethod === 'nequi') {
+        paymentData.payment_method = {
+          type: "NEQUI",
+          phone_number: formData.paymentInfo.nequiPhone
+        };
+      } else if (formData.paymentInfo.paymentMethod === 'card') {
+        // Tokenizar la tarjeta con Wompi
+        const wompiPublicKey = import.meta.env.VITE_WOMPI_PUBLIC_KEY;
+        
+        if (!wompiPublicKey) {
+          throw new Error("Clave pública de Wompi no configurada");
+        }
+
+        // Separar mes y año de la fecha de expiración (MM/AA)
+        const [expMonth, expYear] = formData.paymentInfo.expiryDate?.split('/') || ['', ''];
+        
+        if (!expMonth || !expYear) {
+          throw new Error("Fecha de expiración inválida");
+        }
+
+        // Tokenizar tarjeta
+        const tokenizeResponse = await fetch('https://production.wompi.co/v1/tokens/cards', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${wompiPublicKey}`
+          },
+          body: JSON.stringify({
+            number: formData.paymentInfo.cardNumber?.replace(/\s/g, ''),
+            cvc: formData.paymentInfo.cvv,
+            exp_month: expMonth,
+            exp_year: expYear,
+            card_holder: formData.paymentInfo.cardName
+          })
+        });
+
+        if (!tokenizeResponse.ok) {
+          const errorData = await tokenizeResponse.json().catch(() => ({ error: 'Error al tokenizar la tarjeta' }));
+          throw new Error(errorData.error?.reason || errorData.error || 'Error al procesar la tarjeta');
+        }
+
+        const tokenData = await tokenizeResponse.json();
+        
+        if (!tokenData.data?.id) {
+          throw new Error('No se pudo obtener el token de la tarjeta');
+        }
+
+        paymentData.payment_method = {
+          type: "CARD",
+          installments: 1,
+          token: tokenData.data.id
+        };
+      }
+
+      // Hacer petición al backend
+      const response = await fetch(
+        `https://server-mabs-xo9s.onrender.com/api/membresia/seguridad/crear/crearmembresia/${token}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+
+          },
+          body: JSON.stringify(paymentData),
+        }
       );
-      toast.success("¡Pago procesado exitosamente!");
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: 'Error en el servidor' }));
+        throw new Error(errorData.message || `Error ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      console.log('Respuesta del servidor:', data);
+
+      toast.success("¡Membresía creada exitosamente!");
       navigate("/membresia/dashboard");
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error en el pago:", error);
-      toast.error("Error al procesar el pago");
+      toast.error(error.message || "Error al procesar el pago. Intenta nuevamente.");
     } finally {
       setLoading(false);
     }
@@ -127,12 +264,11 @@ export function useMembershipPaymentForm({
 
   const handleNext = (): void => {
     if (!validateStep(activeStep)) {
-      toast.error("Por favor completa todos los campos requeridos");
+      toast.error(getValidationErrorMessage(activeStep));
       return;
     }
-    if (activeStep === steps.length - 1) {
-      handlePayment();
-    } else {
+    // En el último paso no avanzar, solo mostrar botón de pago
+    if (activeStep < steps.length - 1) {
       setActiveStep(prevStep => prevStep + 1);
     }
   };
