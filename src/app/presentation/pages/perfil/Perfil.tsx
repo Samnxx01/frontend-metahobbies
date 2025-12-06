@@ -414,6 +414,7 @@ export default function Perfil(): React.ReactElement {
 
                         {/* --- Tarjeta de Información Personal --- */}
                         {activeNavItem === 'personal' && (
+<<<<<<< HEAD
                             <Card className="shadow-sm border-border bg-card">
                                 <CardHeader className="flex flex-col md:flex-row md:items-center justify-between pb-2 space-y-2 md:space-y-0">
                                     <CardTitle className="text-lg md:text-xl font-semibold flex items-center gap-2 text-foreground">
@@ -463,6 +464,26 @@ export default function Perfil(): React.ReactElement {
                                     />
                                 </CardContent>
                             </Card>
+=======
+                            <PerfilClienteForm
+                                profile={clientProfile}
+                                token={localStorage.getItem('token') || ''}
+                                onProfileUpdate={async (updatedProfile) => {
+                                    setClientProfile(updatedProfile);
+                                    if (user?._id) {
+                                        try {
+                                            const response = await updateClientProfile(user._id, updatedProfile);
+                                            if (response && response.success) {
+                                                toast.success('Perfil actualizado correctamente.');
+                                            }
+                                        } catch (error) {
+                                            console.error('Error al actualizar perfil:', error);
+                                            toast.error('Error al actualizar el perfil.');
+                                        }
+                                    }
+                                }}
+                            />
+>>>>>>> cbbf943 (MOD: Wompi integration from API, parametrization for profile update)
                         )}
 
                         {/* --- Tarjeta de Dirección de Envío --- */}

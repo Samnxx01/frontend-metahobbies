@@ -109,6 +109,7 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
         { label: "Posts", path: "/posts" },
         { label: "Modelo de Negocio", path: "/modelo-negocio" },
         { label: "Contacto", path: "/contacto" },
+        { label: "Membresía", path: "/membresia/pago" },
     ];
 
     // Función para determinar si un enlace está activo
