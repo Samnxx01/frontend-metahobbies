@@ -7,7 +7,7 @@ import { PrivateRoute } from './PrivateRoute';
 export const MembershipRoutes = (): ReactElement => {
     return (
         <Routes>
-            <Route path="pago" element={<MembershipPayment />} />
+            <Route path="pago/:token" element={<MembershipPayment />} />
             <Route
                 path="dashboard"
                 element={

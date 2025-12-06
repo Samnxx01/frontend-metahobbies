@@ -394,6 +394,7 @@ export default function Perfil(): React.ReactElement {
                         {activeNavItem === 'personal' && (
                             <PerfilClienteForm
                                 profile={clientProfile}
+                                token={localStorage.getItem('token') || ''}
                                 onProfileUpdate={async (updatedProfile) => {
                                     setClientProfile(updatedProfile);
                                     if (user?._id) {
