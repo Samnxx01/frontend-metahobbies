@@ -104,11 +104,10 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
 
     const menuItems: MenuItem[] = [
         { label: "Inicio", path: "/" },
-        { label: "Descubre tu Tono", path: "/descubre-tono" },
-        { label: "Sobre Nosotros", path: "/sobre-nosotros" },
+         { label: "Sobre Nosotros", path: "/sobre-nosotros" },
         { label: "Productos", path: "/productos" },
+        { label: "Posts", path: "/posts" },
         { label: "Modelo de Negocio", path: "/modelo-negocio" },
-        { label: "Eventos", path: "/eventos" },
         { label: "Contacto", path: "/contacto" },
     ];
 

@@ -24,6 +24,9 @@ import RecuperarContrasena from '@/app/presentation/pages/recuperar-contrasena/R
 import Contacto from '@/app/presentation/pages/contacto/Contacto';
 import { MembershipRoutes } from './MembershipRoutes';
 import GestionProductos from '../presentation/pages/admin/GestionProductos';
+import Posts from '@/app/presentation/pages/posts/Posts';
+import SobreNosotros from '@/app/presentation/pages/sobre-nosotros/SobreNosotros';
+import ModeloNegocio from '@/app/presentation/pages/modelo-negocio/ModeloNegocio';
 
 // Types for route system
 interface RouteConfig {
@@ -33,7 +36,9 @@ interface RouteConfig {
 }
 
 interface AuthorizedRoutes {
+    publicRoutes?: RouteConfig[];
     adminRoutes?: RouteConfig[];
+    authRoutes?: RouteConfig[];
 }
 
 type ComponentMapType = {
@@ -56,7 +61,10 @@ const componentMap: ComponentMapType = {
     PedidosAdmin,
     ConfiguracionAdmin,
     GestionCategorias,
-    Contacto
+    Contacto,
+    Posts,
+    SobreNosotros,
+    ModeloNegocio
 };
 
 export default function LayoutRoutes(): ReactElement {
@@ -78,19 +86,14 @@ export default function LayoutRoutes(): ReactElement {
                 setAuthorizedRoutes(routes as AuthorizedRoutes);
             } catch (error) {
                 console.error('Error cargando rutas:', error);
-                setAuthorizedRoutes(null);
+                setAuthorizedRoutes({ publicRoutes: [], adminRoutes: [], authRoutes: [] });
             }
         };
 
-        if (user) {
-            loadRoutes();
-        } else {
-            // Use setTimeout to avoid synchronous state update in effect
-            setTimeout(() => setAuthorizedRoutes(null), 0);
-        }
+        loadRoutes();
     }, [user]);
 
-    if (!authorizedRoutes && user) {
+    if (!authorizedRoutes) {
         return <div>Cargando rutas...</div>;
     }
 
@@ -123,23 +126,20 @@ export default function LayoutRoutes(): ReactElement {
     return (
         <Routes>
             <Route element={<PublicLayout />}>
-                <Route index element={<Home />} />
-                <Route path="productos" element={<Productos />} />
-                <Route path="producto/:id" element={<DetalleProducto />} />
-                <Route path="carrito" element={<Carrito />} />
-                <Route path="checkout" element={<Checkout />} />
-                <Route path="contacto" element={<Contacto />} />
+                {/* Rutas dinámicas públicas */}
+                {authorizedRoutes.publicRoutes && renderRoutes(authorizedRoutes.publicRoutes)}
+                
+                {/* Rutas especiales que no vienen del backend */}
                 <Route path="membresia/*" element={<MembershipRoutes />} />
                 {user && <Route path="perfil" element={<Perfil />} />}
             </Route>
 
             <Route element={<AuthLayout />}>
-                <Route path="login" element={<Login />} />
-                <Route path="registro" element={<Registro />} />
-                <Route path="recuperar-contrasena" element={<RecuperarContrasena />} />
+                {/* Rutas dinámicas de autenticación */}
+                {authorizedRoutes.authRoutes && renderRoutes(authorizedRoutes.authRoutes)}
             </Route>
 
-            {user && authorizedRoutes?.adminRoutes && (
+            {user && authorizedRoutes?.adminRoutes && authorizedRoutes.adminRoutes.length > 0 && (
                 <Route path="/admin" element={<AdminLayout />}>
                     {renderRoutes(authorizedRoutes.adminRoutes)}
                 </Route>
