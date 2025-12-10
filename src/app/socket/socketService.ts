@@ -1,94 +1,71 @@
 import { io, Socket } from "socket.io-client";
-import type { SocketOptions } from './socketTypes';
 
 // Global socket instance
 let socket: Socket | null = null;
 
-// Function to connect to socket with authentication
+
+// Conectar socket
 export const conectarSocket = (): Socket | null => {
     const token = localStorage.getItem("token");
+    const API_URL = import.meta.env.PUBLIC_BASE_URL;
 
     if (!token) {
-        console.warn("⚠️ No token → No me conecto al socket");
+        console.warn("⚠ No token → No socket");
         return null;
     }
 
-    const socketOptions: SocketOptions = {
+    const s: Socket = io(API_URL, {
         auth: { token },
         transports: ["websocket"],
-        reconnection: true,
-    };
-
-    const newSocket = io("/api/", socketOptions);
-
-    setSocket(newSocket);
-    
-    newSocket.on("connect", () => {
-        console.log("⚡ Socket conectado:", newSocket.id);
     });
 
-    newSocket.on("disconnect", () => {
-        console.log("🔴 Socket desconectado");
-    });
+    socket = s;
 
-    // Ping every second to keep connection alive
-    const pingInterval = setInterval(() => {
-        if (newSocket.connected) {
-            newSocket.emit("ping-usuario");
-        }
-    }, 1000);
+    s.on("connect", () => console.log("⚡ Socket conectado:", s.id));
+    s.on("disconnect", () => console.log("🔴 Socket desconectado"));
 
-    // Clean up interval on disconnect
-    newSocket.on("disconnect", () => {
-        clearInterval(pingInterval);
-    });
-
-    return newSocket;
+    return s;
 };
 
-// Function to disconnect socket
+// Desconectar
 export const desconectadoUsu = (): void => {
-    if (socket && socket.connected) {
+    if (socket) {
         socket.disconnect();
-        console.log("🔌 Socket desconectado");
+        console.log("🔌 Socket desconectado manualmente");
     }
 };
 
-// Function to set socket instance
-export const setSocket = (instance: Socket | null): void => {
-    socket = instance;
-};
+// Obtener socket
+export const getSocket = (): Socket | null => socket;
 
-// Function to get current socket instance
-export const getSocket = (): Socket | null => {
-    return socket;
-};
-
-// Function to emit event to socket
+// Emitir evento
 export const emitSocketEvent = (event: string, data?: any): void => {
-    if (socket && socket.connected) {
+    if (socket?.connected) {
         socket.emit(event, data);
     } else {
-        console.warn("⚠️ Socket no conectado, no se puede emitir evento:", event);
+        console.warn("⚠ No se puede emitir, socket desconectado:", event);
     }
 };
 
-// Function to listen for socket events
-export const onSocketEvent = (event: string, callback: (data: any) => void): void => {
-    if (socket) {
-        socket.on(event, callback);
-    } else {
-        console.warn("⚠️ Socket no disponible para escuchar evento:", event);
+// Escuchar evento
+export const onSocketEvent = (
+    event: string,
+    callback: (data: any) => void
+): void => {
+    if (!socket) {
+        console.warn("⚠ Socket no inicializado:", event);
+        return;
     }
+
+    socket.on(event, callback);
 };
 
-// Function to remove socket event listener
-export const offSocketEvent = (event: string, callback?: (data: any) => void): void => {
-    if (socket) {
-        if (callback) {
-            socket.off(event, callback);
-        } else {
-            socket.off(event);
-        }
-    }
+// Remover listeners
+export const offSocketEvent = (
+    event: string,
+    callback?: (data: any) => void
+): void => {
+    if (!socket) return;
+
+    callback ? socket.off(event, callback) : socket.off(event);
 };

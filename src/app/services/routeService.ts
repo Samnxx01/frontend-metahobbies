@@ -11,10 +11,7 @@ interface RouteResponse {
         icon: string | null;
         allowedRoles: Array<{ iud: string }>;
         estadoRuta: boolean;
-        accessType: {
-            _id: string;
-            accessType: string;
-        };
+        accessType: { _id: string; accessType: string };
         order: number;
     }>;
 }
@@ -27,16 +24,24 @@ interface AuthorizedRoutes {
 
 export const getAuthorizedRoutes = async (): Promise<AuthorizedRoutes> => {
     try {
-        const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://server-mabs-xo9s.onrender.com/api';
+        const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "/api";
+        const token = localStorage.getItem("token") || null;
+
+        const headers: HeadersInit = {
+            "Content-Type": "application/json",
+        };
+
+        if (token) {
+            headers["x-token"] = token;
+        }
+
         const response = await fetch(`${API_BASE_URL}/seguridad/rutas/listarRutas/admin`, {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json',
-            }
+            method: "GET",
+            headers,
         });
 
         if (!response.ok) {
-            throw new Error('Error al obtener las rutas');
+            throw new Error("Error al obtener rutas");
         }
 
         const result: RouteResponse = await response.json();
@@ -45,49 +50,41 @@ export const getAuthorizedRoutes = async (): Promise<AuthorizedRoutes> => {
             return { publicRoutes: [], adminRoutes: [], authRoutes: [] };
         }
 
-        // Filtrar y organizar rutas por layout/accessType
+        // Normaliza nombres de componentes
+        const normalizeComponent = (name: string) =>
+            name.replace(/\.(jsx|tsx|js|ts)$/i, "");
+
+        const normalizePath = (path: string) =>
+            path.replace(/^\//, "");
+
+        // PUBLIC
         const publicRoutes = result.data
-            .filter(route => {
-                const normalizedLayout = route.layout?.replace('/', '').trim();
-                return route.estadoRuta && 
-                    normalizedLayout === 'PublicLayout' &&
-                    route.accessType.accessType === 'PUBLIC';
-            })
-            .sort((a, b) => a.order - b.order)
-            .map(route => ({
-                path: route.path.startsWith('/') ? route.path.substring(1) : route.path,
-                component: route.component.replace('.jsx', '').replace('.tsx', '')
+            .filter(r => r.estadoRuta && r.layout.replace("/", "").trim() === "PublicLayout")
+            .map(r => ({
+                path: normalizePath(r.path),
+                component: normalizeComponent(r.component),
             }));
 
+        // AUTH
         const authRoutes = result.data
-            .filter(route => {
-                const normalizedLayout = route.layout?.replace('/', '').trim();
-                return route.estadoRuta && normalizedLayout === 'AuthLayout';
-            })
-            .sort((a, b) => a.order - b.order)
-            .map(route => ({
-                path: route.path.startsWith('/') ? route.path.substring(1) : route.path,
-                component: route.component.replace('.jsx', '').replace('.tsx', '')
+            .filter(r => r.estadoRuta && r.layout.replace("/", "").trim() === "AuthLayout")
+            .map(r => ({
+                path: normalizePath(r.path),
+                component: normalizeComponent(r.component),
             }));
 
+        // ADMIN
         const adminRoutes = result.data
-            .filter(route => {
-                const normalizedLayout = route.layout?.replace('/', '').trim();
-                return route.estadoRuta && normalizedLayout === 'AdminLayout';
-            })
-            .sort((a, b) => a.order - b.order)
-            .map(route => ({
-                path: route.path.startsWith('/admin/') ? route.path.replace('/admin/', '') : route.path.startsWith('/') ? route.path.substring(1) : route.path,
-                component: route.component.replace('.jsx', '').replace('.tsx', '')
+            .filter(r => r.estadoRuta && r.layout.replace("/", "").trim() === "AdminLayout")
+            .map(r => ({
+                path: r.path.replace(/^\/admin\//i, "").replace(/^\//, ""),
+                component: normalizeComponent(r.component),
             }));
 
-        return {
-            publicRoutes,
-            adminRoutes,
-            authRoutes
-        };
+        return { publicRoutes, authRoutes, adminRoutes };
+
     } catch (error) {
-        console.error('Error al obtener rutas autorizadas:', error);
+        console.error("Error al obtener rutas autorizadas:", error);
         return { publicRoutes: [], adminRoutes: [], authRoutes: [] };
     }
 };

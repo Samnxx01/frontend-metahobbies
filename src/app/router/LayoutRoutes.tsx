@@ -98,19 +98,12 @@ export default function LayoutRoutes(): ReactElement {
     }
 
     const renderRoutes = (routes: RouteConfig[]): ReactElement[] => {
-        return routes.map((route) => {
+        return routes.map(route => {
             const Component = componentMap[route.component];
-            if (!Component) {
-                console.warn(`Componente no encontrado: ${route.component}`);
-                return null;
-            }
 
-            if (route.children) {
-                return (
-                    <Route key={route.path} path={route.path} element={<Component />}>
-                        {renderRoutes(route.children)}
-                    </Route>
-                );
+            if (!Component) {
+                console.warn("Componente no encontrado:", route.component);
+                return null;
             }
 
             return (
@@ -128,14 +121,13 @@ export default function LayoutRoutes(): ReactElement {
             <Route element={<PublicLayout />}>
                 {/* Rutas dinámicas públicas */}
                 {authorizedRoutes.publicRoutes && renderRoutes(authorizedRoutes.publicRoutes)}
-                
+
                 {/* Rutas especiales que no vienen del backend */}
                 <Route path="membresia/*" element={<MembershipRoutes />} />
                 {user && <Route path="perfil" element={<Perfil />} />}
             </Route>
 
             <Route element={<AuthLayout />}>
-                {/* Rutas dinámicas de autenticación */}
                 {authorizedRoutes.authRoutes && renderRoutes(authorizedRoutes.authRoutes)}
             </Route>
 
