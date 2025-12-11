@@ -18,6 +18,17 @@ interface Genero {
     iud: string;
 }
 
+interface Nacionalidad {
+    Nacionalidad: string;
+    siglaNaciona: string;
+    iud: string;
+}
+
+interface Prefijo {
+    iud: string;
+    prefijoTelefonicoPais: string;
+}
+
 interface Departamento {
     departamentoId: string;
     codigo_postal: string;
@@ -109,11 +120,15 @@ export default function PerfilClienteForm({
     const [isEditing, setIsEditing] = useState(false);
     const [tiposDocumento, setTiposDocumento] = useState<TipoDocumento[]>([]);
     const [generos, setGeneros] = useState<Genero[]>([]);
+    const [nacionalidades, setNacionalidades] = useState<Nacionalidad[]>([]);
+    const [prefijos, setPrefijos] = useState<Prefijo[]>([]);
     const [paises, setPaises] = useState<Pais[]>([]);
     const [departamentos, setDepartamentos] = useState<Departamento[]>([]);
     const [ciudades, setCiudades] = useState<Ciudad[]>([]);
     const [selectedTipoDoc, setSelectedTipoDoc] = useState<string>('');
     const [selectedGenero, setSelectedGenero] = useState<string>('');
+    const [selectedNacionalidad, setSelectedNacionalidad] = useState<string>('');
+    const [selectedPrefijo, setSelectedPrefijo] = useState<string>('');
     const [selectedPais, setSelectedPais] = useState<string>('1');
     const [selectedDepartamento, setSelectedDepartamento] = useState<string>('');
     const [selectedCiudad, setSelectedCiudad] = useState<string>('');
@@ -136,7 +151,7 @@ export default function PerfilClienteForm({
         const fetchData = async () => {
             try {
                 // Cargar tipos de documento
-                const tiposResponse = await fetch('https://server-mabs-xo9s.onrender.com/api/perfil/seguridad/tipo/documentos');
+                const tiposResponse = await fetch('/api/perfil/seguridad/tipo/documentos');
                 const tiposData = await tiposResponse.json();
                 if (tiposData.ok) {
                     setTiposDocumento(tiposData.tipos);
@@ -144,7 +159,7 @@ export default function PerfilClienteForm({
 
                 // Cargar géneros (requiere autenticación)
                 if (token) {
-                    const generosResponse = await fetch('https://server-mabs-xo9s.onrender.com/api/perfil/seguridad/listar/tipo/genero', {
+                    const generosResponse = await fetch('/api/perfil/seguridad/listar/tipo/genero', {
                         headers: {
                             'Authorization': `Bearer ${token}`
                         }
@@ -154,8 +169,30 @@ export default function PerfilClienteForm({
                         setGeneros(generosData.generos);
                     }
 
+                    // Cargar nacionalidades (requiere autenticación)
+                    const nacionalidadesResponse = await fetch('/api/perfil/seguridad/listar/tipo/nacionalidad', {
+                        headers: {
+                            'Authorization': `Bearer ${token}`
+                        }
+                    });
+                    const nacionalidadesData = await nacionalidadesResponse.json();
+                    if (nacionalidadesData.ok) {
+                        setNacionalidades(nacionalidadesData.nacionalidades);
+                    }
+
+                    // Cargar prefijos telefónicos (requiere autenticación)
+                    const prefijosResponse = await fetch('/api/perfil/seguridad/listar/tipo/prefijo', {
+                        headers: {
+                            'Authorization': `Bearer ${token}`
+                        }
+                    });
+                    const prefijosData = await prefijosResponse.json();
+                    if (prefijosData.ok) {
+                        setPrefijos(prefijosData.prefijos);
+                    }
+
                     // Cargar departamentos y ciudades (requiere autenticación)
-                    const locationResponse = await fetch('https://server-mabs-xo9s.onrender.com/api/perfil/seguridad/listar/paises/departamentos/ciudades?paisId=1', {
+                    const locationResponse = await fetch('/api/perfil/seguridad/listar/paises/departamentos/ciudades?paisId=1', {
                         headers: {
                             'Authorization': `Bearer ${token}`
                         }
@@ -182,6 +219,8 @@ export default function PerfilClienteForm({
         if (profile) {
             setSelectedTipoDoc(profile.tipoDeIntendidad || '');
             setSelectedGenero(profile.genero || '');
+            setSelectedNacionalidad(profile.nacionalidad || '');
+            setSelectedPrefijo(profile.prefijo || '');
             setSelectedPais(profile.paisId || '1');
             setSelectedDepartamento(profile.departamentoId || '');
             setSelectedCiudad(profile.ciudadId || '');
@@ -209,39 +248,83 @@ export default function PerfilClienteForm({
     // --- HANDLER: GUARDAR CAMBIOS ---
     // Recopila los valores de todos los refs, construye el objeto actualizado
     // y lo envía al componente padre a través del callback onProfileUpdate
-    const handleSave = () => {
-        // Verificar que profile no sea null
-        if (!profile) return;
+    const handleSave = async () => {
+        try {
+            // Construir objeto base para enviar al backend según el schema
+            const profileData: any = {
+                nombre_cliente: nombreRef.current?.value || profile?.nombre_cliente || '',
+                apellido: apellidoRef.current?.value || profile?.apellido || '',
+                genero: selectedGenero || profile?.genero || '',
+                tipoDeIntendidad: selectedTipoDoc || profile?.tipoDeIntendidad || '',
+                documentoIntentidad: parseInt(documentoRef.current?.value || String(profile?.documentoIntentidad || 0), 10),
+                telefono: parseInt(telefonoRef.current?.value || String(profile?.telefono || 0), 10),
+                fecha_nacimiento: fechaNacimientoRef.current?.value || profile?.fecha_nacimiento || '',
+                paisId: selectedPais || profile?.paisId || '1',
+                departamentoId: selectedDepartamento || profile?.departamentoId || '',
+                ciudadId: selectedCiudad || profile?.ciudadId || '',
+            };
 
-        // Construir objeto con los valores actualizados
-        const updatedProfile: ClientProfile = {
-            // Mantener todos los campos del perfil original
-            ...profile,
-            
-            // Campos de texto: usar valor del ref o mantener el valor original
-            nombre_cliente: nombreRef.current?.value || profile.nombre_cliente,
-            apellido: apellidoRef.current?.value || profile.apellido,
-            genero: selectedGenero || profile.genero,
-            tipoDeIntendidad: selectedTipoDoc || profile.tipoDeIntendidad,
-            fecha_nacimiento: fechaNacimientoRef.current?.value || profile.fecha_nacimiento,
-            
-            // Campos numéricos: parsear a número con parseInt
-            // Si el campo está vacío, usar el valor original convertido a string
-            documentoIntentidad: parseInt(documentoRef.current?.value || String(profile.documentoIntentidad), 10),
-            telefono: parseInt(telefonoRef.current?.value || String(profile.telefono), 10),
-            
-            // Campos de ubicación: usar valores seleccionados
-            paisId: selectedPais || profile.paisId,
-            departamentoId: selectedDepartamento || profile.departamentoId,
-            ciudadId: selectedCiudad || profile.ciudadId,
-        };
+            // Solo agregar campos opcionales si tienen valores válidos
+            if (selectedNacionalidad) {
+                profileData.Nacionalidad = selectedNacionalidad;
+            } else if (profile?.nacionalidad) {
+                profileData.Nacionalidad = profile.nacionalidad;
+            }
 
-        // Enviar datos actualizados al componente padre
-        // El padre se encarga de llamar al servicio y actualizar el backend
-        onProfileUpdate(updatedProfile);
-        
-        // Volver a modo lectura
-        setIsEditing(false);
+            if (selectedPrefijo) {
+                profileData.prefijo = selectedPrefijo;
+            } else if (profile?.prefijo) {
+                profileData.prefijo = profile.prefijo;
+            }
+
+            // Determinar si es creación o actualización
+            const isCreating = !profile;
+            const endpoint = isCreating 
+                ? '/api/perfil/seguridad/usuario'
+                : '/api/perfil/usuario/actualizar';
+
+            // Enviar al backend
+            const response = await fetch(endpoint, {
+                method: isCreating ? 'POST' : 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify(profileData)
+            });
+
+            const data = await response.json();
+
+            if (data.ok) {
+                // Construir el perfil actualizado para el callback
+                const updatedProfile: ClientProfile = {
+                    nombre_cliente: profileData.nombre_cliente,
+                    apellido: profileData.apellido,
+                    genero: profileData.genero,
+                    tipoDeIntendidad: profileData.tipoDeIntendidad,
+                    documentoIntentidad: profileData.documentoIntentidad,
+                    telefono: profileData.telefono,
+                    fecha_nacimiento: profileData.fecha_nacimiento,
+                    nacionalidad: profileData.Nacionalidad,
+                    prefijo: profileData.prefijo,
+                    paisId: profileData.paisId,
+                    departamentoId: profileData.departamentoId,
+                    ciudadId: profileData.ciudadId,
+                };
+                
+                // Enviar datos actualizados al componente padre
+                onProfileUpdate(updatedProfile);
+                
+                // Volver a modo lectura
+                setIsEditing(false);
+            } else {
+                console.error('Error al guardar perfil:', data.message);
+                alert('Error al guardar el perfil: ' + (data.message || 'Error desconocido'));
+            }
+        } catch (error) {
+            console.error('Error en handleSave:', error);
+            alert('Error al guardar el perfil. Por favor intenta nuevamente.');
+        }
     };
 
     // --- HANDLER: CANCELAR EDICIÓN ---
@@ -251,28 +334,21 @@ export default function PerfilClienteForm({
         setIsEditing(false);
     };
 
-    // --- ESTADO DE CARGA ---
-    // Si profile es null, mostrar estado de carga mientras se obtienen los datos del servidor
-    if (!profile) {
-        return (
-            <Card className="shadow-sm border-border bg-card">
-                <CardHeader className="pb-2">
-                    <CardTitle className="text-lg md:text-xl font-semibold flex items-center gap-2 text-foreground">
-                        <UserIcon className="h-5 w-5 text-primary" /> Información del Perfil
-                    </CardTitle>
-                </CardHeader>
-                <CardContent className="text-center py-8">
-                    <p className="text-muted-foreground">Cargando información del perfil...</p>
-                </CardContent>
-            </Card>
-        );
-    }
+    // --- ACTIVAR MODO EDICIÓN SI NO HAY PERFIL ---
+    // Si profile es null, activar automáticamente el modo edición para crear el perfil
+    useEffect(() => {
+        if (profile === null && tiposDocumento.length > 0) {
+            // Solo activar edición cuando ya se cargaron los datos de catálogos
+            setIsEditing(true);
+        }
+    }, [profile, tiposDocumento]);
 
     return (
         <Card className="shadow-sm border-border bg-card">
             <CardHeader className="flex flex-col md:flex-row md:items-center justify-between pb-2 space-y-2 md:space-y-0">
                 <CardTitle className="text-lg md:text-xl font-semibold flex items-center gap-2 text-foreground">
                     <UserIcon className="h-5 w-5 text-primary" /> Información del Perfil
+                    {!profile && <span className="text-sm font-normal text-muted-foreground ml-2">(Nuevo)</span>}
                 </CardTitle>
                 {!isEditing ? (
                     <Button variant="outline" size="sm" onClick={handleEdit}>
@@ -280,11 +356,13 @@ export default function PerfilClienteForm({
                     </Button>
                 ) : (
                     <div className="flex gap-2">
-                        <Button variant="outline" size="sm" onClick={handleCancel}>
-                            <X className="h-4 w-4 mr-2" /> Cancelar
-                        </Button>
+                        {profile && (
+                            <Button variant="outline" size="sm" onClick={handleCancel}>
+                                <X className="h-4 w-4 mr-2" /> Cancelar
+                            </Button>
+                        )}
                         <Button size="sm" onClick={handleSave}>
-                            <Save className="h-4 w-4 mr-2" /> Guardar
+                            <Save className="h-4 w-4 mr-2" /> {profile ? 'Guardar' : 'Crear Perfil'}
                         </Button>
                     </div>
                 )}
@@ -298,7 +376,7 @@ export default function PerfilClienteForm({
                             id="nombre_cliente"
                             name="nombre_cliente"
                             type="text"
-                            defaultValue={profile.nombre_cliente}
+                            defaultValue={profile?.nombre_cliente || ''}
                             readOnly={!isEditing}
                             key={`nombre_cliente-${isEditing}`}
                             className={isEditing
@@ -314,7 +392,7 @@ export default function PerfilClienteForm({
                             id="apellido"
                             name="apellido"
                             type="text"
-                            defaultValue={profile.apellido}
+                            defaultValue={profile?.apellido || ''}
                             readOnly={!isEditing}
                             key={`apellido-${isEditing}`}
                             className={isEditing
@@ -332,7 +410,7 @@ export default function PerfilClienteForm({
                                 </SelectTrigger>
                                 <SelectContent>
                                     {tiposDocumento.map((tipo) => (
-                                        <SelectItem key={tipo.iud} value={tipo.tipos}>
+                                        <SelectItem key={tipo.iud} value={tipo.iud}>
                                             {tipo.nombreDocumento}
                                         </SelectItem>
                                     ))}
@@ -340,7 +418,7 @@ export default function PerfilClienteForm({
                             </Select>
                         ) : (
                             <div className="text-base text-foreground">
-                                {tiposDocumento.find(t => t.tipos === selectedTipoDoc)?.nombreDocumento || selectedTipoDoc}
+                                {tiposDocumento.find(t => t.iud === selectedTipoDoc)?.nombreDocumento || selectedTipoDoc}
                             </div>
                         )}
                     </div>
@@ -351,7 +429,7 @@ export default function PerfilClienteForm({
                             id="documentoIntentidad"
                             name="documentoIntentidad"
                             type="text"
-                            defaultValue={profile.documentoIntentidad}
+                            defaultValue={profile?.documentoIntentidad || ''}
                             readOnly={!isEditing}
                             key={`documentoIntentidad-${isEditing}`}
                             className={isEditing
@@ -367,7 +445,7 @@ export default function PerfilClienteForm({
                             id="telefono"
                             name="telefono"
                             type="tel"
-                            defaultValue={profile.telefono}
+                            defaultValue={profile?.telefono || ''}
                             readOnly={!isEditing}
                             key={`telefono-${isEditing}`}
                             className={isEditing
@@ -375,6 +453,27 @@ export default function PerfilClienteForm({
                                 : "border-none shadow-none text-base pl-0 h-auto bg-transparent focus-visible:ring-0 text-foreground"
                             }
                         />
+                    </div>
+                    <div className="space-y-1">
+                        <Label htmlFor="prefijo" className="text-foreground">Prefijo Telefónico</Label>
+                        {isEditing ? (
+                            <Select value={selectedPrefijo} onValueChange={setSelectedPrefijo}>
+                                <SelectTrigger className="text-base">
+                                    <SelectValue placeholder="Selecciona prefijo" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {prefijos.map((prefijo) => (
+                                        <SelectItem key={prefijo.iud} value={prefijo.iud}>
+                                            {prefijo.prefijoTelefonicoPais}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        ) : (
+                            <div className="text-base text-foreground">
+                                {prefijos.find(p => p.iud === selectedPrefijo)?.prefijoTelefonicoPais || selectedPrefijo}
+                            </div>
+                        )}
                     </div>
                     <div className="space-y-1">
                         <Label htmlFor="genero" className="text-foreground">Género</Label>
@@ -393,7 +492,28 @@ export default function PerfilClienteForm({
                             </Select>
                         ) : (
                             <div className="text-base text-foreground">
-                                {selectedGenero || profile.genero}
+                                {selectedGenero || profile?.genero || ''}
+                            </div>
+                        )}
+                    </div>
+                    <div className="space-y-1">
+                        <Label htmlFor="nacionalidad" className="text-foreground">Nacionalidad</Label>
+                        {isEditing ? (
+                            <Select value={selectedNacionalidad} onValueChange={setSelectedNacionalidad}>
+                                <SelectTrigger className="text-base">
+                                    <SelectValue placeholder="Selecciona nacionalidad" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {nacionalidades.map((nacionalidad) => (
+                                        <SelectItem key={nacionalidad.iud} value={nacionalidad.iud}>
+                                            {nacionalidad.Nacionalidad}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        ) : (
+                            <div className="text-base text-foreground">
+                                {nacionalidades.find(n => n.iud === selectedNacionalidad)?.Nacionalidad || selectedNacionalidad}
                             </div>
                         )}
                     </div>
@@ -404,7 +524,7 @@ export default function PerfilClienteForm({
                             id="fecha_nacimiento"
                             name="fecha_nacimiento"
                             type="date"
-                            defaultValue={profile.fecha_nacimiento}
+                            defaultValue={profile?.fecha_nacimiento || ''}
                             readOnly={!isEditing}
                             key={`fecha_nacimiento-${isEditing}`}
                             className={isEditing

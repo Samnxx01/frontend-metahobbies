@@ -5,7 +5,8 @@ import { toast } from 'react-toastify';
 // Importar servicios y providers con la ruta relativa ajustada
 import { useAuth } from '../../../providers/AuthProvider';
 import { uploadProfileImage, getProfileImageBlobUrl } from '../../../services/clientService';
-import type { User } from '../../../../types/common';
+import type { User, ClientProfile } from '../../../../types/common';
+import PerfilClienteForm from '../../components/perfil/PerfilClienteForm';
 
 // Shadcn UI components
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -71,14 +72,11 @@ export default function Perfil(): React.ReactElement {
 
     // --- ESTADOS DE GESTIÓN DE UI Y DATOS ---
     const [localUser, setLocalUser] = useState<User>(user || DEFAULT_USER_DATA);
-    const [isEditingPersonal, setIsEditingPersonal] = useState<boolean>(false);
     const [isEditingAddress, setIsEditingAddress] = useState<boolean>(false);
     const [activeNavItem, setActiveNavItem] = useState<string>('personal');
+    const [clientProfile, setClientProfile] = useState<ClientProfile | null>(null);
 
-    // Refs para inputs no controlados
-    const nombreRef = useRef<HTMLInputElement>(null);
-    const correoRef = useRef<HTMLInputElement>(null);
-    const telefonoRef = useRef<HTMLInputElement>(null);
+    // Refs para inputs no controlados (solo dirección)
     const direccionRef = useRef<HTMLInputElement>(null);
 
     // Estados de Foto de Perfil
@@ -171,31 +169,35 @@ export default function Perfil(): React.ReactElement {
     isMounted = false;
   };
 }, [loading, isAuthenticated, cacheBuster]); // ⬅️ sin user._id
+
+    // --- CARGAR DATOS DEL PERFIL DEL CLIENTE ---
+    useEffect(() => {
+        const loadClientProfile = async () => {
+            try {
+                const token = localStorage.getItem('token');
+                if (!token) return;
+
+                const response = await fetch('https://server-mabs-xo9s.onrender.com/api/perfil/usuario/consultarPerfil', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                const data = await response.json();
+                if (data.ok && data.cliente) {
+                    setClientProfile(data.cliente);
+                }
+            } catch (error) {
+                console.error('Error al cargar perfil del cliente:', error);
+            }
+        };
+
+        if (isAuthenticated && !loading) {
+            loadClientProfile();
+        }
+    }, [isAuthenticated, loading]);
+
     // --- HANDLERS DE EDICIÓN DE DATOS ---
-
-    const handleEditPersonal = () => {
-        setIsEditingPersonal(true);
-    };
-
-    const handleSavePersonal = () => {
-        const nombre = nombreRef.current?.value || '';
-        const correo = correoRef.current?.value || '';
-        const telefono = telefonoRef.current?.value || '';
-
-        setLocalUser(prev => ({
-            ...prev,
-            nombre,
-            correo,
-            telefono
-        }));
-        setIsEditingPersonal(false);
-        toast.success("Información personal actualizada.");
-    };
-
-    const handleCancelPersonal = () => {
-        setIsEditingPersonal(false);
-        // Los inputs se resetearán automáticamente al valor de localUser cuando cambie isEditingPersonal
-    };
 
     const handleEditAddress = () => {
         setIsEditingAddress(true);
@@ -414,76 +416,14 @@ export default function Perfil(): React.ReactElement {
 
                         {/* --- Tarjeta de Información Personal --- */}
                         {activeNavItem === 'personal' && (
-<<<<<<< HEAD
-                            <Card className="shadow-sm border-border bg-card">
-                                <CardHeader className="flex flex-col md:flex-row md:items-center justify-between pb-2 space-y-2 md:space-y-0">
-                                    <CardTitle className="text-lg md:text-xl font-semibold flex items-center gap-2 text-foreground">
-                                        <UserIcon className="h-5 w-5 text-primary" /> Información Personal
-                                    </CardTitle>
-                                    {!isEditingPersonal ? (
-                                        <Button variant="outline" size="sm" onClick={handleEditPersonal}>
-                                            <Edit className="h-4 w-4 mr-2" /> Editar
-                                        </Button>
-                                    ) : (
-                                        <div className="flex gap-2">
-                                            <Button variant="outline" size="sm" onClick={handleCancelPersonal}>
-                                                <X className="h-4 w-4 mr-2" /> Cancelar
-                                            </Button>
-                                            <Button size="sm" onClick={handleSavePersonal}>
-                                                <Save className="h-4 w-4 mr-2" /> Guardar
-                                            </Button>
-                                        </div>
-                                    )}
-                                </CardHeader>
-                                <CardContent className="space-y-4 pt-4">
-                                    <FieldDisplay
-                                        id="nombre"
-                                        name="nombre"
-                                        label="Nombre Completo"
-                                        defaultValue={localUser.nombre}
-                                        readOnly={!isEditingPersonal}
-                                        inputRef={nombreRef}
-                                    />
-                                    <FieldDisplay
-                                        id="correo"
-                                        name="correo"
-                                        label="Correo Electrónico"
-                                        defaultValue={localUser.correo}
-                                        readOnly={true}
-                                        inputRef={correoRef}
-                                        type="email"
-                                    />
-                                    <FieldDisplay
-                                        id="telefono"
-                                        name="telefono"
-                                        label="Teléfono"
-                                        defaultValue={localUser.telefono || ''}
-                                        readOnly={!isEditingPersonal}
-                                        inputRef={telefonoRef}
-                                        type="tel"
-                                    />
-                                </CardContent>
-                            </Card>
-=======
                             <PerfilClienteForm
                                 profile={clientProfile}
-                                token={localStorage.getItem('token') || ''}
-                                onProfileUpdate={async (updatedProfile) => {
+                                onProfileUpdate={(updatedProfile) => {
                                     setClientProfile(updatedProfile);
-                                    if (user?._id) {
-                                        try {
-                                            const response = await updateClientProfile(user._id, updatedProfile);
-                                            if (response && response.success) {
-                                                toast.success('Perfil actualizado correctamente.');
-                                            }
-                                        } catch (error) {
-                                            console.error('Error al actualizar perfil:', error);
-                                            toast.error('Error al actualizar el perfil.');
-                                        }
-                                    }
+                                    toast.success('Perfil actualizado correctamente');
                                 }}
+                                token={localStorage.getItem('token') || undefined}
                             />
->>>>>>> cbbf943 (MOD: Wompi integration from API, parametrization for profile update)
                         )}
 
                         {/* --- Tarjeta de Dirección de Envío --- */}

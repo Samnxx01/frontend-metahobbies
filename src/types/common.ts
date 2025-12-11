@@ -112,3 +112,19 @@ export interface ProfileImage {
   usuario: UserId;
   url?: string;
 }
+
+// Tipos para perfil de cliente
+export interface ClientProfile {
+  nombre_cliente: string;
+  apellido: string;
+  genero: string;
+  tipoDeIntendidad: string;
+  fecha_nacimiento: string;
+  documentoIntentidad: number;
+  telefono: number;
+  nacionalidad?: string;
+  prefijo?: string;
+  paisId: string;
+  departamentoId: string;
+  ciudadId: string;
+}
