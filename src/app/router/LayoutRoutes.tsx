@@ -21,6 +21,7 @@ import GestionCategorias from '@/app/presentation/pages/admin/GestionCategorias'
 import Login from '@/app/presentation/pages/login/Login';
 import Registro from '@/app/presentation/pages/registro/Registro';
 import RecuperarContrasena from '@/app/presentation/pages/recuperar-contrasena/RecuperarContrasena';
+import CambiarContrasenaProvisional from '@/app/presentation/pages/cambiar-contrasena/CambiarContrasenaProvisional';
 import Contacto from '@/app/presentation/pages/contacto/Contacto';
 import { MembershipRoutes } from './MembershipRoutes';
 import GestionProductos from '../presentation/pages/admin/GestionProductos';
@@ -124,6 +125,7 @@ export default function LayoutRoutes(): ReactElement {
 
                 {/* Rutas especiales que no vienen del backend */}
                 <Route path="membresia/*" element={<MembershipRoutes />} />
+                <Route path="cambiar-contrasena-provisional" element={<CambiarContrasenaProvisional />} />
                 {user && <Route path="perfil" element={<Perfil />} />}
             </Route>
 

@@ -37,6 +37,7 @@ interface LoginResponse {
         rol: string;
         [key: string]: any;
     };
+    requiereActualizacion?: boolean;
 }
 
 interface LoginError {
@@ -98,6 +99,15 @@ export default function Login(): React.ReactElement {
             const response = await login({ correo: data.correo, password: data.password }) as LoginResponse;
 
             if (response?.token && response?.usuario) {
+                // Verificar si requiere actualización de contraseña
+                if (response.requiereActualizacion === true) {
+                    toast.info('Debes actualizar tu contraseña provisional');
+                    setTimeout(() => {
+                        navigate('/cambiar-contrasena-provisional');
+                    }, 1000);
+                    return;
+                }
+
                 // Éxito: Mostrar Toast y Redirigir
                 toast.success('¡Acceso exitoso! Redirigiendo...');
 
