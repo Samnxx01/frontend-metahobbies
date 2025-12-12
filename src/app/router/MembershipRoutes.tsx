@@ -11,7 +11,7 @@ export const MembershipRoutes = (): ReactElement => {
             <Route
                 path="dashboard"
                 element={
-                    <PrivateRoute>
+                    <PrivateRoute requireAdmin={false}>
                         <MembershipDashboard />
                     </PrivateRoute>
                 }

@@ -15,7 +15,7 @@ interface TipoDocumento {
 
 interface Genero {
     nombre_genero: string;
-    iud: string;
+    id: string;
 }
 
 interface Nacionalidad {
@@ -484,7 +484,7 @@ export default function PerfilClienteForm({
                                 </SelectTrigger>
                                 <SelectContent>
                                     {generos.map((genero) => (
-                                        <SelectItem key={genero.iud} value={genero.nombre_genero}>
+                                        <SelectItem key={genero.id} value={genero.nombre_genero}>
                                             {genero.nombre_genero}
                                         </SelectItem>
                                     ))}

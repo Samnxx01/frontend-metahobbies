@@ -38,6 +38,17 @@ export const apiFetch = async (
 
     try {
         const response: Response = await fetch(endpoint, options as RequestInit);
+        
+        // Verificar si es 401 Unauthorized
+        if (response.status === 401) {
+            // Token no válido - cerrar sesión
+            localStorage.removeItem('user');
+            localStorage.removeItem('token');
+            // Redirigir a login
+            window.location.href = '/login';
+            throw new Error('Sesión expirada. Por favor inicia sesión nuevamente.');
+        }
+        
         if (options.responseType === 'raw') {
             if (!response.ok) {
                 throw new Error(response.statusText || 'Error de red en respuesta raw');

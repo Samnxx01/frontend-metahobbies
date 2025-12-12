@@ -4,16 +4,19 @@ import { useAuth } from '../providers/AuthProvider';
 
 interface PrivateRouteProps {
   children: ReactNode;
+  requireAdmin?: boolean; // Nueva prop opcional
 }
 
-export const PrivateRoute = ({ children }: PrivateRouteProps) => {
+export const PrivateRoute = ({ children, requireAdmin = true }: PrivateRouteProps) => {
   const { isAuthenticated, user } = useAuth();
   const location = useLocation();
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace state={{ from: location }} />;
   }
-  if (user?.role !== 'ADMIN' && user?.role !== 'DESARROLLADOR') {
+  
+  // Solo verificar rol de admin si requireAdmin es true
+  if (requireAdmin && user?.role !== 'ADMIN' && user?.role !== 'DESARROLLADOR') {
     return <Navigate to="/" replace />;
   }
 

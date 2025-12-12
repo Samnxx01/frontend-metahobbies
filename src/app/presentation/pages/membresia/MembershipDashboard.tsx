@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { toast } from 'react-toastify';
+import { useReferralLink } from '@/app/hooks/useReferralLink';
 
 // Shadcn UI components
 import { Button } from '@/components/ui/button';
@@ -16,7 +17,7 @@ import {
 } from '@/components/ui/table';
 
 // Lucide icons
-import { Copy, Share2, DollarSign, Users, TrendingUp } from 'lucide-react';
+import { Copy, Share2, DollarSign, Users, TrendingUp, Loader2 } from 'lucide-react';
 
 interface ReferralStats {
     totalReferrals: number;
@@ -36,8 +37,7 @@ interface Referral {
 }
 
 export default function MembershipDashboard(): React.ReactElement {
-    const [referralLink] = useState<string>('https://mabs.com/ref/ABC123');
-    const [referralCode] = useState<string>('MABS-ABC123');
+    const { referralData, loading, refetch } = useReferralLink();
 
     // Datos de ejemplo
     const referralStats: ReferralStats = {
@@ -65,19 +65,41 @@ export default function MembershipDashboard(): React.ReactElement {
         toast.success(`${type} copiado al portapapeles`);
     };
 
-    const handleCopyLink = (): void => handleCopy(referralLink, 'Enlace');
-    const handleCopyCode = (): void => handleCopy(referralCode, 'Código');
+    const handleCopyLink = (): void => {
+        if (referralData?.enlaceCompleto) {
+            handleCopy(referralData.enlaceCompleto, 'Enlace');
+        }
+    };
+    
+    const handleCopyCode = (): void => {
+        if (referralData?.codigoReferido) {
+            handleCopy(referralData.codigoReferido, 'Código');
+        }
+    };
 
     const handleShare = (): void => {
-        if (navigator.share) {
+        if (navigator.share && referralData?.enlaceCompleto) {
             navigator.share({
                 title: 'Únete a Mabs',
                 text: '¡Únete a Mabs con mi código de referido!',
-                url: referralLink
+                url: referralData.enlaceCompleto
             });
         } else {
             toast.info('La función de compartir nativa no está disponible en este navegador.');
         }
+    };
+
+    // Funciรณn para truncar el enlace visualmente
+    const truncateLink = (link: string, maxLength: number = 40): string => {
+        if (link.length <= maxLength) return link;
+        const start = link.substring(0, maxLength / 2);
+        const end = link.substring(link.length - maxLength / 2);
+        return `${start}...${end}`;
+    };
+
+    const handleGenerateLink = async (): Promise<void> => {
+        await refetch();
+        toast.success('Enlace de referido generado correctamente');
     };
 
     return (
@@ -99,10 +121,29 @@ export default function MembershipDashboard(): React.ReactElement {
 
                     {/* Columna Izquierda (Enlaces y Códigos) - Sin bordes */}
                     <Card className="shadow-sm border-0 bg-card">
-                        <CardHeader>
+                        <CardHeader className="flex flex-row items-center justify-between">
                             <CardTitle className="text-lg font-semibold">
                                 Herramientas de Referido
                             </CardTitle>
+                            <Button
+                                onClick={handleGenerateLink}
+                                variant="outline"
+                                size="sm"
+                                disabled={loading}
+                                className="gap-2"
+                            >
+                                {loading ? (
+                                    <>
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                        Generando...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Share2 className="w-4 h-4" />
+                                        Generar Enlace
+                                    </>
+                                )}
+                            </Button>
                         </CardHeader>
                         <CardContent className="space-y-6">
                             {/* Enlace de Referido */}
@@ -113,9 +154,10 @@ export default function MembershipDashboard(): React.ReactElement {
                                 <div className="relative flex items-center">
                                     <Input
                                         id="referral-link"
-                                        value={referralLink}
+                                        value={referralData?.enlaceCompleto ? truncateLink(referralData.enlaceCompleto, 50) : 'Haz clic en "Generar Enlace"'}
                                         readOnly
                                         className="pr-20 font-mono text-sm bg-muted/30 border-muted"
+                                        title={referralData?.enlaceCompleto}
                                     />
                                     <div className="absolute right-1 flex space-x-1">
                                         <Button
@@ -124,6 +166,7 @@ export default function MembershipDashboard(): React.ReactElement {
                                             size="icon"
                                             className="h-8 w-8 text-muted-foreground hover:text-foreground"
                                             title="Copiar Enlace"
+                                            disabled={!referralData}
                                         >
                                             <Copy className="w-4 h-4" />
                                         </Button>
@@ -133,6 +176,7 @@ export default function MembershipDashboard(): React.ReactElement {
                                             size="icon"
                                             className="h-8 w-8 text-muted-foreground hover:text-foreground"
                                             title="Compartir"
+                                            disabled={!referralData}
                                         >
                                             <Share2 className="w-4 h-4" />
                                         </Button>
@@ -148,7 +192,7 @@ export default function MembershipDashboard(): React.ReactElement {
                                 <div className="relative flex items-center">
                                     <Input
                                         id="referral-code"
-                                        value={referralCode}
+                                        value={referralData?.codigoReferido || 'Haz clic en "Generar Enlace"'}
                                         readOnly
                                         className="pr-12 font-mono text-sm font-semibold bg-muted/30 border-muted"
                                     />
@@ -158,6 +202,7 @@ export default function MembershipDashboard(): React.ReactElement {
                                         size="icon"
                                         className="absolute right-1 h-8 w-8 text-muted-foreground hover:text-foreground"
                                         title="Copiar Código"
+                                        disabled={!referralData}
                                     >
                                         <Copy className="w-4 h-4" />
                                     </Button>
