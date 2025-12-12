@@ -43,9 +43,9 @@ export const useReferralLink = (): UseReferralLinkReturn => {
 
             const data = await response.json();
 
-            // Construir el enlace completo
-            const frontendUrl = import.meta.env.VITE_FRONTEND_URL ?? 'https://mabs-frontend.vercel.app';
-            const enlaceCompleto = `${frontendUrl}/membresia/pago/${data.jwtReferido}`;
+            // Construir el enlace completo usando la ruta actual
+            const currentOrigin = window.location.origin;
+            const enlaceCompleto = `${currentOrigin}/membresia/pago/${data.jwtReferido}`;
 
             setReferralData({
                 codigoReferido: data.codigoReferido,

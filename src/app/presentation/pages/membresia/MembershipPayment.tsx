@@ -58,7 +58,11 @@ export default function MembershipPayment(): React.ReactElement {
                 cardNumber: '',
                 cardName: '',
                 expiryDate: '',
-                cvv: ''
+                cvv: '',
+                pseUserType: '',
+                pseLegalIdType: '',
+                pseLegalId: '',
+                pseFinancialInstitution: ''
             }
         },
         steps,

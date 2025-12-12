@@ -8,12 +8,16 @@ interface PersonalInfo {
 }
 
 interface PaymentInfo {
-  paymentMethod: 'nequi' | 'card' | '';
+  paymentMethod: 'nequi' | 'card' | 'pse' | '';
   nequiPhone?: string;
   cardNumber?: string;
   cardName?: string;
   expiryDate?: string;
   cvv?: string;
+  pseUserType?: '0' | '1' | '';
+  pseLegalIdType?: 'CC' | 'CE' | 'NIT' | '';
+  pseLegalId?: string;
+  pseFinancialInstitution?: string;
 }
 
 interface FormData {
@@ -104,6 +108,7 @@ export default function MembershipStepContent({
               <SelectContent>
                 <SelectItem value="nequi">Nequi</SelectItem>
                 <SelectItem value="card">Tarjeta de Crédito/Débito</SelectItem>
+                <SelectItem value="pse">PSE (Pago Seguro en Línea)</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -187,6 +192,106 @@ export default function MembershipStepContent({
                   placeholder="123"
                 />
               </div>
+            </div>
+          )}
+
+          {/* PSE Fields */}
+          {formData.paymentInfo.paymentMethod === 'pse' && (
+            <div className="space-y-4 animate-in fade-in-50">
+              {/* User Type */}
+              <div className="space-y-2">
+                <Label htmlFor="pseUserType">
+                  Tipo de persona <span className="text-destructive">*</span>
+                </Label>
+                <Select
+                  value={formData.paymentInfo.pseUserType || ''}
+                  onValueChange={(value) => handleFormChange('paymentInfo', 'pseUserType', value)}
+                >
+                  <SelectTrigger id="pseUserType">
+                    <SelectValue placeholder="Selecciona el tipo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="0">Persona Natural</SelectItem>
+                    <SelectItem value="1">Persona Jurídica</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Legal ID Type */}
+              <div className="space-y-2">
+                <Label htmlFor="pseLegalIdType">
+                  Tipo de documento <span className="text-destructive">*</span>
+                </Label>
+                <Select
+                  value={formData.paymentInfo.pseLegalIdType || ''}
+                  onValueChange={(value) => handleFormChange('paymentInfo', 'pseLegalIdType', value)}
+                >
+                  <SelectTrigger id="pseLegalIdType">
+                    <SelectValue placeholder="Selecciona el tipo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="CC">Cédula de Ciudadanía (CC)</SelectItem>
+                    <SelectItem value="CE">Cédula de Extranjería (CE)</SelectItem>
+                    <SelectItem value="NIT">NIT</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Legal ID */}
+              <FormField
+                id="pseLegalId"
+                label="Número de documento"
+                type="text"
+                required
+                value={formData.paymentInfo.pseLegalId || ''}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                  const value = e.target.value.replace(/[^0-9]/g, '');
+                  handleFormChange('paymentInfo', 'pseLegalId', value);
+                }}
+                placeholder="1099888777"
+              />
+
+              {/* Financial Institution */}
+              <div className="space-y-2">
+                <Label htmlFor="pseFinancialInstitution">
+                  Banco <span className="text-destructive">*</span>
+                </Label>
+                <Select
+                  value={formData.paymentInfo.pseFinancialInstitution || ''}
+                  onValueChange={(value) => handleFormChange('paymentInfo', 'pseFinancialInstitution', value)}
+                >
+                  <SelectTrigger id="pseFinancialInstitution">
+                    <SelectValue placeholder="Selecciona tu banco" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1007">Bancolombia</SelectItem>
+                    <SelectItem value="1013">BBVA Colombia</SelectItem>
+                    <SelectItem value="1009">Citibank</SelectItem>
+                    <SelectItem value="1006">Itau</SelectItem>
+                    <SelectItem value="1012">Banco GNB Sudameris</SelectItem>
+                    <SelectItem value="1019">Scotiabank Colpatria</SelectItem>
+                    <SelectItem value="1023">Banco de Occidente</SelectItem>
+                    <SelectItem value="1002">Banco Popular</SelectItem>
+                    <SelectItem value="1032">Banco Falabella</SelectItem>
+                    <SelectItem value="1001">Banco Agrario</SelectItem>
+                    <SelectItem value="1040">Banco AV Villas</SelectItem>
+                    <SelectItem value="1052">Banco Pichincha</SelectItem>
+                    <SelectItem value="1060">Banco Caja Social</SelectItem>
+                    <SelectItem value="1061">Bancoomeva</SelectItem>
+                    <SelectItem value="1062">Banco Finandina</SelectItem>
+                    <SelectItem value="1063">Banco Davivienda</SelectItem>
+                    <SelectItem value="1283">Banco Cooperativo Coopcentral</SelectItem>
+                    <SelectItem value="1551">Daviplata</SelectItem>
+                    <SelectItem value="1507">Nequi</SelectItem>
+                    <SelectItem value="1151">Rappipay</SelectItem>
+                    <SelectItem value="1009">Lulo Bank</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <p className="text-sm text-muted-foreground">
+                Serás redirigido a la plataforma de tu banco para completar el pago de forma segura.
+              </p>
             </div>
           )}
         </div>

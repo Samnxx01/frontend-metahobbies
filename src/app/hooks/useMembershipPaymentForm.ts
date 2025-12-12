@@ -8,7 +8,7 @@ interface PersonalInfo {
 
 // Interface for payment info step
 interface PaymentInfo {
-  paymentMethod: 'nequi' | 'card' | '';
+  paymentMethod: 'nequi' | 'card' | 'pse' | '';
   // Nequi fields
   nequiPhone?: string;
   // Card fields
@@ -16,6 +16,11 @@ interface PaymentInfo {
   cardName?: string;
   expiryDate?: string;
   cvv?: string;
+  // PSE fields
+  pseUserType?: '0' | '1' | ''; // 0: Natural person, 1: Business
+  pseLegalIdType?: 'CC' | 'CE' | 'NIT' | ''; // CC: Cédula, CE: Cédula de extranjería, NIT: NIT
+  pseLegalId?: string; // Document number
+  pseFinancialInstitution?: string; // Financial institution code
 }
 
 // Interface for the complete form data
@@ -95,7 +100,7 @@ export function useMembershipPaymentForm({
       case 1:
         return true;
       case 2: {
-        const { paymentMethod, nequiPhone, cardNumber, cardName, expiryDate, cvv } = formData.paymentInfo;
+        const { paymentMethod, nequiPhone, cardNumber, cardName, expiryDate, cvv, pseUserType, pseLegalIdType, pseLegalId, pseFinancialInstitution } = formData.paymentInfo;
         if (!paymentMethod) return false;
         
         if (paymentMethod === 'nequi') {
@@ -108,6 +113,11 @@ export function useMembershipPaymentForm({
           return !!cardNumber && !!cardName && !!expiryDate && !!cvv &&
                  cardNumber.trim() !== "" && cardName.trim() !== "" &&
                  expiryDate.trim() !== "" && cvv.trim() !== "";
+        }
+        
+        if (paymentMethod === 'pse') {
+          return !!pseUserType && !!pseLegalIdType && !!pseLegalId && !!pseFinancialInstitution &&
+                 pseLegalId.trim() !== "" && pseFinancialInstitution.trim() !== "";
         }
         
         return false;
@@ -150,6 +160,10 @@ export function useMembershipPaymentForm({
           return "Por favor completa todos los datos de la tarjeta";
         }
         
+        if (paymentMethod === 'pse') {
+          return "Por favor completa todos los datos de PSE";
+        }
+        
         return "Por favor completa la información de pago";
       }
       default:
@@ -180,6 +194,15 @@ export function useMembershipPaymentForm({
         paymentData.payment_method = {
           type: "NEQUI",
           phone_number: formData.paymentInfo.nequiPhone
+        };
+      } else if (formData.paymentInfo.paymentMethod === 'pse') {
+        paymentData.payment_method = {
+          type: "PSE",
+          user_type: parseInt(formData.paymentInfo.pseUserType || '0'),
+          user_legal_id_type: formData.paymentInfo.pseLegalIdType,
+          user_legal_id: formData.paymentInfo.pseLegalId,
+          financial_institution_code: formData.paymentInfo.pseFinancialInstitution,
+          payment_description: `Membresía Premium - Ref: ${token.substring(0, 16)}`
         };
       } else if (formData.paymentInfo.paymentMethod === 'card') {
         // Tokenizar la tarjeta con Wompi
