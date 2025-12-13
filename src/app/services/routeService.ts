@@ -1,3 +1,5 @@
+import { apiFetch } from './api';
+
 interface RouteResponse {
     success: boolean;
     message: string;
@@ -25,26 +27,13 @@ interface AuthorizedRoutes {
 export const getAuthorizedRoutes = async (): Promise<AuthorizedRoutes> => {
     try {
         const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "/api";
-        const token = localStorage.getItem("token") || null;
 
-        const headers: HeadersInit = {
-            "Content-Type": "application/json",
-        };
-
-        if (token) {
-            headers["x-token"] = token;
-        }
-
-        const response = await fetch(`${API_BASE_URL}/seguridad/rutas/listarRutas/admin`, {
+        const result: RouteResponse = await apiFetch(`${API_BASE_URL}/seguridad/rutas/listarRutas/admin`, {
             method: "GET",
-            headers,
+            headers: {
+                "x-token": localStorage.getItem("token") || ""
+            }
         });
-
-        if (!response.ok) {
-            throw new Error("Error al obtener rutas");
-        }
-
-        const result: RouteResponse = await response.json();
 
         if (!result.success || !result.data) {
             return { publicRoutes: [], adminRoutes: [], authRoutes: [] };

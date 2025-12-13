@@ -97,7 +97,8 @@ export const GestionUsuarios = (): React.ReactElement => {
             minWidth: 130,
             flex: 1.2,
             render: (user: User) => {
-                const isActive = user.estado === 'ACTIVO';
+                // Manejar tanto boolean como string para el estado
+                const isActive = user.estado === true || user.estado === 'ACTIVO' || user.estado === 'true';
                 return (
                     <Badge
                         variant={isActive ? 'default' : 'outline'}
@@ -226,7 +227,12 @@ export const GestionUsuarios = (): React.ReactElement => {
                     <UserEditModal
                         open={editModalOpen}
                         onClose={() => setEditModalOpen(false)}
-                        user={currentUser}
+                        user={{
+                            ...currentUser,
+                            estado: typeof currentUser.estado === 'boolean' 
+                                ? (currentUser.estado ? 'ACTIVO' : 'INACTIVO')
+                                : currentUser.estado
+                        }}
                         onSave={(userData) => updateUser(currentUser._id, userData)}
                         isUpdating={isUpdating}
                     />

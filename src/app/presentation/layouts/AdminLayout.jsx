@@ -23,7 +23,7 @@ export default function AdminLayout() {
             <main
                 className="grow p-3 bg-gray-100 min-h-screen sm:w-[calc(100%-260px)]"
             >
-                <div className="min-h-[70px]" /> {/* Spacer for fixed navbar */}
+                <div className="h-16" /> {/* Spacer for fixed navbar */}
 
                 <Outlet />
 

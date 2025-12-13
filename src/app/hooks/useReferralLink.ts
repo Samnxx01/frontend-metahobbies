@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { apiFetch } from '@/app/services/api';
 
 interface ReferralData {
     codigoReferido: string;
@@ -29,19 +30,9 @@ export const useReferralLink = (): UseReferralLinkReturn => {
             }
 
             const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api';
-            const response = await fetch(`${API_BASE_URL}/referido/enlace/${token}`, {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'metasploit': token
-                }
+            const data = await apiFetch(`${API_BASE_URL}/referido/enlace/${token}`, {
+                method: 'GET'
             });
-
-            if (!response.ok) {
-                throw new Error('Error al obtener el enlace de referido');
-            }
-
-            const data = await response.json();
 
             // Construir el enlace completo usando la ruta actual
             const currentOrigin = window.location.origin;

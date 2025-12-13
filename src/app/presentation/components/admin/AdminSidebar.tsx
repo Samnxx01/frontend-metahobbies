@@ -16,7 +16,9 @@ import {
     Users,
     ScrollText,
     Settings,
-    LogOut
+    LogOut,
+    Network,
+    Wrench
 } from 'lucide-react';
 
 import type { AdminSidebarProps } from '@/types/components';
@@ -49,7 +51,9 @@ export default function AdminSidebar({ mobileOpen, setMobileOpen }: AdminSidebar
         { label: 'Productos', icon: <Package className='w-5 h-5' />, path: '/admin/productos' },
         { label: 'Categorías', icon: <Tags className='w-5 h-5' />, path: '/admin/categorias' },
         { label: 'Usuarios', icon: <Users className='w-5 h-5' />, path: '/admin/usuarios' },
+        { label: 'Referidos', icon: <Network className='w-5 h-5' />, path: '/admin/referidos' },
         { label: 'Pedidos', icon: <ScrollText className='w-5 h-5' />, path: '/admin/pedidos' },
+        { label: 'Parametrización', icon: <Wrench className='w-5 h-5' />, path: '/admin/parametrizacion' },
         { label: 'Configuración', icon: <Settings className='w-5 h-5' />, path: '/admin/configuracion' },
     ];
 

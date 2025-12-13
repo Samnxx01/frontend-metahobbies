@@ -151,7 +151,6 @@ export const UserFormModal = ({
                                 <SelectContent>
                                     <SelectItem value="ADMIN">ADMIN</SelectItem>
                                     <SelectItem value="CLIENTE">CLIENTE</SelectItem>
-                                    <SelectItem value="DESARROLLADOR">DESARROLLADOR</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>

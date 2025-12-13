@@ -15,8 +15,10 @@ import Perfil from '@/app/presentation/pages/perfil/Perfil';
 import AdminLayout from '@/app/presentation/layouts/AdminLayout';
 import DashboardAdmin from '@/app/presentation/pages/admin/Dashboard';
 import GestionUsuarios from '@/app/presentation/pages/admin/GestionUsuarios';
+import GestionReferidos from '@/app/presentation/pages/admin/GestionReferidos';
 import PedidosAdmin from '@/app/presentation/pages/admin/Pedidos';
 import ConfiguracionAdmin from '@/app/presentation/pages/admin/Configuracion';
+import Parametrizacion from '@/app/presentation/pages/admin/Parametrizacion';
 import GestionCategorias from '@/app/presentation/pages/admin/GestionCategorias';
 import Login from '@/app/presentation/pages/login/Login';
 import Registro from '@/app/presentation/pages/registro/Registro';
@@ -59,8 +61,10 @@ const componentMap: ComponentMapType = {
     DashboardAdmin,
     GestionProductos,
     GestionUsuarios,
+    GestionReferidos,
     PedidosAdmin,
     ConfiguracionAdmin,
+    Parametrizacion,
     GestionCategorias,
     Contacto,
     Posts,

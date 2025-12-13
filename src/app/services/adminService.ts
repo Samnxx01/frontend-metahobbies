@@ -9,6 +9,7 @@ export const listUsers = async () => {
 
 export interface AdminData {
     [key: string]: unknown;
+    rol?: string;
 }
 
 export interface UpdateUserData {
@@ -16,7 +17,12 @@ export interface UpdateUserData {
 }
 
 export const registerAdmin = async (adminData: AdminData): Promise<ApiResponse> => {
-    return apiFetch('/api/admin/registro', {
+    // Determinar el endpoint según el rol
+    const endpoint = adminData.rol === 'ADMIN' 
+        ? '/api/admin/registro' 
+        : '/api/registro/client';
+    
+    return apiFetch(endpoint, {
         method: 'POST',
         body: adminData 
     });

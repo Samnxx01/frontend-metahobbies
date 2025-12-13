@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { toast } from "react-toastify";
+import { apiFetch } from "@/app/services/api";
 
 // Interface for personal info step
 interface PersonalInfo {
@@ -254,25 +255,15 @@ export function useMembershipPaymentForm({
       }
 
       // Hacer petición al backend
-      const response = await fetch(
-        `https://server-mabs-xo9s.onrender.com/api/membresia/seguridad/crear/crearmembresia/${token}`,
+      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api';
+      const data = await apiFetch(
+        `${API_BASE_URL}/membresia/seguridad/crear/crearmembresia/${token}`,
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-
-          },
-          body: JSON.stringify(paymentData),
+          body: paymentData
         }
       );
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: 'Error en el servidor' }));
-        throw new Error(errorData.message || `Error ${response.status}: ${response.statusText}`);
-      }
-
-      const data = await response.json();
+      
       console.log('Respuesta del servidor:', data);
 
       toast.success("¡Membresía creada exitosamente!");

@@ -5,6 +5,7 @@ import { toast } from 'react-toastify';
 // Importar servicios y providers con la ruta relativa ajustada
 import { useAuth } from '../../../providers/AuthProvider';
 import { uploadProfileImage, getProfileImageBlobUrl } from '../../../services/clientService';
+import { apiFetch } from '../../../services/api';
 import type { User, ClientProfile } from '../../../../types/common';
 import PerfilClienteForm from '../../components/perfil/PerfilClienteForm';
 
@@ -174,16 +175,11 @@ export default function Perfil(): React.ReactElement {
     useEffect(() => {
         const loadClientProfile = async () => {
             try {
-                const token = localStorage.getItem('token');
-                if (!token) return;
-
-                const response = await fetch('https://server-mabs-xo9s.onrender.com/api/perfil/usuario/consultarPerfil', {
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    }
+                const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api';
+                const data = await apiFetch(`${API_BASE_URL}/perfil/usuario/consultarPerfil`, {
+                    method: 'GET'
                 });
 
-                const data = await response.json();
                 if (data.ok && data.cliente) {
                     setClientProfile(data.cliente);
                 }

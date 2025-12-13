@@ -86,7 +86,7 @@ export interface User {
   correo: string;
   provisional?: boolean;
   rol: string;
-  estado: string;
+  estado: string | boolean; // Puede venir como string o boolean del backend
   role?: string; // Campo normalizado para consistencia
   telefono?: string;
   direccion?: string;
