@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { toast } from "react-toastify";
-import { apiFetch } from "@/app/services/api";
 
 // Interface for personal info step
 interface PersonalInfo {
@@ -254,16 +253,26 @@ export function useMembershipPaymentForm({
         };
       }
 
-      // Hacer petición al backend
+      // Hacer petición al backend usando el token del referido
       const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api';
-      const data = await apiFetch(
+      const response = await fetch(
         `${API_BASE_URL}/membresia/seguridad/crear/crearmembresia/${token}`,
         {
           method: 'POST',
-          body: paymentData
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`, // Usar token del referido, no del usuario autenticado
+          },
+          body: JSON.stringify(paymentData)
         }
       );
-      
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: 'Error al crear la membresía' }));
+        throw new Error(errorData.message || `Error ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
       console.log('Respuesta del servidor:', data);
 
       toast.success("¡Membresía creada exitosamente!");
