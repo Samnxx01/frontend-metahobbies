@@ -172,22 +172,31 @@ export default function Perfil(): React.ReactElement {
 }, [loading, isAuthenticated, cacheBuster]); // ⬅️ sin user._id
 
     // --- CARGAR DATOS DEL PERFIL DEL CLIENTE ---
-    useEffect(() => {
-        const loadClientProfile = async () => {
-            try {
-                const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api';
-                const data = await apiFetch(`${API_BASE_URL}/perfil/usuario/consultarPerfil`, {
-                    method: 'GET'
-                });
+    const loadClientProfile = async () => {
+        try {
+            const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api';
+            const data = await apiFetch(`${API_BASE_URL}/perfil/seguridad/visualizando/usuario`, {
+                method: 'GET'
+            });
 
-                if (data.ok && data.cliente) {
-                    setClientProfile(data.cliente);
-                }
-            } catch (error) {
-                console.error('Error al cargar perfil del cliente:', error);
+            if (data.ok && data.perfil) {
+                // Mapear los datos del backend al formato esperado por ClientProfile
+                const mappedProfile = {
+                    ...data.perfil,
+                    // Extraer IDs de los objetos anidados para los selects
+                    tipoDeIntendidad: data.perfil.tipoDeIntendidad?._id || data.perfil.tipoDeIntendidad,
+                    genero: data.perfil.genero?._id || data.perfil.genero,
+                    nacionalidad: data.perfil.nacionalidad?._id || data.perfil.nacionalidad,
+                    prefijo: data.perfil.prefijo?._id || data.perfil.prefijo,
+                };
+                setClientProfile(mappedProfile);
             }
-        };
+        } catch (error) {
+            console.error('Error al cargar perfil del cliente:', error);
+        }
+    };
 
+    useEffect(() => {
         if (isAuthenticated && !loading) {
             loadClientProfile();
         }
@@ -414,9 +423,10 @@ export default function Perfil(): React.ReactElement {
                         {activeNavItem === 'personal' && (
                             <PerfilClienteForm
                                 profile={clientProfile}
-                                onProfileUpdate={(updatedProfile) => {
+                                onProfileUpdate={async (updatedProfile) => {
                                     setClientProfile(updatedProfile);
-                                    toast.success('Perfil actualizado correctamente');
+                                    // Recargar el perfil desde el servidor para obtener datos actualizados
+                                    await loadClientProfile();
                                 }}
                                 token={localStorage.getItem('token') || undefined}
                             />

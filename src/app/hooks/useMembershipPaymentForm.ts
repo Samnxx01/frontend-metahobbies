@@ -267,16 +267,23 @@ export function useMembershipPaymentForm({
         }
       );
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: 'Error al crear la membresía' }));
-        throw new Error(errorData.message || `Error ${response.status}: ${response.statusText}`);
-      }
-
       const data = await response.json();
       console.log('Respuesta del servidor:', data);
 
-      toast.success("¡Membresía creada exitosamente!");
-      navigate("/membresia/dashboard");
+      // Verificar si hay un error con pago pendiente
+      if (!response.ok || data.success === false) {
+        const errorMsg = data.msg || data.message || `Error ${response.status}: ${response.statusText}`;
+        throw new Error(errorMsg);
+      }
+
+      // Si el pago es PSE, redirigir al portal de Wompi
+      if (formData.paymentInfo.paymentMethod === 'pse' && data.data?.wompiLink) {
+        toast.success("Redirigiendo al portal de pago PSE...");
+        window.location.href = data.data.wompiLink;
+      } else {
+        toast.success("¡Membresía creada exitosamente!");
+        navigate("/membresia/dashboard");
+      }
     } catch (error: any) {
       console.error("Error en el pago:", error);
       toast.error(error.message || "Error al procesar el pago. Intenta nuevamente.");

@@ -6,6 +6,8 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { UserIcon, Edit, Save, X } from 'lucide-react';
 import { ClientProfile } from '@/types/common';
+import { apiFetch } from '@/app/services/api';
+import { toast } from 'react-toastify';
 
 interface TipoDocumento {
     tipos: string;
@@ -15,7 +17,7 @@ interface TipoDocumento {
 
 interface Genero {
     nombre_genero: string;
-    id: string;
+    iud: string;
 }
 
 interface Nacionalidad {
@@ -150,64 +152,54 @@ export default function PerfilClienteForm({
     useEffect(() => {
         const fetchData = async () => {
             try {
+                const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api';
+
                 // Cargar tipos de documento
-                const tiposResponse = await fetch('/api/perfil/seguridad/tipo/documentos');
-                const tiposData = await tiposResponse.json();
+                const tiposData = await apiFetch(`${API_BASE_URL}/perfil/seguridad/tipo/documentos`, {
+                    method: 'GET'
+                });
                 if (tiposData.ok) {
                     setTiposDocumento(tiposData.tipos);
                 }
 
-                // Cargar géneros (requiere autenticación)
-                if (token) {
-                    const generosResponse = await fetch('/api/perfil/seguridad/listar/tipo/genero', {
-                        headers: {
-                            'Authorization': `Bearer ${token}`
-                        }
-                    });
-                    const generosData = await generosResponse.json();
-                    if (generosData.ok) {
-                        setGeneros(generosData.generos);
-                    }
+                // Cargar géneros
+                const generosData = await apiFetch(`${API_BASE_URL}/perfil/seguridad/listar/tipo/genero`, {
+                    method: 'GET'
+                });
+                if (generosData.ok) {
+                    setGeneros(generosData.generos);
+                }
 
-                    // Cargar nacionalidades (requiere autenticación)
-                    const nacionalidadesResponse = await fetch('/api/perfil/seguridad/listar/tipo/nacionalidad', {
-                        headers: {
-                            'Authorization': `Bearer ${token}`
-                        }
-                    });
-                    const nacionalidadesData = await nacionalidadesResponse.json();
-                    if (nacionalidadesData.ok) {
-                        setNacionalidades(nacionalidadesData.nacionalidades);
-                    }
+                // Cargar nacionalidades
+                const nacionalidadesData = await apiFetch(`${API_BASE_URL}/perfil/seguridad/listar/tipo/nacionalidad`, {
+                    method: 'GET'
+                });
+                if (nacionalidadesData.ok) {
+                    setNacionalidades(nacionalidadesData.nacionalidades);
+                }
 
-                    // Cargar prefijos telefónicos (requiere autenticación)
-                    const prefijosResponse = await fetch('/api/perfil/seguridad/listar/tipo/prefijo', {
-                        headers: {
-                            'Authorization': `Bearer ${token}`
-                        }
-                    });
-                    const prefijosData = await prefijosResponse.json();
-                    if (prefijosData.ok) {
-                        setPrefijos(prefijosData.prefijos);
-                    }
+                // Cargar prefijos telefónicos
+                const prefijosData = await apiFetch(`${API_BASE_URL}/perfil/seguridad/listar/tipo/prefijo`, {
+                    method: 'GET'
+                });
+                if (prefijosData.ok) {
+                    setPrefijos(prefijosData.prefijos);
+                }
 
-                    // Cargar departamentos y ciudades (requiere autenticación)
-                    const locationResponse = await fetch('/api/perfil/seguridad/listar/paises/departamentos/ciudades?paisId=1', {
-                        headers: {
-                            'Authorization': `Bearer ${token}`
-                        }
-                    });
-                    const locationData = await locationResponse.json();
-                    if (locationData.ok) {
-                        // Guardar el país desde la respuesta
-                        if (locationData.pais) {
-                            setPaises([locationData.pais]);
-                        }
-                        setDepartamentos(locationData.departamentos);
+                // Cargar departamentos y ciudades
+                const locationData = await apiFetch(`${API_BASE_URL}/perfil/seguridad/listar/paises/departamentos/ciudades?paisId=1`, {
+                    method: 'GET'
+                });
+                if (locationData.ok) {
+                    // Guardar el país desde la respuesta
+                    if (locationData.pais) {
+                        setPaises([locationData.pais]);
                     }
+                    setDepartamentos(locationData.departamentos);
                 }
             } catch (error) {
                 console.error('Error al cargar datos:', error);
+                toast.error('Error al cargar datos del formulario');
             }
         };
 
@@ -278,22 +270,17 @@ export default function PerfilClienteForm({
             }
 
             // Determinar si es creación o actualización
+            const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api';
             const isCreating = !profile;
             const endpoint = isCreating 
-                ? '/api/perfil/seguridad/usuario'
-                : '/api/perfil/usuario/actualizar';
+                ? `${API_BASE_URL}/seguridad/usuario`
+                : `${API_BASE_URL}/perfil/seguridad/actualizar/PerfilUsuario`;
 
-            // Enviar al backend
-            const response = await fetch(endpoint, {
+            // Enviar al backend usando apiFetch
+            const data = await apiFetch(endpoint, {
                 method: isCreating ? 'POST' : 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify(profileData)
+                body: profileData
             });
-
-            const data = await response.json();
 
             if (data.ok) {
                 // Construir el perfil actualizado para el callback
@@ -317,13 +304,15 @@ export default function PerfilClienteForm({
                 
                 // Volver a modo lectura
                 setIsEditing(false);
+                
+                toast.success(data.msg || 'Perfil guardado exitosamente');
             } else {
                 console.error('Error al guardar perfil:', data.message);
-                alert('Error al guardar el perfil: ' + (data.message || 'Error desconocido'));
+                toast.error('Error al guardar el perfil: ' + (data.message || 'Error desconocido'));
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error en handleSave:', error);
-            alert('Error al guardar el perfil. Por favor intenta nuevamente.');
+            toast.error(error.message || 'Error al guardar el perfil. Por favor intenta nuevamente.');
         }
     };
 
@@ -484,7 +473,7 @@ export default function PerfilClienteForm({
                                 </SelectTrigger>
                                 <SelectContent>
                                     {generos.map((genero) => (
-                                        <SelectItem key={genero.id} value={genero.nombre_genero}>
+                                        <SelectItem key={genero.iud} value={genero.iud}>
                                             {genero.nombre_genero}
                                         </SelectItem>
                                     ))}
@@ -492,7 +481,7 @@ export default function PerfilClienteForm({
                             </Select>
                         ) : (
                             <div className="text-base text-foreground">
-                                {selectedGenero || profile?.genero || ''}
+                                {generos.find(g => g.iud === selectedGenero)?.nombre_genero || profile?.genero || ''}
                             </div>
                         )}
                     </div>

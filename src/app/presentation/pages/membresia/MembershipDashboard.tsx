@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { toast } from 'react-toastify';
 import { useReferralLink } from '@/app/hooks/useReferralLink';
+import { apiFetch } from '@/app/services/api';
 
 // Shadcn UI components
 import { Button } from '@/components/ui/button';
@@ -19,41 +20,80 @@ import {
 // Lucide icons
 import { Copy, Share2, DollarSign, Users, TrendingUp, Loader2 } from 'lucide-react';
 
-interface ReferralStats {
-    totalReferrals: number;
-    totalEarnings: string;
-    membershipPaid: boolean;
-    currentLevel: number;
-    percentageEarned: string;
+interface Voucher {
+    _id: string;
+    referidoId: string;
+    montoGanado: number;
+    ciclo: number;
+    fecha: string;
+    status: 'pendiente' | 'pagado';
+    motivo: string;
 }
 
-interface Referral {
-    id: number;
-    name: string;
-    date: string;
-    level: number;
-    commission: string;
-    status: string;
+interface UsuarioReferido {
+    usuarioId: string;
+    correo: string;
+    saldoInicial: number;
+    saldoActual: number;
+    totalPagado: number;
+    totalPendiente: number;
+    vouchers: Voucher[];
+}
+
+interface ReferidosResponse {
+    ok: boolean;
+    esAdmin: boolean;
+    usuarios: UsuarioReferido[];
 }
 
 export default function MembershipDashboard(): React.ReactElement {
     const { referralData, loading, refetch } = useReferralLink();
+    const [referidosData, setReferidosData] = useState<ReferidosResponse | null>(null);
+    const [loadingReferidos, setLoadingReferidos] = useState<boolean>(true);
 
-    // Datos de ejemplo
-    const referralStats: ReferralStats = {
-        totalReferrals: 15,
-        totalEarnings: '450,000',
-        membershipPaid: true,
-        currentLevel: 2,
-        percentageEarned: '5%'
+    useEffect(() => {
+        fetchReferidos();
+    }, []);
+
+    const fetchReferidos = async (): Promise<void> => {
+        try {
+            setLoadingReferidos(true);
+            const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api';
+            const response = await apiFetch(`${API_BASE_URL}/referido/listarSaldoRefere`, {
+                method: 'GET'
+            });
+            setReferidosData(response);
+        } catch (err) {
+            console.error('Error al cargar datos de referidos:', err);
+            toast.error('Error al cargar datos de referidos');
+        } finally {
+            setLoadingReferidos(false);
+        }
     };
 
-    const referralList: Referral[] = [
-        { id: 1, name: 'Juan Pérez', date: '2023-11-01', level: 0, commission: '25%', status: 'Activo' },
-        { id: 2, name: 'María García', date: '2023-11-02', level: 1, commission: '5%', status: 'Activo' },
-        { id: 3, name: 'Carlos Ruiz', date: '2023-11-05', level: 0, commission: '25%', status: 'Inactivo' },
-        { id: 4, name: 'Ana López', date: '2023-11-10', level: 1, commission: '5%', status: 'Activo' },
-    ];
+    const formatCurrency = (amount: number): string => {
+        return new Intl.NumberFormat('es-CO', {
+            style: 'currency',
+            currency: 'COP',
+            minimumFractionDigits: 0
+        }).format(amount);
+    };
+
+    const formatDate = (dateString: string): string => {
+        return new Date(dateString).toLocaleDateString('es-CO', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric'
+        });
+    };
+
+    // Calcular estadísticas desde los datos reales
+    // El endpoint devuelve la información del usuario actual (no es admin, así que solo hay un usuario)
+    const misDatos = referidosData?.usuarios?.[0];
+    const totalReferrals = misDatos?.vouchers?.length || 0;
+    const totalEarnings = misDatos?.saldoActual || 0;
+    const totalPagado = misDatos?.totalPagado || 0;
+    const totalPendiente = misDatos?.totalPendiente || 0;
 
     const handleCopy = (text: string, type: string): void => {
         const tempInput = document.createElement('textarea');
@@ -219,90 +259,114 @@ export default function MembershipDashboard(): React.ReactElement {
                             </CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <div className="space-y-4">
-                                <div className="flex justify-between items-center py-3 border-b border-border/40">
-                                    <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                                        <Users className="w-4 h-4" />
-                                        Total de Referidos
+                            {loadingReferidos ? (
+                                <div className="flex justify-center items-center py-8">
+                                    <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                                </div>
+                            ) : (
+                                <div className="space-y-4">
+                                    <div className="flex justify-between items-center py-3 border-b border-border/40">
+                                        <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                                            <Users className="w-4 h-4" />
+                                            Total de Vouchers
+                                        </div>
+                                        <span className="text-lg font-semibold text-foreground">
+                                            {totalReferrals}
+                                        </span>
                                     </div>
-                                    <span className="text-lg font-semibold text-foreground">
-                                        {referralStats.totalReferrals}
-                                    </span>
-                                </div>
-                                
-                                <div className="flex justify-between items-center py-3 border-b border-border/40">
-                                    <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                                        <DollarSign className="w-4 h-4" />
-                                        Ganancias Totales
+                                    
+                                    <div className="flex justify-between items-center py-3 border-b border-border/40">
+                                        <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                                            <DollarSign className="w-4 h-4" />
+                                            Saldo Actual
+                                        </div>
+                                        <span className="text-lg font-bold text-primary">
+                                            {formatCurrency(totalEarnings)}
+                                        </span>
                                     </div>
-                                    <span className="text-lg font-bold text-primary">
-                                        COP ${referralStats.totalEarnings}
-                                    </span>
-                                </div>
-                                
-                                <div className="flex justify-between items-center py-3 border-b border-border/40">
-                                    <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                                        <TrendingUp className="w-4 h-4" />
-                                        Nivel Actual
+                                    
+                                    <div className="flex justify-between items-center py-3 border-b border-border/40">
+                                        <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                                            <TrendingUp className="w-4 h-4" />
+                                            Total Pagado
+                                        </div>
+                                        <span className="text-lg font-semibold text-green-600">
+                                            {formatCurrency(totalPagado)}
+                                        </span>
                                     </div>
-                                    <span className="text-lg font-semibold text-foreground">
-                                        Generación {referralStats.currentLevel}
-                                    </span>
+                                    
+                                    <div className="flex justify-between items-center py-3">
+                                        <span className="text-sm font-medium text-muted-foreground">
+                                            Pendiente de Pago
+                                        </span>
+                                        <span className="text-lg font-bold text-orange-600">
+                                            {formatCurrency(totalPendiente)}
+                                        </span>
+                                    </div>
                                 </div>
-                                
-                                <div className="flex justify-between items-center py-3">
-                                    <span className="text-sm font-medium text-muted-foreground">
-                                        Porcentaje de Ganancia
-                                    </span>
-                                    <span className="text-lg font-bold text-green-600">
-                                        {referralStats.percentageEarned}
-                                    </span>
-                                </div>
-                            </div>
+                            )}
                         </CardContent>
                     </Card>
                 </div>
 
-                {/* --- TABLA DE REFERIDOS DETALLADA --- */}
+                {/* --- TABLA DE VOUCHERS DETALLADA --- */}
                 <Card className="shadow-sm border-0 bg-card">
                     <CardHeader>
                         <CardTitle className="text-lg font-semibold">
-                            Mis Referidos Directos
+                            Mis Vouchers de Comisiones
                         </CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <div className="rounded-lg overflow-hidden">
-                            <Table>
-                                <TableHeader>
-                                    <TableRow className="bg-muted/50 hover:bg-muted/50">
-                                        <TableHead className="font-semibold">Nombre</TableHead>
-                                        <TableHead className="font-semibold">Fecha</TableHead>
-                                        <TableHead className="font-semibold">Generación</TableHead>
-                                        <TableHead className="font-semibold">Comisión</TableHead>
-                                        <TableHead className="font-semibold">Estado</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {referralList.map((referral) => (
-                                        <TableRow key={referral.id} className="hover:bg-muted/30">
-                                            <TableCell className="font-medium">{referral.name}</TableCell>
-                                            <TableCell className="text-muted-foreground">{referral.date}</TableCell>
-                                            <TableCell>Nivel {referral.level}</TableCell>
-                                            <TableCell className="font-semibold text-primary">{referral.commission}</TableCell>
-                                            <TableCell>
-                                                <span className={`text-xs font-semibold px-3 py-1 rounded-full ${
-                                                    referral.status === 'Activo' 
-                                                        ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' 
-                                                        : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
-                                                }`}>
-                                                    {referral.status}
-                                                </span>
-                                            </TableCell>
+                        {loadingReferidos ? (
+                            <div className="flex justify-center items-center py-12">
+                                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                            </div>
+                        ) : !misDatos || misDatos.vouchers.length === 0 ? (
+                            <div className="text-center py-12 text-muted-foreground">
+                                <p>No tienes vouchers de comisiones aún</p>
+                            </div>
+                        ) : (
+                            <div className="rounded-lg overflow-hidden">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow className="bg-muted/50 hover:bg-muted/50">
+                                            <TableHead className="font-semibold">Fecha</TableHead>
+                                            <TableHead className="font-semibold">Ciclo</TableHead>
+                                            <TableHead className="font-semibold">Monto</TableHead>
+                                            <TableHead className="font-semibold">Motivo</TableHead>
+                                            <TableHead className="font-semibold">Estado</TableHead>
                                         </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                        </div>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {misDatos.vouchers.map((voucher) => (
+                                            <TableRow key={voucher._id} className="hover:bg-muted/30">
+                                                <TableCell className="text-muted-foreground">
+                                                    {formatDate(voucher.fecha)}
+                                                </TableCell>
+                                                <TableCell className="font-medium">
+                                                    Ciclo {voucher.ciclo}
+                                                </TableCell>
+                                                <TableCell className="font-semibold text-primary">
+                                                    {formatCurrency(voucher.montoGanado)}
+                                                </TableCell>
+                                                <TableCell className="text-sm">
+                                                    {voucher.motivo}
+                                                </TableCell>
+                                                <TableCell>
+                                                    <span className={`text-xs font-semibold px-3 py-1 rounded-full ${
+                                                        voucher.status === 'pagado' 
+                                                            ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' 
+                                                            : 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400'
+                                                    }`}>
+                                                        {voucher.status === 'pagado' ? 'Pagado' : 'Pendiente'}
+                                                    </span>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        )}
                     </CardContent>
                 </Card>
             </div>

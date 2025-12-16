@@ -19,6 +19,7 @@ import GestionReferidos from '@/app/presentation/pages/admin/GestionReferidos';
 import PedidosAdmin from '@/app/presentation/pages/admin/Pedidos';
 import ConfiguracionAdmin from '@/app/presentation/pages/admin/Configuracion';
 import Parametrizacion from '@/app/presentation/pages/admin/Parametrizacion';
+import ModalInicio from '@/app/presentation/pages/admin/ModalInicio';
 import GestionCategorias from '@/app/presentation/pages/admin/GestionCategorias';
 import Login from '@/app/presentation/pages/login/Login';
 import Registro from '@/app/presentation/pages/registro/Registro';
@@ -65,6 +66,7 @@ const componentMap: ComponentMapType = {
     PedidosAdmin,
     ConfiguracionAdmin,
     Parametrizacion,
+    ModalInicio,
     GestionCategorias,
     Contacto,
     Posts,
