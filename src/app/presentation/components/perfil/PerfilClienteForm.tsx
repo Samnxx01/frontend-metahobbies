@@ -273,7 +273,7 @@ export default function PerfilClienteForm({
             const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api';
             const isCreating = !profile;
             const endpoint = isCreating 
-                ? `${API_BASE_URL}/seguridad/usuario`
+                ? `${API_BASE_URL}/perfil/seguridad/usuario`
                 : `${API_BASE_URL}/perfil/seguridad/actualizar/PerfilUsuario`;
 
             // Enviar al backend usando apiFetch

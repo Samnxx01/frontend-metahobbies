@@ -94,6 +94,8 @@ export default function MembershipDashboard(): React.ReactElement {
     const totalEarnings = misDatos?.saldoActual || 0;
     const totalPagado = misDatos?.totalPagado || 0;
     const totalPendiente = misDatos?.totalPendiente || 0;
+    // Mostrar en la tabla sólo los vouchers que NO estén en estado 'pendiente'
+    const visibleVouchers = misDatos?.vouchers?.filter(v => true) || [];
 
     const handleCopy = (text: string, type: string): void => {
         const tempInput = document.createElement('textarea');
@@ -321,7 +323,7 @@ export default function MembershipDashboard(): React.ReactElement {
                             <div className="flex justify-center items-center py-12">
                                 <Loader2 className="w-8 h-8 animate-spin text-primary" />
                             </div>
-                        ) : !misDatos || misDatos.vouchers.length === 0 ? (
+                        ) : !misDatos || visibleVouchers.length === 0 ? (
                             <div className="text-center py-12 text-muted-foreground">
                                 <p>No tienes vouchers de comisiones aún</p>
                             </div>
@@ -334,11 +336,10 @@ export default function MembershipDashboard(): React.ReactElement {
                                             <TableHead className="font-semibold">Ciclo</TableHead>
                                             <TableHead className="font-semibold">Monto</TableHead>
                                             <TableHead className="font-semibold">Motivo</TableHead>
-                                            <TableHead className="font-semibold">Estado</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
-                                        {misDatos.vouchers.map((voucher) => (
+                                        {visibleVouchers.map((voucher) => (
                                             <TableRow key={voucher._id} className="hover:bg-muted/30">
                                                 <TableCell className="text-muted-foreground">
                                                     {formatDate(voucher.fecha)}
@@ -351,15 +352,6 @@ export default function MembershipDashboard(): React.ReactElement {
                                                 </TableCell>
                                                 <TableCell className="text-sm">
                                                     {voucher.motivo}
-                                                </TableCell>
-                                                <TableCell>
-                                                    <span className={`text-xs font-semibold px-3 py-1 rounded-full ${
-                                                        voucher.status === 'pagado' 
-                                                            ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' 
-                                                            : 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400'
-                                                    }`}>
-                                                        {voucher.status === 'pagado' ? 'Pagado' : 'Pendiente'}
-                                                    </span>
                                                 </TableCell>
                                             </TableRow>
                                         ))}

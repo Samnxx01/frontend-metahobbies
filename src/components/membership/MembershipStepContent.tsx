@@ -9,11 +9,13 @@ interface PersonalInfo {
 
 interface PaymentInfo {
   paymentMethod: 'nequi' | 'card' | 'pse' | '';
+  cardType?: 'credit' | 'debit';
   nequiPhone?: string;
   cardNumber?: string;
   cardName?: string;
   expiryDate?: string;
   cvv?: string;
+  installments?: number;
   pseUserType?: '0' | '1' | '';
   pseLegalIdType?: 'CC' | 'CE' | 'NIT' | '';
   pseLegalId?: string;
@@ -28,7 +30,7 @@ interface FormData {
 interface MembershipStepContentProps {
   step: number;
   formData: FormData;
-  handleFormChange: (section: 'personalInfo' | 'paymentInfo', field: string, value: string) => void;
+  handleFormChange: (section: 'personalInfo' | 'paymentInfo', field: string, value: any) => void;
   MEMBERSHIP_PRICE: number | null;
   token: string;
 }
@@ -137,6 +139,52 @@ export default function MembershipStepContent({
           {/* Card Fields */}
           {formData.paymentInfo.paymentMethod === 'card' && (
             <div className="space-y-4 animate-in fade-in-50">
+              <div className="space-y-2">
+                <Label htmlFor="cardType">
+                  Tipo de tarjeta <span className="text-destructive">*</span>
+                </Label>
+                <Select
+                  value={formData.paymentInfo.cardType || ''}
+                  onValueChange={(value) => {
+                    handleFormChange('paymentInfo', 'cardType', value);
+                    if (value === 'debit') {
+                      handleFormChange('paymentInfo', 'installments', 1);
+                    }
+                  }}
+                >
+                  <SelectTrigger id="cardType">
+                    <SelectValue placeholder="Crédito o Débito" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="credit">Crédito</SelectItem>
+                    <SelectItem value="debit">Débito</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {formData.paymentInfo.cardType === 'credit' && (
+                <div className="space-y-2">
+                  <Label htmlFor="installments">
+                    Cuotas <span className="text-destructive">*</span>
+                  </Label>
+                  <Select
+                    value={(formData.paymentInfo.installments || 1).toString()}
+                    onValueChange={(value) => handleFormChange('paymentInfo', 'installments', parseInt(value, 10))}
+                  >
+                    <SelectTrigger id="installments">
+                      <SelectValue placeholder="Selecciona cuotas" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="1">1 cuota</SelectItem>
+                      <SelectItem value="2">2 cuotas</SelectItem>
+                      <SelectItem value="3">3 cuotas</SelectItem>
+                      <SelectItem value="6">6 cuotas</SelectItem>
+                      <SelectItem value="12">12 cuotas</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
               <FormField
                 id="cardNumber"
                 label="Número de tarjeta"
@@ -289,9 +337,41 @@ export default function MembershipStepContent({
                 </Select>
               </div>
 
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-muted-foreground mb-4">
                 Serás redirigido a la plataforma de tu banco para completar el pago de forma segura.
               </p>
+
+              {/* PSE Customer Data */}
+              <div className="border-t pt-4">
+                <h4 className="font-semibold mb-4">Información de contacto</h4>
+                <div>
+                  <FormField
+                    id="pseFullName"
+                    label="Nombre Completo"
+                    type="text"
+                    required
+                    value={formData.paymentInfo.fullName || ''}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                      handleFormChange('paymentInfo', 'fullName', e.target.value);
+                    }}
+                    placeholder="Juan Pérez"
+                  />
+                </div>
+                <div className="mt-4">
+                  <FormField
+                    id="psePhoneNumber"
+                    label="Número de Teléfono"
+                    type="tel"
+                    required
+                    value={formData.paymentInfo.phoneNumber || ''}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                      const value = e.target.value.replace(/[^0-9]/g, '').slice(0, 10);
+                      handleFormChange('paymentInfo', 'phoneNumber', value);
+                    }}
+                    placeholder="3001234567"
+                  />
+                </div>
+              </div>
             </div>
           )}
         </div>

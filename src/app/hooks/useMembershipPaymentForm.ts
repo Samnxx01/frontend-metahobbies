@@ -4,6 +4,8 @@ import { toast } from "react-toastify";
 // Interface for personal info step
 interface PersonalInfo {
   email: string;
+  phoneNumber?: string;
+  fullName?: string;
 }
 
 // Interface for payment info step
@@ -12,11 +14,15 @@ interface PaymentInfo {
   // Nequi fields
   nequiPhone?: string;
   // Card fields
+  cardType?: 'credit' | 'debit';
   cardNumber?: string;
   cardName?: string;
   expiryDate?: string;
   cvv?: string;
+  installments?: number;
   // PSE fields
+  phoneNumber?: string;
+  fullName?: string;
   pseUserType?: '0' | '1' | ''; // 0: Natural person, 1: Business
   pseLegalIdType?: 'CC' | 'CE' | 'NIT' | ''; // CC: Cédula, CE: Cédula de extranjería, NIT: NIT
   pseLegalId?: string; // Document number
@@ -72,7 +78,7 @@ interface UseMembershipPaymentFormReturn {
 export function useMembershipPaymentForm({ 
   initialFormData, 
   steps, 
-  purchaseMembership, 
+  purchaseMembership: _purchaseMembership, 
   navigate, 
   token 
 }: UseMembershipPaymentFormParams): UseMembershipPaymentFormReturn {
@@ -100,7 +106,7 @@ export function useMembershipPaymentForm({
       case 1:
         return true;
       case 2: {
-        const { paymentMethod, nequiPhone, cardNumber, cardName, expiryDate, cvv, pseUserType, pseLegalIdType, pseLegalId, pseFinancialInstitution } = formData.paymentInfo;
+        const { paymentMethod, nequiPhone, cardType, cardNumber, cardName, expiryDate, cvv, installments, pseUserType, pseLegalIdType, pseLegalId, pseFinancialInstitution } = formData.paymentInfo;
         if (!paymentMethod) return false;
         
         if (paymentMethod === 'nequi') {
@@ -110,9 +116,16 @@ export function useMembershipPaymentForm({
         }
         
         if (paymentMethod === 'card') {
-          return !!cardNumber && !!cardName && !!expiryDate && !!cvv &&
+          const hasBasics = !!cardNumber && !!cardName && !!expiryDate && !!cvv &&
                  cardNumber.trim() !== "" && cardName.trim() !== "" &&
                  expiryDate.trim() !== "" && cvv.trim() !== "";
+          if (!cardType) return false;
+          if (cardType === 'credit') {
+            const validInstallments = typeof installments === 'number' && installments > 0;
+            return hasBasics && validInstallments;
+          }
+          // debit: no cuotas requeridas
+          return hasBasics;
         }
         
         if (paymentMethod === 'pse') {
@@ -141,7 +154,7 @@ export function useMembershipPaymentForm({
         return "Por favor completa la información de usuario";
       }
       case 2: {
-        const { paymentMethod, nequiPhone } = formData.paymentInfo;
+        const { paymentMethod, nequiPhone, installments, cardType, phoneNumber, fullName } = formData.paymentInfo;
         if (!paymentMethod) {
           return "Por favor selecciona un método de pago";
         }
@@ -157,10 +170,26 @@ export function useMembershipPaymentForm({
         }
         
         if (paymentMethod === 'card') {
+          if (!cardType) {
+            return "Selecciona si la tarjeta es crédito o débito";
+          }
+          if (cardType === 'credit' && (!installments || installments <= 0)) {
+            return "Selecciona el número de cuotas";
+          }
           return "Por favor completa todos los datos de la tarjeta";
         }
         
         if (paymentMethod === 'pse') {
+          if (!phoneNumber) {
+            return "Por favor ingresa tu número de teléfono";
+          }
+          const colombiaPhoneRegex = /^3\d{9}$/;
+          if (!colombiaPhoneRegex.test(phoneNumber)) {
+            return "Por favor ingresa un número de teléfono colombiano válido (debe empezar con 3 y tener 10 dígitos)";
+          }
+          if (!fullName || !fullName.trim()) {
+            return "Por favor ingresa tu nombre completo";
+          }
           return "Por favor completa todos los datos de PSE";
         }
         
@@ -191,11 +220,14 @@ export function useMembershipPaymentForm({
 
       // Preparar datos según el método de pago
       if (formData.paymentInfo.paymentMethod === 'nequi') {
+        paymentData.payment_flow = 'API';
+        paymentData.payment_method_type = 'NEQUI';
         paymentData.payment_method = {
           type: "NEQUI",
           phone_number: formData.paymentInfo.nequiPhone
         };
       } else if (formData.paymentInfo.paymentMethod === 'pse') {
+        paymentData.payment_flow = 'CHECKOUT';
         paymentData.payment_method = {
           type: "PSE",
           user_type: parseInt(formData.paymentInfo.pseUserType || '0'),
@@ -203,6 +235,10 @@ export function useMembershipPaymentForm({
           user_legal_id: formData.paymentInfo.pseLegalId,
           financial_institution_code: formData.paymentInfo.pseFinancialInstitution,
           payment_description: `Membresía Premium - Ref: ${token.substring(0, 16)}`
+        };
+        paymentData.customer_data = {
+          phone_number: formData.paymentInfo.phoneNumber,
+          full_name: formData.paymentInfo.fullName
         };
       } else if (formData.paymentInfo.paymentMethod === 'card') {
         // Tokenizar la tarjeta con Wompi
@@ -246,9 +282,15 @@ export function useMembershipPaymentForm({
           throw new Error('No se pudo obtener el token de la tarjeta');
         }
 
+        const installmentsToSend = formData.paymentInfo.cardType === 'debit'
+          ? 1
+          : (formData.paymentInfo.installments || 1);
+
+        paymentData.payment_flow = 'API';
+        paymentData.payment_method_type = 'CARD';
         paymentData.payment_method = {
           type: "CARD",
-          installments: 1,
+          installments: installmentsToSend,
           token: tokenData.data.id
         };
       }
