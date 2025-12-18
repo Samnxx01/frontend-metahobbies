@@ -21,6 +21,7 @@ import ConfiguracionAdmin from '@/app/presentation/pages/admin/Configuracion';
 import Parametrizacion from '@/app/presentation/pages/admin/Parametrizacion';
 import ModalInicio from '@/app/presentation/pages/admin/ModalInicio';
 import GestionCategorias from '@/app/presentation/pages/admin/GestionCategorias';
+import GestionRutas from '@/app/presentation/pages/admin/GestionRutas';
 import Login from '@/app/presentation/pages/login/Login';
 import Registro from '@/app/presentation/pages/registro/Registro';
 import RecuperarContrasena from '@/app/presentation/pages/recuperar-contrasena/RecuperarContrasena';
@@ -68,6 +69,7 @@ const componentMap: ComponentMapType = {
     Parametrizacion,
     ModalInicio,
     GestionCategorias,
+    GestionRutas,
     Contacto,
     Posts,
     SobreNosotros,

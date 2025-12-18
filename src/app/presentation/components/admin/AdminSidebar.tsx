@@ -28,7 +28,8 @@ import {
     Network,
     Wrench,
     Palette,
-    SquareStack
+    SquareStack,
+    Route
 } from 'lucide-react';
 
 import type { AdminSidebarProps } from '@/types/components';
@@ -63,6 +64,7 @@ export default function AdminSidebar({ mobileOpen, setMobileOpen }: AdminSidebar
         { label: 'Usuarios', icon: <Users className='w-5 h-5' />, path: '/admin/usuarios' },
         { label: 'Referidos', icon: <Network className='w-5 h-5' />, path: '/admin/referidos' },
         { label: 'Pedidos', icon: <ScrollText className='w-5 h-5' />, path: '/admin/pedidos' },
+        { label: 'Rutas', icon: <Route className='w-5 h-5' />, path: '/admin/rutas' },
         { label: 'Parametrización', icon: <Wrench className='w-5 h-5' />, path: '/admin/parametrizacion' },
         { label: 'Configuración', icon: <Settings className='w-5 h-5' />, path: '/admin/configuracion' },
     ];

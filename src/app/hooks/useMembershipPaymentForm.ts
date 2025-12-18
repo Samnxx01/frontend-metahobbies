@@ -228,6 +228,7 @@ export function useMembershipPaymentForm({
         };
       } else if (formData.paymentInfo.paymentMethod === 'pse') {
         paymentData.payment_flow = 'CHECKOUT';
+        paymentData.payment_method_type ='PSE';
         paymentData.payment_method = {
           type: "PSE",
           user_type: parseInt(formData.paymentInfo.pseUserType || '0'),
@@ -319,9 +320,9 @@ export function useMembershipPaymentForm({
       }
 
       // Si el pago es PSE, redirigir al portal de Wompi
-      if (formData.paymentInfo.paymentMethod === 'pse' && data.data?.wompiLink) {
+      if (formData.paymentInfo.paymentMethod === 'pse' && data?.wompiCheckoutUrl) {
         toast.success("Redirigiendo al portal de pago PSE...");
-        window.location.href = data.data.wompiLink;
+        window.location.href = data.wompiCheckoutUrl;
       } else {
         toast.success("¡Membresía creada exitosamente!");
         navigate("/membresia/dashboard");
