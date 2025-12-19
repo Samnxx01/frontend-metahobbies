@@ -156,7 +156,7 @@ export const GestionUsuarios = (): React.ReactElement => {
     );
 
     return (
-        <div className="p-4 md:p-6 lg:p-8 bg-background shadow-lg rounded-xl w-full relative">
+        <div className="p-4 md:p-6 lg:p-8 bg-card shadow-lg rounded-xl w-full relative">
             <div className="w-full">
 
                 {/* --- HEADER --- */}

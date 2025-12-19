@@ -38,8 +38,8 @@ const DRAWER_WIDTH = '260px'; // Usamos string para la propiedad de ancho CSS de
 // Usaremos la variable de CSS personalizada para el color primario si no está en Tailwind,
 // o un color de Tailwind configurado. Aquí asumiré un color en Tailwind, por ejemplo, 'rose-600'
 const PRIMARY_COLOR_CLASS = 'text-rose-600'; // Equivalente a #C43670 (Raspberry Rose)
-const PRIMARY_BG_LIGHT_CLASS = 'bg-rose-50'; // Fondo muy claro para activo
-const HOVER_BG_CLASS = 'hover:bg-gray-100';
+const PRIMARY_BG_LIGHT_CLASS = 'bg-primary/10'; // Fondo muy claro para activo
+const HOVER_BG_CLASS = 'hover:bg-muted';
 
 interface MenuItem {
     label: string;
@@ -81,13 +81,13 @@ export default function AdminSidebar({ mobileOpen, setMobileOpen }: AdminSidebar
             flex items-center space-x-3 p-3 mb-1 rounded-md cursor-pointer transition-all duration-200
             ${isActive
                 ? `${PRIMARY_BG_LIGHT_CLASS} ${PRIMARY_COLOR_CLASS} font-semibold` // Estilos Activo
-                : `text-gray-600 ${HOVER_BG_CLASS} hover:${PRIMARY_COLOR_CLASS}` // Estilos Inactivo y Hover
+                : `text-muted-foreground ${HOVER_BG_CLASS} hover:${PRIMARY_COLOR_CLASS}` // Estilos Inactivo y Hover
             }
         `;
 
         const iconClasses = `
             flex-shrink-0 w-5 h-5 
-            ${isActive ? PRIMARY_COLOR_CLASS : 'text-gray-500'}
+            ${isActive ? PRIMARY_COLOR_CLASS : 'text-muted-foreground'}
         `;
 
         const handleClick = (): void => {
@@ -120,10 +120,10 @@ export default function AdminSidebar({ mobileOpen, setMobileOpen }: AdminSidebar
 
     const drawerContent = (
         // Reemplaza Box con display: flex, flexDirection: column, height: 100%
-        <div className="overflow-y-auto flex flex-col h-full bg-white">
+        <div className="overflow-y-auto flex flex-col h-full bg-card">
 
             {/* Encabezado / Toolbar */}
-            <div style={{ minHeight: '70px' }} className="flex items-center justify-center mb-2 px-4 border-b border-gray-100"> {/* Reemplaza Toolbar */}
+            <div style={{ minHeight: '70px' }} className="flex items-center justify-center mb-2 px-4 border-b border-border"> {/* Reemplaza Toolbar */}
                 <h1 className={`${PRIMARY_COLOR_CLASS} font-bold text-xl`}>
                     MABS Panel
                 </h1>
@@ -138,7 +138,7 @@ export default function AdminSidebar({ mobileOpen, setMobileOpen }: AdminSidebar
                 {/* Acordeón de Personalización */}
                 <Accordion type="single" collapsible className="w-full">
                     <AccordionItem value="personalizacion" className="border-none">
-                        <AccordionTrigger className={`flex items-center space-x-3 p-3 rounded-md hover:no-underline transition-all duration-200 text-gray-600 ${HOVER_BG_CLASS} hover:${PRIMARY_COLOR_CLASS}`}>
+                        <AccordionTrigger className={`flex items-center space-x-3 p-3 rounded-md hover:no-underline transition-all duration-200 text-muted-foreground ${HOVER_BG_CLASS} hover:${PRIMARY_COLOR_CLASS}`}>
                             <div className="flex items-center space-x-3">
                                 <Palette className='w-5 h-5' />
                                 <span className="text-sm">Personalización</span>
@@ -153,7 +153,7 @@ export default function AdminSidebar({ mobileOpen, setMobileOpen }: AdminSidebar
                                         className={`flex items-center space-x-3 p-3 mb-1 ml-6 rounded-md cursor-pointer transition-all duration-200
                                             ${isActive
                                                 ? `${PRIMARY_BG_LIGHT_CLASS} ${PRIMARY_COLOR_CLASS} font-semibold`
-                                                : `text-gray-600 ${HOVER_BG_CLASS} hover:${PRIMARY_COLOR_CLASS}`
+                                                : `text-muted-foreground ${HOVER_BG_CLASS} hover:${PRIMARY_COLOR_CLASS}`
                                             }`}
                                         onClick={() => {
                                             navigate(item.path);

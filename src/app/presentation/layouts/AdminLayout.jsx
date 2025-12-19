@@ -21,7 +21,7 @@ export default function AdminLayout() {
             <AdminNavbar mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} />
             <AdminSidebar mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} />
             <main
-                className="grow p-3 bg-gray-100 min-h-screen sm:w-[calc(100%-260px)]"
+                className="grow p-3 bg-background min-h-screen sm:w-[calc(100%-260px)]"
             >
                 <div className="h-16" /> {/* Spacer for fixed navbar */}
 

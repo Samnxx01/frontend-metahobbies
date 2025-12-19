@@ -20,7 +20,7 @@ export default function Dashboard(): React.ReactElement {
             <div className="bg-card p-6 rounded-xl shadow-lg border border-border">
 
                 {/* Título de la Sección de Tabla */}
-                <h2 className="text-xl font-semibold mb-4">
+                <h2 className="text-xl font-semibold mb-4 text-foreground">
                     Total de Pedidos Recientes
                 </h2>
 

@@ -71,7 +71,7 @@ export default function AboutUs(): React.ReactElement {
                         </p>
 
                         {/* Puntos Clave */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 text-foreground">
                             {aboutConfig.puntosClave.map((punto: string, index: number) => (
                                 <PuntoClaveItem key={index} punto={punto} index={index} />
                             ))}

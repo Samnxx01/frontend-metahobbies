@@ -81,8 +81,8 @@ export default function Home(): React.ReactElement {
         <>
             <HeroBanner />
 
-            <div className="container max-w-7xl mx-auto py-16 px-4 bg-background dark:bg-background">
-
+        <section className="py-12 md:py-24 bg-background">
+            <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                 {/* --- SECCIÓN: PRODUCTOS DESTACADOS / FLASH DEALS --- */}
                 <div className="mb-16">
 
@@ -106,7 +106,7 @@ export default function Home(): React.ReactElement {
                                 onClick={prevFlashDeals}
                                 className="border-border hover:bg-muted/50 transition-colors"
                             >
-                                <ArrowLeft className="w-5 h-5" />
+                                <ArrowLeft className="w-5 h-5 text-foreground" />
                             </Button>
                             <Button
                                 variant="outline"
@@ -114,7 +114,7 @@ export default function Home(): React.ReactElement {
                                 onClick={nextFlashDeals}
                                 className="border-border hover:bg-muted/50 transition-colors"
                             >
-                                <ArrowRight className="w-5 h-5" />
+                                <ArrowRight className="w-5 h-5 text-foreground" />
                             </Button>
                         </div>
                     </div>
@@ -182,6 +182,7 @@ export default function Home(): React.ReactElement {
                     </div>
                 </div>
             </div>
+        </section>
 
             {/* --- SECCIÓN: SOBRE NOSOTROS (AboutUs) --- */}
             <AboutUs />

@@ -267,10 +267,6 @@ export default function PerfilClienteForm({
             if (selectedNacionalidad || profile?.nacionalidad) {
                 profileData.nacionalidad = selectedNacionalidad || profile?.nacionalidad || '';
             }
-            if(profile){
-                profileData.Nacionalidad = selectedNacionalidad || profile?.nacionalidad || '';
-
-            }
 
             if (selectedPrefijo || profile?.prefijo) {
                 profileData.prefijo = selectedPrefijo || profile?.prefijo || '';

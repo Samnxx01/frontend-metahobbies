@@ -100,17 +100,16 @@ export default function CategoryCard({ category }: CategoryCardProps): React.Rea
                         {/* Botón de Flecha (Reemplaza StyledIconButton) */}
                         <Button
                             onClick={handleButtonClick}
-                            variant="default" // Usamos default para el fondo primario de Tailwind
+                            variant="default"
                             size="icon"
                             className="
-                                h-7 w-7 p-0 rounded-full 
-                                bg-white text-foreground 
-                                border border-input 
-                                transition-all duration-300 
-                                hover:scale-[1.1] hover:bg-gray-100 hover:text-primary
+                                h-7 w-7 p-0 rounded-full
+                                border border-input
+                                transition-all duration-300
+                                hover:scale-[1.1] hover:bg-primary/90
                             "
                         >
-                            <ArrowRight className="h-4 w-4" />
+                            <ArrowRight className="h-4 w-4 text-primary-foreground" />
                         </Button>
                     </div>
                 </div>

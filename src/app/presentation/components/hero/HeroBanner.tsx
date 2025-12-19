@@ -79,7 +79,7 @@ export default function HeroBanner({
         <div className="w-full bg-background py-4 md:py-8 relative overflow-hidden">
             <div className="container mx-auto px-4 lg:px-8 relative">
                 <div
-                    className="relative overflow-hidden rounded-lg bg-card min-h-auto sm:min-h-[50vh] md:min-h-[60vh] lg:min-h-[500px] flex items-center bg-linear-to-br from-card to-gray-100"
+                    className="relative overflow-hidden rounded-lg bg-card min-h-auto sm:min-h-[50vh] md:min-h-[60vh] lg:min-h-[500px] flex items-center bg-linear-to-br from-card to-muted"
                 >
                     <div
                         className="flex transition-transform duration-500 ease-in-out"
@@ -145,8 +145,8 @@ export default function HeroBanner({
                         <div
                             key={index}
                             onClick={() => setActiveSlide(index)}
-                            className={`w-3 h-3 rounded-full cursor-pointer transition-all duration-300 ease-in-out ${index === activeSlide ? "bg-primary w-4 h-4" : "bg-gray-400"
-                                } hover:scale-125`}
+                            className={`w-3 h-3 rounded-full cursor-pointer transition-all duration-300 ease-in-out ${index === activeSlide ? "bg-primary w-4 h-4" : "bg-muted-foreground/30"}
+                                hover:scale-125`}
                         />
                     ))}
                 </div>

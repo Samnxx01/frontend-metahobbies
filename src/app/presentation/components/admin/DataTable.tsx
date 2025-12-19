@@ -16,7 +16,7 @@ import { Button } from '@/components/ui/button';
 import type { DataTableProps } from '@/types/components';
 
 // Constantes de estilo (traducidas a Tailwind si es posible)
-const BORDER_COLOR = "border-gray-200";
+const BORDER_COLOR = "border-border";
 const HEADER_BG_COLOR = "bg-muted/50";
 const ROW_HOVER_COLOR = "hover:bg-primary/5"; // Sustituye '#FBF4EB'
 
@@ -83,7 +83,7 @@ export const DataTable = ({
 
     if (loading) {
         return (
-            <div className="w-full bg-white rounded-lg border border-border shadow-sm p-8 text-center" style={{ minHeight: MIN_HEIGHT }}>
+            <div className="w-full bg-card rounded-lg border border-border shadow-sm p-8 text-center" style={{ minHeight: MIN_HEIGHT }}>
                 <p className="text-muted-foreground">Cargando...</p>
             </div>
         );
@@ -92,7 +92,7 @@ export const DataTable = ({
     return (
         // Contenedor principal - Reemplaza Box con sus estilos
         <div
-            className="w-full bg-white rounded-lg overflow-hidden border border-border shadow-sm"
+            className="w-full bg-card rounded-lg overflow-hidden border border-border shadow-sm"
             style={{ minHeight: MIN_HEIGHT }}
         >
             {/* Contenedor de la tabla interna con minWidth para el scroll horizontal */}

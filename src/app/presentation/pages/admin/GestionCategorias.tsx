@@ -265,7 +265,7 @@ export default function GestionCategorias(): React.ReactElement {
                                             alt={selectedCategory.nombre}
                                             className="w-full h-full object-cover"
                                         />
-                                        <div className="absolute inset-0 bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <div className="absolute inset-0 bg-background/80 text-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                                             <span className="text-sm font-medium">Cambiar imagen</span>
                                         </div>
                                     </>

@@ -26,16 +26,16 @@ export default function LatestOrdersCard({ orders, title = "Últimos Pedidos", o
     const getStatusColor = (status: string): string => {
         switch (status.toLowerCase()) {
             case 'pendiente':
-                return 'bg-yellow-100 text-yellow-800';
+                return 'bg-muted text-foreground';
             case 'completado':
-                return 'bg-green-100 text-green-800';
+                return 'bg-primary/10 text-primary';
             default:
-                return 'bg-gray-100 text-gray-800';
+                return 'bg-muted text-foreground';
         }
     };
 
     return (
-        <Card className="rounded-xl p-6 shadow-sm border-0 bg-white h-full flex flex-col" style={{ boxShadow: '0 2px 12px rgba(0,0,0,0.04)' }}>
+        <Card className="rounded-xl p-6 shadow-sm border-0 bg-card h-full flex flex-col" style={{ boxShadow: '0 2px 12px rgba(0,0,0,0.04)' }}>
             <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-bold text-pink-600">{title}</h3>
                 <Button 
