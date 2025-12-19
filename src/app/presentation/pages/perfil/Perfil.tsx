@@ -184,6 +184,7 @@ export default function Perfil(): React.ReactElement {
                 const mappedProfile = {
                     ...data.perfil,
                     // Extraer IDs de los objetos anidados para los selects
+                    fecha_nacimiento: data.perfil.fecha_nacimiento,
                     tipoDeIntendidad: data.perfil.tipoDeIntendidad?._id || data.perfil.tipoDeIntendidad,
                     genero: data.perfil.genero?._id || data.perfil.genero,
                     nacionalidad: data.perfil.nacionalidad?._id || data.perfil.nacionalidad,

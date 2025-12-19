@@ -739,7 +739,7 @@ function Parametrizacion(): React.ReactElement {
                                                         <CardContent className="p-4">
                                                             <div className="flex items-start justify-between gap-2">
                                                                 <div className="flex-1">
-                                                                    <p className="font-semibold text-sm">{nacionalidad.Nacionalidad}</p>
+                                                                    <p className="font-semibold text-sm">{nacionalidad.siglaNaciona}</p>
                                                                     <Badge variant="secondary" className="mt-2 text-xs">
                                                                         {nacionalidad.siglaNaciona}
                                                                     </Badge>

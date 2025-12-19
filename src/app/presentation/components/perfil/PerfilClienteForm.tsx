@@ -21,7 +21,7 @@ interface Genero {
 }
 
 interface Nacionalidad {
-    Nacionalidad: string;
+    naciondalidadss: string;
     siglaNaciona: string;
     iud: string;
 }
@@ -118,6 +118,13 @@ export default function PerfilClienteForm({
     onProfileUpdate,
     token,
 }: PerfilClienteFormProps) {
+    // Normaliza fechas ISO a formato input date (YYYY-MM-DD)
+    const formatDateForInput = (value?: string): string => {
+        if (!value) return '';
+        // Evita desfases de zona horaria tomando solo la porción de fecha
+        return value.split('T')[0] || '';
+    };
+
     // --- ESTADO LOCAL ---
     const [isEditing, setIsEditing] = useState(false);
     const [tiposDocumento, setTiposDocumento] = useState<TipoDocumento[]>([]);
@@ -244,12 +251,12 @@ export default function PerfilClienteForm({
         try {
             // Construir objeto base para enviar al backend según el schema
             const profileData: any = {
-                nombre_cliente: nombreRef.current?.value || profile?.nombre_cliente || '',
-                apellido: apellidoRef.current?.value || profile?.apellido || '',
+                nombre_cliente: (nombreRef.current?.value || profile?.nombre_cliente || '').trim(),
+                apellido: (apellidoRef.current?.value || profile?.apellido || '').trim(),
                 genero: selectedGenero || profile?.genero || '',
                 tipoDeIntendidad: selectedTipoDoc || profile?.tipoDeIntendidad || '',
-                documentoIntentidad: parseInt(documentoRef.current?.value || String(profile?.documentoIntentidad || 0), 10),
-                telefono: parseInt(telefonoRef.current?.value || String(profile?.telefono || 0), 10),
+                documentoIntentidad: (documentoRef.current?.value || profile?.documentoIntentidad || '').toString(),
+                telefono: (telefonoRef.current?.value || profile?.telefono || '').toString(),
                 fecha_nacimiento: fechaNacimientoRef.current?.value || profile?.fecha_nacimiento || '',
                 paisId: selectedPais || profile?.paisId || '1',
                 departamentoId: selectedDepartamento || profile?.departamentoId || '',
@@ -257,16 +264,16 @@ export default function PerfilClienteForm({
             };
 
             // Solo agregar campos opcionales si tienen valores válidos
-            if (selectedNacionalidad) {
-                profileData.Nacionalidad = selectedNacionalidad;
-            } else if (profile?.nacionalidad) {
-                profileData.Nacionalidad = profile.nacionalidad;
+            if (selectedNacionalidad || profile?.nacionalidad) {
+                profileData.nacionalidad = selectedNacionalidad || profile?.nacionalidad || '';
+            }
+            if(profile){
+                profileData.Nacionalidad = selectedNacionalidad || profile?.nacionalidad || '';
+
             }
 
-            if (selectedPrefijo) {
-                profileData.prefijo = selectedPrefijo;
-            } else if (profile?.prefijo) {
-                profileData.prefijo = profile.prefijo;
+            if (selectedPrefijo || profile?.prefijo) {
+                profileData.prefijo = selectedPrefijo || profile?.prefijo || '';
             }
 
             // Determinar si es creación o actualización
@@ -289,10 +296,10 @@ export default function PerfilClienteForm({
                     apellido: profileData.apellido,
                     genero: profileData.genero,
                     tipoDeIntendidad: profileData.tipoDeIntendidad,
-                    documentoIntentidad: profileData.documentoIntentidad,
-                    telefono: profileData.telefono,
+                    documentoIntentidad: Number(profileData.documentoIntentidad) || 0,
+                    telefono: Number(profileData.telefono) || 0,
                     fecha_nacimiento: profileData.fecha_nacimiento,
-                    nacionalidad: profileData.Nacionalidad,
+                    nacionalidad: profileData.nacionalidad,
                     prefijo: profileData.prefijo,
                     paisId: profileData.paisId,
                     departamentoId: profileData.departamentoId,
@@ -495,25 +502,25 @@ export default function PerfilClienteForm({
                                 <SelectContent>
                                     {nacionalidades.map((nacionalidad) => (
                                         <SelectItem key={nacionalidad.iud} value={nacionalidad.iud}>
-                                            {nacionalidad.Nacionalidad}
+                                            {nacionalidad.naciondalidadss}
                                         </SelectItem>
                                     ))}
                                 </SelectContent>
                             </Select>
                         ) : (
                             <div className="text-base text-foreground">
-                                {nacionalidades.find(n => n.iud === selectedNacionalidad)?.Nacionalidad || selectedNacionalidad}
+                                {nacionalidades.find(n => n.iud === selectedNacionalidad)?.naciondalidadss || selectedNacionalidad}
                             </div>
                         )}
                     </div>
                     <div className="space-y-1">
-                        <Label htmlFor="fecha_nacimiento" className="text-foreground">Fecha de Nacimiento</Label>
+                        <Label htmlFor="fecha_nacimiento" className="text-foreground">Fecha de Nacimiento </Label>
                         <Input
                             ref={fechaNacimientoRef}
                             id="fecha_nacimiento"
                             name="fecha_nacimiento"
                             type="date"
-                            defaultValue={profile?.fecha_nacimiento || ''}
+                            defaultValue={formatDateForInput(profile?.fecha_nacimiento)}
                             readOnly={!isEditing}
                             key={`fecha_nacimiento-${isEditing}`}
                             className={isEditing
