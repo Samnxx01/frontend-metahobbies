@@ -265,7 +265,7 @@ export default function PerfilClienteForm({
 
             // Solo agregar campos opcionales si tienen valores válidos
             if (selectedNacionalidad || profile?.nacionalidad) {
-                profileData.nacionalidad = selectedNacionalidad || profile?.nacionalidad || '';
+                profileData.Nacionalidad = selectedNacionalidad || profile?.nacionalidad || '';
             }
 
             if (selectedPrefijo || profile?.prefijo) {

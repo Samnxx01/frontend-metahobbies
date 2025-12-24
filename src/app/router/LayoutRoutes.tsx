@@ -32,6 +32,16 @@ import GestionProductos from '../presentation/pages/admin/GestionProductos';
 import Posts from '@/app/presentation/pages/posts/Posts';
 import SobreNosotros from '@/app/presentation/pages/sobre-nosotros/SobreNosotros';
 import ModeloNegocio from '@/app/presentation/pages/modelo-negocio/ModeloNegocio';
+import ParametrizacionCorporativa from '@/app/presentation/pages/admin/ParametrizacionCorporativa';
+import RepresentanteEmpresarial from '@/app/presentation/pages/admin/RepresentanteEmpresarial';
+import SociedadesCorporativas from '@/app/presentation/pages/admin/SociedadesCorporativas';
+import DireccionCorporativa from '@/app/presentation/pages/admin/DireccionCorporativa';
+import DocumentosCorporativos from '@/app/presentation/pages/admin/DocumentosCorporativos';
+import LogosCorporativos from '@/app/presentation/pages/admin/LogosCorporativos';
+import SectorIndustriaEmpresa from '@/app/presentation/pages/admin/SectorIndustriaEmpresa';
+import EstadoUsuarios from '@/app/presentation/pages/admin/EstadoUsuarios';
+import PublicidadPanel from '@/app/presentation/pages/admin/PublicidadPanel';
+import PostsParametrizables from '@/app/presentation/pages/admin/PostsParametrizables';
 
 // Types for route system
 interface RouteConfig {
@@ -73,7 +83,17 @@ const componentMap: ComponentMapType = {
     Contacto,
     Posts,
     SobreNosotros,
-    ModeloNegocio
+    ModeloNegocio,
+    ParametrizacionCorporativa,
+    RepresentanteEmpresarial,
+    SociedadesCorporativas,
+    DireccionCorporativa,
+    DocumentosCorporativos,
+    LogosCorporativos,
+    SectorIndustriaEmpresa,
+    EstadoUsuarios,
+    PublicidadPanel,
+    PostsParametrizables
 };
 
 export default function LayoutRoutes(): ReactElement {

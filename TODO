@@ -14,3 +14,7 @@ sipineg323@crsay.com
 
 nequi
 monak42189@crsay.com
+
+
+{"nombre_cliente":"wwsw","apellido":"wsw","genero":"69250670fc3527ab5fccef4e","tipoDeIntendidad":"6924759939f4f6f2f12072fc","documentoIntentidad":"11192001","telefono":"30029202","fecha_nacimiento":"2025-12-19","paisId":"1","departamentoId":"8","ciudadId":"343","nacionalidad":"692482e89e0271ac9b1e9fd4","prefijo":"692444a76135afeff47e87d6"}
+{"ok":true,"msg":"Perfil creado correctamente","perfil":{"nombre_cliente":"wwsw","apellido":"wsw","regisUsuario":"6940ca260360880e0bb01656","tipoDeIntendidad":"6924759939f4f6f2f12072fc","genero":"69250670fc3527ab5fccef4e","nacionalidad":"692482e89e0271ac9b1e9fd4","prefijo":"692444a76135afeff47e87d6","telefono":30029202,"fecha_nacimiento":"2025-12-19T00:00:00.000Z","paisId":"1","departamentoId":"8","ciudadId":"343","saldoComisiones":0,"createdAt":"2025-12-20T12:00:28.344Z","updatedAt":"2025-12-20T12:00:28.344Z","iud":"69468fdc2a7aee6276115322"}}

@@ -8,14 +8,6 @@ import {
     SheetContent,
 } from "@/components/ui/sheet";
 
-// Importar Accordion de Shadcn
-import {
-    Accordion,
-    AccordionContent,
-    AccordionItem,
-    AccordionTrigger,
-} from "@/components/ui/accordion";
-
 // 2. Importar los íconos de lucide-react
 import {
     LayoutDashboard,
@@ -29,7 +21,8 @@ import {
     Wrench,
     Palette,
     SquareStack,
-    Route
+    Route,
+    Building2
 } from 'lucide-react';
 
 import type { AdminSidebarProps } from '@/types/components';
@@ -56,7 +49,7 @@ export default function AdminSidebar({ mobileOpen, setMobileOpen }: AdminSidebar
     const { logout } = useAuth();
     const location = useLocation();
 
-    // 3. Reemplazamos los iconos de MUI por los de Lucide
+    // Menú principal
     const menu: MenuItem[] = [
         { label: 'Dashboard', icon: <LayoutDashboard className='w-5 h-5' />, path: '/admin/dashboard' },
         { label: 'Productos', icon: <Package className='w-5 h-5' />, path: '/admin/productos' },
@@ -66,16 +59,13 @@ export default function AdminSidebar({ mobileOpen, setMobileOpen }: AdminSidebar
         { label: 'Pedidos', icon: <ScrollText className='w-5 h-5' />, path: '/admin/pedidos' },
         { label: 'Rutas', icon: <Route className='w-5 h-5' />, path: '/admin/rutas' },
         { label: 'Parametrización', icon: <Wrench className='w-5 h-5' />, path: '/admin/parametrizacion' },
+        { label: 'Parametrización Corporativa', icon: <Building2 className='w-5 h-5' />, path: '/admin/parametrizacion-corporativa' },
+        { label: 'Publicidad y Posts', icon: <Palette className='w-5 h-5' />, path: '/admin/personalizacion/modal-inicio' },
         { label: 'Configuración', icon: <Settings className='w-5 h-5' />, path: '/admin/configuracion' },
     ];
 
-    // Menú de personalización (acordeón)
-    const personalizacionMenu = [
-        { label: 'Modal de Inicio', icon: <SquareStack className='w-5 h-5' />, path: '/admin/personalizacion/modal-inicio' },
-    ];
-
     const MenuLink = ({ item }: MenuLinkProps): React.ReactElement => {
-        const isActive = location.pathname.includes(item.path);
+        const isActive = location.pathname === item.path;
 
         const linkClasses = `
             flex items-center space-x-3 p-3 mb-1 rounded-md cursor-pointer transition-all duration-200
@@ -130,48 +120,10 @@ export default function AdminSidebar({ mobileOpen, setMobileOpen }: AdminSidebar
             </div>
 
             {/* Lista de Navegación */}
-            <nav className="px-2 space-y-1"> {/* Reemplaza List con px: 1 */}
+            <nav className="px-2 space-y-1">
                 {menu.map((m) => (
                     <MenuLink key={m.label} item={m} />
                 ))}
-
-                {/* Acordeón de Personalización */}
-                <Accordion type="single" collapsible className="w-full">
-                    <AccordionItem value="personalizacion" className="border-none">
-                        <AccordionTrigger className={`flex items-center space-x-3 p-3 rounded-md hover:no-underline transition-all duration-200 text-muted-foreground ${HOVER_BG_CLASS} hover:${PRIMARY_COLOR_CLASS}`}>
-                            <div className="flex items-center space-x-3">
-                                <Palette className='w-5 h-5' />
-                                <span className="text-sm">Personalización</span>
-                            </div>
-                        </AccordionTrigger>
-                        <AccordionContent className="pb-0 pt-1">
-                            {personalizacionMenu.map((item) => {
-                                const isActive = location.pathname.includes(item.path);
-                                return (
-                                    <div
-                                        key={item.label}
-                                        className={`flex items-center space-x-3 p-3 mb-1 ml-6 rounded-md cursor-pointer transition-all duration-200
-                                            ${isActive
-                                                ? `${PRIMARY_BG_LIGHT_CLASS} ${PRIMARY_COLOR_CLASS} font-semibold`
-                                                : `text-muted-foreground ${HOVER_BG_CLASS} hover:${PRIMARY_COLOR_CLASS}`
-                                            }`}
-                                        onClick={() => {
-                                            navigate(item.path);
-                                            if (setMobileOpen) {
-                                                setMobileOpen(false);
-                                            }
-                                        }}
-                                    >
-                                        <span className={`flex-shrink-0 w-5 h-5 ${isActive ? PRIMARY_COLOR_CLASS : 'text-gray-500'}`}>
-                                            {item.icon}
-                                        </span>
-                                        <span className="text-sm">{item.label}</span>
-                                    </div>
-                                );
-                            })}
-                        </AccordionContent>
-                    </AccordionItem>
-                </Accordion>
             </nav>
 
             {/* Spacer / Box sx={{ flexGrow: 1 }} */}

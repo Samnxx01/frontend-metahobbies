@@ -27,6 +27,7 @@ import { Badge } from '@/components/ui/badge';
 
 // Lucide icons
 import { Plus, Edit, Trash2, Loader2, ImageUp, Eye } from 'lucide-react';
+import PostsParametrizables from './PostsParametrizables';
 
 interface Publicidad {
     id: string;
@@ -300,270 +301,281 @@ export default function ModalInicio(): React.ReactElement {
     const isView = dialogType === 'view';
 
     return (
-        <div className="p-6 space-y-6">
-            {/* Header */}
-            <div className="flex justify-between items-center">
-                <div>
-                    <h1 className="text-3xl font-bold text-foreground">Modal de Inicio</h1>
-                    <p className="text-muted-foreground mt-1">
-                        Gestiona las publicidades que aparecen en el modal de inicio
-                    </p>
-                </div>
-                <Button onClick={handleAdd} className="gap-2">
-                    <Plus className="h-4 w-4" />
-                    Nueva Publicidad
-                </Button>
-            </div>
-
-            {/* Card con Tabla */}
-            <Card>
-                <CardHeader>
-                    <CardTitle>Publicidades Registradas</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    {loading ? (
-                        <div className="flex justify-center items-center py-12">
-                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <Card className="max-w-4xl mx-auto mt-8">
+         
+            <CardContent>
+                {/* Publicidad UI */}
+                <div className="p-6 space-y-6">
+                    {/* Header */}
+                    <div className="flex justify-between items-center">
+                        <div>
+                            <h1 className="text-3xl font-bold text-foreground">Modal de Inicio</h1>
+                            <p className="text-muted-foreground mt-1">
+                                Gestiona las publicidades que aparecen en el modal de inicio
+                            </p>
                         </div>
-                    ) : publicidades.length === 0 ? (
-                        <div className="text-center py-12 text-muted-foreground">
-                            <p>No hay publicidades registradas</p>
-                            <Button onClick={handleAdd} variant="outline" className="mt-4">
-                                <Plus className="h-4 w-4 mr-2" />
-                                Crear primera publicidad
-                            </Button>
-                        </div>
-                    ) : (
-                        <div className="rounded-md border">
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Título</TableHead>
-                                        <TableHead>Subtítulo</TableHead>
-                                        <TableHead>Precio</TableHead>
-                                        <TableHead>Botón</TableHead>
-                                        <TableHead className="text-right">Acciones</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {publicidades.map((publicidad) => (
-                                        <TableRow key={publicidad.id}>
-                                            <TableCell className="font-medium">
-                                                {publicidad.tittle}
-                                            </TableCell>
-                                            <TableCell>
-                                                {publicidad.subtittle || '-'}
-                                            </TableCell>
-                                            <TableCell>
-                                                {publicidad.price ? (
-                                                    <Badge variant="secondary">
-                                                        ${publicidad.price.toLocaleString()}
-                                                    </Badge>
-                                                ) : '-'}
-                                            </TableCell>
-                                            <TableCell>
-                                                {publicidad.buttonText || '-'}
-                                            </TableCell>
-                                            <TableCell className="text-right">
-                                                <div className="flex justify-end gap-2">
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        onClick={() => handleView(publicidad)}
-                                                    >
-                                                        <Eye className="h-4 w-4" />
-                                                    </Button>
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        onClick={() => handleEdit(publicidad)}
-                                                    >
-                                                        <Edit className="h-4 w-4" />
-                                                    </Button>
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        onClick={() => handleDelete(publicidad)}
-                                                        className="text-destructive hover:text-destructive"
-                                                    >
-                                                        <Trash2 className="h-4 w-4" />
-                                                    </Button>
-                                                </div>
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                        </div>
-                    )}
-                </CardContent>
-            </Card>
+                        <Button onClick={handleAdd} className="gap-2">
+                            <Plus className="h-4 w-4" />
+                            Nueva Publicidad
+                        </Button>
+                    </div>
 
-            {/* Dialog para Crear/Editar/Ver */}
-            <Dialog open={openDialog} onOpenChange={handleClose}>
-                <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-                    <DialogHeader>
-                        <DialogTitle>
-                            {isView ? 'Ver Publicidad' : dialogType === 'edit' ? 'Editar Publicidad' : 'Nueva Publicidad'}
-                        </DialogTitle>
-                    </DialogHeader>
+                    {/* Card con Tabla */}
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Publicidades Registradas</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            {loading ? (
+                                <div className="flex justify-center items-center py-12">
+                                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                                </div>
+                            ) : publicidades.length === 0 ? (
+                                <div className="text-center py-12 text-muted-foreground">
+                                    <p>No hay publicidades registradas</p>
+                                    <Button onClick={handleAdd} variant="outline" className="mt-4">
+                                        <Plus className="h-4 w-4 mr-2" />
+                                        Crear primera publicidad
+                                    </Button>
+                                </div>
+                            ) : (
+                                <div className="rounded-md border">
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead>Título</TableHead>
+                                                <TableHead>Subtítulo</TableHead>
+                                                <TableHead>Precio</TableHead>
+                                                <TableHead>Botón</TableHead>
+                                                <TableHead className="text-right">Acciones</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {publicidades.map((publicidad) => (
+                                                <TableRow key={publicidad.id}>
+                                                    <TableCell className="font-medium">
+                                                        {publicidad.tittle}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        {publicidad.subtittle || '-'}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        {publicidad.price ? (
+                                                            <Badge variant="secondary">
+                                                                ${publicidad.price.toLocaleString()}
+                                                            </Badge>
+                                                        ) : '-'}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        {publicidad.buttonText || '-'}
+                                                    </TableCell>
+                                                    <TableCell className="text-right">
+                                                        <div className="flex justify-end gap-2">
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                onClick={() => handleView(publicidad)}
+                                                            >
+                                                                <Eye className="h-4 w-4" />
+                                                            </Button>
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                onClick={() => handleEdit(publicidad)}
+                                                            >
+                                                                <Edit className="h-4 w-4" />
+                                                            </Button>
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                onClick={() => handleDelete(publicidad)}
+                                                                className="text-destructive hover:text-destructive"
+                                                            >
+                                                                <Trash2 className="h-4 w-4" />
+                                                            </Button>
+                                                        </div>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
 
-                    <form onSubmit={handleSubmit}>
-                        <div className="py-4 space-y-4">
-                            {/* Preview de imagen/video */}
-                            <div className="space-y-2">
-                                <Label>Imagen o Video *</Label>
-                                <div
-                                    className={`w-full h-64 rounded-lg border-2 border-dashed border-border flex flex-col items-center justify-center relative overflow-hidden group transition-all duration-200 ${isView ? 'cursor-default' : 'cursor-pointer hover:border-primary'}`}
-                                    onClick={() => !isView && document.getElementById('file-input')?.click()}
-                                >
-                                    {formData.filePreview ? (
-                                        <>
-                                            {formData.file?.type.startsWith('video/') || formData.filePreview.includes('video') ? (
-                                                <video
-                                                    src={formData.filePreview}
-                                                    className="w-full h-full object-cover"
-                                                    controls
-                                                />
+                    {/* Dialog para Crear/Editar/Ver */}
+                    <Dialog open={openDialog} onOpenChange={handleClose}>
+                        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                            <DialogHeader>
+                                <DialogTitle>
+                                    {isView ? 'Ver Publicidad' : dialogType === 'edit' ? 'Editar Publicidad' : 'Nueva Publicidad'}
+                                </DialogTitle>
+                            </DialogHeader>
+
+                            <form onSubmit={handleSubmit}>
+                                <div className="py-4 space-y-4">
+                                    {/* Preview de imagen/video */}
+                                    <div className="space-y-2">
+                                        <Label>Imagen o Video *</Label>
+                                        <div
+                                            className={`w-full h-64 rounded-lg border-2 border-dashed border-border flex flex-col items-center justify-center relative overflow-hidden group transition-all duration-200 ${isView ? 'cursor-default' : 'cursor-pointer hover:border-primary'}`}
+                                            onClick={() => !isView && document.getElementById('file-input')?.click()}
+                                        >
+                                            {formData.filePreview ? (
+                                                <>
+                                                    {formData.file?.type.startsWith('video/') || formData.filePreview.includes('video') ? (
+                                                        <video
+                                                            src={formData.filePreview}
+                                                            className="w-full h-full object-cover"
+                                                            controls
+                                                        />
+                                                    ) : (
+                                                        <img
+                                                            src={formData.filePreview}
+                                                            alt="Preview"
+                                                            className="w-full h-full object-cover"
+                                                        />
+                                                    )}
+                                                    {!isView && (
+                                                        <div className="absolute inset-0 bg-background/80 text-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                                            <span className="text-sm font-medium">Cambiar archivo</span>
+                                                        </div>
+                                                    )}
+                                                </>
                                             ) : (
-                                                <img
-                                                    src={formData.filePreview}
-                                                    alt="Preview"
-                                                    className="w-full h-full object-cover"
-                                                />
+                                                <div className="text-center text-muted-foreground">
+                                                    <ImageUp className="h-10 w-10 mx-auto mb-1" />
+                                                    <p className="text-sm">Haga clic para subir imagen o video</p>
+                                                    <p className="text-xs mt-1">JPEG, PNG, GIF, WEBP, MP4, WEBM</p>
+                                                </div>
                                             )}
                                             {!isView && (
-                                                <div className="absolute inset-0 bg-background/80 text-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                                    <span className="text-sm font-medium">Cambiar archivo</span>
-                                                </div>
+                                                <input
+                                                    id="file-input"
+                                                    type="file"
+                                                    accept="image/*,video/*"
+                                                    style={{ display: 'none' }}
+                                                    onChange={handleFileChange}
+                                                />
                                             )}
-                                        </>
-                                    ) : (
-                                        <div className="text-center text-muted-foreground">
-                                            <ImageUp className="h-10 w-10 mx-auto mb-1" />
-                                            <p className="text-sm">Haga clic para subir imagen o video</p>
-                                            <p className="text-xs mt-1">JPEG, PNG, GIF, WEBP, MP4, WEBM</p>
                                         </div>
-                                    )}
-                                    {!isView && (
-                                        <input
-                                            id="file-input"
-                                            type="file"
-                                            accept="image/*,video/*"
-                                            style={{ display: 'none' }}
-                                            onChange={handleFileChange}
+                                    </div>
+
+                                    {/* Título */}
+                                    <div className="space-y-2">
+                                        <Label htmlFor="tittle">Título *</Label>
+                                        <Input
+                                            id="tittle"
+                                            value={formData.tittle}
+                                            onChange={(e) => handleInputChange('tittle', e.target.value)}
+                                            disabled={isView}
+                                            placeholder="Ej: Oferta Especial de Verano"
                                         />
+                                    </div>
+
+                                    {/* Subtítulo */}
+                                    <div className="space-y-2">
+                                        <Label htmlFor="subtittle">Subtítulo</Label>
+                                        <Input
+                                            id="subtittle"
+                                            value={formData.subtittle}
+                                            onChange={(e) => handleInputChange('subtittle', e.target.value)}
+                                            disabled={isView}
+                                            placeholder="Ej: Hasta 50% de descuento"
+                                        />
+                                    </div>
+
+                                    {/* Cuerpo */}
+                                    <div className="space-y-2">
+                                        <Label htmlFor="body">Descripción *</Label>
+                                        <Textarea
+                                            id="body"
+                                            value={formData.body}
+                                            onChange={(e) => handleInputChange('body', e.target.value)}
+                                            disabled={isView}
+                                            placeholder="Describe el contenido de la publicidad..."
+                                            rows={4}
+                                        />
+                                    </div>
+
+                                    {/* Grid para precio y botón */}
+                                    <div className="grid grid-cols-2 gap-4">
+                                        {/* Precio */}
+                                        <div className="space-y-2">
+                                            <Label htmlFor="price">Precio</Label>
+                                            <Input
+                                                id="price"
+                                                type="number"
+                                                value={formData.price}
+                                                onChange={(e) => handleInputChange('price', e.target.value)}
+                                                disabled={isView}
+                                                placeholder="0"
+                                            />
+                                        </div>
+
+                                        {/* Texto del Botón */}
+                                        <div className="space-y-2">
+                                            <Label htmlFor="buttonText">Texto del Botón</Label>
+                                            <Input
+                                                id="buttonText"
+                                                value={formData.buttonText}
+                                                onChange={(e) => handleInputChange('buttonText', e.target.value)}
+                                                disabled={isView}
+                                                placeholder="Ej: Ver Más"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Link del Botón */}
+                                    <div className="space-y-2">
+                                        <Label htmlFor="buttonLink">Enlace del Botón</Label>
+                                        <Input
+                                            id="buttonLink"
+                                            type="url"
+                                            value={formData.buttonLink}
+                                            onChange={(e) => handleInputChange('buttonLink', e.target.value)}
+                                            disabled={isView}
+                                            placeholder="https://example.com"
+                                        />
+                                    </div>
+                                </div>
+
+                                <DialogFooter className="pt-4 flex justify-end gap-3">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        onClick={handleClose}
+                                        disabled={isSubmitting}
+                                    >
+                                        {isView ? 'Cerrar' : 'Cancelar'}
+                                    </Button>
+                                    {!isView && (
+                                        <Button
+                                            type="submit"
+                                            disabled={isSubmitting}
+                                        >
+                                            {isSubmitting ? (
+                                                <>
+                                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                                    Guardando...
+                                                </>
+                                            ) : (
+                                                dialogType === 'edit' ? 'Actualizar' : 'Crear'
+                                            )}
+                                        </Button>
                                     )}
-                                </div>
-                            </div>
+                                </DialogFooter>
+                            </form>
+                        </DialogContent>
+                    </Dialog>
+                </div>
 
-                            {/* Título */}
-                            <div className="space-y-2">
-                                <Label htmlFor="tittle">Título *</Label>
-                                <Input
-                                    id="tittle"
-                                    value={formData.tittle}
-                                    onChange={(e) => handleInputChange('tittle', e.target.value)}
-                                    disabled={isView}
-                                    placeholder="Ej: Oferta Especial de Verano"
-                                />
-                            </div>
-
-                            {/* Subtítulo */}
-                            <div className="space-y-2">
-                                <Label htmlFor="subtittle">Subtítulo</Label>
-                                <Input
-                                    id="subtittle"
-                                    value={formData.subtittle}
-                                    onChange={(e) => handleInputChange('subtittle', e.target.value)}
-                                    disabled={isView}
-                                    placeholder="Ej: Hasta 50% de descuento"
-                                />
-                            </div>
-
-                            {/* Cuerpo */}
-                            <div className="space-y-2">
-                                <Label htmlFor="body">Descripción *</Label>
-                                <Textarea
-                                    id="body"
-                                    value={formData.body}
-                                    onChange={(e) => handleInputChange('body', e.target.value)}
-                                    disabled={isView}
-                                    placeholder="Describe el contenido de la publicidad..."
-                                    rows={4}
-                                />
-                            </div>
-
-                            {/* Grid para precio y botón */}
-                            <div className="grid grid-cols-2 gap-4">
-                                {/* Precio */}
-                                <div className="space-y-2">
-                                    <Label htmlFor="price">Precio</Label>
-                                    <Input
-                                        id="price"
-                                        type="number"
-                                        value={formData.price}
-                                        onChange={(e) => handleInputChange('price', e.target.value)}
-                                        disabled={isView}
-                                        placeholder="0"
-                                    />
-                                </div>
-
-                                {/* Texto del Botón */}
-                                <div className="space-y-2">
-                                    <Label htmlFor="buttonText">Texto del Botón</Label>
-                                    <Input
-                                        id="buttonText"
-                                        value={formData.buttonText}
-                                        onChange={(e) => handleInputChange('buttonText', e.target.value)}
-                                        disabled={isView}
-                                        placeholder="Ej: Ver Más"
-                                    />
-                                </div>
-                            </div>
-
-                            {/* Link del Botón */}
-                            <div className="space-y-2">
-                                <Label htmlFor="buttonLink">Enlace del Botón</Label>
-                                <Input
-                                    id="buttonLink"
-                                    type="url"
-                                    value={formData.buttonLink}
-                                    onChange={(e) => handleInputChange('buttonLink', e.target.value)}
-                                    disabled={isView}
-                                    placeholder="https://example.com"
-                                />
-                            </div>
-                        </div>
-
-                        <DialogFooter className="pt-4 flex justify-end gap-3">
-                            <Button
-                                type="button"
-                                variant="outline"
-                                onClick={handleClose}
-                                disabled={isSubmitting}
-                            >
-                                {isView ? 'Cerrar' : 'Cancelar'}
-                            </Button>
-                            {!isView && (
-                                <Button
-                                    type="submit"
-                                    disabled={isSubmitting}
-                                >
-                                    {isSubmitting ? (
-                                        <>
-                                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                            Guardando...
-                                        </>
-                                    ) : (
-                                        dialogType === 'edit' ? 'Actualizar' : 'Crear'
-                                    )}
-                                </Button>
-                            )}
-                        </DialogFooter>
-                    </form>
-                </DialogContent>
-            </Dialog>
-        </div>
+                {/* Sección de Posts */}
+                <div className="mt-8">
+                    <PostsParametrizables />
+                </div>
+            </CardContent>
+        </Card>
     );
 }
