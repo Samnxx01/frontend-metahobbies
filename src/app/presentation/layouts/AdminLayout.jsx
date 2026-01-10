@@ -11,7 +11,7 @@ export default function AdminLayout() {
     const { user } = useAuth()
     const [mobileOpen, setMobileOpen] = useState(false)
 
-    if (!user || (user.role !== 'ADMIN' && user.role !== 'DESARROLLADOR')) {
+    if (!user || (user.role !== 'ADMIN' && user.role !== 'DESARROLLADOR' && user.role !== 'DIOS')) {
         navigate('/')
         return null
     }

@@ -41,7 +41,8 @@ export default function PostsParametrizables() {
     setLoading(true);
     setError('');
     try {
-      const res = await apiFetch('/api/parametrizable/listar/todas/post', { method: 'GET' });
+      const res = await apiFetch('/api/parametrizable/listar/todas/post', 
+        { method: 'GET' });
       setData(res?.publicaciones || []);
     } catch (err: any) {
       setError(err.message || 'Error al cargar datos');

@@ -59,7 +59,7 @@ export default function MembershipDashboard(): React.ReactElement {
         try {
             setLoadingReferidos(true);
             const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api';
-            const response = await apiFetch(`${API_BASE_URL}/referido/listarSaldoRefere`, {
+            const response = await apiFetch(`${API_BASE_URL}/referido/listarMiMembresia`, {
                 method: 'GET'
             });
             setReferidosData(response);

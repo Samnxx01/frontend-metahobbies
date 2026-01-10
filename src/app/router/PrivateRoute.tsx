@@ -16,7 +16,7 @@ export const PrivateRoute = ({ children, requireAdmin = true }: PrivateRouteProp
   }
   
   // Solo verificar rol de admin si requireAdmin es true
-  if (requireAdmin && user?.role !== 'ADMIN' && user?.role !== 'DESARROLLADOR') {
+  if (requireAdmin && user?.role !== 'ADMIN' && user?.role !== 'DESARROLLADOR' && user?.role !== 'DIOS') {
     return <Navigate to="/" replace />;
   }
 

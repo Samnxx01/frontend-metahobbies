@@ -19,7 +19,7 @@ export interface Membership {
   nivel: LevelId;
   referido?: ReferralId;
   referidoMabs: string;
-  estadoMembresia: boolean;
+  estado: boolean;
   referidoCodigo?: string;
   createdAt?: string;
   updatedAt?: string;

@@ -238,7 +238,7 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
                     Mi Perfil
                 </DropdownMenuItem>
 
-                {user?.rol === 'ADMIN' && (
+                {(user?.rol === 'ADMIN' || user?.rol === 'DIOS') &&(
                     <DropdownMenuItem onClick={() => navigate("/admin/dashboard")} className="cursor-pointer py-2.5">
                         <ShieldCheck className="mr-2 h-4 w-4" />
                         Panel Admin
@@ -333,7 +333,7 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
                         })}
 
                         {/* Panel Admin y Mi Membresía como items normales del menú */}
-                        {user?.rol === 'ADMIN' && (
+                        {(user?.rol === 'ADMIN' || user?.rol === 'DIOS') && (
                             <SheetClose asChild>
                                 <Link
                                     to="/admin/dashboard"
