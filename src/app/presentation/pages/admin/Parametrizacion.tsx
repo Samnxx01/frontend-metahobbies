@@ -20,7 +20,7 @@ interface Genero {
 }
 
 interface Nacionalidad {
-    Nacionalidad: string;
+    naciondalidadss: string;
     siglaNaciona: string;
     iud: string;
 }
@@ -43,6 +43,7 @@ interface Ciudad {
 
 interface Departamento {
     departamentoId: string;
+    nombre_Dapartamento: string;
     codigo_postal: string;
     ciudades: Ciudad[];
 }
@@ -225,7 +226,7 @@ function Parametrizacion(): React.ReactElement {
                                                         <CardContent className="p-4">
                                                             <p className="font-semibold text-sm">{genero.nombre_genero}</p>
                                                             <p className="text-xs text-muted-foreground mt-2 font-mono">
-                                                                ID: {genero.id}
+                                                                ID: {genero.nombre_genero}
                                                             </p>
                                                         </CardContent>
                                                     </Card>
@@ -271,7 +272,7 @@ function Parametrizacion(): React.ReactElement {
                                                                 </div>
                                                             </div>
                                                             <p className="text-xs text-muted-foreground mt-2 font-mono">
-                                                                ID: {nacionalidad.iud}
+                                                                ID: {nacionalidad.naciondalidadss}
                                                             </p>
                                                         </CardContent>
                                                     </Card>

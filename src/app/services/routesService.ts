@@ -93,7 +93,7 @@ export const updateRoute = async (id: string, routeData: UpdateRouteDto): Promis
 
 // Eliminar una ruta
 export const deleteRoute = async (id: string): Promise<{ success: boolean; message: string }> => {
-  const response = await apiFetch(`${API_BASE_URL}/rutas/${id}`, {
+  const response = await apiFetch(`${API_BASE_URL}/seguridad/rutas/inactivo/sistema/${id}`, {
     method: 'DELETE',
   });
   return response;
