@@ -10,11 +10,11 @@ export default defineConfig({
     server: {
         proxy: {
             "/socket.io": {
-                target: "http://localhost:8080",
+                target: "https://server-mabs-xo9s.onrender.com",
                 ws: true,
             },
             "/api": {
-                target: "http://localhost:8080",
+                target: "https://server-mabs-xo9s.onrender.com",
                 changeOrigin: true,
             },
         },
