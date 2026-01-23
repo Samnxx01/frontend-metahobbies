@@ -9,13 +9,23 @@ export default defineConfig({
     },
     server: {
         proxy: {
-            "/socket.io": {
-                target: "https://server-mabs-xo9s.onrender.com",
-                ws: true,
-            },
             "/api": {
                 target: "https://server-mabs-xo9s.onrender.com",
                 changeOrigin: true,
+                secure: false,
+                // Añadimos esto para asegurarnos de que reconozca la ruta
+                configure: (proxy, _options) => {
+                    proxy.on('error', (err, _req, _res) => {
+                        console.log('proxy error', err);
+                    });
+                    proxy.on('proxyReq', (proxyReq, req, _res) => {
+                        console.log('Enviando petición al Target:', req.method, req.url);
+                    });
+                },
+            },
+            "/socket.io": {
+                target: "https://server-mabs-xo9s.onrender.com",
+                ws: true,
             },
         },
     },
