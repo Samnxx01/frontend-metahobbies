@@ -18,7 +18,7 @@ export default function SociedadesCorporativas() {
       setError('');
       try {
         const res = await apiFetch(
-          'https://server-mabs-xo9s.onrender.com/api/config/parametrizacion/sociedades/coporativa',
+          '/api/config/parametrizacion/sociedades/coporativa',
           { method: 'GET' }
         );
         setData(res?.sociedades || []);
