@@ -17,7 +17,7 @@ export default function LogosCorporativos() {
       setError('');
       try {
         const res = await apiFetch(
-          'https://server-mabs-xo9s.onrender.com/api/config/parametrizacion/listar/logos/coporativa',
+          'api/config/parametrizacion/listar/logos/coporativa',
           { method: 'GET' }
         );
         setData(res);
