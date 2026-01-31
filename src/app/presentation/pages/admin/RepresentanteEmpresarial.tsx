@@ -38,22 +38,19 @@ export default function RepresentanteEmpresarial() {
     prefijo: ''
   });
 
-  // Parametrización dinámica
   const [tiposDocumento, setTiposDocumento] = useState<any[]>([]);
   const [nacionalidades, setNacionalidades] = useState<any[]>([]);
   const [prefijos, setPrefijos] = useState<any[]>([]);
   const [loadingParams, setLoadingParams] = useState(true);
 
-  // Carga inicial de datos
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       setError('');
       try {
         const res = await apiFetch('/api/config/listar/represente/empresarial', { method: 'GET' });
-        console.log('GET --> Obtener datos del representante: ', res);
         setData(res);
-        // Si hay datos, se prepara el formulario de actualización
+
         if (res?.representantes && res.representantes.length > 0) {
           const rep = res.representantes[0];
           setUpdateForm({
@@ -76,7 +73,6 @@ export default function RepresentanteEmpresarial() {
     fetchData();
   }, []);
 
-  // Carga de parámetros (Listas desplegables)
   useEffect(() => {
     const fetchParams = async () => {
       setLoadingParams(true);
@@ -121,7 +117,7 @@ export default function RepresentanteEmpresarial() {
         nacionalidads: '',
         prefijo: ''
       });
-      // Recargar datos tras registro
+
       const res = await apiFetch('/api/config/listar/represente/empresarial', { method: 'GET' });
       setData(res);
     } catch (err: any) {
@@ -144,7 +140,7 @@ export default function RepresentanteEmpresarial() {
 
     setUpdating(true);
     try {
-      const id = data.representantes[0]._id; // Asumiendo que el ID viene en _id
+      const id = data.representantes[0]._id;
       await apiFetch(`/api/config/parametrizacion/actualizar/represe/coporativa/${id}`, {
         method: 'PUT',
         body: updateForm
@@ -152,10 +148,9 @@ export default function RepresentanteEmpresarial() {
       toast.success('Los datos del Representante han sido actualizados exitosamente!');
       setIsUpdateModalOpen(false);
 
-      // Recargar datos para reflejar cambios en la vista de lectura
       const res = await apiFetch('/api/config/listar/represente/empresarial', { method: 'GET' });
       setData(res);
-      // Actualizar el form de actualización con los nuevos datos
+
       if (res?.representantes?.[0]) {
         const rep = res.representantes[0];
         setUpdateForm({
@@ -177,7 +172,6 @@ export default function RepresentanteEmpresarial() {
     }
   };
 
-  // Helpers para mostrar etiquetas (Labels) en vez de IDs en el modo lectura
   const getDocLabel = () => tiposDocumento.find(t => t.iud === updateForm.tipoDocument)?.nombreDocumento || '';
   const getNacLabel = () => nacionalidades.find(n => n.iud === updateForm.nacionalidads)?.naciondalidadss || '';
   const getPrefLabel = () => prefijos.find(p => p.iud === updateForm.prefijo)?.prefijoTelefonicoPais || '';
