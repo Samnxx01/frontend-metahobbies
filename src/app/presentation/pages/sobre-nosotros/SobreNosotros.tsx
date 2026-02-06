@@ -1,9 +1,78 @@
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Shield, Users, Zap, Target, Eye, Heart, Award, CheckCircle2, Phone, UserPlus } from 'lucide-react';
+import { Shield, Users, Zap, Target, Eye, Heart, Award, CheckCircle2, Phone, UserPlus, Building2 } from 'lucide-react';
+import { apiFetch } from "@/app/services/api";
+
+interface EmpresaData {
+    razon_social: string;
+    descripcion: string;
+    mision: string;
+    vision: string;
+}
 
 export default function SobreNosotros() {
+    // Estado para los datos de texto
+    const [empresa, setEmpresa] = useState<EmpresaData>({
+        razon_social: '',
+        descripcion: '',
+        mision: '',
+        vision: ''
+    });
+
+    const [logoUrl, setLogoUrl] = useState<string | null>(null);
+    const [loading, setLoading] = useState<boolean>(true);
+
+    useEffect(() => {
+        const fetchData = async () => {
+            setLoading(true);
+            try {
+                const perfilRes = await apiFetch('/api/configuracion/listar/user/coporativo/perfil/publico', {
+                    method: 'GET'
+                });
+
+                if (perfilRes?.ok && perfilRes?.perfil) {
+                    const p = perfilRes.perfil;
+                    setEmpresa({
+                        razon_social: p.razon_social || 'Nuestra Empresa',
+                        descripcion: p.descripcion || 'Dedicada al desarrollo de software empresarial y soluciones tecnológicas.',
+                        mision: p.descripcion_mision_empresa || 'Brindar soluciones tecnológicas innovadoras.',
+                        vision: p.descripcion_vision_empresa || 'Ser líderes en transformación digital.'
+                    });
+                }
+
+                const listaLogosRes = await apiFetch('/api/config/parametrizacion/listar/logos/coporativa', {
+                    method: 'GET'
+                });
+
+                const logos = listaLogosRes?.logos || [];
+
+                if (logos.length > 0) {
+                    const logoIdReal = logos[0].iud || logos[0]._id || logos[0].id;
+
+                    const logoDetalleRes = await apiFetch(`/api/config/parametrizacion/listar/logos/coporativa/${logoIdReal}`, {
+                        method: 'GET'
+                    });
+
+                    if (logoDetalleRes?.ok && logoDetalleRes?.logo) {
+                        const { base64, mimetype } = logoDetalleRes.logo;
+                        if (base64 && mimetype) {
+                            setLogoUrl(`data:${mimetype};base64,${base64}`);
+                        }
+                    }
+                }
+
+            } catch (error) {
+                console.error("Error cargando datos de Sobre Nosotros:", error);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchData();
+    }, []);
+
     return (
         <div className="min-h-screen bg-background">
             {/* Hero Section */}
@@ -11,13 +80,13 @@ export default function SobreNosotros() {
                 <div className="container mx-auto px-4 max-w-5xl">
                     <div className="text-center space-y-6">
                         <h1 className="text-4xl md:text-6xl font-bold text-foreground tracking-tight">
-                            Construimos tu éxito,
+                            {empresa.razon_social ? empresa.razon_social : 'Construimos tu éxito'},
                             <span className="block text-primary mt-2">un referido a la vez</span>
                         </h1>
                         <p className="text-xl md:text-2xl text-muted-foreground max-w-3xl mx-auto">
                             La plataforma que transforma tu red en ingresos reales, con tecnología de pago segura y un sistema de membresías diseñado para crecer contigo.
                         </p>
-                        
+
                         {/* Bullets con beneficios */}
                         <div className="flex flex-wrap justify-center gap-4 md:gap-6 pt-6">
                             <div className="flex items-center gap-2 text-sm md:text-base text-foreground font-medium">
@@ -37,47 +106,51 @@ export default function SobreNosotros() {
                 </div>
             </section>
 
-            {/* Quiénes Somos */}
+            {/* Quiénes Somos - SECCIÓN DINÁMICA */}
             <section className="py-16 md:py-24 bg-muted/30">
                 <div className="container mx-auto px-4 max-w-5xl">
                     <div className="grid md:grid-cols-2 gap-12 items-center">
+                        {/* Columna Texto */}
                         <div className="space-y-6">
                             <h2 className="text-3xl md:text-4xl font-bold text-foreground">
                                 Quiénes Somos
                             </h2>
-                            <div className="space-y-4 text-muted-foreground leading-relaxed">
-                                <p>
-                                    MABS nació en [INSERTAR_AÑO] con una visión clara: democratizar el acceso a programas de membresías y sistemas de referidos que realmente funcionen. Fundada por un equipo de emprendedores y tecnólogos, nuestra plataforma ha ayudado a [INSERTAR_DATO: miles de usuarios] a monetizar sus redes de contacto.
-                                </p>
-                                <p>
-                                    Desde nuestros inicios, hemos procesado más de [INSERTAR_DATO: millones en transacciones] y conectado a comunidades enteras a través de un modelo de negocio justo, transparente y escalable.
-                                </p>
+
+                            {/* Descripción Dinámica */}
+                            <div className="space-y-4 text-muted-foreground leading-relaxed text-lg">
+                                {loading ? (
+                                    <p>Cargando información corporativa...</p>
+                                ) : (
+                                    <p>{empresa.descripcion}</p>
+                                )}
                             </div>
 
-                            {/* Misión y Visión */}
+                            {/* Misión y Visión Dinámicas */}
                             <div className="space-y-4 pt-4">
-                                <Card className="border-l-4 border-l-primary bg-card">
+                                {/* Misión */}
+                                <Card className="border-l-4 border-l-primary bg-card hover:bg-card/80 transition-colors">
                                     <CardContent className="p-4">
                                         <div className="flex items-start gap-3">
                                             <Target className="h-6 w-6 text-primary flex-shrink-0 mt-1" />
                                             <div>
                                                 <h3 className="font-semibold text-foreground mb-1">Misión</h3>
                                                 <p className="text-sm text-muted-foreground">
-                                                    Empoderar a emprendedores y comunidades para crear fuentes de ingresos sostenibles mediante tecnología accesible y sistemas de referidos transparentes.
+                                                    {loading ? 'Cargando...' : empresa.mision}
                                                 </p>
                                             </div>
                                         </div>
                                     </CardContent>
                                 </Card>
 
-                                <Card className="border-l-4 border-l-primary bg-card">
+                                {/* Visión */}
+                                <Card className="border-l-4 border-l-primary bg-card hover:bg-card/80 transition-colors">
                                     <CardContent className="p-4">
                                         <div className="flex items-start gap-3">
                                             <Eye className="h-6 w-6 text-primary flex-shrink-0 mt-1" />
                                             <div>
                                                 <h3 className="font-semibold text-foreground mb-1">Visión</h3>
                                                 <p className="text-sm text-muted-foreground">
-                                                    Ser la plataforma líder en Latinoamérica para membresías y economía colaborativa, transformando millones de vidas a través de la tecnología.
+                                                    {loading ? 'Cargando...' : empresa.vision}
                                                 </p>
                                             </div>
                                         </div>
@@ -86,9 +159,23 @@ export default function SobreNosotros() {
                             </div>
                         </div>
 
-                        <div className="relative">
-                            <div className="aspect-square rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
-                                <Heart className="h-32 w-32 text-primary/40" />
+                        {/* Columna Imagen / Logo Dinámico */}
+                        <div className="relative flex justify-center">
+                            <div className="aspect-square w-full max-w-md rounded-2xl bg-white shadow-xl flex items-center justify-center p-8 overflow-hidden border border-border/50">
+                                {loading ? (
+                                    <div className="animate-pulse flex flex-col items-center">
+                                        <Building2 className="h-24 w-24 text-gray-200" />
+                                    </div>
+                                ) : logoUrl ? (
+                                    <img
+                                        src={logoUrl}
+                                        alt={`Logo ${empresa.razon_social}`}
+                                        className="w-full h-full object-contain hover:scale-105 transition-transform duration-500"
+                                    />
+                                ) : (
+                                    // Fallback si no hay logo
+                                    <Heart className="h-32 w-32 text-primary/40" />
+                                )}
                             </div>
                         </div>
                     </div>
@@ -147,10 +234,6 @@ export default function SobreNosotros() {
                 </div>
             </section>
 
-         
-
-         
-
             {/* FAQs */}
             <section className="py-16 md:py-24">
                 <div className="container mx-auto px-4 max-w-3xl">
@@ -195,7 +278,7 @@ export default function SobreNosotros() {
                     <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto">
                         Únete a miles de emprendedores que ya están generando ingresos con MABS
                     </p>
-                    
+
                     <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
                         <Button asChild size="lg" className="text-lg px-8">
                             <Link to="/registro">

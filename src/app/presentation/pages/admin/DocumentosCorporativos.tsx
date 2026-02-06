@@ -233,7 +233,9 @@ export default function DocumentosCorporativos() {
         <DialogContent className="max-w-6xl w-[95vw] h-[90vh] p-0 flex flex-col overflow-hidden bg-zinc-100">
           <div className="p-3 border-b bg-white flex justify-between items-center px-6">
             <h3 className="font-semibold truncate max-w-[80%]">{selectedDoc?.nombre}</h3>
-            <Button variant="ghost" size="sm" onClick={() => setSelectedDoc(null)}><X className="h-5 w-5" /></Button>
+            {/* <Button variant="ghost" size="sm" onClick={() => setSelectedDoc(null)}>
+              <X className="h-5 w-5" />
+            </Button> */}
           </div>
 
           <div className="flex-1 relative bg-zinc-200/50 flex items-center justify-center overflow-auto p-4">
