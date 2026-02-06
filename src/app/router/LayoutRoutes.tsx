@@ -42,6 +42,7 @@ import SectorIndustriaEmpresa from '@/app/presentation/pages/admin/SectorIndustr
 import EstadoUsuarios from '@/app/presentation/pages/admin/EstadoUsuarios';
 import PublicidadPanel from '@/app/presentation/pages/admin/PublicidadPanel';
 import PostsParametrizables from '@/app/presentation/pages/admin/PostsParametrizables';
+import PerfilCorporativo from '../presentation/pages/admin/PerfilCorporativo';
 
 // Types for route system
 interface RouteConfig {
@@ -93,7 +94,8 @@ const componentMap: ComponentMapType = {
     SectorIndustriaEmpresa,
     EstadoUsuarios,
     PublicidadPanel,
-    PostsParametrizables
+    PostsParametrizables,
+    PerfilCorporativo
 };
 
 export default function LayoutRoutes(): ReactElement {
