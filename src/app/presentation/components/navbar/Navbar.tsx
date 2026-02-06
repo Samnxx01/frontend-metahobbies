@@ -2,12 +2,10 @@ import React, { useState, useEffect } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { swalFire as Swal } from '@/lib/sweetalert';
 import { toast } from 'react-toastify';
-
 // Importar Providers
 import { useAuth } from "@/app/providers/AuthProvider";
 import { useCart } from "@/app/providers/CartProvider";
 import { useMembership } from "@/app/providers/MembershipProvider";
-
 // Shadcn UI components
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetClose } from "@/components/ui/sheet";
@@ -17,7 +15,6 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 // Lucide icons
 import { Menu, ShoppingCart, User, X, Trash2, ShieldCheck, LogOut, LogIn, ChevronRight, Crown, Building2 } from "lucide-react";
-
 // Theme Toggle
 import ThemeToggle from "@/app/presentation/components/common/ThemeToggle";
 
@@ -52,68 +49,56 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
     const totalItems = cartItems.reduce((sum, item) => sum + item.quantity, 0);
     const cartTotal = cartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
     const { hasActiveMembership } = useMembership();
-
     const [isScrolled, setIsScrolled] = useState<boolean>(false);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
+
     const [logoUrl, setLogoUrl] = useState<string>(DEFAULT_LOGO);
     const [logoError, setLogoError] = useState<boolean>(false);
     const [logoLoading, setLogoLoading] = useState<boolean>(true);
 
-    // ✅ Cargar el logo directamente desde el perfil
     useEffect(() => {
         const fetchLogo = async () => {
             setLogoLoading(true);
             try {
-                console.log('📥 Cargando logo corporativo...');
-
                 const perfilRes = await apiFetch('/api/configuracion/listar/user/coporativo/perfil/publico', {
                     method: 'GET'
                 });
 
-                if (!perfilRes?.ok || !perfilRes?.perfil?._id) {
-                    console.log('ℹ️ No se encontró perfil corporativo, usando logo por defecto');
-                    setLogoError(true);
+                if (!perfilRes?.ok) {
                     setLogoUrl(DEFAULT_LOGO);
                     setLogoLoading(false);
                     return;
                 }
 
-                const perfilId = perfilRes.perfil._id;
-                console.log('✅ Perfil ID obtenido:', perfilId);
+                const listaLogosRes = await apiFetch('/api/config/parametrizacion/listar/logos/coporativa', {
+                    method: 'GET'
+                });
 
-                try {
-                    const logoRes = await apiFetch(`/api/config/parametrizacion/listar/logos/coporativa/${perfilId}`, {
-                        method: 'GET'
-                    });
+                const logos = listaLogosRes?.logos || [];
 
-                    console.log('📡 Respuesta del logo:', logoRes);
-
-                    if (logoRes?.ok && logoRes?.logo?.base64) {
-                        const { base64, mimetype } = logoRes.logo;
-                        const dataUri = `data:${mimetype};base64,${base64}`;
-
-                        console.log('✅ Logo cargado correctamente');
-                        console.log('   Tipo:', mimetype);
-                        console.log('   Tamaño base64:', base64.length);
-
-                        setLogoUrl(dataUri);
-                        setLogoError(false);
-                    } else {
-                        console.log('ℹ️ No se encontró logo para este perfil, usando logo por defecto');
-                        setLogoError(true);
-                        setLogoUrl(DEFAULT_LOGO);
-                    }
-                } catch (logoError: any) {
-                    if (logoError.message?.includes('no encontrado') || logoError.message?.includes('404')) {
-                        console.log('ℹ️ Este perfil no tiene logo registrado, usando logo por defecto');
-                    } else {
-                        console.warn('⚠️ Error al cargar logo:', logoError.message);
-                    }
-                    setLogoError(true);
+                if (logos.length === 0) {
                     setLogoUrl(DEFAULT_LOGO);
+                    setLogoLoading(false);
+                    return;
                 }
-            } catch (err: any) {
-                console.error('❌ Error al cargar perfil:', err);
+
+                const logoIdReal = logos[0].iud || logos[0]._id || logos[0].id;
+
+                const logoDetalleRes = await apiFetch(`/api/config/parametrizacion/listar/logos/coporativa/${logoIdReal}`, {
+                    method: 'GET'
+                });
+
+                if (logoDetalleRes?.ok && logoDetalleRes?.logo) {
+                    const { base64, mimetype } = logoDetalleRes.logo;
+
+                    if (base64 && mimetype) {
+                        setLogoUrl(`data:${mimetype};base64,${base64}`);
+                        setLogoError(false);
+                    }
+                }
+
+            } catch (err) {
+                console.error('❌ Error en el flujo del logo:', err);
                 setLogoError(true);
                 setLogoUrl(DEFAULT_LOGO);
             } finally {
@@ -144,7 +129,6 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
             confirmButtonText: 'Sí, eliminar',
             cancelButtonText: 'Cancelar'
         });
-
         if (result.isConfirmed) {
             removeFromCart(item.id, item.color?.pantone);
             toast.success('Producto eliminado del carrito');
@@ -162,7 +146,6 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
             confirmButtonText: 'Sí, cerrar sesión',
             cancelButtonText: 'Cancelar'
         });
-
         if (result.isConfirmed) {
             logout();
             navigate('/login');
@@ -181,9 +164,7 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
     ];
 
     const isLinkActive = (path: string): boolean => {
-        if (path === "/") {
-            return location.pathname === "/";
-        }
+        if (path === "/") return location.pathname === "/";
         return location.pathname.startsWith(path);
     };
 
@@ -209,8 +190,8 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
     };
 
     const handleLogoError = (): void => {
-        if (!logoError) {
-            console.warn('⚠️ Error al cargar logo, usando fallback');
+        if (!logoError && logoUrl !== DEFAULT_LOGO) {
+            console.warn('⚠️ Error al renderizar imagen del logo, usando fallback');
             setLogoError(true);
             setLogoUrl(DEFAULT_LOGO);
         }
@@ -249,7 +230,7 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
                                 />
                                 <div className="flex-1 overflow-hidden pointer-events-auto">
                                     <p className="font-semibold text-sm truncate leading-tight">{item.name}</p>
-                                    <p className="text-xs text-muted-foreground">Cant: {item.quantity} - {item.color?.name || ''}</p>
+                                    <p className="text-xs text-muted-foreground">Cant: {item.quantity} {item.color?.name ? `- ${item.color.name}` : ''}</p>
                                 </div>
                                 <p className="font-semibold text-sm flex-shrink-0 pointer-events-auto">${(item.price * item.quantity).toFixed(2)}</p>
                                 <Button
@@ -288,10 +269,7 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
                     </Avatar>
                 </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent
-                className="w-56 backdrop-blur-lg border-none shadow-xl"
-                align="end"
-            >
+            <DropdownMenuContent className="w-56 backdrop-blur-lg border-none shadow-xl" align="end">
                 <div className="flex items-center gap-2 p-3">
                     <Avatar className="h-9 w-9">
                         <AvatarFallback className="bg-primary text-primary-foreground text-sm">
@@ -305,28 +283,21 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
                 </div>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => navigate("/perfil")} className="cursor-pointer py-2.5">
-                    <User className="mr-2 h-4 w-4" />
-                    Mi Perfil
+                    <User className="mr-2 h-4 w-4" /> Mi Perfil
                 </DropdownMenuItem>
-
                 {(user?.rol === 'ADMIN' || user?.rol === 'DIOS') && (
                     <DropdownMenuItem onClick={() => navigate("/admin/dashboard")} className="cursor-pointer py-2.5">
-                        <ShieldCheck className="mr-2 h-4 w-4" />
-                        Panel Admin
+                        <ShieldCheck className="mr-2 h-4 w-4" /> Panel Admin
                     </DropdownMenuItem>
                 )}
-
                 {user && hasActiveMembership && (
                     <DropdownMenuItem onClick={() => navigate("/membresia/dashboard")} className="cursor-pointer py-2.5">
-                        <Crown className="mr-2 h-4 w-4" />
-                        Mi Membresía
+                        <Crown className="mr-2 h-4 w-4" /> Mi Membresía
                     </DropdownMenuItem>
                 )}
-
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleLogout} className="cursor-pointer text-destructive focus:text-destructive py-2.5">
-                    <LogOut className="mr-2 h-4 w-4" />
-                    Cerrar Sesión
+                    <LogOut className="mr-2 h-4 w-4" /> Cerrar Sesión
                 </DropdownMenuItem>
             </DropdownMenuContent>
         </DropdownMenu>
@@ -334,24 +305,11 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
 
     const renderAuthSection = (
         <div className="flex items-center gap-2">
-            <div className="hidden md:block">
-                <ThemeToggle />
-            </div>
-
-            <div className="hidden md:block relative">
-                {renderCartDropdown}
-            </div>
-
-            {user ? (
-                renderProfileDropdown
-            ) : (
-                <Button
-                    variant="default"
-                    onClick={() => navigate("/login")}
-                    className="h-9 px-4 text-sm font-semibold bg-black hover:bg-gray-800 text-white"
-                >
-                    <LogIn className="mr-2 h-4 w-4" />
-                    Ingresar
+            <div className="hidden md:block"><ThemeToggle /></div>
+            <div className="hidden md:block relative">{renderCartDropdown}</div>
+            {user ? renderProfileDropdown : (
+                <Button variant="default" onClick={() => navigate("/login")} className="h-9 px-4 text-sm font-semibold bg-black hover:bg-gray-800 text-white">
+                    <LogIn className="mr-2 h-4 w-4" /> Ingresar
                 </Button>
             )}
         </div>
@@ -371,119 +329,69 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
                         <div className="flex items-center justify-between">
                             <SheetTitle className="text-xl font-bold text-foreground">Menú</SheetTitle>
                             <SheetClose asChild>
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-8 w-8 hover:bg-accent/50"
-                                >
+                                <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-accent/50">
                                     <X className="h-4 w-4" />
                                 </Button>
                             </SheetClose>
                         </div>
                     </SheetHeader>
-
                     <div className="flex-1 overflow-y-auto p-6 space-y-3">
                         {menuItems.map((item) => {
                             const isActive = isLinkActive(item.path);
                             return (
                                 <SheetClose asChild key={item.label}>
-                                    <Link
-                                        to={item.path}
-                                        className={`flex items-center justify-between px-4 py-3 text-base font-medium rounded-xl transition-all duration-200 border
-                                            ${isActive
-                                                ? 'text-primary border-primary shadow-sm'
-                                                : 'text-foreground border-transparent hover:bg-accent/50 hover:border-accent'}`}
-                                    >
+                                    <Link to={item.path} className={`flex items-center justify-between px-4 py-3 text-base font-medium rounded-xl transition-all duration-200 border ${isActive ? 'text-primary border-primary shadow-sm' : 'text-foreground border-transparent hover:bg-accent/50 hover:border-accent'}`}>
                                         <span className="font-semibold">{item.label}</span>
                                         <ChevronRight className={`h-4 w-4 ${isActive ? 'text-primary' : 'text-muted-foreground'}`} />
                                     </Link>
                                 </SheetClose>
                             );
                         })}
-
                         {(user?.rol === 'ADMIN' || user?.rol === 'DIOS') && (
                             <SheetClose asChild>
-                                <Link
-                                    to="/admin/dashboard"
-                                    className="flex items-center justify-between px-4 py-3 text-base font-medium rounded-xl transition-all duration-200 border border-transparent hover:bg-accent/50 hover:border-accent text-foreground"
-                                >
-                                    <span className="font-semibold flex items-center">
-                                        <ShieldCheck className="mr-3 h-5 w-5" />
-                                        Panel Admin
-                                    </span>
+                                <Link to="/admin/dashboard" className="flex items-center justify-between px-4 py-3 text-base font-medium rounded-xl transition-all duration-200 border border-transparent hover:bg-accent/50 hover:border-accent text-foreground">
+                                    <span className="font-semibold flex items-center"><ShieldCheck className="mr-3 h-5 w-5" /> Panel Admin</span>
                                     <ChevronRight className="h-4 w-4 text-muted-foreground" />
                                 </Link>
                             </SheetClose>
                         )}
-
                         {user && hasActiveMembership && (
                             <SheetClose asChild>
-                                <Link
-                                    to="/membresia/dashboard"
-                                    className="flex items-center justify-between px-4 py-3 text-base font-medium rounded-xl transition-all duration-200 border border-transparent hover:bg-accent/50 hover:border-accent text-foreground"
-                                >
-                                    <span className="font-semibold flex items-center">
-                                        <Crown className="mr-3 h-5 w-5" />
-                                        Mi Membresía
-                                    </span>
+                                <Link to="/membresia/dashboard" className="flex items-center justify-between px-4 py-3 text-base font-medium rounded-xl transition-all duration-200 border border-transparent hover:bg-accent/50 hover:border-accent text-foreground">
+                                    <span className="font-semibold flex items-center"><Crown className="mr-3 h-5 w-5" /> Mi Membresía</span>
                                     <ChevronRight className="h-4 w-4 text-muted-foreground" />
                                 </Link>
                             </SheetClose>
                         )}
                     </div>
-
                     <div className="flex flex-col gap-3 p-6 border-t border-border/30 bg-background/50 backdrop-blur-md">
                         <div className="flex items-center justify-between px-4 py-3 rounded-xl bg-accent/30">
                             <span className="text-sm font-semibold">Tema</span>
                             <ThemeToggle />
                         </div>
-
                         <SheetClose asChild>
-                            <Button
-                                variant="outline"
-                                onClick={() => navigate('/carrito')}
-                                className="w-full justify-between font-semibold py-3 rounded-xl border-border/50 hover:border-primary/50"
-                            >
-                                <span className="flex items-center">
-                                    <ShoppingCart className="mr-3 h-4 w-4" />
-                                    Ver Carrito
-                                </span>
+                            <Button variant="outline" onClick={() => navigate('/carrito')} className="w-full justify-between font-semibold py-3 rounded-xl border-border/50 hover:border-primary/50">
+                                <span className="flex items-center"><ShoppingCart className="mr-3 h-4 w-4" /> Ver Carrito</span>
                                 <Badge variant="destructive" className="ml-2">{totalItems}</Badge>
                             </Button>
                         </SheetClose>
-
                         {user ? (
                             <>
                                 <SheetClose asChild>
-                                    <Button
-                                        variant="outline"
-                                        onClick={() => navigate('/perfil')}
-                                        className="w-full justify-start font-semibold py-3 rounded-xl border-border/50 hover:border-primary/50"
-                                    >
-                                        <User className="mr-3 h-4 w-4" />
-                                        Mi Perfil
+                                    <Button variant="outline" onClick={() => navigate('/perfil')} className="w-full justify-start font-semibold py-3 rounded-xl border-border/50 hover:border-primary/50">
+                                        <User className="mr-3 h-4 w-4" /> Mi Perfil
                                     </Button>
                                 </SheetClose>
                                 <SheetClose asChild>
-                                    <Button
-                                        variant="destructive"
-                                        onClick={handleLogout}
-                                        className="w-full justify-start font-semibold py-3 rounded-xl"
-                                    >
-                                        <LogOut className="mr-3 h-4 w-4" />
-                                        Cerrar Sesión
+                                    <Button variant="destructive" onClick={handleLogout} className="w-full justify-start font-semibold py-3 rounded-xl">
+                                        <LogOut className="mr-3 h-4 w-4" /> Cerrar Sesión
                                     </Button>
                                 </SheetClose>
                             </>
                         ) : (
                             <SheetClose asChild>
-                                <Button
-                                    variant="default"
-                                    onClick={() => navigate('/login')}
-                                    className="w-full justify-start font-semibold py-3 rounded-xl bg-black hover:bg-gray-800 text-white"
-                                >
-                                    <LogIn className="mr-3 h-4 w-4" />
-                                    Ingresar
+                                <Button variant="default" onClick={() => navigate('/login')} className="w-full justify-start font-semibold py-3 rounded-xl bg-black hover:bg-gray-800 text-white">
+                                    <LogIn className="mr-3 h-4 w-4" /> Ingresar
                                 </Button>
                             </SheetClose>
                         )}
@@ -496,51 +404,27 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
     return (
         <>
             <div className="h-[57px] md:h-16" />
-            <nav
-                className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ease-in-out
-                    ${transparent && !isScrolled
-                        ? "bg-transparent"
-                        : isScrolled
-                            ? "shadow-lg backdrop-blur-md bg-background/95"
-                            : "bg-background/80 backdrop-blur-md"}`}
-            >
+            <nav className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ease-in-out ${transparent && !isScrolled ? "bg-transparent" : isScrolled ? "shadow-lg backdrop-blur-md bg-background/95" : "bg-background/80 backdrop-blur-md"}`}>
                 <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-[57px] md:h-16 flex items-center justify-between">
                     <div className="flex items-center h-full">
                         <div className="dark:bg-white dark:rounded-lg dark:p-1.5 dark:shadow-sm">
-                            {logoError ? (
-                                <div
-                                    className="h-7 md:h-8 w-7 md:w-8 bg-primary/10 rounded-lg flex items-center justify-center cursor-pointer hover:opacity-80 transition-opacity"
-                                    onClick={() => navigate("/")}
-                                >
-                                    <Building2 className="h-4 md:h-5 w-4 md:w-5 text-primary" />
-                                </div>
-                            ) : (
-                                <img
-                                    src={logoUrl}
-                                    alt="Logo"
-                                    className="h-7 md:h-8 max-w-[120px] object-contain cursor-pointer flex-shrink-0 hover:opacity-80 transition-opacity"
-                                    onClick={() => navigate("/")}
-                                    onError={handleLogoError}
-                                />
-                            )}
+                            {/* LOGO RENDERIZADO AQUÍ */}
+                            <img
+                                src={logoError ? DEFAULT_LOGO : logoUrl}
+                                alt="Logo"
+                                className="h-7 md:h-8 max-w-[120px] object-contain cursor-pointer flex-shrink-0 hover:opacity-80 transition-opacity"
+                                onClick={() => navigate("/")}
+                                onError={handleLogoError}
+                            />
                         </div>
 
                         <div className="hidden md:flex items-center gap-1 h-full ml-6">
                             {menuItems.map((item) => {
                                 const isActive = isLinkActive(item.path);
                                 return (
-                                    <Link
-                                        key={item.label}
-                                        to={item.path}
-                                        className={`text-sm font-medium transition-all duration-200 h-full flex items-center px-4 relative
-                                            ${isActive
-                                                ? 'text-primary'
-                                                : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'}`}
-                                    >
+                                    <Link key={item.label} to={item.path} className={`text-sm font-medium transition-all duration-200 h-full flex items-center px-4 relative ${isActive ? 'text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'}`}>
                                         {item.label}
-                                        {isActive && (
-                                            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1/4 h-0.5 bg-primary rounded-full"></div>
-                                        )}
+                                        {isActive && <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1/4 h-0.5 bg-primary rounded-full"></div>}
                                     </Link>
                                 );
                             })}
@@ -549,9 +433,7 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
 
                     <div className="flex items-center gap-2 flex-shrink-0">
                         {renderAuthSection}
-                        <div className="md:hidden">
-                            {renderMobileMenu}
-                        </div>
+                        <div className="md:hidden">{renderMobileMenu}</div>
                     </div>
                 </div>
             </nav>
