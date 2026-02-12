@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Facebook, Instagram, Twitter, Mail, Phone, Clock, Loader2 } from 'lucide-react';
 import { apiFetch } from '@/app/services/api';
+import { useAuth } from '@/app/providers/AuthProvider';
 import type { FooterProps } from '@/types/components';
 
 interface DireccionData {
@@ -21,6 +22,7 @@ interface PerfilData {
 
 export default function Footer({ variant = 'default' }: FooterProps = {}): React.ReactElement {
     const isMinimal = variant === 'minimal';
+    const { user } = useAuth();
 
     const [loading, setLoading] = useState(true);
     const [direccion, setDireccion] = useState<DireccionData | null>(null);
@@ -29,28 +31,40 @@ export default function Footer({ variant = 'default' }: FooterProps = {}): React
     useEffect(() => {
         const fetchFooterData = async () => {
             try {
+                console.log('🦶 Footer: Cargando datos...', { isAuthenticated: !!user });
+
+                const perfilEndpoint = user
+                    ? '/api/configuracion/listar/user/coporativo/perfil/publico'
+                    : '/api/configuracion/listar/coporativo/perfil/publico';
+
+                console.log('📡 Footer: Usando endpoint:', perfilEndpoint);
 
                 const [direccionRes, perfilRes] = await Promise.all([
                     apiFetch('/api/config/parametrizacion/direccion/coporativa', { method: 'GET' }),
-                    apiFetch('/api/configuracion/listar/user/coporativo/perfil/publico', { method: 'GET' })
+                    apiFetch(perfilEndpoint, { method: 'GET' })
                 ]);
+
+                console.log('📥 Footer: Respuesta dirección:', direccionRes);
+                console.log('📥 Footer: Respuesta perfil:', perfilRes);
 
                 if (direccionRes?.ok && direccionRes?.direcciones?.length > 0) {
                     setDireccion(direccionRes.direcciones[0]);
+                    console.log('✅ Footer: Dirección cargada');
                 }
 
                 if (perfilRes?.ok && perfilRes?.perfil) {
                     setPerfil(perfilRes.perfil);
+                    console.log('✅ Footer: Perfil cargado');
                 }
             } catch (err) {
-                console.error('❌ Error al cargar datos del footer:', err);
+                console.error('❌ Footer: Error al cargar datos (usando fallback):', err);
             } finally {
                 setLoading(false);
             }
         };
 
         fetchFooterData();
-    }, []);
+    }, [user]);
 
     const razonSocial = perfil?.razon_social || 'Belleza & Glam';
     const descripcion = perfil?.descripcion || 'Tu destino para accesorios de belleza y maquillaje de alta calidad. Descubre tu estilo y resalta tu belleza natural.';
@@ -131,7 +145,7 @@ export default function Footer({ variant = 'default' }: FooterProps = {}): React
                                 Productos
                             </Link>
                             <Link
-                                to="/nosotros"
+                                to="/sobre-nosotros"
                                 className="text-sm md:text-base text-muted-foreground hover:text-primary hover:underline transition-colors"
                             >
                                 Sobre Nosotros
@@ -143,16 +157,16 @@ export default function Footer({ variant = 'default' }: FooterProps = {}): React
                                 Contacto
                             </Link>
                             <Link
-                                to="/envios"
+                                to="/modelo-negocio"
                                 className="text-sm md:text-base text-muted-foreground hover:text-primary hover:underline transition-colors"
                             >
-                                Envíos y Devoluciones
+                                Modelo de Negocio
                             </Link>
                             <Link
-                                to="/politicas"
+                                to="/posts"
                                 className="text-sm md:text-base text-muted-foreground hover:text-primary hover:underline transition-colors"
                             >
-                                Política de Privacidad
+                                Blog
                             </Link>
                         </nav>
                     </div>
@@ -218,6 +232,6 @@ export default function Footer({ variant = 'default' }: FooterProps = {}): React
                     </p>
                 </div>
             </div>
-        </footer>
+        </footer >
     );
 }

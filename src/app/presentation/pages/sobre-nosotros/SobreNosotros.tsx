@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Shield, Users, Zap, Target, Eye, Heart, Award, CheckCircle2, Phone, UserPlus, Building2 } from 'lucide-react';
+import { Shield, Users, Zap, Target, Eye, Heart, Award, Phone, UserPlus, Building2, Loader2 } from 'lucide-react';
 import { apiFetch } from "@/app/services/api";
 
 interface EmpresaData {
@@ -13,12 +13,11 @@ interface EmpresaData {
 }
 
 export default function SobreNosotros() {
-    // Estado para los datos de texto
     const [empresa, setEmpresa] = useState<EmpresaData>({
-        razon_social: '',
-        descripcion: '',
-        mision: '',
-        vision: ''
+        razon_social: 'Nuestra Empresa',
+        descripcion: 'Dedicada al desarrollo de software empresarial y gestión de redes.',
+        mision: 'Brindar soluciones tecnológicas innovadoras para el crecimiento de nuestros clientes.',
+        vision: 'Ser líderes globales en transformación digital y sistemas de referidos.'
     });
 
     const [logoUrl, setLogoUrl] = useState<string | null>(null);
@@ -28,43 +27,38 @@ export default function SobreNosotros() {
         const fetchData = async () => {
             setLoading(true);
             try {
-                const perfilRes = await apiFetch('/api/configuracion/listar/user/coporativo/perfil/publico', {
-                    method: 'GET'
-                });
+                const perfilRes = await apiFetch('/api/configuracion/listar/coporativo/perfil/publico', { method: 'GET' });
 
                 if (perfilRes?.ok && perfilRes?.perfil) {
                     const p = perfilRes.perfil;
                     setEmpresa({
                         razon_social: p.razon_social || 'Nuestra Empresa',
-                        descripcion: p.descripcion || 'Dedicada al desarrollo de software empresarial y soluciones tecnológicas.',
+                        descripcion: p.descripcion || 'Dedicada al desarrollo de software empresarial.',
                         mision: p.descripcion_mision_empresa || 'Brindar soluciones tecnológicas innovadoras.',
                         vision: p.descripcion_vision_empresa || 'Ser líderes en transformación digital.'
                     });
                 }
 
-                const listaLogosRes = await apiFetch('/api/config/parametrizacion/listar/logos/coporativa', {
-                    method: 'GET'
-                });
+                try {
+                    const listaLogosRes = await apiFetch('/api/config/parametrizacion/listar/logos/coporativa', { method: 'GET' });
+                    const logos = listaLogosRes?.logos || [];
+                    if (logos.length > 0) {
+                        const logoIdReal = logos[0].iud || logos[0]._id || logos[0].id;
+                        const logoDetalleRes = await apiFetch(`/api/config/parametrizacion/listar/logos/coporativa/${logoIdReal}`, { method: 'GET' });
 
-                const logos = listaLogosRes?.logos || [];
-
-                if (logos.length > 0) {
-                    const logoIdReal = logos[0].iud || logos[0]._id || logos[0].id;
-
-                    const logoDetalleRes = await apiFetch(`/api/config/parametrizacion/listar/logos/coporativa/${logoIdReal}`, {
-                        method: 'GET'
-                    });
-
-                    if (logoDetalleRes?.ok && logoDetalleRes?.logo) {
-                        const { base64, mimetype } = logoDetalleRes.logo;
-                        if (base64 && mimetype) {
-                            setLogoUrl(`data:${mimetype};base64,${base64}`);
+                        if (logoDetalleRes?.ok && logoDetalleRes?.logo) {
+                            const { base64, mimetype } = logoDetalleRes.logo;
+                            if (base64 && mimetype) {
+                                setLogoUrl(`data:${mimetype};base64,${base64}`);
+                            }
                         }
                     }
+                } catch (logoErr) {
+                    console.warn("No se pudo cargar el logo, se usará el icono por defecto.");
                 }
 
             } catch (error) {
-                console.error("Error cargando datos de Sobre Nosotros:", error);
+                console.error("Error cargando datos de Sobre Nosotros (usando valores por defecto):", error);
             } finally {
                 setLoading(false);
             }
@@ -75,19 +69,16 @@ export default function SobreNosotros() {
 
     return (
         <div className="min-h-screen bg-background">
-            {/* Hero Section */}
             <section className="relative bg-gradient-to-br from-primary/10 via-background to-background py-20 md:py-32">
                 <div className="container mx-auto px-4 max-w-5xl">
                     <div className="text-center space-y-6">
                         <h1 className="text-4xl md:text-6xl font-bold text-foreground tracking-tight">
-                            {empresa.razon_social ? empresa.razon_social : 'Construimos tu éxito'},
+                            {empresa.razon_social},
                             <span className="block text-primary mt-2">un referido a la vez</span>
                         </h1>
                         <p className="text-xl md:text-2xl text-muted-foreground max-w-3xl mx-auto">
-                            La plataforma que transforma tu red en ingresos reales, con tecnología de pago segura y un sistema de membresías diseñado para crecer contigo.
+                            La plataforma que transforma tu red en ingresos reales, con tecnología de pago segura.
                         </p>
-
-                        {/* Bullets con beneficios */}
                         <div className="flex flex-wrap justify-center gap-4 md:gap-6 pt-6">
                             <div className="flex items-center gap-2 text-sm md:text-base text-foreground font-medium">
                                 <Shield className="h-5 w-5 text-primary" />
@@ -106,52 +97,33 @@ export default function SobreNosotros() {
                 </div>
             </section>
 
-            {/* Quiénes Somos - SECCIÓN DINÁMICA */}
             <section className="py-16 md:py-24 bg-muted/30">
                 <div className="container mx-auto px-4 max-w-5xl">
                     <div className="grid md:grid-cols-2 gap-12 items-center">
-                        {/* Columna Texto */}
                         <div className="space-y-6">
-                            <h2 className="text-3xl md:text-4xl font-bold text-foreground">
-                                Quiénes Somos
-                            </h2>
-
-                            {/* Descripción Dinámica */}
+                            <h2 className="text-3xl md:text-4xl font-bold text-foreground">Quiénes Somos</h2>
                             <div className="space-y-4 text-muted-foreground leading-relaxed text-lg">
-                                {loading ? (
-                                    <p>Cargando información corporativa...</p>
-                                ) : (
-                                    <p>{empresa.descripcion}</p>
-                                )}
+                                <p>{empresa.descripcion}</p>
                             </div>
-
-                            {/* Misión y Visión Dinámicas */}
                             <div className="space-y-4 pt-4">
-                                {/* Misión */}
-                                <Card className="border-l-4 border-l-primary bg-card hover:bg-card/80 transition-colors">
+                                <Card className="border-l-4 border-l-primary">
                                     <CardContent className="p-4">
                                         <div className="flex items-start gap-3">
-                                            <Target className="h-6 w-6 text-primary flex-shrink-0 mt-1" />
+                                            <Target className="h-6 w-6 text-primary mt-1" />
                                             <div>
                                                 <h3 className="font-semibold text-foreground mb-1">Misión</h3>
-                                                <p className="text-sm text-muted-foreground">
-                                                    {loading ? 'Cargando...' : empresa.mision}
-                                                </p>
+                                                <p className="text-sm text-muted-foreground">{empresa.mision}</p>
                                             </div>
                                         </div>
                                     </CardContent>
                                 </Card>
-
-                                {/* Visión */}
-                                <Card className="border-l-4 border-l-primary bg-card hover:bg-card/80 transition-colors">
+                                <Card className="border-l-4 border-l-primary">
                                     <CardContent className="p-4">
                                         <div className="flex items-start gap-3">
-                                            <Eye className="h-6 w-6 text-primary flex-shrink-0 mt-1" />
+                                            <Eye className="h-6 w-6 text-primary mt-1" />
                                             <div>
                                                 <h3 className="font-semibold text-foreground mb-1">Visión</h3>
-                                                <p className="text-sm text-muted-foreground">
-                                                    {loading ? 'Cargando...' : empresa.vision}
-                                                </p>
+                                                <p className="text-sm text-muted-foreground">{empresa.vision}</p>
                                             </div>
                                         </div>
                                     </CardContent>
@@ -159,139 +131,17 @@ export default function SobreNosotros() {
                             </div>
                         </div>
 
-                        {/* Columna Imagen / Logo Dinámico */}
                         <div className="relative flex justify-center">
                             <div className="aspect-square w-full max-w-md rounded-2xl bg-white shadow-xl flex items-center justify-center p-8 overflow-hidden border border-border/50">
                                 {loading ? (
-                                    <div className="animate-pulse flex flex-col items-center">
-                                        <Building2 className="h-24 w-24 text-gray-200" />
-                                    </div>
+                                    <Loader2 className="h-12 w-12 animate-spin text-primary" />
                                 ) : logoUrl ? (
-                                    <img
-                                        src={logoUrl}
-                                        alt={`Logo ${empresa.razon_social}`}
-                                        className="w-full h-full object-contain hover:scale-105 transition-transform duration-500"
-                                    />
+                                    <img src={logoUrl} alt="Logo" className="w-full h-full object-contain" />
                                 ) : (
-                                    // Fallback si no hay logo
-                                    <Heart className="h-32 w-32 text-primary/40" />
+                                    <Building2 className="h-32 w-32 text-primary/20" />
                                 )}
                             </div>
                         </div>
-                    </div>
-                </div>
-            </section>
-
-            {/* Qué Hacemos */}
-            <section className="py-16 md:py-24">
-                <div className="container mx-auto px-4 max-w-5xl">
-                    <div className="text-center mb-12">
-                        <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
-                            Qué Hacemos
-                        </h2>
-                        <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-                            Ofrecemos una suite completa de herramientas para gestionar, monetizar y hacer crecer tu red
-                        </p>
-                    </div>
-
-                    <div className="grid md:grid-cols-3 gap-8">
-                        <Card className="bg-card hover:shadow-lg transition-shadow">
-                            <CardContent className="p-6 space-y-4">
-                                <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
-                                    <Award className="h-6 w-6 text-primary" />
-                                </div>
-                                <h3 className="text-xl font-semibold text-foreground">Membresías Premium</h3>
-                                <p className="text-muted-foreground">
-                                    Planes flexibles con beneficios exclusivos: acceso a cursos, herramientas profesionales y comisiones mejoradas por referidos.
-                                </p>
-                            </CardContent>
-                        </Card>
-
-                        <Card className="bg-card hover:shadow-lg transition-shadow">
-                            <CardContent className="p-6 space-y-4">
-                                <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
-                                    <Users className="h-6 w-6 text-primary" />
-                                </div>
-                                <h3 className="text-xl font-semibold text-foreground">Panel de Referidos</h3>
-                                <p className="text-muted-foreground">
-                                    Dashboard intuitivo para rastrear tus referidos, comisiones ganadas, gráficos de desempeño y proyecciones de ingresos en tiempo real.
-                                </p>
-                            </CardContent>
-                        </Card>
-
-                        <Card className="bg-card hover:shadow-lg transition-shadow">
-                            <CardContent className="p-6 space-y-4">
-                                <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
-                                    <Shield className="h-6 w-6 text-primary" />
-                                </div>
-                                <h3 className="text-xl font-semibold text-foreground">Pagos Seguros</h3>
-                                <p className="text-muted-foreground">
-                                    Integración con Wompi. Retiros rápidos, encriptación de extremo a extremo y soporte 24/7.
-                                </p>
-                            </CardContent>
-                        </Card>
-                    </div>
-                </div>
-            </section>
-
-            {/* FAQs */}
-            <section className="py-16 md:py-24">
-                <div className="container mx-auto px-4 max-w-3xl">
-                    <div className="text-center mb-12">
-                        <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
-                            Preguntas Frecuentes
-                        </h2>
-                    </div>
-
-                    <div className="space-y-4">
-                        {[
-                            {
-                                q: '¿Cómo funciona el sistema de referidos?',
-                                a: 'Cada vez que alguien se registra usando tu enlace único y compra una membresía, ganas una comisión automática. Las ganancias se reflejan en tu dashboard en tiempo real.'
-                            },
-                            {
-                                q: '¿Qué métodos de pago aceptan?',
-                                a: 'Aceptamos tarjetas de crédito/débito, PSE, Nequi y otros métodos locales a través de nuestras integraciones pasarelas de pago.'
-                            },
-                            {
-                                q: '¿Hay costos ocultos o permanencia mínima?',
-                                a: 'No. El único costo es tu membresía mensual, sin cargos sorpresa. Puedes cancelar en cualquier momento sin penalizaciones.'
-                            }
-                        ].map((faq, index) => (
-                            <Card key={index} className="bg-card">
-                                <CardContent className="p-6">
-                                    <h3 className="font-semibold text-foreground mb-2">{faq.q}</h3>
-                                    <p className="text-sm text-muted-foreground">{faq.a}</p>
-                                </CardContent>
-                            </Card>
-                        ))}
-                    </div>
-                </div>
-            </section>
-
-            {/* CTA Final */}
-            <section className="py-20 md:py-32 bg-gradient-to-br from-primary/10 via-background to-background">
-                <div className="container mx-auto px-4 max-w-4xl text-center space-y-8">
-                    <h2 className="text-3xl md:text-5xl font-bold text-foreground">
-                        ¿Listo para Construir tu Red?
-                    </h2>
-                    <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto">
-                        Únete a miles de emprendedores que ya están generando ingresos con MABS
-                    </p>
-
-                    <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
-                        <Button asChild size="lg" className="text-lg px-8">
-                            <Link to="/registro">
-                                <UserPlus className="mr-2 h-5 w-5" />
-                                Crear Cuenta Gratis
-                            </Link>
-                        </Button>
-                        <Button asChild size="lg" variant="outline" className="text-lg px-8">
-                            <Link to="/contacto">
-                                <Phone className="mr-2 h-5 w-5" />
-                                Hablar con un Asesor
-                            </Link>
-                        </Button>
                     </div>
                 </div>
             </section>
