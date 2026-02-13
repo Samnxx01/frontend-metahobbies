@@ -5,6 +5,8 @@ export type ApiOptions = Omit<RequestInit, 'body' | 'headers'> & {
     body?: unknown;
     headers?: ApiHeaders;
     responseType?: ResponseType;
+    useAuth?: boolean;
+    logoutOn401?: boolean;
 };
 
 export const apiFetch = async (
@@ -12,14 +14,16 @@ export const apiFetch = async (
     options: ApiOptions
 ): Promise<any | Response | null> => {
     const token: string | null = localStorage.getItem('token');
+    const useAuth: boolean = options.useAuth ?? true;
+    const logoutOn401: boolean = options.logoutOn401 ?? true;
 
     const defaultHeaders: ApiHeaders = {
         'Content-Type': 'application/json',
-        'metasploit': token as string,
         ...options.headers,
     };
 
-    if (token) {
+    if (useAuth && token) {
+        defaultHeaders['metasploit'] = token;
         defaultHeaders['Authorization'] = `Bearer ${token}`;
     }
 
@@ -38,17 +42,15 @@ export const apiFetch = async (
 
     try {
         const response: Response = await fetch(endpoint, options as RequestInit);
-        
-        // Verificar si es 401 Unauthorized
-        if (response.status === 401) {
-            // Token no válido - cerrar sesión
+
+        // Verificar si es 401 Unauthorized en endpoints autenticados
+        if (response.status === 401 && useAuth && logoutOn401) {
             localStorage.removeItem('user');
             localStorage.removeItem('token');
-            // Redirigir a login
             window.location.href = '/login';
-            throw new Error('Sesión expirada. Por favor inicia sesión nuevamente.');
+            throw new Error('Sesion expirada. Por favor inicia sesion nuevamente.');
         }
-        
+
         if (options.responseType === 'raw') {
             if (!response.ok) {
                 throw new Error(response.statusText || 'Error de red en respuesta raw');
@@ -56,9 +58,8 @@ export const apiFetch = async (
             return response;
         }
 
-        const contentType: string | null = response.headers.get("content-type");
-        if (!contentType || !contentType.includes("application/json")) {
-
+        const contentType: string | null = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
             if (!response.ok) {
                 throw new Error(response.statusText || 'Error de red');
             }
@@ -72,7 +73,6 @@ export const apiFetch = async (
         }
 
         return data;
-
     } catch (error: any) {
         console.error(`Error en fetch a ${endpoint}:`, error.message);
         throw error;

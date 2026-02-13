@@ -44,7 +44,7 @@ interface CartItem {
 export default function Navbar({ transparent = false }: NavbarProps = {}): React.ReactElement {
     const navigate = useNavigate();
     const location = useLocation();
-    const { user, logout } = useAuth();
+    const { user, token, logout } = useAuth();
     const { cartItems, removeFromCart } = useCart();
     const totalItems = cartItems.reduce((sum, item) => sum + item.quantity, 0);
     const cartTotal = cartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
@@ -60,8 +60,14 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
         const fetchLogo = async () => {
             setLogoLoading(true);
             try {
-                const perfilRes = await apiFetch('/api/configuracion/listar/user/coporativo/perfil/publico', {
-                    method: 'GET'
+                const perfilEndpoint = token
+                    ? '/api/configuracion/listar/user/coporativo/perfil/publico'
+                    : '/api/configuracion/listar/coporativo/perfil/publico';
+
+                const perfilRes = await apiFetch(perfilEndpoint, {
+                    method: 'GET',
+                    useAuth: !!token,
+                    logoutOn401: false
                 });
 
                 if (!perfilRes?.ok) {
