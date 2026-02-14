@@ -1,107 +1,323 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { apiFetch } from '@/app/services/api';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
-import { Loader2 } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Loader2, Image as ImageIcon, Upload, ChevronLeft, ChevronRight, Eye, X } from 'lucide-react';
+import { toast } from 'react-toastify';
+import { format, isValid, parseISO } from 'date-fns';
+import { es } from 'date-fns/locale';
+
+const ITEMS_PER_PAGE = 10;
 
 export default function LogosCorporativos() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [viewLoading, setViewLoading] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [file, setFile] = useState<File | null>(null);
 
+  const [isListModalOpen, setIsListModalOpen] = useState(false);
+  const [selectedLogo, setSelectedLogo] = useState<any>(null);
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const fetchLogos = async () => {
+    setLoading(true);
+    try {
+      const res = await apiFetch('/api/config/parametrizacion/listar/logos/coporativa', { method: 'GET' });
+      console.log('📊 Respuesta logos:', res);
+      setData(res);
+    } catch (err: any) {
+      console.error('❌ Error cargando logos:', err);
+      toast.error('Error cargando logos');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      setError('');
-      try {
-        const res = await apiFetch(
-          'https://server-mabs-xo9s.onrender.com/api/config/parametrizacion/listar/logos/coporativa',
-          { method: 'GET' }
-        );
-        setData(res);
-      } catch (err: any) {
-        setError(err.message || 'Error al cargar datos');
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchData();
+    fetchLogos();
   }, []);
+
+  const handleViewLogo = async (id: string) => {
+    setViewLoading(id);
+    try {
+      const res = await apiFetch(`/api/config/parametrizacion/listar/logos/coporativa/${id}`, { method: 'GET' });
+
+      if (res?.ok && res?.logo) {
+        const { base64, mimetype, nombre } = res.logo;
+
+        if (!base64) {
+          console.error('❌ No se recibió base64');
+          toast.error("No se pudo cargar la imagen.");
+          return;
+        }
+
+        const dataUri = `data:${mimetype};base64,${base64}`;
+
+        console.log('✅ Logo cargado:', {
+          nombre,
+          mimetype,
+          base64Length: base64.length
+        });
+
+        setSelectedLogo({
+          url: dataUri,
+          mimetype: mimetype,
+          nombre: nombre
+        });
+      } else {
+        console.error('❌ Respuesta inválida:', res);
+        toast.error("No se pudo cargar la imagen.");
+      }
+    } catch (error) {
+      console.error("❌ Error al visualizar logo:", error);
+      toast.error("Error al visualizar logo.");
+    } finally {
+      setViewLoading(null);
+    }
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      setFile(e.target.files[0]);
+      const selectedFile = e.target.files[0];
+      setFile(selectedFile);
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!file) return;
+    if (!file) return toast.error('Selecciona una imagen');
+
     setSubmitting(true);
     try {
       const formData = new FormData();
       formData.append('archivo', file);
+
       await apiFetch('/api/config/parametrizacion/guardar/logos/coporativa', {
         method: 'POST',
         body: formData,
-        headers: { }, // No poner Content-Type, el navegador lo gestiona
       });
+
+      toast.success('Logo subido correctamente');
       setFile(null);
-      // Opcional: recargar lista de logos
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      fetchLogos();
     } catch (err: any) {
-      // Manejo de error opcional
+      console.error('❌ Error al subir logo:', err);
+      toast.error(err.message || 'Error al subir imagen');
     } finally {
       setSubmitting(false);
     }
   };
 
-  return (
-    <Card className="max-w-2xl mx-auto mt-8">
-      <CardHeader>
-        <CardTitle>Logos Corporativos</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={handleSubmit} className="mb-4 flex flex-col gap-2">
-          <input type="file" accept=".png,.jpg,.jpeg" onChange={handleFileChange} />
-          <Button type="submit" disabled={submitting || !file}>{submitting ? 'Subiendo...' : 'Subir Logo'}</Button>
-        </form>
-        {loading ? (
-          <div className="flex items-center justify-center"><Loader2 className="animate-spin" /> Cargando...</div>
-        ) : error ? (
-          <div className="text-destructive">{error}</div>
-        ) : (
-          <div className="mb-4">
-            {Array.isArray(data?.logos) && data.logos.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-xs border rounded">
-                  <thead>
-                    <tr className="bg-muted/40">
-                      <th className="px-2 py-1 text-left">Nombre</th>
-                      <th className="px-2 py-1 text-left">Tipo</th>
-                      <th className="px-2 py-1 text-left">Usuario</th>
-                      <th className="px-2 py-1 text-left">Fecha</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.logos.map((logo: any) => (
-                      <tr key={logo._id} className="border-b">
-                        <td className="px-2 py-1">{logo.nombre}</td>
-                        <td className="px-2 py-1">{logo.mimetype}</td>
-                        <td className="px-2 py-1">{logo.usuario}</td>
-                        <td className="px-2 py-1">{logo.createdAt ? new Date(logo.createdAt).toLocaleString() : '-'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+  const getFileExtension = (mimetype: string) => mimetype?.split('/')[1]?.toUpperCase() || 'IMG';
+
+  const formatDate = (dateString: string) => {
+    if (!dateString) return '-';
+    const date = parseISO(dateString);
+    return isValid(date) ? format(date, "d 'de' MMMM, yyyy", { locale: es }) : '-';
+  };
+
+  const logosList = data?.logos || [];
+  const ultimosLogos = logosList.slice(0, 4);
+  const totalPages = Math.ceil(logosList.length / ITEMS_PER_PAGE);
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+  const logosPaginados = logosList.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+
+  const renderRow = (logo: any) => {
+    const logoId = logo.iud || logo._id || logo.id;
+
+    return (
+      <tr key={logoId} className="border-t hover:bg-muted/20 transition-colors">
+        <td className="px-4 py-3 truncate max-w-[200px]" title={logo.nombre_documento || logo.nombre}>
+          {logo.nombre_documento || logo.nombre || 'Sin nombre'}
+        </td>
+        <td className="px-4 py-3">
+          <span className="px-2 py-1 rounded-full text-[10px] font-bold bg-primary/10 text-primary">
+            {getFileExtension(logo.mimetype)}
+          </span>
+        </td>
+        <td className="px-4 py-3 text-muted-foreground text-xs">
+          {formatDate(logo.usuCreacion || logo.createdAt)}
+        </td>
+        <td className="px-4 py-3 text-center">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 w-8 p-0"
+            onClick={() => handleViewLogo(logoId)}
+            disabled={viewLoading === logoId}
+          >
+            {viewLoading === logoId ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
-              <div className="text-muted-foreground text-sm">No hay logos registrados.</div>
+              <Eye className="h-4 w-4 text-primary" />
+            )}
+          </Button>
+        </td>
+      </tr>
+    );
+  };
+
+  return (
+    <>
+      <Card className="max-w-4xl mx-auto mt-8 shadow-md">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <ImageIcon className="h-5 w-5 text-primary" /> Logos Corporativos
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="animate-spin h-8 w-8 text-primary" />
+            </div>
+          ) : (
+            <div className="mb-6">
+              {ultimosLogos.length > 0 ? (
+                <>
+                  <div className="overflow-x-auto border rounded-md">
+                    <table className="min-w-full text-sm">
+                      <thead className="bg-muted/50">
+                        <tr>
+                          <th className="px-4 py-3 text-left font-semibold">Nombre</th>
+                          <th className="px-4 py-3 text-left font-semibold">Extensión</th>
+                          <th className="px-4 py-3 text-left font-semibold">Fecha</th>
+                          <th className="px-4 py-3 text-center font-semibold">Ver</th>
+                        </tr>
+                      </thead>
+                      <tbody>{ultimosLogos.map(renderRow)}</tbody>
+                    </table>
+                  </div>
+                  {logosList.length > 4 && (
+                    <div className="mt-4 text-center">
+                      <button
+                        onClick={() => setIsListModalOpen(true)}
+                        className="text-primary hover:underline font-medium text-sm inline-flex items-center gap-1"
+                      >
+                        Ver todos ({logosList.length}) <ChevronRight className="h-4 w-4" />
+                      </button>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="text-center py-10 text-muted-foreground border-2 border-dashed rounded-lg">
+                  <ImageIcon className="h-10 w-10 mx-auto mb-2 opacity-20" />
+                  <p>No hay logos registrados</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="pt-6 border-t bg-muted/10 -mx-6 px-6 pb-2">
+            <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+              <Upload className="h-4 w-4" /> Subir nuevo logo
+            </h3>
+            <div className="flex flex-col sm:flex-row gap-3 items-end">
+              <div className="w-full">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".png,.jpg,.jpeg"
+                  onChange={handleFileChange}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm cursor-pointer file:border-0 file:bg-transparent file:text-sm file:font-medium"
+                />
+              </div>
+              <Button onClick={handleSubmit} disabled={submitting || !file} className="w-full sm:w-auto">
+                {submitting ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Upload className="mr-2 h-4 w-4" />
+                )}
+                Subir
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* MODAL LISTA */}
+      <Dialog open={isListModalOpen} onOpenChange={setIsListModalOpen}>
+        <DialogContent className="max-w-4xl max-h-[85vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Historial de Logos</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 overflow-auto border rounded-md">
+            <table className="min-w-full text-sm">
+              <thead className="bg-muted sticky top-0 z-10">
+                <tr>
+                  <th className="px-4 py-3 text-left">Nombre</th>
+                  <th className="px-4 py-3 text-left">Extensión</th>
+                  <th className="px-4 py-3 text-left">Fecha</th>
+                  <th className="px-4 py-3 text-center">Acción</th>
+                </tr>
+              </thead>
+              <tbody>{logosPaginados.map(renderRow)}</tbody>
+            </table>
+          </div>
+          {/* Paginación */}
+          {totalPages > 1 && (
+            <div className="flex justify-between items-center pt-4 border-t">
+              <span className="text-xs text-muted-foreground">
+                Página {currentPage} de {totalPages}
+              </span>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* MODAL VISOR IMAGEN */}
+      <Dialog open={!!selectedLogo} onOpenChange={() => setSelectedLogo(null)}>
+        <DialogContent className="max-w-4xl w-full p-0 overflow-hidden bg-black/90 border-none">
+          <div className="absolute top-2 right-2 z-50">
+            <Button
+              variant="secondary"
+              size="icon"
+              onClick={() => setSelectedLogo(null)}
+              className="rounded-full opacity-70 hover:opacity-100"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+          <div className="w-full h-[80vh] flex items-center justify-center p-4">
+            {selectedLogo ? (
+              <img
+                src={selectedLogo.url}
+                alt={selectedLogo.nombre}
+                className="max-w-full max-h-full object-contain"
+              />
+            ) : (
+              <Loader2 className="animate-spin text-white" />
             )}
           </div>
-        )}
-      </CardContent>
-    </Card>
+          <div className="p-4 bg-white text-center">
+            <p className="font-medium text-sm">{selectedLogo?.nombre}</p>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
+
+// PR hecho por Gustavo Pereira el 13-02-2026
