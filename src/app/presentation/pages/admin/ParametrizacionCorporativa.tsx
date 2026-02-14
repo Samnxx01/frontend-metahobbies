@@ -7,9 +7,9 @@ import DocumentosCorporativos from './DocumentosCorporativos';
 import LogosCorporativos from './LogosCorporativos';
 import SectorIndustriaEmpresa from './SectorIndustriaEmpresa';
 import PerfilCorporativo from './PerfilCorporativo';
-import DesactivarRepresentante from './DesactivarRepresentante';
+// import DesactivarRepresentante from './DesactivarRepresentante';
 import { apiFetch } from '../../../services/api';
-import { Loader2 } from 'lucide-react';
+// import { Loader2 } from 'lucide-react';
 
 export default function ParametrizacionCorporativa() {
   const [representanteId, setRepresentanteId] = useState<string | null>(null);
@@ -43,7 +43,7 @@ export default function ParametrizacionCorporativa() {
           <TabsTrigger value="logos">Logos Corporativos</TabsTrigger>
           <TabsTrigger value="sector">Sector/Industria Empresa</TabsTrigger>
           <TabsTrigger value="perfil">Perfil Corporativo</TabsTrigger>
-          <TabsTrigger value="config" className="text-destructive">Desactivar Representante</TabsTrigger>
+          {/* <TabsTrigger value="config" className="text-destructive">Desactivar Representante</TabsTrigger> */}
         </TabsList>
       </div>
       <TabsContent value="representante">
@@ -67,7 +67,7 @@ export default function ParametrizacionCorporativa() {
       <TabsContent value="perfil">
         <PerfilCorporativo />
       </TabsContent>
-      <TabsContent value="config">
+      {/* <TabsContent value="config">
         <div className="flex flex-col items-center justify-center p-12 border rounded-lg bg-card space-y-4 shadow-sm">
           <h3 className="text-xl font-bold">Zona Peligrosa</h3>
           <p className="text-muted-foreground text-sm text-center max-w-md">
@@ -87,8 +87,10 @@ export default function ParametrizacionCorporativa() {
             </p>
           )}
         </div>
-      </TabsContent>
+      </TabsContent> */}
     </Tabs>
   );
 }
+
+// PR hecho por Gustavo Pereira el 13-02-2026
 

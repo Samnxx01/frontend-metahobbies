@@ -9,6 +9,10 @@ interface PerfilData {
     razon_social: string;
     descripcion: string;
     titulo: string;
+    regisUsuario?: {
+        correo: string;
+    };
+    movil_corporativo?: number;
 }
 
 export default function Footer({ variant = 'default' }: FooterProps = {}): React.ReactElement {
@@ -83,9 +87,9 @@ export default function Footer({ variant = 'default' }: FooterProps = {}): React
     const descripcion =
         perfil?.descripcion ||
         'Tu destino para accesorios de belleza y maquillaje de alta calidad. Descubre tu estilo y resalta tu belleza natural.';
-    const correo = 'contacto@bellezayglam.com';
-    const telefono = '234 567 890';
-    const prefijo = '+1';
+    const correo = perfil?.regisUsuario?.correo || 'contacto@bellezayglam.com';
+    const telefono = perfil?.movil_corporativo?.toString() || '234 567 890';
+    const prefijo = '+57';
     const horario = 'Lunes a Viernes: 9:00 AM - 6:00 PM';
 
     if (isMinimal) {
@@ -216,3 +220,5 @@ export default function Footer({ variant = 'default' }: FooterProps = {}): React
         </footer>
     );
 }
+
+// PR hecho por Gustavo Pereira el 13-02-2026

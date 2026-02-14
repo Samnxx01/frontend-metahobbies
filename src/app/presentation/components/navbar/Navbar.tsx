@@ -446,3 +446,5 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
         </>
     );
 }
+
+// PR hecho por Gustavo Pereira el 13-02-2026

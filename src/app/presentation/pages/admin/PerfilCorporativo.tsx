@@ -24,7 +24,6 @@ interface FormularioProps {
 
 const FormularioEmpresa = ({ data, setData, representantes, tiposSociedad, direcciones }: FormularioProps) => {
     const updateField = (field: string, value: any) => {
-        console.log(`📝 Actualizando campo "${field}" con valor:`, value);
         setData({ ...data, [field]: value });
     };
 
@@ -201,7 +200,6 @@ export default function PerfilCorporativo() {
     const [updateForm, setUpdateForm] = useState(initialFormState);
 
     const fetchCatalogos = async () => {
-        console.log('📥 ===== CARGANDO CATÁLOGOS =====');
         try {
             const [repsRes, socRes, dirRes] = await Promise.all([
                 apiFetch('/api/config/listar/represente/empresarial', { method: 'GET' }),
@@ -213,11 +211,6 @@ export default function PerfilCorporativo() {
             const socs = socRes?.sociedades || [];
             const dirs = dirRes?.direcciones || [];
 
-            console.log('✅ Catálogos cargados');
-            console.log('  Representantes:', reps.length);
-            console.log('  Tipos de sociedad:', socs.length);
-            console.log('  Direcciones:', dirs.length);
-
             setRepresentantes(reps);
             setTiposSociedad(socs);
             setDirecciones(dirs);
@@ -228,7 +221,6 @@ export default function PerfilCorporativo() {
     };
 
     const fetchPerfil = async () => {
-        console.log('🔍 ===== OBTENIENDO PERFIL DEL USUARIO =====');
         setLoading(true);
 
         try {
@@ -236,13 +228,7 @@ export default function PerfilCorporativo() {
                 method: 'GET'
             });
 
-            console.log('📡 Respuesta completa:', res);
-
             if (res?.ok && res?.perfil) {
-                console.log('✅ Perfil encontrado');
-                console.log('🆔 ID:', res.perfil._id);
-                console.log('🏢 Razón social:', res.perfil.razon_social);
-                console.log('📋 Tipo de sociedad (objeto completo):', res.perfil.tipo_sociedad);
 
                 setPerfil(res.perfil);
                 setPerfilId(res.perfil._id);
@@ -250,7 +236,6 @@ export default function PerfilCorporativo() {
                 let tipoSociedadId = '';
                 if (res.perfil.tipo_sociedad) {
                     tipoSociedadId = res.perfil.tipo_sociedad._id || '';
-                    console.log('🔑 ID del tipo de sociedad extraído:', tipoSociedadId);
                 }
 
                 setUpdateForm({
@@ -269,10 +254,7 @@ export default function PerfilCorporativo() {
                     camara_comercio: res.perfil.camara_comercio || '',
                     estado: res.perfil.estado ?? true,
                 });
-
-                console.log('✅ Formulario de actualización preparado');
             } else {
-                console.log('ℹ️ No se encontró perfil');
                 setPerfil(null);
             }
         } catch (err: any) {
@@ -295,9 +277,6 @@ export default function PerfilCorporativo() {
     const handleCreateSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
-        console.log('🚀 ===== REGISTRANDO PERFIL =====');
-        console.log('📋 Datos del formulario:', form);
-
         if (!form.tipo_sociedad) {
             toast.error('Debe seleccionar un tipo de sociedad');
             return;
@@ -310,15 +289,11 @@ export default function PerfilCorporativo() {
             estado: true,
         };
 
-        console.log('📤 Payload:', JSON.stringify(payload, null, 2));
-
         try {
             const res = await apiFetch('/api/configuracion/parametrizacion/corporativo/perfil', {
                 method: 'POST',
                 body: payload,
             });
-
-            console.log('✅ Respuesta:', res);
 
             if (res?.ok) {
                 toast.success('✅ Perfil corporativo registrado');
@@ -340,10 +315,6 @@ export default function PerfilCorporativo() {
             return;
         }
 
-        console.log('🔄 ===== ACTUALIZANDO PERFIL =====');
-        console.log('🆔 ID:', perfilId);
-        console.log('📋 Datos:', updateForm);
-
         setUpdating(true);
 
         try {
@@ -352,7 +323,6 @@ export default function PerfilCorporativo() {
                 body: updateForm,
             });
 
-            console.log('✅ Respuesta:', res);
             toast.success('✅ Información actualizada');
             setIsUpdateModalOpen(false);
             await fetchPerfil();
@@ -458,3 +428,5 @@ export default function PerfilCorporativo() {
         </div>
     );
 }
+
+// PR hecho por Gustavo Pereira el 13-02-2026
