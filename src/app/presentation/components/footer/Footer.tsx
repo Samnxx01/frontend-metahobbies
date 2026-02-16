@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Facebook, Instagram, Twitter, Mail, Phone, Clock, Loader2 } from 'lucide-react';
 import { apiFetch } from '@/app/services/api';
 import { useAuth } from '@/app/providers/AuthProvider';
+import { getFooterPublicRoutes } from '@/app/services/routeService';
 import type { FooterProps } from '@/types/components';
 
 interface PerfilData {
@@ -21,6 +22,7 @@ export default function Footer({ variant = 'default' }: FooterProps = {}): React
 
     const [loading, setLoading] = useState(true);
     const [perfil, setPerfil] = useState<PerfilData | null>(null);
+    const [quickLinks, setQuickLinks] = useState<Array<{ path: string; label: string }>>([]);
 
     // Carga perfil publico al montar: no envia JWT
     useEffect(() => {
@@ -28,12 +30,22 @@ export default function Footer({ variant = 'default' }: FooterProps = {}): React
 
         const fetchPublicPerfil = async () => {
             try {
-                const perfilRes = await apiFetch('/api/configuracion/listar/coporativo/perfil/publico', {
-                    method: 'GET',
-                    useAuth: false,
-                });
+                const [perfilRes, dynamicLinks] = await Promise.all([
+                    apiFetch('/api/configuracion/listar/coporativo/perfil/publico', {
+                        method: 'GET',
+                        useAuth: false,
+                    }),
+                    getFooterPublicRoutes()
+                ]);
 
                 if (!active) return;
+
+                if (Array.isArray(dynamicLinks) && dynamicLinks.length > 0) {
+                    setQuickLinks(dynamicLinks.map((item) => ({
+                        path: item.path,
+                        label: item.label
+                    })));
+                }
 
                 if (perfilRes?.ok && perfilRes?.perfil) {
                     setPerfil(perfilRes.perfil);
@@ -62,13 +74,25 @@ export default function Footer({ variant = 'default' }: FooterProps = {}): React
 
         const fetchPrivatePerfil = async () => {
             try {
-                const perfilRes = await apiFetch('/api/configuracion/listar/user/coporativo/perfil/publico', {
-                    method: 'GET',
-                    useAuth: true,
-                    logoutOn401: false,
-                });
+                const [perfilRes, dynamicLinks] = await Promise.all([
+                    apiFetch('/api/configuracion/listar/user/coporativo/perfil/publico', {
+                        method: 'GET',
+                        useAuth: true,
+                        logoutOn401: false,
+                    }),
+                    getFooterPublicRoutes()
+                ]);
 
-                if (active && perfilRes?.ok && perfilRes?.perfil) {
+                if (!active) return;
+
+                if (Array.isArray(dynamicLinks) && dynamicLinks.length > 0) {
+                    setQuickLinks(dynamicLinks.map((item) => ({
+                        path: item.path,
+                        label: item.label
+                    })));
+                }
+
+                if (perfilRes?.ok && perfilRes?.perfil) {
                     setPerfil(perfilRes.perfil);
                 }
             } catch (err) {
@@ -82,6 +106,16 @@ export default function Footer({ variant = 'default' }: FooterProps = {}): React
             active = false;
         };
     }, [user, token]);
+
+    const fallbackQuickLinks = [
+        { path: '/productos', label: 'Productos' },
+        { path: '/sobre-nosotros', label: 'Sobre Nosotros' },
+        { path: '/contacto', label: 'Contacto' },
+        { path: '/modelo-negocio', label: 'Modelo de Negocio' },
+        { path: '/posts', label: 'Blog' },
+    ];
+
+    const linksToRender = quickLinks.length > 0 ? quickLinks : fallbackQuickLinks;
 
     const razonSocial = perfil?.razon_social || 'Belleza & Glam';
     const descripcion =
@@ -149,21 +183,11 @@ export default function Footer({ variant = 'default' }: FooterProps = {}): React
                     <div className="col-span-1">
                         <h6 className="text-base md:text-lg font-semibold mb-3 md:mb-4 text-foreground">Enlaces Rapidos</h6>
                         <nav className="flex flex-col gap-2 md:gap-2.5">
-                            <Link to="/productos" className="text-sm md:text-base text-muted-foreground hover:text-primary hover:underline transition-colors">
-                                Productos
-                            </Link>
-                            <Link to="/sobre-nosotros" className="text-sm md:text-base text-muted-foreground hover:text-primary hover:underline transition-colors">
-                                Sobre Nosotros
-                            </Link>
-                            <Link to="/contacto" className="text-sm md:text-base text-muted-foreground hover:text-primary hover:underline transition-colors">
-                                Contacto
-                            </Link>
-                            <Link to="/modelo-negocio" className="text-sm md:text-base text-muted-foreground hover:text-primary hover:underline transition-colors">
-                                Modelo de Negocio
-                            </Link>
-                            <Link to="/posts" className="text-sm md:text-base text-muted-foreground hover:text-primary hover:underline transition-colors">
-                                Blog
-                            </Link>
+                            {linksToRender.map((link) => (
+                                <Link key={`${link.path}-${link.label}`} to={link.path} className="text-sm md:text-base text-muted-foreground hover:text-primary hover:underline transition-colors">
+                                    {link.label}
+                                </Link>
+                            ))}
                         </nav>
                     </div>
 

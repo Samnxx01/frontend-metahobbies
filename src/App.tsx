@@ -3,6 +3,7 @@ import LayoutRoutes from './app/router/LayoutRoutes';
 import { AuthProvider } from './app/providers/AuthProvider';
 import CartProvider from './app/providers/CartProvider';
 import { MembershipProvider } from './app/providers/MembershipProvider';
+import BrandingProvider from './app/providers/BrandingProvider';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
@@ -12,7 +13,9 @@ function App(): React.ReactElement {
       <CartProvider>
         <MembershipProvider>
           <BrowserRouter>
-            <LayoutRoutes />
+            <BrandingProvider>
+              <LayoutRoutes />
+            </BrandingProvider>
           </BrowserRouter>
         </MembershipProvider>
       </CartProvider>

@@ -44,6 +44,7 @@ import PublicidadPanel from '@/app/presentation/pages/admin/PublicidadPanel';
 import PostsParametrizables from '@/app/presentation/pages/admin/PostsParametrizables';
 import PerfilCorporativo from '../presentation/pages/admin/PerfilCorporativo';
 import DesactivarRepresentante from '../presentation/pages/admin/DesactivarRepresentante';
+import ParametrosGobernanza from '@/app/presentation/pages/admin/ParametrosGobernanza';
 
 // Types for route system
 interface RouteConfig {
@@ -98,6 +99,9 @@ const componentMap: ComponentMapType = {
     PostsParametrizables,
     PerfilCorporativo,
     DesactivarRepresentante,
+    ParametrosGobernanza,
+    // Alias dinamico para rutas parametrizadas de perfil
+    ConfiguracionPerfil: Perfil,
 };
 
 export default function LayoutRoutes(): ReactElement {
@@ -136,7 +140,17 @@ export default function LayoutRoutes(): ReactElement {
 
             if (!Component) {
                 console.warn("Componente no encontrado:", route.component);
-                return null;
+                return (
+                    <Route
+                        key={route.path}
+                        path={route.path}
+                        element={
+                            <div className="p-6 text-sm text-muted-foreground">
+                                Componente no registrado: {route.component}
+                            </div>
+                        }
+                    />
+                );
             }
 
             return (
@@ -168,6 +182,7 @@ export default function LayoutRoutes(): ReactElement {
             {user && authorizedRoutes?.adminRoutes && authorizedRoutes.adminRoutes.length > 0 && (
                 <Route path="/admin" element={<AdminLayout />}>
                     {renderRoutes(authorizedRoutes.adminRoutes)}
+                    <Route path="*" element={<DashboardAdmin />} />
                 </Route>
             )}
         </Routes>

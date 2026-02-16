@@ -1,14 +1,12 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useAuth } from '../../../providers/AuthProvider'; // Asumiendo que esta ruta sigue siendo válida
+import { useAuth } from '../../../providers/AuthProvider';
 
-// 1. Importar el componente Sheet de Shadcn
 import {
     Sheet,
     SheetContent,
 } from "@/components/ui/sheet";
 
-// 2. Importar los íconos de lucide-react
 import {
     LayoutDashboard,
     Package,
@@ -22,16 +20,17 @@ import {
     Palette,
     SquareStack,
     Route,
-    Building2
+    Building2,
+    ChevronDown,
+    ChevronRight
 } from 'lucide-react';
 
+import { getAdminSidebarTree, type AdminNavTreeItem } from '@/app/services/routeService';
 import type { AdminSidebarProps } from '@/types/components';
 
-const DRAWER_WIDTH = '260px'; // Usamos string para la propiedad de ancho CSS de Tailwind
-// Usaremos la variable de CSS personalizada para el color primario si no está en Tailwind,
-// o un color de Tailwind configurado. Aquí asumiré un color en Tailwind, por ejemplo, 'rose-600'
-const PRIMARY_COLOR_CLASS = 'text-rose-600'; // Equivalente a #C43670 (Raspberry Rose)
-const PRIMARY_BG_LIGHT_CLASS = 'bg-primary/10'; // Fondo muy claro para activo
+const DRAWER_WIDTH = '260px';
+const PRIMARY_COLOR_CLASS = 'text-rose-600';
+const PRIMARY_BG_LIGHT_CLASS = 'bg-primary/10';
 const HOVER_BG_CLASS = 'hover:bg-muted';
 
 interface MenuItem {
@@ -44,25 +43,98 @@ interface MenuLinkProps {
     item: MenuItem;
 }
 
+interface MenuTreeItem extends MenuItem {
+    id: string;
+    tipoNodo: string;
+    children: MenuTreeItem[];
+}
+
 export default function AdminSidebar({ mobileOpen, setMobileOpen }: AdminSidebarProps): React.ReactElement {
     const navigate = useNavigate();
     const { logout } = useAuth();
     const location = useLocation();
+    const [dynamicTree, setDynamicTree] = useState<MenuTreeItem[]>([]);
+    const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({});
 
-    // Menú principal
-    const menu: MenuItem[] = [
+    const fallbackMenu: MenuItem[] = [
         { label: 'Dashboard', icon: <LayoutDashboard className='w-5 h-5' />, path: '/admin/dashboard' },
         { label: 'Productos', icon: <Package className='w-5 h-5' />, path: '/admin/productos' },
-        { label: 'Categorías', icon: <Tags className='w-5 h-5' />, path: '/admin/categorias' },
+        { label: 'Categorias', icon: <Tags className='w-5 h-5' />, path: '/admin/categorias' },
         { label: 'Usuarios', icon: <Users className='w-5 h-5' />, path: '/admin/usuarios' },
         { label: 'Referidos', icon: <Network className='w-5 h-5' />, path: '/admin/referidos' },
         { label: 'Pedidos', icon: <ScrollText className='w-5 h-5' />, path: '/admin/pedidos' },
         { label: 'Rutas', icon: <Route className='w-5 h-5' />, path: '/admin/rutas' },
-        { label: 'Parametrización', icon: <Wrench className='w-5 h-5' />, path: '/admin/parametrizacion' },
-        { label: 'Parametrización Corporativa', icon: <Building2 className='w-5 h-5' />, path: '/admin/parametrizacion-corporativa' },
+        { label: 'Parametrizacion', icon: <Wrench className='w-5 h-5' />, path: '/admin/parametrizacion' },
+        { label: 'Parametrizacion Corporativa', icon: <Building2 className='w-5 h-5' />, path: '/admin/parametrizacion-corporativa' },
         { label: 'Publicidad y Posts', icon: <Palette className='w-5 h-5' />, path: '/admin/personalizacion/modal-inicio' },
-        { label: 'Configuración', icon: <Settings className='w-5 h-5' />, path: '/admin/configuracion' },
+        { label: 'Configuracion', icon: <Settings className='w-5 h-5' />, path: '/admin/configuracion' },
     ];
+
+    const iconByPath = (path: string): React.ReactNode => {
+        const normalized = String(path || '').toLowerCase();
+        if (normalized.includes('/dashboard')) return <LayoutDashboard className='w-5 h-5' />;
+        if (normalized.includes('/productos')) return <Package className='w-5 h-5' />;
+        if (normalized.includes('/categorias')) return <Tags className='w-5 h-5' />;
+        if (normalized.includes('/usuarios')) return <Users className='w-5 h-5' />;
+        if (normalized.includes('/referidos')) return <Network className='w-5 h-5' />;
+        if (normalized.includes('/pedidos')) return <ScrollText className='w-5 h-5' />;
+        if (normalized.includes('/rutas')) return <Route className='w-5 h-5' />;
+        if (normalized.includes('/parametrizacion-corporativa')) return <Building2 className='w-5 h-5' />;
+        if (normalized.includes('/parametrizacion')) return <Wrench className='w-5 h-5' />;
+        if (normalized.includes('/personalizacion') || normalized.includes('/posts')) return <Palette className='w-5 h-5' />;
+        if (normalized.includes('/configuracion')) return <Settings className='w-5 h-5' />;
+        return <SquareStack className='w-5 h-5' />;
+    };
+
+    useEffect(() => {
+        let active = true;
+
+        const loadDynamicMenu = async (): Promise<void> => {
+            try {
+                const routes = await getAdminSidebarTree();
+                if (!active || !routes.length) return;
+                const mappedTree: MenuTreeItem[] = routes.map((route) => ({
+                    id: route.id,
+                    label: route.label,
+                    path: route.path,
+                    icon: iconByPath(route.path),
+                    tipoNodo: route.tipoNodo,
+                    children: (route.children || []).map(function mapChildren(child: AdminNavTreeItem): MenuTreeItem {
+                        return {
+                            id: child.id,
+                            label: child.label,
+                            path: child.path,
+                            icon: iconByPath(child.path),
+                            tipoNodo: child.tipoNodo,
+                            children: (child.children || []).map(mapChildren)
+                        };
+                    })
+                }));
+                setDynamicTree(mappedTree);
+                const initialExpanded: Record<string, boolean> = {};
+                mappedTree.forEach((node) => {
+                    if (node.children.length > 0) initialExpanded[node.id] = true;
+                });
+                setExpandedNodes(initialExpanded);
+            } catch (error) {
+                console.error('Error cargando menu admin dinamico:', error);
+            }
+        };
+
+        const onRoutesUpdated = (): void => {
+            void loadDynamicMenu();
+        };
+
+        void loadDynamicMenu();
+        window.addEventListener('admin-routes-updated', onRoutesUpdated);
+
+        return () => {
+            active = false;
+            window.removeEventListener('admin-routes-updated', onRoutesUpdated);
+        };
+    }, []);
+
+    const menu: MenuItem[] = dynamicTree.length ? [] : fallbackMenu;
 
     const MenuLink = ({ item }: MenuLinkProps): React.ReactElement => {
         const isActive = location.pathname === item.path;
@@ -70,8 +142,8 @@ export default function AdminSidebar({ mobileOpen, setMobileOpen }: AdminSidebar
         const linkClasses = `
             flex items-center space-x-3 p-3 mb-1 rounded-md cursor-pointer transition-all duration-200
             ${isActive
-                ? `${PRIMARY_BG_LIGHT_CLASS} ${PRIMARY_COLOR_CLASS} font-semibold` // Estilos Activo
-                : `text-muted-foreground ${HOVER_BG_CLASS} hover:${PRIMARY_COLOR_CLASS}` // Estilos Inactivo y Hover
+                ? `${PRIMARY_BG_LIGHT_CLASS} ${PRIMARY_COLOR_CLASS} font-semibold`
+                : `text-muted-foreground ${HOVER_BG_CLASS} hover:${PRIMARY_COLOR_CLASS}`
             }
         `;
 
@@ -83,7 +155,7 @@ export default function AdminSidebar({ mobileOpen, setMobileOpen }: AdminSidebar
         const handleClick = (): void => {
             navigate(item.path);
             if (setMobileOpen) {
-                setMobileOpen(false); // Cierra el sidebar móvil al hacer clic
+                setMobileOpen(false);
             }
         };
 
@@ -103,34 +175,82 @@ export default function AdminSidebar({ mobileOpen, setMobileOpen }: AdminSidebar
         );
     };
 
+    const toggleNode = (id: string): void => {
+        setExpandedNodes((prev) => ({ ...prev, [id]: !prev[id] }));
+    };
+
+    const TreeNode = ({ node, level = 0 }: { node: MenuTreeItem; level?: number }): React.ReactElement => {
+        const hasChildren = Array.isArray(node.children) && node.children.length > 0;
+        const isExpanded = !!expandedNodes[node.id];
+        const isActive = location.pathname === node.path;
+
+        const linkClasses = `
+            flex items-center justify-between p-3 mb-1 rounded-md cursor-pointer transition-all duration-200
+            ${isActive
+                ? `${PRIMARY_BG_LIGHT_CLASS} ${PRIMARY_COLOR_CLASS} font-semibold`
+                : `text-muted-foreground ${HOVER_BG_CLASS} hover:${PRIMARY_COLOR_CLASS}`
+            }
+        `;
+
+        const handleClick = (): void => {
+            if (hasChildren) {
+                toggleNode(node.id);
+                return;
+            }
+            if (node.path) {
+                navigate(node.path);
+                if (setMobileOpen) setMobileOpen(false);
+            }
+        };
+
+        return (
+            <div style={{ paddingLeft: `${level * 10}px` }}>
+                <div className={linkClasses} onClick={handleClick}>
+                    <div className="flex items-center space-x-3">
+                        <span className={`flex-shrink-0 w-5 h-5 ${isActive ? PRIMARY_COLOR_CLASS : 'text-muted-foreground'}`}>
+                            {node.icon}
+                        </span>
+                        <span className="text-sm">{node.label}</span>
+                    </div>
+                    {hasChildren && (
+                        <span className="text-muted-foreground">
+                            {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                        </span>
+                    )}
+                </div>
+                {hasChildren && isExpanded && (
+                    <div>
+                        {node.children.map((child) => (
+                            <TreeNode key={child.id} node={child} level={level + 1} />
+                        ))}
+                    </div>
+                )}
+            </div>
+        );
+    };
+
     const handleLogout = (): void => {
         logout();
         navigate('/');
     };
 
     const drawerContent = (
-        // Reemplaza Box con display: flex, flexDirection: column, height: 100%
         <div className="overflow-y-auto flex flex-col h-full bg-card">
-
-            {/* Encabezado / Toolbar */}
-            <div style={{ minHeight: '70px' }} className="flex items-center justify-center mb-2 px-4 border-b border-border"> {/* Reemplaza Toolbar */}
+            <div style={{ minHeight: '70px' }} className="flex items-center justify-center mb-2 px-4 border-b border-border">
                 <h1 className={`${PRIMARY_COLOR_CLASS} font-bold text-xl`}>
                     MABS Panel
                 </h1>
             </div>
 
-            {/* Lista de Navegación */}
             <nav className="px-2 space-y-1">
-                {menu.map((m) => (
-                    <MenuLink key={m.label} item={m} />
-                ))}
+                {dynamicTree.length > 0
+                    ? dynamicTree.map((node) => <TreeNode key={node.id} node={node} />)
+                    : menu.map((m) => <MenuLink key={m.label} item={m} />)}
             </nav>
 
-            {/* Spacer / Box sx={{ flexGrow: 1 }} */}
             <div className="flex-grow" />
 
-            {/* Botón de Logout */}
-            <div className="p-2 border-t border-gray-200"> {/* Reemplaza Box con p: 2 y borderTop */}
+            <div className="p-2 border-t border-gray-200">
                 <div
                     onClick={handleLogout}
                     className="flex items-center space-x-3 p-3 rounded-md cursor-pointer transition-all duration-200 text-gray-600 hover:bg-red-50 hover:text-red-600"
@@ -139,7 +259,7 @@ export default function AdminSidebar({ mobileOpen, setMobileOpen }: AdminSidebar
                         <LogOut className='w-5 h-5' />
                     </span>
                     <span className="text-sm font-medium">
-                        Cerrar Sesión
+                        Cerrar Sesion
                     </span>
                 </div>
             </div>
@@ -154,22 +274,19 @@ export default function AdminSidebar({ mobileOpen, setMobileOpen }: AdminSidebar
 
     return (
         <>
-            {/* 4. Sidebar Permanente (Desktop) */}
             <div
                 className="hidden md:block border-r border-gray-200 bg-white"
-                style={{ width: DRAWER_WIDTH, minWidth: DRAWER_WIDTH }} // Fija el ancho
+                style={{ width: DRAWER_WIDTH, minWidth: DRAWER_WIDTH }}
             >
                 {drawerContent}
             </div>
 
-            {/* 5. Sidebar Temporal (Mobile) - Reemplaza Drawer variant="temporary" con Sheet */}
             <Sheet open={mobileOpen} onOpenChange={handleMobileToggle}>
                 <SheetContent
-                    side="left" // Abre desde la izquierda (como un Drawer)
-                    className="p-0 border-r-0" // Remueve padding y borde por defecto
-                    style={{ width: DRAWER_WIDTH, minWidth: DRAWER_WIDTH }} // Fija el ancho
+                    side="left"
+                    className="p-0 border-r-0"
+                    style={{ width: DRAWER_WIDTH, minWidth: DRAWER_WIDTH }}
                 >
-                    {/* El SheetContent puede usar el mismo drawerContent sin necesidad de SheetHeader */}
                     {drawerContent}
                 </SheetContent>
             </Sheet>

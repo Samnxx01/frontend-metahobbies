@@ -10,8 +10,9 @@ export default function AdminLayout() {
     const navigate = useNavigate()
     const { user } = useAuth()
     const [mobileOpen, setMobileOpen] = useState(false)
+    const role = String(user?.role || user?.rol || '').toUpperCase()
 
-    if (!user || (user.role !== 'ADMIN' && user.role !== 'DESARROLLADOR' && user.role !== 'DIOS')) {
+    if (!user || !['ADMIN', 'DESAROLLADOR', 'DIOS'].includes(role)) {
         navigate('/')
         return null
     }

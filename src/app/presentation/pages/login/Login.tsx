@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -24,6 +24,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 
 // Lucide icons
 import { Loader2, AlertTriangle } from 'lucide-react';
+import { apiFetch } from '@/app/services/api';
 
 // --- Interfaces ---
 interface LoginFormData {
@@ -67,6 +68,7 @@ export default function Login(): React.ReactElement {
     // Estado para el Dialog (Errores críticos de API)
     const [dialogOpen, setDialogOpen] = useState<boolean>(false);
     const [dialogMessage, setDialogMessage] = useState<string>('');
+    const [logoUrl, setLogoUrl] = useState<string>(LOGO_URL);
 
     // 1. Inicializar useForm
     const form = useForm<LoginFormData>({
@@ -76,6 +78,30 @@ export default function Login(): React.ReactElement {
             password: '',
         }
     });
+
+    useEffect(() => {
+        const fetchPublicLogo = async (): Promise<void> => {
+            try {
+                const logoRes = await apiFetch('/api/config/parametrizacion/listar/logos/coporativo', {
+                    method: 'GET',
+                    useAuth: false,
+                    logoutOn401: false
+                });
+
+                if (logoRes?.ok && logoRes?.logo) {
+                    const { base64, mimetype } = logoRes.logo;
+                    if (base64 && mimetype) {
+                        setLogoUrl(`data:${mimetype};base64,${base64}`);
+                    }
+                }
+            } catch (error) {
+                console.warn('No se pudo cargar el logo publico para login:', error);
+                setLogoUrl(LOGO_URL);
+            }
+        };
+
+        fetchPublicLogo();
+    }, []);
 
     // Función para cerrar el diálogo
     const handleCloseDialog = (): void => {
@@ -186,9 +212,10 @@ export default function Login(): React.ReactElement {
                     {/* Logo y Títulos */}
                     <div className="mb-4 p-4 rounded-full bg-primary/10 dark:bg-primary/20">
                         <img 
-                            src={LOGO_URL} 
+                            src={logoUrl} 
                             alt="Mabs Logo" 
                             className="h-16 w-auto filter dark:brightness-110" 
+                            onError={() => setLogoUrl(LOGO_URL)}
                         />
                     </div>
                     <h1 className="text-2xl font-semibold mb-1 text-center text-foreground">

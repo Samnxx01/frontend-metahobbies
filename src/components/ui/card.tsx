@@ -5,10 +5,16 @@ import { cn } from "@/lib/utils"
 interface CardProps extends React.HTMLAttributes<HTMLDivElement> {}
 
 const Card = React.forwardRef<HTMLDivElement, CardProps>(
-  ({ className, ...props }, ref) => (
+  ({ className, style, ...props }, ref) => (
     <div
       ref={ref}
       className={cn("rounded-xl border bg-card text-card-foreground shadow", className)}
+      style={{
+        borderRadius: "var(--card-radius, 0.75rem)",
+        boxShadow: "var(--card-shadow, 0 1px 2px rgba(0,0,0,.06))",
+        borderColor: "hsl(var(--card-border, var(--border)))",
+        ...(style || {}),
+      }}
       {...props} />
   )
 )
