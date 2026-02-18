@@ -1,0 +1,472 @@
+import React, { useEffect, useMemo, useState } from 'react';
+import { toast } from 'react-toastify';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
+import { getRouteCatalog, RouteCatalogItem } from '@/app/services/routeService';
+import {
+  AccionBackend,
+  BrandingConfig,
+  guardarBrandingPrivado,
+  obtenerAccionesWidgetPrivado,
+  obtenerBrandingPrivado
+} from '@/app/services/brandingWidget';
+
+interface ParametrizacionDisenoProps {
+  initialRoute?: string;
+  hideRouteSelector?: boolean;
+}
+
+interface DesignFormState {
+  fontFamilyBase: string;
+  fontFamilyHeading: string;
+  lightPrimary: string;
+  darkPrimary: string;
+  lightBackground: string;
+  darkBackground: string;
+  buttonRadius: string;
+  buttonWeight: string;
+  buttonHeight: string;
+  buttonShadow: string;
+  cardRadius: string;
+  cardShadow: string;
+  cardBorder: string;
+  inputRadius: string;
+  inputBorder: string;
+  inputBackground: string;
+  tokensJson: string;
+}
+
+const DEFAULT_FORM: DesignFormState = {
+  fontFamilyBase: '',
+  fontFamilyHeading: '',
+  lightPrimary: '',
+  darkPrimary: '',
+  lightBackground: '',
+  darkBackground: '',
+  buttonRadius: '',
+  buttonWeight: '',
+  buttonHeight: '',
+  buttonShadow: '',
+  cardRadius: '',
+  cardShadow: '',
+  cardBorder: '',
+  inputRadius: '',
+  inputBorder: '',
+  inputBackground: '',
+  tokensJson: '{}'
+};
+
+const parseJsonTokens = (value: string): Record<string, string> => {
+  try {
+    const parsed = JSON.parse(value || '{}') as Record<string, string>;
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    throw new Error('El JSON de tokens no es válido');
+  }
+};
+
+export default function ParametrizacionDiseno({
+  initialRoute,
+  hideRouteSelector = false
+}: ParametrizacionDisenoProps): React.ReactElement {
+  const [loading, setLoading] = useState<boolean>(true);
+  const [saving, setSaving] = useState<boolean>(false);
+  const [branding, setBranding] = useState<BrandingConfig | null>(null);
+  const [routes, setRoutes] = useState<RouteCatalogItem[]>([]);
+  const [selectedRoute, setSelectedRoute] = useState<string>(initialRoute || '*');
+  const [form, setForm] = useState<DesignFormState>(DEFAULT_FORM);
+  const [accionesTenant, setAccionesTenant] = useState<AccionBackend[]>([]);
+  const [accionesSistema, setAccionesSistema] = useState<AccionBackend[]>([]);
+
+  useEffect(() => {
+    const loadData = async (): Promise<void> => {
+      try {
+        setLoading(true);
+        const [catalog, brandingData] = await Promise.all([
+          getRouteCatalog(),
+          obtenerBrandingPrivado()
+        ]);
+        setRoutes(catalog);
+        setBranding(brandingData || {});
+        const acciones = await obtenerAccionesWidgetPrivado();
+        setAccionesTenant(acciones.accionesTenant);
+        setAccionesSistema(acciones.accionesSistema);
+      } catch (error) {
+        console.error(error);
+        toast.error('No se pudo cargar la parametrización de diseño');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadData();
+  }, []);
+
+  const routeOptions = useMemo(() => {
+    const dynamicRoutes = routes.map((route) => ({
+      key: route.path,
+      label: `${route.path} (${route.layout})`
+    }));
+    return [{ key: '*', label: 'Todas las rutas' }, ...dynamicRoutes];
+  }, [routes]);
+
+  useEffect(() => {
+    if (initialRoute) {
+      setSelectedRoute(initialRoute);
+    }
+  }, [initialRoute]);
+
+  useEffect(() => {
+    const routeConfigs = Array.isArray(branding?.widgets?.routes)
+      ? (branding?.widgets?.routes as Array<Record<string, unknown>>)
+      : [];
+
+    const activeRouteConfig = routeConfigs.find((item) => String(item.route) === selectedRoute);
+    const overrides = (activeRouteConfig?.overrides || {}) as Record<string, any>;
+    const tokens = (overrides?.tokens || {}) as Record<string, string>;
+
+    setForm({
+      fontFamilyBase: String(overrides?.tipografia?.fontFamilyBase || ''),
+      fontFamilyHeading: String(overrides?.tipografia?.fontFamilyHeading || ''),
+      lightPrimary: String(overrides?.paleta?.light?.primary || ''),
+      darkPrimary: String(overrides?.paleta?.dark?.primary || ''),
+      lightBackground: String(overrides?.paleta?.light?.background || ''),
+      darkBackground: String(overrides?.paleta?.dark?.background || ''),
+      buttonRadius: String(overrides?.botones?.radius || ''),
+      buttonWeight: String(overrides?.botones?.fontWeight || ''),
+      buttonHeight: String(tokens['button-height'] || ''),
+      buttonShadow: String(tokens['button-shadow'] || ''),
+      cardRadius: String(tokens['card-radius'] || ''),
+      cardShadow: String(tokens['card-shadow'] || ''),
+      cardBorder: String(tokens['card-border'] || ''),
+      inputRadius: String(tokens['input-radius'] || ''),
+      inputBorder: String(tokens['input-border'] || ''),
+      inputBackground: String(tokens['input-bg'] || ''),
+      tokensJson: JSON.stringify(tokens, null, 2)
+    });
+  }, [branding, selectedRoute]);
+
+  const updateForm = (key: keyof DesignFormState, value: string): void => {
+    setForm((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handleSave = async (): Promise<void> => {
+    if (!branding) return;
+
+    try {
+      setSaving(true);
+      const tokens = parseJsonTokens(form.tokensJson);
+
+      const routeConfigs = Array.isArray(branding.widgets?.routes)
+        ? ([...branding.widgets?.routes] as Array<Record<string, unknown>>)
+        : [];
+
+      const tokensFusionados: Record<string, string> = {
+        ...tokens,
+        ...(form.buttonHeight ? { 'button-height': form.buttonHeight } : {}),
+        ...(form.buttonShadow ? { 'button-shadow': form.buttonShadow } : {}),
+        ...(form.cardRadius ? { 'card-radius': form.cardRadius } : {}),
+        ...(form.cardShadow ? { 'card-shadow': form.cardShadow } : {}),
+        ...(form.cardBorder ? { 'card-border': form.cardBorder } : {}),
+        ...(form.inputRadius ? { 'input-radius': form.inputRadius } : {}),
+        ...(form.inputBorder ? { 'input-border': form.inputBorder } : {}),
+        ...(form.inputBackground ? { 'input-bg': form.inputBackground } : {})
+      };
+
+      const nextRouteConfig = {
+        route: selectedRoute,
+        overrides: {
+          tipografia: {
+            fontFamilyBase: form.fontFamilyBase || undefined,
+            fontFamilyHeading: form.fontFamilyHeading || undefined
+          },
+          paleta: {
+            light: {
+              primary: form.lightPrimary || undefined,
+              background: form.lightBackground || undefined
+            },
+            dark: {
+              primary: form.darkPrimary || undefined,
+              background: form.darkBackground || undefined
+            }
+          },
+          botones: {
+            radius: form.buttonRadius || undefined,
+            fontWeight: form.buttonWeight || undefined
+          },
+          tokens: tokensFusionados
+        }
+      };
+
+      const index = routeConfigs.findIndex((item) => String(item.route) === selectedRoute);
+      if (index >= 0) {
+        routeConfigs[index] = nextRouteConfig;
+      } else {
+        routeConfigs.push(nextRouteConfig);
+      }
+
+      const payload: BrandingConfig = {
+        ...branding,
+        widgets: {
+          ...(branding.widgets || {}),
+          routes: routeConfigs
+        }
+      };
+
+      const saved = await guardarBrandingPrivado(payload);
+      setBranding(saved || payload);
+      toast.success('Parametrización de diseño guardada correctamente');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Error al guardar diseño';
+      toast.error(message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return <div className="p-6">Cargando parametrización de diseño...</div>;
+  }
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>Parametrización de Diseño por Ruta</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {!hideRouteSelector && (
+            <div className="space-y-2">
+              <Label>Ruta a configurar (dinámica desde backend)</Label>
+              <select
+                className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
+                value={selectedRoute}
+                onChange={(event) => setSelectedRoute(event.target.value)}
+              >
+                {routeOptions.map((option) => (
+                  <option key={option.key} value={option.key}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Tipografía</CardTitle>
+            </CardHeader>
+            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>Fuente base</Label>
+                <Input value={form.fontFamilyBase} onChange={(e) => updateForm('fontFamilyBase', e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>Fuente heading</Label>
+                <Input value={form.fontFamilyHeading} onChange={(e) => updateForm('fontFamilyHeading', e.target.value)} />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Colores Base</CardTitle>
+            </CardHeader>
+            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>Primary (Light)</Label>
+                <Input placeholder="328 78% 54%" value={form.lightPrimary} onChange={(e) => updateForm('lightPrimary', e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>Primary (Dark)</Label>
+                <Input placeholder="328 78% 54%" value={form.darkPrimary} onChange={(e) => updateForm('darkPrimary', e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>Background (Light)</Label>
+                <Input placeholder="0 0% 100%" value={form.lightBackground} onChange={(e) => updateForm('lightBackground', e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>Background (Dark)</Label>
+                <Input placeholder="328 35% 12%" value={form.darkBackground} onChange={(e) => updateForm('darkBackground', e.target.value)} />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Botones</CardTitle>
+            </CardHeader>
+            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>Radio</Label>
+                <Input placeholder="0.5rem" value={form.buttonRadius} onChange={(e) => updateForm('buttonRadius', e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>Peso fuente</Label>
+                <Input placeholder="600" value={form.buttonWeight} onChange={(e) => updateForm('buttonWeight', e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>Altura</Label>
+                <Input placeholder="40px" value={form.buttonHeight} onChange={(e) => updateForm('buttonHeight', e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>Sombra</Label>
+                <Input placeholder="0 2px 8px rgba(0,0,0,.15)" value={form.buttonShadow} onChange={(e) => updateForm('buttonShadow', e.target.value)} />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Cards</CardTitle>
+            </CardHeader>
+            <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="space-y-2">
+                <Label>Radio card</Label>
+                <Input placeholder="0.75rem" value={form.cardRadius} onChange={(e) => updateForm('cardRadius', e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>Sombra card</Label>
+                <Input placeholder="0 1px 2px rgba(0,0,0,.06)" value={form.cardShadow} onChange={(e) => updateForm('cardShadow', e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>Borde card</Label>
+                <Input placeholder="345 100% 95%" value={form.cardBorder} onChange={(e) => updateForm('cardBorder', e.target.value)} />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Inputs</CardTitle>
+            </CardHeader>
+            <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="space-y-2">
+                <Label>Radio input</Label>
+                <Input placeholder="0.5rem" value={form.inputRadius} onChange={(e) => updateForm('inputRadius', e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>Borde input</Label>
+                <Input placeholder="345 100% 95%" value={form.inputBorder} onChange={(e) => updateForm('inputBorder', e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>Fondo input</Label>
+                <Input placeholder="0 0% 100%" value={form.inputBackground} onChange={(e) => updateForm('inputBackground', e.target.value)} />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Avanzado (tokens adicionales)</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <Label>Tokens adicionales (JSON)</Label>
+              <Textarea
+                rows={8}
+                value={form.tokensJson}
+                onChange={(e) => updateForm('tokensJson', e.target.value)}
+              />
+            </CardContent>
+          </Card>
+
+          <div className="flex items-center gap-3">
+            <Button onClick={handleSave} disabled={saving}>
+              {saving ? 'Guardando...' : 'Guardar diseño de ruta'}
+            </Button>
+            <Badge variant="secondary">Se aplica a pública/privada según la ruta seleccionada del backend</Badge>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Vista previa por componente</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div
+            className="rounded-xl p-6 border space-y-4"
+            style={{
+              backgroundColor: form.lightBackground ? `hsl(${form.lightBackground})` : 'hsl(var(--background))',
+              color: 'hsl(var(--foreground))',
+              fontFamily: form.fontFamilyBase || 'var(--font-family-base)'
+            }}
+          >
+            <h3
+              style={{ fontFamily: form.fontFamilyHeading || 'var(--font-family-heading)' }}
+              className="text-xl font-bold"
+            >
+              Preview del diseño para {selectedRoute}
+            </h3>
+
+            <div
+              className="p-4 border"
+              style={{
+                borderRadius: form.cardRadius || '0.75rem',
+                boxShadow: form.cardShadow || '0 1px 2px rgba(0,0,0,.06)',
+                borderColor: form.cardBorder ? `hsl(${form.cardBorder})` : 'hsl(var(--border))'
+              }}
+            >
+              <p className="text-sm mb-3">Componente Card de muestra</p>
+              <Input
+                placeholder="Input de muestra"
+                style={{
+                  borderRadius: form.inputRadius || '0.5rem',
+                  borderColor: form.inputBorder ? `hsl(${form.inputBorder})` : 'hsl(var(--input))',
+                  backgroundColor: form.inputBackground ? `hsl(${form.inputBackground})` : undefined
+                }}
+              />
+            </div>
+
+            <button
+              type="button"
+              style={{
+                backgroundColor: form.lightPrimary ? `hsl(${form.lightPrimary})` : 'hsl(var(--primary))',
+                color: 'hsl(var(--primary-foreground))',
+                borderRadius: form.buttonRadius || 'var(--radius)',
+                fontWeight: Number(form.buttonWeight || '600'),
+                height: form.buttonHeight || '40px',
+                boxShadow: form.buttonShadow || undefined,
+                paddingInline: '1rem'
+              }}
+            >
+              Botón de muestra
+            </button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Acciones desde Backend</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div>
+            <h4 className="font-semibold mb-2">Acciones permitidas en tu tenant/herencia</h4>
+            <div className="flex flex-wrap gap-2">
+              {accionesTenant.length > 0 ? accionesTenant.map((accion) => (
+                <Badge key={accion._id || accion.iud || accion.method} variant="secondary">
+                  {accion.etiquetas || accion.method}
+                </Badge>
+              )) : <span className="text-sm text-muted-foreground">Sin acciones permitidas</span>}
+            </div>
+          </div>
+          <div>
+            <h4 className="font-semibold mb-2">Catálogo global de acciones</h4>
+            <div className="flex flex-wrap gap-2">
+              {accionesSistema.length > 0 ? accionesSistema.map((accion) => (
+                <Badge key={accion._id || accion.iud || `${accion.method}-${accion.etiquetas}`} variant="outline">
+                  {accion.etiquetas || accion.method}
+                </Badge>
+              )) : <span className="text-sm text-muted-foreground">Sin acciones activas en sistema</span>}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

@@ -1,9 +1,10 @@
 // src/presentation/components/admin/AdminNavbar.tsx
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/app/providers/AuthProvider'
 import { useTheme } from 'next-themes'
 import { useMembership } from '@/app/hooks/useMembership'
+import { apiFetch } from '@/app/services/api'
 
 // Shadcn UI components
 import { Button } from "@/components/ui/button"
@@ -15,13 +16,63 @@ import { Menu, Sun, Moon, Home, LogOut, User as UserIcon, Crown } from 'lucide-r
 
 import type { AdminNavbarProps } from '@/types/components'
 
-const LOGO_URL = "/assets/logo.png"
+const DEFAULT_LOGO = "/assets/logo.png"
 
 export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarProps): React.ReactElement {
     const navigate = useNavigate()
     const { user, logout } = useAuth()
     const { theme, setTheme } = useTheme()
     const { hasActiveMembership } = useMembership()
+    const [logoUrl, setLogoUrl] = useState<string>(DEFAULT_LOGO)
+    const [logoError, setLogoError] = useState<boolean>(false)
+
+    useEffect(() => {
+        let active = true
+
+        const cargarLogoAdmin = async (): Promise<void> => {
+            try {
+                const resContextual = await apiFetch('/api/config/parametrizacion/listar/logos/coporativo/admin', {
+                    method: 'GET',
+                    useAuth: true,
+                    logoutOn401: false
+                })
+
+                if (!active) return
+
+                if (resContextual?.ok && resContextual?.logo?.base64 && resContextual?.logo?.mimetype) {
+                    setLogoUrl(`data:${resContextual.logo.mimetype};base64,${resContextual.logo.base64}`)
+                    setLogoError(false)
+                    return
+                }
+
+                const resPublico = await apiFetch('/api/config/parametrizacion/listar/logos/coporativo', {
+                    method: 'GET',
+                    useAuth: false,
+                    logoutOn401: false
+                })
+
+                if (!active) return
+
+                if (resPublico?.ok && resPublico?.logo?.base64 && resPublico?.logo?.mimetype) {
+                    setLogoUrl(`data:${resPublico.logo.mimetype};base64,${resPublico.logo.base64}`)
+                    setLogoError(false)
+                    return
+                }
+
+                setLogoUrl(DEFAULT_LOGO)
+                setLogoError(false)
+            } catch (_error) {
+                if (!active) return
+                setLogoUrl(DEFAULT_LOGO)
+                setLogoError(true)
+            }
+        }
+
+        cargarLogoAdmin()
+        return () => {
+            active = false
+        }
+    }, [user?._id, user?.correo, user?.rol])
 
     const toggleTheme = (): void => {
         setTheme(theme === 'dark' ? 'light' : 'dark')
@@ -126,10 +177,14 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
                     {/* Logo */}
                     <div className="dark:bg-white dark:rounded-lg dark:p-1.5 dark:shadow-sm">
                         <img
-                            src={LOGO_URL}
+                            src={logoError ? DEFAULT_LOGO : logoUrl}
                             alt="Mabs Logo"
                             className="h-7 md:h-8 cursor-pointer flex-shrink-0 hover:opacity-80 transition-opacity"
                             onClick={() => navigate("/admin/dashboard")}
+                            onError={() => {
+                                setLogoError(true)
+                                setLogoUrl(DEFAULT_LOGO)
+                            }}
                         />
                     </div>
                 </div>

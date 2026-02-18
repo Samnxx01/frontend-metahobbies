@@ -7,11 +7,16 @@ import DocumentosCorporativos from './DocumentosCorporativos';
 import LogosCorporativos from './LogosCorporativos';
 import SectorIndustriaEmpresa from './SectorIndustriaEmpresa';
 import PerfilCorporativo from './PerfilCorporativo';
+import DesactivarPerfilCorporativo from './DesactivarPerfilCorporativo';
 // import DesactivarRepresentante from './DesactivarRepresentante';
 import { apiFetch } from '../../../services/api';
+import { useAuth } from '@/app/providers/AuthProvider';
 // import { Loader2 } from 'lucide-react';
 
 export default function ParametrizacionCorporativa() {
+  const { user } = useAuth();
+  const normalizedRole = String(user?.role || user?.rol || '').toUpperCase();
+  const isTenantSuperAdmin = normalizedRole === 'DIOS';
   const [representanteId, setRepresentanteId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -43,6 +48,11 @@ export default function ParametrizacionCorporativa() {
           <TabsTrigger value="logos">Logos Corporativos</TabsTrigger>
           <TabsTrigger value="sector">Sector/Industria Empresa</TabsTrigger>
           <TabsTrigger value="perfil">Perfil Corporativo</TabsTrigger>
+          {isTenantSuperAdmin && (
+            <TabsTrigger value="desactivar-perfil" className="text-destructive">
+              Desactivar Perfil
+            </TabsTrigger>
+          )}
           {/* <TabsTrigger value="config" className="text-destructive">Desactivar Representante</TabsTrigger> */}
         </TabsList>
       </div>
@@ -67,6 +77,11 @@ export default function ParametrizacionCorporativa() {
       <TabsContent value="perfil">
         <PerfilCorporativo />
       </TabsContent>
+      {isTenantSuperAdmin && (
+        <TabsContent value="desactivar-perfil">
+          <DesactivarPerfilCorporativo />
+        </TabsContent>
+      )}
       {/* <TabsContent value="config">
         <div className="flex flex-col items-center justify-center p-12 border rounded-lg bg-card space-y-4 shadow-sm">
           <h3 className="text-xl font-bold">Zona Peligrosa</h3>

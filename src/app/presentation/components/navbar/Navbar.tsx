@@ -14,11 +14,12 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 // Lucide icons
-import { Menu, ShoppingCart, User, X, Trash2, ShieldCheck, LogOut, LogIn, ChevronRight, Crown, Building2 } from "lucide-react";
+import { Menu, ShoppingCart, User, X, Trash2, ShieldCheck, LogOut, LogIn, ChevronRight, Crown } from "lucide-react";
 // Theme Toggle
 import ThemeToggle from "@/app/presentation/components/common/ThemeToggle";
 
 import { apiFetch } from "@/app/services/api";
+import { getPrivateHomeRoute, getPublicNavigationRoutes } from "@/app/services/routeService";
 
 import type { NavbarProps } from '@/types/components';
 
@@ -44,7 +45,7 @@ interface CartItem {
 export default function Navbar({ transparent = false }: NavbarProps = {}): React.ReactElement {
     const navigate = useNavigate();
     const location = useLocation();
-    const { user, token, logout } = useAuth();
+    const { user, logout } = useAuth();
     const { cartItems, removeFromCart } = useCart();
     const totalItems = cartItems.reduce((sum, item) => sum + item.quantity, 0);
     const cartTotal = cartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
@@ -54,71 +55,71 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
 
     const [logoUrl, setLogoUrl] = useState<string>(DEFAULT_LOGO);
     const [logoError, setLogoError] = useState<boolean>(false);
-    const [logoLoading, setLogoLoading] = useState<boolean>(true);
+    const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+    const [privateHomePath, setPrivateHomePath] = useState<string>('/admin/dashboard');
+    const menuItemsWithoutCart = menuItems.filter((item) => {
+        const normalizedLabel = String(item.label || '').trim().toLowerCase();
+        const normalizedPath = String(item.path || '').trim().toLowerCase();
+        return normalizedLabel !== 'carrito' && normalizedPath !== '/carrito';
+    });
+
+    const userRole = String(user?.role || user?.rol || '').toUpperCase();
+    const hasAdminScope = ['ADMIN', 'DIOS', 'DESAROLLADOR'].includes(userRole);
 
     useEffect(() => {
-        const fetchLogo = async () => {
-            setLogoLoading(true);
+        const fetchHeaderData = async (): Promise<void> => {
             try {
-                const perfilEndpoint = token
-                    ? '/api/configuracion/listar/user/coporativo/perfil/publico'
-                    : '/api/configuracion/listar/coporativo/perfil/publico';
+                const requests: Promise<any>[] = [
+                    apiFetch('/api/config/parametrizacion/listar/logos/coporativo', {
+                        method: 'GET',
+                        useAuth: false,
+                        logoutOn401: false
+                    }),
+                    getPublicNavigationRoutes(),
+                ];
 
-                const perfilRes = await apiFetch(perfilEndpoint, {
-                    method: 'GET',
-                    useAuth: !!token,
-                    logoutOn401: false
-                });
-
-                if (!perfilRes?.ok) {
-                    setLogoUrl(DEFAULT_LOGO);
-                    setLogoLoading(false);
-                    return;
+                if (hasAdminScope) {
+                    requests.push(getPrivateHomeRoute());
                 }
 
-                const listaLogosRes = await apiFetch('/api/config/parametrizacion/listar/logos/coporativa', {
-                    method: 'GET'
-                });
+                const [logoRes, dynamicRoutes, privateHome] = await Promise.all(requests);
 
-                const logos = listaLogosRes?.logos || [];
-
-                if (logos.length === 0) {
-                    setLogoUrl(DEFAULT_LOGO);
-                    setLogoLoading(false);
-                    return;
-                }
-
-                const logoIdReal = logos[0].iud || logos[0]._id || logos[0].id;
-
-                const logoDetalleRes = await apiFetch(`/api/config/parametrizacion/listar/logos/coporativa/${logoIdReal}`, {
-                    method: 'GET'
-                });
-
-                if (logoDetalleRes?.ok && logoDetalleRes?.logo) {
-                    const { base64, mimetype } = logoDetalleRes.logo;
-
+                if (logoRes?.ok && logoRes?.logo) {
+                    const { base64, mimetype } = logoRes.logo;
                     if (base64 && mimetype) {
                         setLogoUrl(`data:${mimetype};base64,${base64}`);
                         setLogoError(false);
+                    } else {
+                        setLogoUrl(DEFAULT_LOGO);
                     }
+                } else {
+                    setLogoUrl(DEFAULT_LOGO);
                 }
 
+                setMenuItems(dynamicRoutes.map((route) => ({
+                    label: route.label,
+                    path: route.path
+                })));
+
+                if (typeof privateHome === 'string' && privateHome.trim()) {
+                    setPrivateHomePath(privateHome);
+                }
             } catch (err) {
-                console.error('❌ Error en el flujo del logo:', err);
+                console.error('Error en el flujo de header dinamico:', err);
                 setLogoError(true);
                 setLogoUrl(DEFAULT_LOGO);
-            } finally {
-                setLogoLoading(false);
+                setMenuItems([]);
             }
         };
 
-        fetchLogo();
-    }, []);
+        fetchHeaderData();
+    }, [hasAdminScope]);
 
     useEffect(() => {
         const handleScroll = (): void => {
             setIsScrolled(window.pageYOffset > 10);
         };
+
         window.addEventListener("scroll", handleScroll);
         return () => window.removeEventListener("scroll", handleScroll);
     }, []);
@@ -158,16 +159,6 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
             toast.success('Sesión cerrada correctamente');
         }
     };
-
-    const menuItems: MenuItem[] = [
-        { label: "Inicio", path: "/" },
-        { label: "Sobre Nosotros", path: "/sobre-nosotros" },
-        { label: "Productos", path: "/productos" },
-        { label: "Posts", path: "/posts" },
-        { label: "Modelo de Negocio", path: "/modelo-negocio" },
-        { label: "Contacto", path: "/contacto" },
-        { label: "Membresía", path: "/membresia/pago" },
-    ];
 
     const isLinkActive = (path: string): boolean => {
         if (path === "/") return location.pathname === "/";
@@ -291,8 +282,8 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
                 <DropdownMenuItem onClick={() => navigate("/perfil")} className="cursor-pointer py-2.5">
                     <User className="mr-2 h-4 w-4" /> Mi Perfil
                 </DropdownMenuItem>
-                {(user?.rol === 'ADMIN' || user?.rol === 'DIOS') && (
-                    <DropdownMenuItem onClick={() => navigate("/admin/dashboard")} className="cursor-pointer py-2.5">
+                {hasAdminScope && (
+                    <DropdownMenuItem onClick={() => navigate(privateHomePath)} className="cursor-pointer py-2.5">
                         <ShieldCheck className="mr-2 h-4 w-4" /> Panel Admin
                     </DropdownMenuItem>
                 )}
@@ -342,7 +333,7 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
                         </div>
                     </SheetHeader>
                     <div className="flex-1 overflow-y-auto p-6 space-y-3">
-                        {menuItems.map((item) => {
+                        {menuItemsWithoutCart.map((item) => {
                             const isActive = isLinkActive(item.path);
                             return (
                                 <SheetClose asChild key={item.label}>
@@ -353,9 +344,9 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
                                 </SheetClose>
                             );
                         })}
-                        {(user?.rol === 'ADMIN' || user?.rol === 'DIOS') && (
+                        {hasAdminScope && (
                             <SheetClose asChild>
-                                <Link to="/admin/dashboard" className="flex items-center justify-between px-4 py-3 text-base font-medium rounded-xl transition-all duration-200 border border-transparent hover:bg-accent/50 hover:border-accent text-foreground">
+                                <Link to={privateHomePath} className="flex items-center justify-between px-4 py-3 text-base font-medium rounded-xl transition-all duration-200 border border-transparent hover:bg-accent/50 hover:border-accent text-foreground">
                                     <span className="font-semibold flex items-center"><ShieldCheck className="mr-3 h-5 w-5" /> Panel Admin</span>
                                     <ChevronRight className="h-4 w-4 text-muted-foreground" />
                                 </Link>
@@ -425,7 +416,7 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
                         </div>
 
                         <div className="hidden md:flex items-center gap-1 h-full ml-6">
-                            {menuItems.map((item) => {
+                            {menuItemsWithoutCart.map((item) => {
                                 const isActive = isLinkActive(item.path);
                                 return (
                                     <Link key={item.label} to={item.path} className={`text-sm font-medium transition-all duration-200 h-full flex items-center px-4 relative ${isActive ? 'text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'}`}>
@@ -448,3 +439,5 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
 }
 
 // PR hecho por Gustavo Pereira el 13-02-2026
+
+
