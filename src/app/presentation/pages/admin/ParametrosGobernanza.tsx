@@ -457,6 +457,8 @@ const ParametrosGobernanza: React.FC = () => {
   const [catalogSelection, setCatalogSelection] = useState<Record<string, CatalogSelection>>({});
   const [bulkAllMode, setBulkAllMode] = useState<Record<string, boolean>>({});
   const [tenantCorporativos, setTenantCorporativos] = useState<TenantCorporativoOption[]>([]);
+  const [tenantCorpLoadingByEndpoint, setTenantCorpLoadingByEndpoint] = useState<Record<string, boolean>>({});
+  const [tenantCorpErrorByEndpoint, setTenantCorpErrorByEndpoint] = useState<Record<string, string>>({});
   const [herenciasUsuario, setHerenciasUsuario] = useState<any[]>([]);
 
   const primaryTenantForm = useMemo(() => ENDPOINTS.find((e) => e.primary), []);
@@ -490,33 +492,15 @@ const ParametrosGobernanza: React.FC = () => {
       ]);
       const heredaOptionsMap = new Map<string, HeredaGlobalOption>();
 
-      if (tenantsRes.status === 'fulfilled') {
-        const rows = Array.isArray(tenantsRes.value?.data) ? tenantsRes.value.data : [];
+      {
         const allById = new Map<string, TenantGlobal>();
-        rows.forEach((row: any) => {
-          const id = String(row?._id || row?.iud || row?.tenantGlobalId || row?.id || '').trim();
-          if (!id) return;
-          const label = String(
-            row?.name ||
-            row?.nombre ||
-            row?.titulo ||
-            row?.coporativo?.razon_social ||
-            row?.coporativo?.titulo ||
-            id
-          );
-          allById.set(id, {
-            id,
-            label,
-            corporativo: pickTenantCorporate(row),
-          });
-        });
 
+        // Fuente principal para select JWT-driven (scope por rol/contexto).
         if (tenantsDestinoRes.status === 'fulfilled') {
           const destinoRows = pickArray(tenantsDestinoRes.value, ['data', 'items']);
           destinoRows.forEach((row: any) => {
             const id = String(row?.tenantGlobalId || row?.id || row?._id || row?.iud || '').trim();
             if (!id) return;
-            const current = allById.get(id);
             const rolName = String(row?.rol || row?.rolesMabs?.rol || '').trim();
             const label = String(
               row?.label ||
@@ -524,14 +508,34 @@ const ParametrosGobernanza: React.FC = () => {
               row?.name ||
               row?.nombre ||
               row?.titulo ||
-              current?.label ||
               id
             );
-            const corporativo = pickTenantCorporate(row);
             allById.set(id, {
               id,
               label,
-              corporativo: corporativo !== 'Sin corporativo' ? corporativo : (current?.corporativo || 'Sin corporativo'),
+              corporativo: pickTenantCorporate(row),
+            });
+          });
+        }
+
+        // Fallback solo si el endpoint de contexto no trae data.
+        if (!allById.size && tenantsRes.status === 'fulfilled') {
+          const rows = pickArray(tenantsRes.value, ['data', 'items', 'tenants']);
+          rows.forEach((row: any) => {
+            const id = String(row?._id || row?.iud || row?.tenantGlobalId || row?.id || '').trim();
+            if (!id) return;
+            const label = String(
+              row?.name ||
+              row?.nombre ||
+              row?.titulo ||
+              row?.coporativo?.razon_social ||
+              row?.coporativo?.titulo ||
+              id
+            );
+            allById.set(id, {
+              id,
+              label,
+              corporativo: pickTenantCorporate(row),
             });
           });
         }
@@ -766,6 +770,45 @@ const ParametrosGobernanza: React.FC = () => {
 
   const getPermisos = (endpointId: string): PermisoItem[] => permisoData[endpointId] || [{ vistaId: '', accionId: [] }];
   const setPermisos = (endpointId: string, value: PermisoItem[]) => setPermisoData((prev) => ({ ...prev, [endpointId]: value }));
+  const fetchTenantCorporativosByGlobal = async (endpointId: string, tenantGlobalId: string) => {
+    const tg = tenantGlobalId.trim();
+    if (!tg) return;
+    try {
+      setTenantCorpLoadingByEndpoint((prev) => ({ ...prev, [endpointId]: true }));
+      setTenantCorpErrorByEndpoint((prev) => ({ ...prev, [endpointId]: '' }));
+      const response = await apiFetch(`/api/config/permisos/creacion/admin/tenant/corporativos?tenantGlobal=${encodeURIComponent(tg)}`, {
+        method: 'GET'
+      });
+      const rows = pickArray(response, ['data', 'items']);
+      const mapped = rows
+        .map((row: any) => {
+          const id = String(row?.id || row?._id || row?.iud || '').trim();
+          const tenantGlobalRow = String(
+            row?.tenantGlobalId ||
+            row?.tenantGlobal?._id ||
+            row?.tenantGlobal ||
+            tg
+          ).trim();
+          if (!id || !tenantGlobalRow) return null;
+          const label = String(row?.label || row?.name || row?.nombre || id).trim();
+          return { id, tenantGlobalId: tenantGlobalRow, label: `${label} | ${id}` };
+        })
+        .filter(Boolean) as TenantCorporativoOption[];
+
+      setTenantCorporativos((prev) => {
+        const keep = prev.filter((x) => x.tenantGlobalId !== tg);
+        const unique = new Map<string, TenantCorporativoOption>();
+        [...keep, ...mapped].forEach((item) => unique.set(`${item.tenantGlobalId}:${item.id}`, item));
+        return Array.from(unique.values());
+      });
+    } catch (error: any) {
+      const message = String(error?.message || 'No se pudo cargar tenant corporativo').trim();
+      setTenantCorpErrorByEndpoint((prev) => ({ ...prev, [endpointId]: message }));
+      toast.error(message);
+    } finally {
+      setTenantCorpLoadingByEndpoint((prev) => ({ ...prev, [endpointId]: false }));
+    }
+  };
   const getAccionesPorVistaDesdeRegla = (endpointId: string): Map<string, string[]> => {
     const ruleId = getFieldValue(endpointId, 'x-regla-id').trim();
     const rule = ruleCatalog[ruleId];
@@ -845,6 +888,16 @@ const ParametrosGobernanza: React.FC = () => {
       applyRuleToForm(endpointModal.id, firstId);
     }
   }, [endpointModal, reglas.length]);
+
+  useEffect(() => {
+    if (!endpointModal) return;
+    const needsTenantGlobal =
+      endpointModal.fields.some((f) => f.name === 'tenantGlobal' || f.name === 'tenantGlobalId');
+    if (!needsTenantGlobal) return;
+    if (tenantGlobales.length === 0 && !loadingData) {
+      hydrateData();
+    }
+  }, [endpointModal, tenantGlobales.length, loadingData]);
 
   useEffect(() => {
     const endpointId = 'perm-usuario-tenant-global';
@@ -1381,18 +1434,29 @@ const ParametrosGobernanza: React.FC = () => {
                     setPermisos(endpoint.id, [{ vistaId: '', accionId: [] }]);
                     setCatalogSelectionFor(endpoint.id, { vistas: [], acciones: [] });
                     setBulkAllFor(endpoint.id, false);
+                    setTenantCorpErrorByEndpoint((prev) => ({ ...prev, [endpoint.id]: '' }));
+                    if (nextValue) fetchTenantCorporativosByGlobal(endpoint.id, nextValue);
                   }
                 }}
               >
-                <option value="">Selecciona tenant global</option>
+                <option value="">
+                  {loadingData ? 'Cargando tenants globales...' : 'Selecciona tenant global'}
+                </option>
                 {tenantGlobales.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
               </select>
+              {!loadingData && tenantGlobales.length === 0 ? (
+                <p className="mt-1 text-xs text-amber-700">
+                  No hay tenants globales cargados. Pulsa "Recargar datos API".
+                </p>
+              ) : null}
             </div>
           );
         }
         if (field.name === 'tenantCorporativo' && (endpoint.id === 'perm-admin-tenant-global' || endpoint.id === 'perm-admin-tenant-global-actualizar')) {
           const options = getTenantCorporativoOptions(endpoint.id);
           const tenantGlobalSelected = getFieldValue(endpoint.id, 'tenantGlobal').trim();
+          const loadingCorp = !!tenantCorpLoadingByEndpoint[endpoint.id];
+          const tenantCorpError = String(tenantCorpErrorByEndpoint[endpoint.id] || '').trim();
           return (
             <div key={field.name}>
               <Label>{field.label} {field.required ? '*' : ''}</Label>
@@ -1402,12 +1466,19 @@ const ParametrosGobernanza: React.FC = () => {
                 onChange={(e) => setFieldValue(endpoint.id, field.name, e.target.value)}
                 disabled={!tenantGlobalSelected}
               >
-                <option value="">Sin tenant corporativo</option>
+                <option value="">
+                  {loadingCorp ? 'Cargando corporativos...' : 'Sin tenant corporativo'}
+                </option>
                 {options.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
               </select>
               <p className="mt-1 text-xs text-slate-500">
                 Opcional. Si seleccionas tenant corporativo, se usa bajo el tenant global elegido.
               </p>
+              {tenantCorpError ? (
+                <p className="mt-1 text-xs text-rose-700">
+                  Error cargando corporativos: {tenantCorpError}
+                </p>
+              ) : null}
             </div>
           );
         }
