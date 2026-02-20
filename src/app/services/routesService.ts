@@ -4,6 +4,7 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api';
 
 export interface Route {
   iud: string;
+  _id?: string;
   name: string;
   path: string;
   component: string;
@@ -28,6 +29,8 @@ export interface Route {
   fechaCreacionUsu: string;
   createdAt: string;
   updatedAt: string;
+  permitidoPorHerencia?: boolean;
+  cumpleJerarquiaHerencia?: boolean;
 }
 
 export interface CreateRouteDto {

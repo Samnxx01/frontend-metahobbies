@@ -146,7 +146,11 @@ export interface AdminNavTreeItem extends AdminNavItem {
 const fetchAllSecurityRoutes = async (useAuth: boolean): Promise<RouteResponse | null> => {
     try {
         const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "/api";
-        const result: RouteResponse = await apiFetch(`${API_BASE_URL}/seguridad/rutas/listarRutas/admin`, {
+        const endpoint = useAuth
+            ? `${API_BASE_URL}/seguridad/rutas/listarRutas/admin`
+            : `${API_BASE_URL}/seguridad/rutas/listarRutas/public`;
+
+        const result: RouteResponse = await apiFetch(endpoint, {
             method: "GET",
             useAuth,
             logoutOn401: useAuth
@@ -191,13 +195,16 @@ export const getAuthorizedRoutes = async (): Promise<AuthorizedRoutes> => {
     try {
         const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "/api";
         const token = localStorage.getItem("token");
-        const herencia = token ? await getHerenciaAdminPermitida() : { idsPermitidos: new Set<string>(), pathsPermitidos: new Set<string>() };
+        const hasToken = Boolean(token);
+        const herencia = hasToken ? await getHerenciaAdminPermitida() : { idsPermitidos: new Set<string>(), pathsPermitidos: new Set<string>() };
+        const endpoint = hasToken
+            ? `${API_BASE_URL}/seguridad/rutas/listarRutas/admin`
+            : `${API_BASE_URL}/seguridad/rutas/listarRutas/public`;
 
-        const result: RouteResponse = await apiFetch(`${API_BASE_URL}/seguridad/rutas/listarRutas/admin`, {
+        const result: RouteResponse = await apiFetch(endpoint, {
             method: "GET",
-            headers: {
-                "x-token": localStorage.getItem("token") || ""
-            }
+            useAuth: hasToken,
+            logoutOn401: hasToken
         });
 
         if (!result.success || !result.data) {
@@ -227,22 +234,37 @@ export const getAuthorizedRoutes = async (): Promise<AuthorizedRoutes> => {
                 component: normalizeComponent(r.component),
             }));
 
-        // ADMIN
-        const adminSource = result.data.filter((r) => r.estadoRuta && normalizeLayout(r.layout) === "AdminLayout");
-        const hasHerenciaAdmin = herencia.idsPermitidos.size > 0 || herencia.pathsPermitidos.size > 0;
-        const adminFiltrado = hasHerenciaAdmin
-            ? adminSource.filter((r) => {
-                const routeId = String(r._id || r.iud || "");
-                const routePath = r.path.startsWith("/") ? r.path : `/${r.path}`;
-                return herencia.idsPermitidos.has(routeId) || herencia.pathsPermitidos.has(routePath);
-            })
-            : adminSource;
+        // ADMIN: priorizar el arbol autorizado backend para evitar desalineacion
+        // entre sidebar y rutas registradas en React Router.
+        let adminRoutes: Array<{ path: string; component: string }> = [];
+        if (hasToken) {
+            const tree = await getAdminSidebarTree();
+            const flattenTree = (nodes: AdminNavTreeItem[]): AdminNavTreeItem[] =>
+                nodes.flatMap((node) => [node, ...flattenTree(node.children || [])]);
 
-        const adminRoutes = adminFiltrado
-            .map(r => ({
-                path: r.path.replace(/^\/admin\//i, "").replace(/^\//, ""),
-                component: normalizeComponent(r.component),
-            }));
+            const flattened = flattenTree(tree);
+            if (flattened.length > 0) {
+                adminRoutes = flattened.map((node) => ({
+                    path: node.path.replace(/^\/admin\//i, "").replace(/^\//, ""),
+                    component: normalizeComponent(node.component),
+                }));
+            } else {
+                const adminSource = result.data.filter((r) => r.estadoRuta && normalizeLayout(r.layout) === "AdminLayout");
+                const hasHerenciaAdmin = herencia.idsPermitidos.size > 0 || herencia.pathsPermitidos.size > 0;
+                const adminFiltrado = hasHerenciaAdmin
+                    ? adminSource.filter((r) => {
+                        const routeId = String(r._id || r.iud || "");
+                        const routePath = r.path.startsWith("/") ? r.path : `/${r.path}`;
+                        return herencia.idsPermitidos.has(routeId) || herencia.pathsPermitidos.has(routePath);
+                    })
+                    : adminSource;
+
+                adminRoutes = adminFiltrado.map((r) => ({
+                    path: r.path.replace(/^\/admin\//i, "").replace(/^\//, ""),
+                    component: normalizeComponent(r.component),
+                }));
+            }
+        }
 
         return { publicRoutes, authRoutes, adminRoutes };
 
