@@ -73,6 +73,8 @@ export default function GestionRutas(): React.ReactElement {
   const [creationType, setCreationType] = useState<NodeTypeRef>('');
   const [selectedSuiteIdForForm, setSelectedSuiteIdForForm] = useState<string>('');
   const [expandedTableNodes, setExpandedTableNodes] = useState<Record<string, boolean>>({});
+  const [nameFilter, setNameFilter] = useState<string>('');
+  const [nodeTypeFilter, setNodeTypeFilter] = useState<string>('ALL');
 
   const [nodeTypeForm, setNodeTypeForm] = useState<NodeTypeFormState>({
     codigo: '',
@@ -307,9 +309,29 @@ export default function GestionRutas(): React.ReactElement {
 
   const tableRows = useMemo(() => {
     const rows: RouteTableRow[] = [];
+    const normalizedFilter = String(nameFilter || '').trim().toLowerCase();
+    const isNameFiltering = normalizedFilter.length > 0;
+    const normalizedTypeFilter = String(nodeTypeFilter || 'ALL').toUpperCase();
+    const isTypeFiltering = normalizedTypeFilter !== 'ALL';
+    const isFiltering = isNameFiltering || isTypeFiltering;
+
     const walk = (nodes: RouteTreeNode[], depth = 0): void => {
       nodes.forEach((node) => {
         const hasChildren = node.children.length > 0;
+        const matchesName = String(node.name || '').toLowerCase().includes(normalizedFilter);
+        const routeTypeName = String(getRouteType(node as Route) || '').toUpperCase();
+        const matchesType = !isTypeFiltering || routeTypeName === normalizedTypeFilter;
+
+        if (isFiltering) {
+          if (matchesName && matchesType) {
+            rows.push({ node, depth, hasChildren });
+          }
+          if (hasChildren) {
+            walk(node.children, depth + 1);
+          }
+          return;
+        }
+
         rows.push({ node, depth, hasChildren });
         if (hasChildren && expandedTableNodes[node.id] !== false) {
           walk(node.children, depth + 1);
@@ -318,7 +340,7 @@ export default function GestionRutas(): React.ReactElement {
     };
     walk(tableTreeNodes);
     return rows;
-  }, [tableTreeNodes, expandedTableNodes]);
+  }, [tableTreeNodes, expandedTableNodes, nameFilter, nodeTypeFilter, nodeTypes]);
 
   const toggleTableNode = (id: string): void => {
     setExpandedTableNodes((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -478,7 +500,7 @@ export default function GestionRutas(): React.ReactElement {
       };
 
       if (editingRoute) {
-        await updateRoute(editingRoute.iud, payload);
+        await updateRoute(resolveRouteId(editingRoute), payload);
         toast.success('Route updated');
       } else {
         await createRoute(payload);
@@ -509,7 +531,7 @@ export default function GestionRutas(): React.ReactElement {
     if (!result.isConfirmed) return;
 
     try {
-      const response = await deleteRoute(route.iud);
+      const response = await deleteRoute(resolveRouteId(route));
       toast.success(response?.message || 'Action completed successfully');
       await loadRoutes();
       notifyRoutesUpdated();
@@ -521,7 +543,7 @@ export default function GestionRutas(): React.ReactElement {
 
   const handleToggleStatus = async (route: Route): Promise<void> => {
     try {
-      await toggleRouteStatus(route.iud, !route.estadoRuta);
+      await toggleRouteStatus(resolveRouteId(route), !route.estadoRuta);
       toast.success(`Route ${!route.estadoRuta ? 'enabled' : 'disabled'}`);
       await loadRoutes();
       notifyRoutesUpdated();
@@ -629,6 +651,34 @@ export default function GestionRutas(): React.ReactElement {
           </div>
         </CardHeader>
         <CardContent>
+          <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center">
+            <Input
+              value={nameFilter}
+              onChange={(e) => setNameFilter(e.target.value)}
+              placeholder="Filtrar por nombre..."
+              className="max-w-sm"
+            />
+            <Select value={nodeTypeFilter} onValueChange={setNodeTypeFilter}>
+              <SelectTrigger className="w-full md:w-[220px]">
+                <SelectValue placeholder="Filtrar por tipo" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">Todos los tipos</SelectItem>
+                {nodeTypes
+                  .filter((type) => type.estado !== false)
+                  .map((type) => {
+                    const typeLabel = String(type.nombre || type.codigo || '').trim();
+                    const typeValue = String(typeLabel || '').toUpperCase();
+                    if (!typeValue) return null;
+                    return (
+                      <SelectItem key={resolveNodeTypeId(type)} value={typeValue}>
+                        {typeLabel}
+                      </SelectItem>
+                    );
+                  })}
+              </SelectContent>
+            </Select>
+          </div>
           {loading ? (
             <div className="flex justify-center items-center py-12">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -653,62 +703,70 @@ export default function GestionRutas(): React.ReactElement {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {tableRows.map(({ node: route, depth, hasChildren }) => (
-                    <TableRow key={resolveRouteId(route)}>
-                      <TableCell className="font-medium">
-                        <div className="flex items-center gap-2" style={{ paddingLeft: `${depth * 14}px` }}>
-                          {hasChildren ? (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="h-6 w-6"
-                              onClick={() => toggleTableNode(resolveRouteId(route))}
-                            >
-                              {expandedTableNodes[resolveRouteId(route)] !== false ? (
-                                <ChevronDown className="h-4 w-4" />
-                              ) : (
-                                <ChevronRight className="h-4 w-4" />
-                              )}
-                            </Button>
-                          ) : (
-                            <span className="inline-block h-6 w-6" />
-                          )}
-                          <span>{route.name}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{getRouteType(route)}</Badge>
-                      </TableCell>
-                      <TableCell>{getRouteNameById(resolveParentId(route))}</TableCell>
-                      <TableCell>
-                        <code className="px-2 py-1 bg-muted rounded text-xs">{route.path}</code>
-                      </TableCell>
-                      <TableCell>{route.component}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{route.layout}</Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Switch
-                          checked={route.estadoRuta}
-                          onCheckedChange={() => void handleToggleStatus(route)}
-                        />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button variant="ghost" size="icon" onClick={() => handlePreviewRoute(route)} title="Previsualizar">
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          <Button variant="ghost" size="icon" onClick={() => openRouteModal(route)}>
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button variant="ghost" size="icon" onClick={() => void handleDeleteRoute(route)}>
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
-                        </div>
+                  {tableRows.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={8} className="text-center text-muted-foreground">
+                        No hay rutas que coincidan con los filtros aplicados.
                       </TableCell>
                     </TableRow>
-                  ))}
+                  ) : (
+                    tableRows.map(({ node: route, depth, hasChildren }) => (
+                      <TableRow key={resolveRouteId(route)}>
+                        <TableCell className="font-medium">
+                          <div className="flex items-center gap-2" style={{ paddingLeft: `${depth * 14}px` }}>
+                            {hasChildren ? (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6"
+                                onClick={() => toggleTableNode(resolveRouteId(route))}
+                              >
+                                {expandedTableNodes[resolveRouteId(route)] !== false ? (
+                                  <ChevronDown className="h-4 w-4" />
+                                ) : (
+                                  <ChevronRight className="h-4 w-4" />
+                                )}
+                              </Button>
+                            ) : (
+                              <span className="inline-block h-6 w-6" />
+                            )}
+                            <span>{route.name}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline">{getRouteType(route)}</Badge>
+                        </TableCell>
+                        <TableCell>{getRouteNameById(resolveParentId(route))}</TableCell>
+                        <TableCell>
+                          <code className="px-2 py-1 bg-muted rounded text-xs">{route.path}</code>
+                        </TableCell>
+                        <TableCell>{route.component}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline">{route.layout}</Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Switch
+                            checked={route.estadoRuta}
+                            onCheckedChange={() => void handleToggleStatus(route)}
+                          />
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button variant="ghost" size="icon" onClick={() => handlePreviewRoute(route)} title="Previsualizar">
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" onClick={() => openRouteModal(route)}>
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" onClick={() => void handleDeleteRoute(route)}>
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
                 </TableBody>
               </Table>
             </div>
