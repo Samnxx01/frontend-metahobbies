@@ -31,6 +31,12 @@ export interface Route {
   updatedAt: string;
   permitidoPorHerencia?: boolean;
   cumpleJerarquiaHerencia?: boolean;
+  puedeGestionarBaja?: boolean;
+  accionBajaPermitida?: 'ELIMINAR' | 'DESACTIVAR' | 'NINGUNA' | string;
+  accessType?:
+    | string
+    | { _id?: string; iud?: string; accessType?: string }
+    | Array<string | { _id?: string; iud?: string; accessType?: string }>;
 }
 
 export interface CreateRouteDto {
@@ -54,7 +60,7 @@ export interface CreateRouteDto {
     tenantAcciones?: Array<{ tenantId: string; acciones: string[] }>;
     soloDios?: boolean;
   };
-  accessType?: string;
+  accessType?: string | string[];
 }
 
 export interface UpdateRouteDto {
@@ -78,7 +84,7 @@ export interface UpdateRouteDto {
     tenantAcciones?: Array<{ tenantId: string; acciones: string[] }>;
     soloDios?: boolean;
   };
-  accessType?: string;
+  accessType?: string | string[];
   estadoRuta?: boolean;
   order?: number;
 }
@@ -94,6 +100,16 @@ export interface RouteResponse {
   success: boolean;
   message: string;
   data: Route;
+}
+
+export interface PreviewRouteResponse {
+  success: boolean;
+  message?: string;
+  data: {
+    path: string;
+    component: string;
+    layout: string;
+  };
 }
 
 export interface TenantCorporativoOption {
@@ -161,6 +177,26 @@ export interface TipoNodoResponse {
   data: TipoNodoRuta;
 }
 
+export interface AccessTypeOption {
+  _id: string;
+  accessType: 'PUBLIC' | 'PRIVATE' | string;
+  estadoAcces?: boolean;
+}
+
+export interface AccessTypesResponse {
+  success: boolean;
+  message: string;
+  total?: number;
+  data: AccessTypeOption[];
+}
+
+export interface AccessTypeResponse {
+  success?: boolean;
+  message?: string;
+  msg?: string;
+  data: AccessTypeOption;
+}
+
 /**
  * Get all routes from the system
  */
@@ -171,15 +207,26 @@ export const getAllRoutes = async (): Promise<RoutesResponse> => {
   return response;
 };
 
+export const previewRoute = async (id: string): Promise<PreviewRouteResponse> => {
+  const response = await apiFetch(`${API_BASE_URL}/seguridad/rutas/preview/${id}`, {
+    method: 'GET',
+  });
+  return response;
+};
+
  
 // Crear una nueva ruta
 export const createRoute = async (routeData: CreateRouteDto): Promise<RouteResponse> => {
+  const hasAccessType = Array.isArray(routeData.accessType)
+    ? routeData.accessType.length > 0
+    : Boolean(routeData.accessType);
+
   const payload = {
     ...routeData,
     icon: routeData.icon || 'fa-solid fa-route',
     allowedRoles: routeData.allowedRoles || [],
     isActive: routeData.isActive !== undefined ? routeData.isActive : true,
-    accessType: routeData.accessType || '6918802d5fc8260c8fcf870b',
+    ...(hasAccessType ? { accessType: routeData.accessType } : {}),
   };
   
   const response = await apiFetch(`${API_BASE_URL}/seguridad/rutas/permisos`, {
@@ -208,6 +255,36 @@ export const getFormulariosOpciones = async (): Promise<FormulariosOpcionesRespo
 export const getTiposNodoRuta = async (): Promise<TiposNodoResponse> => {
   const response = await apiFetch(`${API_BASE_URL}/seguridad/rutas/tipos-nodo`, {
     method: 'GET',
+  });
+  return response;
+};
+
+export const getAccessTypes = async (): Promise<AccessTypesResponse> => {
+  const response = await apiFetch(`${API_BASE_URL}/seguridad/rutas/listarTiposRutas/admin`, {
+    method: 'GET',
+  });
+  return response;
+};
+
+export const createAccessType = async (payload: { accessType: string }): Promise<AccessTypeResponse> => {
+  const response = await apiFetch(`${API_BASE_URL}/seguridad/rutas/parametrizacion/permisos`, {
+    method: 'POST',
+    body: payload,
+  });
+  return response;
+};
+
+export const updateAccessType = async (id: string, payload: { accessType: string }): Promise<AccessTypeResponse> => {
+  const response = await apiFetch(`${API_BASE_URL}/seguridad/rutas/parametrizacion/permisos/${id}`, {
+    method: 'PUT',
+    body: payload,
+  });
+  return response;
+};
+
+export const deactivateAccessType = async (id: string): Promise<{ success?: boolean; message?: string; msg?: string }> => {
+  const response = await apiFetch(`${API_BASE_URL}/seguridad/rutas/parametrizacion/permisos/${id}`, {
+    method: 'DELETE',
   });
   return response;
 };

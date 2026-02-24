@@ -1,4 +1,5 @@
-import { apiFetch } from './api';
+import { apiFetch, apiFetchPublic } from './api';
+import { normalizeRoutePath, toRelativeRoutePath } from './routePathNormalizer';
 
 interface RouteResponse {
     success: boolean;
@@ -12,8 +13,11 @@ interface RouteResponse {
         component: string;
         layout: string;
         icon: string | null;
+        tipoNodo?: string | null;
+        padreId?: string | { _id?: string; iud?: string } | null;
         allowedRoles: Array<{ iud: string }>;
         estadoRuta: boolean;
+        mostrarEnSidebar?: boolean;
         mostrarEnNavbarPublico?: boolean;
         accessType: { _id: string; accessType: string };
         order: number;
@@ -24,6 +28,7 @@ interface RouteTreeResponse {
     success: boolean;
     message: string;
     total?: number;
+    actorTipo?: string;
     data: Array<{
         _id?: string;
         iud?: string;
@@ -63,12 +68,6 @@ interface AuthorizedRoutes {
 const normalizeLayout = (layout: string): string =>
     (layout || "").replace(/\//g, "").trim();
 
-const normalizeRoutePath = (path: string): string => {
-    const clean = String(path || '').trim();
-    if (!clean) return '/';
-    return clean.startsWith('/') ? clean : `/${clean}`;
-};
-
 const getHerenciaAdminPermitida = async (): Promise<{
     idsPermitidos: Set<string>;
     pathsPermitidos: Set<string>;
@@ -100,7 +99,7 @@ const getHerenciaAdminPermitida = async (): Promise<{
                 if (vistaId) idsPermitidos.add(vistaId);
 
                 const vistaPath = String(vista.path || "").trim();
-                if (vistaPath) pathsPermitidos.add(vistaPath.startsWith("/") ? vistaPath : `/${vistaPath}`);
+                if (vistaPath) pathsPermitidos.add(normalizeRoutePath(vistaPath));
             });
         });
 
@@ -143,6 +142,27 @@ export interface AdminNavTreeItem extends AdminNavItem {
     children: AdminNavTreeItem[];
 }
 
+export type AdminActorTipo = 'SUPERADMIN' | 'GLOBAL' | 'CORPORATIVO' | 'UNKNOWN';
+
+export interface AdminSidebarTreeContext {
+    actorTipo: AdminActorTipo;
+    tree: AdminNavTreeItem[];
+}
+
+const STATIC_SUPERADMIN_ADMIN_ROUTES: Array<{ path: string; component: string }> = [
+    { path: 'dashboard', component: 'DashboardAdmin' },
+    { path: 'productos', component: 'GestionProductos' },
+    { path: 'categorias', component: 'GestionCategorias' },
+    { path: 'usuarios', component: 'GestionUsuarios' },
+    { path: 'referidos', component: 'GestionReferidos' },
+    { path: 'pedidos', component: 'PedidosAdmin' },
+    { path: 'rutas', component: 'GestionRutas' },
+    { path: 'parametrizacion', component: 'Parametrizacion' },
+    { path: 'parametrizacion-corporativa', component: 'ParametrizacionCorporativa' },
+    { path: 'personalizacion/modal-inicio', component: 'ModalInicio' },
+    { path: 'configuracion', component: 'ConfiguracionAdmin' }
+];
+
 const fetchAllSecurityRoutes = async (useAuth: boolean): Promise<RouteResponse | null> => {
     try {
         const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "/api";
@@ -150,11 +170,15 @@ const fetchAllSecurityRoutes = async (useAuth: boolean): Promise<RouteResponse |
             ? `${API_BASE_URL}/seguridad/rutas/listarRutas/admin`
             : `${API_BASE_URL}/seguridad/rutas/listarRutas/public`;
 
-        const result: RouteResponse = await apiFetch(endpoint, {
-            method: "GET",
-            useAuth,
-            logoutOn401: useAuth
-        });
+        const result: RouteResponse = useAuth
+            ? await apiFetch(endpoint, {
+                method: "GET",
+                useAuth: true,
+                logoutOn401: true
+            })
+            : await apiFetchPublic(endpoint, {
+                method: "GET"
+            });
         return result;
     } catch (error) {
         console.error("Error al obtener rutas de seguridad:", error);
@@ -180,7 +204,7 @@ export const getRouteCatalog = async (): Promise<RouteCatalogItem[]> => {
         return result.data
             .filter((r) => r.estadoRuta)
             .map((r) => ({
-                path: r.path.startsWith('/') ? r.path : `/${r.path}`,
+                path: normalizeRoutePath(r.path),
                 layout: r.layout.replace("/", "").trim(),
                 component: r.component.replace(/\.(jsx|tsx|js|ts)$/i, ""),
                 name: r.name
@@ -201,11 +225,15 @@ export const getAuthorizedRoutes = async (): Promise<AuthorizedRoutes> => {
             ? `${API_BASE_URL}/seguridad/rutas/listarRutas/admin`
             : `${API_BASE_URL}/seguridad/rutas/listarRutas/public`;
 
-        const result: RouteResponse = await apiFetch(endpoint, {
-            method: "GET",
-            useAuth: hasToken,
-            logoutOn401: hasToken
-        });
+        const result: RouteResponse = hasToken
+            ? await apiFetch(endpoint, {
+                method: "GET",
+                useAuth: true,
+                logoutOn401: true
+            })
+            : await apiFetchPublic(endpoint, {
+                method: "GET"
+            });
 
         if (!result.success || !result.data) {
             return { publicRoutes: [], adminRoutes: [], authRoutes: [] };
@@ -215,14 +243,11 @@ export const getAuthorizedRoutes = async (): Promise<AuthorizedRoutes> => {
         const normalizeComponent = (name: string) =>
             name.replace(/\.(jsx|tsx|js|ts)$/i, "");
 
-        const normalizePath = (path: string) =>
-            path.replace(/^\//, "");
-
         // PUBLIC
         const publicRoutes = result.data
             .filter(r => r.estadoRuta && r.layout.replace("/", "").trim() === "PublicLayout")
             .map(r => ({
-                path: normalizePath(r.path),
+                path: toRelativeRoutePath(r.path),
                 component: normalizeComponent(r.component),
             }));
 
@@ -230,7 +255,7 @@ export const getAuthorizedRoutes = async (): Promise<AuthorizedRoutes> => {
         const authRoutes = result.data
             .filter(r => r.estadoRuta && r.layout.replace("/", "").trim() === "AuthLayout")
             .map(r => ({
-                path: normalizePath(r.path),
+                path: toRelativeRoutePath(r.path),
                 component: normalizeComponent(r.component),
             }));
 
@@ -238,31 +263,37 @@ export const getAuthorizedRoutes = async (): Promise<AuthorizedRoutes> => {
         // entre sidebar y rutas registradas en React Router.
         let adminRoutes: Array<{ path: string; component: string }> = [];
         if (hasToken) {
-            const tree = await getAdminSidebarTree();
+            const { tree, actorTipo } = await getAdminSidebarTreeWithContext();
             const flattenTree = (nodes: AdminNavTreeItem[]): AdminNavTreeItem[] =>
                 nodes.flatMap((node) => [node, ...flattenTree(node.children || [])]);
 
             const flattened = flattenTree(tree);
             if (flattened.length > 0) {
-                adminRoutes = flattened.map((node) => ({
-                    path: node.path.replace(/^\/admin\//i, "").replace(/^\//, ""),
+                const dynamicRoutes = flattened.map((node) => ({
+                    path: toRelativeRoutePath(node.path.replace(/^\/admin\//i, '')),
                     component: normalizeComponent(node.component),
                 }));
+                // SUPERADMIN: si ya hay herencia (rutas dinamicas), usar solo BD.
+                adminRoutes = dynamicRoutes;
             } else {
                 const adminSource = result.data.filter((r) => r.estadoRuta && normalizeLayout(r.layout) === "AdminLayout");
                 const hasHerenciaAdmin = herencia.idsPermitidos.size > 0 || herencia.pathsPermitidos.size > 0;
                 const adminFiltrado = hasHerenciaAdmin
                     ? adminSource.filter((r) => {
                         const routeId = String(r._id || r.iud || "");
-                        const routePath = r.path.startsWith("/") ? r.path : `/${r.path}`;
+                        const routePath = normalizeRoutePath(r.path);
                         return herencia.idsPermitidos.has(routeId) || herencia.pathsPermitidos.has(routePath);
                     })
                     : adminSource;
 
                 adminRoutes = adminFiltrado.map((r) => ({
-                    path: r.path.replace(/^\/admin\//i, "").replace(/^\//, ""),
+                    path: toRelativeRoutePath(String(r.path || '').replace(/^\/admin\//i, '')),
                     component: normalizeComponent(r.component),
                 }));
+                if (actorTipo === 'SUPERADMIN') {
+                    // SUPERADMIN sin herencia: usar BD; si no hay datos, fallback quemado.
+                    adminRoutes = adminRoutes.length > 0 ? adminRoutes : [...STATIC_SUPERADMIN_ADMIN_ROUTES];
+                }
             }
         }
 
@@ -290,7 +321,7 @@ export const getPublicNavigationRoutes = async (): Promise<PublicNavItem[]> => {
             )
             .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
             .map((route) => ({
-                path: route.path.startsWith("/") ? route.path : `/${route.path}`,
+                path: normalizeRoutePath(route.path),
                 label: route.name,
                 order: route.order ?? 0
             }));
@@ -313,7 +344,7 @@ export const getFooterPublicRoutes = async (): Promise<FooterNavItem[]> => {
             )
             .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
             .map((route) => ({
-                path: route.path.startsWith("/") ? route.path : `/${route.path}`,
+                path: normalizeRoutePath(route.path),
                 label: route.name,
                 order: route.order ?? 0
             }));
@@ -340,7 +371,7 @@ export const getAdminSidebarRoutes = async (): Promise<AdminNavItem[]> => {
         const adminFiltrado = hasHerenciaAdmin
             ? adminSource.filter((r) => {
                 const routeId = String(r._id || r.iud || "");
-                const routePath = r.path.startsWith("/") ? r.path : `/${r.path}`;
+                const routePath = normalizeRoutePath(r.path);
                 return herencia.idsPermitidos.has(routeId) || herencia.pathsPermitidos.has(routePath);
             })
             : adminSource;
@@ -348,7 +379,7 @@ export const getAdminSidebarRoutes = async (): Promise<AdminNavItem[]> => {
         return adminFiltrado
             .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
             .map((r) => ({
-                path: r.path.startsWith("/") ? r.path : `/${r.path}`,
+                path: normalizeRoutePath(r.path),
                 label: r.name,
                 component: r.component.replace(/\.(jsx|tsx|js|ts)$/i, ""),
                 order: r.order ?? 0
@@ -376,9 +407,89 @@ const mapTreeNodes = (nodes: RouteTreeResponse['data']): AdminNavTreeItem[] => {
 };
 
 export const getAdminSidebarTree = async (): Promise<AdminNavTreeItem[]> => {
+    const context = await getAdminSidebarTreeWithContext();
+    return context.tree;
+};
+
+export const getAdminSidebarFallbackTree = async (actorTipo: AdminActorTipo): Promise<AdminNavTreeItem[]> => {
+    try {
+        const token = localStorage.getItem("token");
+        if (!token) return [];
+
+        const [result, herencia] = await Promise.all([
+            fetchAllSecurityRoutes(true),
+            getHerenciaAdminPermitida()
+        ]);
+
+        if (!result?.success || !Array.isArray(result?.data)) return [];
+
+        const adminSource = result.data.filter((r) =>
+            r.estadoRuta &&
+            normalizeLayout(r.layout) === "AdminLayout" &&
+            r.mostrarEnSidebar !== false
+        );
+
+        const hasHerenciaAdmin = herencia.idsPermitidos.size > 0 || herencia.pathsPermitidos.size > 0;
+        const visibles = hasHerenciaAdmin
+            ? adminSource.filter((r) => {
+                const routeId = String(r._id || r.iud || "");
+                const routePath = normalizeRoutePath(r.path);
+                return herencia.idsPermitidos.has(routeId) || herencia.pathsPermitidos.has(routePath);
+            })
+            : (actorTipo === 'SUPERADMIN' ? adminSource : []);
+
+        if (!visibles.length) return [];
+
+        const nodesById = new Map<string, AdminNavTreeItem>();
+        visibles.forEach((route) => {
+            const id = String(route._id || route.iud || '').trim();
+            if (!id) return;
+            nodesById.set(id, {
+                id,
+                path: normalizeRoutePath(route.path),
+                label: String(route.name || '').trim(),
+                component: String(route.component || '').replace(/\.(jsx|tsx|js|ts)$/i, ''),
+                order: Number(route.order ?? 0),
+                tipoNodo: String(route.tipoNodo || 'FORMULARIO').toUpperCase(),
+                children: []
+            });
+        });
+
+        const roots: AdminNavTreeItem[] = [];
+        visibles.forEach((route) => {
+            const id = String(route._id || route.iud || '').trim();
+            const currentNode = nodesById.get(id);
+            if (!currentNode) return;
+
+            const parentRaw = route.padreId;
+            const parentId = typeof parentRaw === 'string'
+                ? String(parentRaw).trim()
+                : String(parentRaw?._id || parentRaw?.iud || '').trim();
+
+            if (parentId && nodesById.has(parentId)) {
+                nodesById.get(parentId)?.children.push(currentNode);
+            } else {
+                roots.push(currentNode);
+            }
+        });
+
+        const sortTree = (items: AdminNavTreeItem[]): void => {
+            items.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+            items.forEach((item) => sortTree(item.children || []));
+        };
+        sortTree(roots);
+
+        return roots;
+    } catch (error) {
+        console.error("Error al construir arbol fallback admin dinamico:", error);
+        return [];
+    }
+};
+
+export const getAdminSidebarTreeWithContext = async (): Promise<AdminSidebarTreeContext> => {
     try {
         const token = localStorage.getItem('token');
-        if (!token) return [];
+        if (!token) return { actorTipo: 'UNKNOWN', tree: [] };
 
         const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api';
         const treeResult: RouteTreeResponse = await apiFetch(`${API_BASE_URL}/seguridad/rutas/listarRutas/arbol/admin`, {
@@ -387,32 +498,18 @@ export const getAdminSidebarTree = async (): Promise<AdminNavTreeItem[]> => {
             logoutOn401: true
         });
 
-        if (treeResult?.success && Array.isArray(treeResult?.data) && treeResult.data.length > 0) {
-            return mapTreeNodes(treeResult.data);
+        if (treeResult?.success && Array.isArray(treeResult?.data)) {
+            // Respetar exactamente lo que define backend por herencia/contexto.
+            const actorTipo = String(treeResult?.actorTipo || '').trim().toUpperCase() as AdminActorTipo;
+            return {
+                actorTipo: actorTipo || 'UNKNOWN',
+                tree: mapTreeNodes(treeResult.data)
+            };
         }
-
-        const flat = await getAdminSidebarRoutes();
-        return flat.map((item) => ({
-            id: item.path,
-            path: item.path,
-            label: item.label,
-            component: item.component,
-            order: item.order,
-            tipoNodo: 'FORMULARIO',
-            children: []
-        }));
+        return { actorTipo: 'UNKNOWN', tree: [] };
     } catch (error) {
         console.error('Error al obtener arbol admin por contexto:', error);
-        const flat = await getAdminSidebarRoutes();
-        return flat.map((item) => ({
-            id: item.path,
-            path: item.path,
-            label: item.label,
-            component: item.component,
-            order: item.order,
-            tipoNodo: 'FORMULARIO',
-            children: []
-        }));
+        return { actorTipo: 'UNKNOWN', tree: [] };
     }
 };
 
