@@ -1,4 +1,4 @@
-import { Routes, Route, useLocation } from 'react-router-dom';
+import { Routes, Route, useLocation, Navigate } from 'react-router-dom';
 import { useState, useEffect, ReactElement } from 'react';
 import { useAuth } from '@/app/providers/AuthProvider';
 import { getAuthorizedRoutes } from '@/app/services/routeService';

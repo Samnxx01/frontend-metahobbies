@@ -8,6 +8,7 @@ import {
   toggleRouteStatus,
   getTiposNodoRuta,
   getAccessTypes,
+  getAccionesCatalogo,
   createAccessType,
   updateAccessType,
   deactivateAccessType,
@@ -17,7 +18,8 @@ import {
   type Route,
   type CreateRouteDto,
   type TipoNodoRuta,
-  type AccessTypeOption
+  type AccessTypeOption,
+  type AccionOption
 } from '@/app/services/routesService';
 import { swalFire } from '@/lib/sweetalert';
 import { normalizeRoutePath } from '@/app/services/routePathNormalizer';
@@ -75,6 +77,7 @@ export default function GestionRutas(): React.ReactElement {
   const [routes, setRoutes] = useState<Route[]>([]);
   const [nodeTypes, setNodeTypes] = useState<TipoNodoRuta[]>([]);
   const [accessTypes, setAccessTypes] = useState<AccessTypeOption[]>([]);
+  const [accionesCatalogo, setAccionesCatalogo] = useState<AccionOption[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [isTreeModalOpen, setIsTreeModalOpen] = useState<boolean>(false);
@@ -111,10 +114,11 @@ export default function GestionRutas(): React.ReactElement {
     padreId: null,
     mostrarEnSidebar: true,
     accessType: [],
+    acciones: [],
   });
 
   useEffect(() => {
-    void Promise.all([loadRoutes(), loadNodeTypes(), loadAccessTypes()]);
+    void Promise.all([loadRoutes(), loadNodeTypes(), loadAccessTypes(), loadAccionesCatalogo()]);
   }, []);
 
   const resolveRouteId = (route: Route): string =>
@@ -123,6 +127,17 @@ export default function GestionRutas(): React.ReactElement {
     String(nodeType?.iud || nodeType?._id || '');
   const resolveAccessTypeIds = (route: Route): string[] => {
     const raw = (route as any)?.accessType;
+    if (!raw) return [];
+    if (Array.isArray(raw)) {
+      return raw
+        .map((item) => String((item as any)?._id || (item as any)?.iud || item || '').trim())
+        .filter(Boolean);
+    }
+    if (typeof raw === 'string') return [String(raw)];
+    return [String(raw?._id || raw?.iud || '')].filter(Boolean);
+  };
+  const resolveActionIds = (route: Route): string[] => {
+    const raw = (route as any)?.acciones;
     if (!raw) return [];
     if (Array.isArray(raw)) {
       return raw
@@ -256,6 +271,19 @@ export default function GestionRutas(): React.ReactElement {
         const normalized = String(id || '').trim();
         const found = accessTypes.find((a) => String(a?._id || '') === normalized);
         return String(found?.accessType || '');
+      })
+      .filter(Boolean);
+  };
+  const getActionLabelsByIds = (ids: string[] = []): string[] => {
+    if (!Array.isArray(ids) || ids.length === 0) return [];
+    return ids
+      .map((id) => {
+        const normalized = String(id || '').trim();
+        const found = accionesCatalogo.find((a) => String(a?._id || a?.iud || '').trim() === normalized);
+        if (!found) return '';
+        const method = String(found.method || '').trim().toUpperCase();
+        const etiqueta = String(found.etiquetas || '').trim();
+        return etiqueta ? `${method} | ${etiqueta}` : method;
       })
       .filter(Boolean);
   };
@@ -508,6 +536,18 @@ export default function GestionRutas(): React.ReactElement {
     }
   };
 
+  const loadAccionesCatalogo = async (): Promise<void> => {
+    try {
+      const response = await getAccionesCatalogo();
+      if (response.success) {
+        const items = Array.isArray(response.data) ? response.data : [];
+        setAccionesCatalogo(items.filter((item) => item?.estadoAccion !== false));
+      }
+    } catch (error) {
+      console.error('Error loading acciones catalogo:', error);
+    }
+  };
+
   const resetRouteForm = (typeId?: string): void => {
     const resolvedTypeId = String(typeId || creationType || resolveNodeTypeId(formularioType) || '');
     const resolvedType = getTypeById(resolvedTypeId);
@@ -521,6 +561,7 @@ export default function GestionRutas(): React.ReactElement {
       padreId: null,
       mostrarEnSidebar: true,
       accessType: [],
+      acciones: [],
     });
     setUseCustomComponent(false);
   };
@@ -553,6 +594,7 @@ export default function GestionRutas(): React.ReactElement {
         padreId: resolveParentId(route),
         mostrarEnSidebar: route?.mostrarEnSidebar !== false,
         accessType: resolveAccessTypeIds(route),
+        acciones: resolveActionIds(route),
       });
     } else {
       const typeId = String(forceTypeId || resolveNodeTypeId(formularioType) || '');
@@ -614,6 +656,9 @@ export default function GestionRutas(): React.ReactElement {
     const selectedAccessTypeIds = Array.isArray(formData.accessType)
       ? formData.accessType.filter(Boolean)
       : (formData.accessType ? [String(formData.accessType)] : []);
+    const selectedAccionesIds = Array.isArray(formData.acciones)
+      ? formData.acciones.filter(Boolean)
+      : (formData.acciones ? [String(formData.acciones)] : []);
 
     if (isFormularioType && selectedAccessTypeIds.length === 0) {
       toast.error('Selecciona tipo de acceso para formulario');
@@ -656,12 +701,15 @@ export default function GestionRutas(): React.ReactElement {
 
       if (isModuloType) {
         delete (payload as any).accessType;
+        payload.acciones = selectedAccionesIds;
       }
       if (isSuiteType) {
         delete (payload as any).accessType;
+        delete (payload as any).acciones;
       }
       if (isFormularioType) {
         payload.accessType = selectedAccessTypeIds;
+        payload.acciones = selectedAccionesIds;
       }
 
       if (editingRoute) {
@@ -930,6 +978,7 @@ export default function GestionRutas(): React.ReactElement {
                     <TableHead>Nombre</TableHead>
                     <TableHead>Tipo</TableHead>
                     <TableHead>Acceso</TableHead>
+                    <TableHead>Acciones HTTP</TableHead>
                     <TableHead>Padre</TableHead>
                     <TableHead>Ruta</TableHead>
                     <TableHead>Componente</TableHead>
@@ -941,7 +990,7 @@ export default function GestionRutas(): React.ReactElement {
                 <TableBody>
                   {tableRows.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={9} className="text-center text-muted-foreground">
+                      <TableCell colSpan={10} className="text-center text-muted-foreground">
                         No hay rutas que coincidan con los filtros aplicados.
                       </TableCell>
                     </TableRow>
@@ -978,6 +1027,19 @@ export default function GestionRutas(): React.ReactElement {
                             {getAccessTypeLabelsByIds(resolveAccessTypeIds(route)).length > 0 ? (
                               getAccessTypeLabelsByIds(resolveAccessTypeIds(route)).map((label) => (
                                 <Badge key={`${resolveRouteId(route)}-${label}`} variant="outline">
+                                  {label}
+                                </Badge>
+                              ))
+                            ) : (
+                              <Badge variant="outline">-</Badge>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1">
+                            {getActionLabelsByIds(resolveActionIds(route)).length > 0 ? (
+                              getActionLabelsByIds(resolveActionIds(route)).map((label) => (
+                                <Badge key={`${resolveRouteId(route)}-accion-${label}`} variant="outline">
                                   {label}
                                 </Badge>
                               ))
@@ -1031,7 +1093,7 @@ export default function GestionRutas(): React.ReactElement {
       </Card>
 
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-        <DialogContent className="sm:max-w-[560px]">
+        <DialogContent className="sm:max-w-[980px]">
           <form onSubmit={(e) => void handleSubmitRoute(e)}>
             <DialogHeader>
               <DialogTitle>{editingRoute ? 'Editar Ruta' : getCreateDialogTitle()}</DialogTitle>
@@ -1039,7 +1101,7 @@ export default function GestionRutas(): React.ReactElement {
                 Parametriza nodos jerarquicos (suite, modulo, formulario)
               </DialogDescription>
             </DialogHeader>
-            <div className="grid gap-4 py-4">
+            <div className="grid gap-4 py-4 md:grid-cols-2">
               {editingRoute ? (
                 <div className="space-y-2">
                   <Label htmlFor="tipoNodo">Tipo de nodo *</Label>
@@ -1208,7 +1270,7 @@ export default function GestionRutas(): React.ReactElement {
                   </p>
                 )}
               </div>
-              <div className="space-y-2">
+              <div className="space-y-2 md:col-span-2">
                 <Label htmlFor="component">Componente *</Label>
                 {isSuiteType ? (
                   <Input
@@ -1246,7 +1308,7 @@ export default function GestionRutas(): React.ReactElement {
                 )}
               </div>
               {(editingRoute || !isFormularioType) ? (
-                <div className="space-y-2">
+                <div className="space-y-2 md:col-span-2">
                   <Label htmlFor="layout">Layout *</Label>
                   <Select
                     value={formData.layout}
@@ -1265,7 +1327,7 @@ export default function GestionRutas(): React.ReactElement {
                   </Select>
                 </div>
               ) : (
-                <div className="space-y-2">
+                <div className="space-y-2 md:col-span-2">
                   <Label>Layout</Label>
                   <Input
                     value={
@@ -1280,7 +1342,7 @@ export default function GestionRutas(): React.ReactElement {
                 </div>
               )}
               {isFormularioType && (
-                <div className="space-y-2">
+                <div className="space-y-2 md:col-span-2">
                   <Label>Tipo de acceso *</Label>
                   <div className="rounded-md border p-3 space-y-2">
                     {accessTypes.filter((item) => item.estadoAcces !== false).map((item) => {
@@ -1314,7 +1376,52 @@ export default function GestionRutas(): React.ReactElement {
                   </p>
                 </div>
               )}
-              <div className="flex items-center justify-between rounded-md border px-3 py-2">
+              {(isModuloType || isFormularioType) && (
+                <div className="space-y-2 md:col-span-2">
+                  <Label htmlFor="acciones">Acciones (ObjectId de acciones)</Label>
+                  <div className="rounded-md border p-3 space-y-2">
+                    {accionesCatalogo.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No hay acciones disponibles.</p>
+                    ) : (
+                      accionesCatalogo.map((accion) => {
+                        const id = String(accion?._id || accion?.iud || '').trim();
+                        const method = String(accion?.method || '').trim().toUpperCase();
+                        const etiqueta = String(accion?.etiquetas || '').trim();
+                        const label = etiqueta ? `${method} | ${etiqueta}` : method;
+                        const selected = Array.isArray(formData.acciones)
+                          ? formData.acciones.map((v) => String(v)).includes(id)
+                          : String(formData.acciones || '') === id;
+                        if (!id) return null;
+                        return (
+                          <label key={id} className="flex items-center gap-2 text-sm cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={selected}
+                              onChange={(e) => {
+                                const checked = e.target.checked;
+                                setFormData((prev) => {
+                                  const current = Array.isArray(prev.acciones)
+                                    ? [...prev.acciones.map((v) => String(v))]
+                                    : (prev.acciones ? [String(prev.acciones)] : []);
+                                  const next = checked
+                                    ? [...new Set([...current, id])]
+                                    : current.filter((value) => value !== id);
+                                  return { ...prev, acciones: next };
+                                });
+                              }}
+                            />
+                            <span>{label}</span>
+                          </label>
+                        );
+                      })
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Selecciona una o varias acciones. Se enviara como array de ObjectId.
+                  </p>
+                </div>
+              )}
+              <div className="flex items-center justify-between rounded-md border px-3 py-2 md:col-span-2">
                 <Label htmlFor="mostrarEnSidebar" className="cursor-pointer">Mostrar en sidebar</Label>
                 <Switch
                   id="mostrarEnSidebar"

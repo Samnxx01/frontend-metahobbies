@@ -1,4 +1,4 @@
-import { apiFetch } from './api';
+import { apiFetch, apiFetchPublic } from './api';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api';
 
@@ -37,6 +37,10 @@ export interface Route {
     | string
     | { _id?: string; iud?: string; accessType?: string }
     | Array<string | { _id?: string; iud?: string; accessType?: string }>;
+  acciones?:
+    | string
+    | { _id?: string; iud?: string; method?: string; etiquetas?: string }
+    | Array<string | { _id?: string; iud?: string; method?: string; etiquetas?: string }>;
 }
 
 export interface CreateRouteDto {
@@ -61,6 +65,7 @@ export interface CreateRouteDto {
     soloDios?: boolean;
   };
   accessType?: string | string[];
+  acciones?: string | string[];
 }
 
 export interface UpdateRouteDto {
@@ -85,6 +90,7 @@ export interface UpdateRouteDto {
     soloDios?: boolean;
   };
   accessType?: string | string[];
+  acciones?: string | string[];
   estadoRuta?: boolean;
   order?: number;
 }
@@ -197,6 +203,37 @@ export interface AccessTypeResponse {
   data: AccessTypeOption;
 }
 
+export interface AccionOption {
+  _id: string;
+  iud?: string;
+  method: string;
+  etiquetas?: string;
+  estadoAccion?: boolean;
+}
+
+export interface AccionesResponse {
+  success: boolean;
+  message?: string;
+  total?: number;
+  data: AccionOption[];
+}
+
+const normalizeAccionesRows = (payload: any): AccionOption[] => {
+  const source = Array.isArray(payload?.data)
+    ? payload.data
+    : (Array.isArray(payload?.acciones) ? payload.acciones : []);
+
+  return source
+    .map((row: any) => ({
+      _id: String(row?._id || row?.iud || '').trim(),
+      iud: String(row?.iud || row?._id || '').trim() || undefined,
+      method: String(row?.method || '').trim().toUpperCase(),
+      etiquetas: String(row?.etiquetas || '').trim(),
+      estadoAccion: row?.estadoAccion !== false,
+    }))
+    .filter((row: AccionOption) => Boolean(row._id));
+};
+
 /**
  * Get all routes from the system
  */
@@ -264,6 +301,36 @@ export const getAccessTypes = async (): Promise<AccessTypesResponse> => {
     method: 'GET',
   });
   return response;
+};
+
+export const getAccionesCatalogo = async (): Promise<AccionesResponse> => {
+  try {
+    const response = await apiFetch(`${API_BASE_URL}/seguridad/rutas/acciones`, {
+      method: 'GET',
+    });
+    const rows = normalizeAccionesRows(response);
+    if (rows.length > 0) {
+      return {
+        success: true,
+        message: response?.message || 'Acciones cargadas',
+        total: rows.length,
+        data: rows,
+      };
+    }
+  } catch (_error) {
+    // Fallback en caso de ruta no disponible o sin permisos.
+  }
+
+  const fallback = await apiFetchPublic(`${API_BASE_URL}/config/parametrizacion/widget/branding/acciones/publico`, {
+    method: 'GET',
+  });
+  const rowsFallback = normalizeAccionesRows(fallback);
+  return {
+    success: rowsFallback.length > 0 || Boolean((fallback as any)?.ok),
+    message: (fallback as any)?.msg || 'Acciones cargadas (fallback)',
+    total: rowsFallback.length,
+    data: rowsFallback,
+  };
 };
 
 export const createAccessType = async (payload: { accessType: string }): Promise<AccessTypeResponse> => {

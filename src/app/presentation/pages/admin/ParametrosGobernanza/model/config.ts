@@ -190,10 +190,8 @@ export const ENDPOINTS: EndpointSpec[] = [
     title: 'Actualizar herencia admin/global',
     description: 'Actualiza una herencia por id.',
     fields: [
-      { name: 'id', label: 'ID herencia', type: 'id', required: true, pathParam: true },
       { name: 'tenantGlobal', label: 'Tenant global', type: 'id' },
-      { name: 'tenantCorporativo', label: 'Tenant corporativo', type: 'id' },
-      { name: 'heredaGlobal', label: 'Herencia global', type: 'id' },
+      { name: 'herenciaAsociada', label: 'Herencia asociada', type: 'id', required: true, pathParam: true },
       { name: 'permisos', label: 'Permisos por vista/accion', type: 'permisos' },
     ],
   },
@@ -219,7 +217,7 @@ export const ENDPOINTS: EndpointSpec[] = [
   },
   {
     id: 'perm-crear-coporativo',
-    section: 'permisos',
+    section: 'tenant',
     actor: 'tenantGlobal',
     method: 'POST',
     path: '/api/config/permisos/creacion/usu/tenant/coporativo',
@@ -236,7 +234,7 @@ export const ENDPOINTS: EndpointSpec[] = [
   },
   {
     id: 'perm-crear-corporativo-alias',
-    section: 'permisos',
+    section: 'tenant',
     actor: 'tenantGlobal',
     method: 'POST',
     path: '/api/config/permisos/creacion/usu/tenant/corporativo',
@@ -253,7 +251,7 @@ export const ENDPOINTS: EndpointSpec[] = [
   },
   {
     id: 'perm-actualizar-corporativo',
-    section: 'permisos',
+    section: 'tenant',
     actor: 'tenantGlobal',
     method: 'PUT',
     path: '/api/config/permisos/corporativo/actualizar/tenant/:id',
@@ -271,7 +269,7 @@ export const ENDPOINTS: EndpointSpec[] = [
   },
   {
     id: 'perm-desactivar-corporativo',
-    section: 'permisos',
+    section: 'tenant',
     actor: 'tenantGlobal',
     method: 'DELETE',
     path: '/api/config/permisos/corporativo/desactivar/tenant/:id',
@@ -281,7 +279,7 @@ export const ENDPOINTS: EndpointSpec[] = [
   },
   {
     id: 'perm-eliminar-corporativo',
-    section: 'permisos',
+    section: 'tenant',
     actor: 'tenantGlobal',
     method: 'DELETE',
     path: '/api/config/permisos/corporativo/eliminar/tenant/:id',
@@ -291,7 +289,7 @@ export const ENDPOINTS: EndpointSpec[] = [
   },
   {
     id: 'perm-corporativo-guardar-catalogo',
-    section: 'permisos',
+    section: 'tenant',
     actor: 'tenantGlobal',
     method: 'POST',
     path: '/api/config/permisos/corporativo/guardar/catologo/tenant/corporativo',
@@ -304,7 +302,7 @@ export const ENDPOINTS: EndpointSpec[] = [
   },
   {
     id: 'perm-corporativo-guardar-rol',
-    section: 'permisos',
+    section: 'tenant',
     actor: 'tenantGlobal',
     method: 'POST',
     path: '/api/config/permisos/corporativo/guardar/roles/tenant/corporativo',
@@ -314,7 +312,7 @@ export const ENDPOINTS: EndpointSpec[] = [
   },
   {
     id: 'perm-corporativo-crear-tenant',
-    section: 'permisos',
+    section: 'tenant',
     actor: 'tenantGlobal',
     method: 'POST',
     path: '/api/config/permisos/corporativo/crear/tenant',
@@ -345,7 +343,7 @@ export const ENDPOINTS: EndpointSpec[] = [
   },
   {
     id: 'perm-corporativo-crear-nivel',
-    section: 'permisos',
+    section: 'tenant',
     actor: 'tenantGlobal',
     method: 'POST',
     path: '/api/config/permisos/corporativo/crear/tenant/nvl/corporativo',
