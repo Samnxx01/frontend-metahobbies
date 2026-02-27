@@ -7,13 +7,22 @@ import {
   deleteRoute,
   toggleRouteStatus,
   getTiposNodoRuta,
+  getAccessTypes,
+  getAccionesCatalogo,
+  createAccessType,
+  updateAccessType,
+  deactivateAccessType,
   createTipoNodoRuta,
   deleteTipoNodoRuta,
+  previewRoute,
   type Route,
   type CreateRouteDto,
-  type TipoNodoRuta
+  type TipoNodoRuta,
+  type AccessTypeOption,
+  type AccionOption
 } from '@/app/services/routesService';
 import { swalFire } from '@/lib/sweetalert';
+import { normalizeRoutePath } from '@/app/services/routePathNormalizer';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -60,16 +69,26 @@ interface NodeTypeFormState {
   descripcion: string;
 }
 
+interface AccessTypeFormState {
+  accessType: string;
+}
+
 export default function GestionRutas(): React.ReactElement {
   const [routes, setRoutes] = useState<Route[]>([]);
   const [nodeTypes, setNodeTypes] = useState<TipoNodoRuta[]>([]);
+  const [accessTypes, setAccessTypes] = useState<AccessTypeOption[]>([]);
+  const [accionesCatalogo, setAccionesCatalogo] = useState<AccionOption[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [isTreeModalOpen, setIsTreeModalOpen] = useState<boolean>(false);
   const [isNodeTypeModalOpen, setIsNodeTypeModalOpen] = useState<boolean>(false);
+  const [isAccessTypeModalOpen, setIsAccessTypeModalOpen] = useState<boolean>(false);
   const [editingRoute, setEditingRoute] = useState<Route | null>(null);
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [nodeTypeSubmitting, setNodeTypeSubmitting] = useState<boolean>(false);
+  const [accessTypeSubmitting, setAccessTypeSubmitting] = useState<boolean>(false);
+  const [editingAccessTypeId, setEditingAccessTypeId] = useState<string>('');
+  const [useCustomComponent, setUseCustomComponent] = useState<boolean>(false);
   const [creationType, setCreationType] = useState<NodeTypeRef>('');
   const [selectedSuiteIdForForm, setSelectedSuiteIdForForm] = useState<string>('');
   const [expandedTableNodes, setExpandedTableNodes] = useState<Record<string, boolean>>({});
@@ -81,6 +100,9 @@ export default function GestionRutas(): React.ReactElement {
     nombre: '',
     descripcion: '',
   });
+  const [accessTypeForm, setAccessTypeForm] = useState<AccessTypeFormState>({
+    accessType: '',
+  });
 
   const [formData, setFormData] = useState<CreateRouteDto>({
     name: '',
@@ -91,16 +113,40 @@ export default function GestionRutas(): React.ReactElement {
     tipoNodoId: '',
     padreId: null,
     mostrarEnSidebar: true,
+    accessType: [],
+    acciones: [],
   });
 
   useEffect(() => {
-    void Promise.all([loadRoutes(), loadNodeTypes()]);
+    void Promise.all([loadRoutes(), loadNodeTypes(), loadAccessTypes(), loadAccionesCatalogo()]);
   }, []);
 
   const resolveRouteId = (route: Route): string =>
     String((route as any)?._id || route?.iud || '');
   const resolveNodeTypeId = (nodeType: TipoNodoRuta | any): string =>
     String(nodeType?.iud || nodeType?._id || '');
+  const resolveAccessTypeIds = (route: Route): string[] => {
+    const raw = (route as any)?.accessType;
+    if (!raw) return [];
+    if (Array.isArray(raw)) {
+      return raw
+        .map((item) => String((item as any)?._id || (item as any)?.iud || item || '').trim())
+        .filter(Boolean);
+    }
+    if (typeof raw === 'string') return [String(raw)];
+    return [String(raw?._id || raw?.iud || '')].filter(Boolean);
+  };
+  const resolveActionIds = (route: Route): string[] => {
+    const raw = (route as any)?.acciones;
+    if (!raw) return [];
+    if (Array.isArray(raw)) {
+      return raw
+        .map((item) => String((item as any)?._id || (item as any)?.iud || item || '').trim())
+        .filter(Boolean);
+    }
+    if (typeof raw === 'string') return [String(raw)];
+    return [String(raw?._id || raw?.iud || '')].filter(Boolean);
+  };
 
   const resolveParentId = (route: Route): string | null => {
     const parent = route?.padreId as any;
@@ -218,12 +264,74 @@ export default function GestionRutas(): React.ReactElement {
     const found = routes.find((route) => resolveRouteId(route) === String(id));
     return found?.name || '-';
   };
+  const getAccessTypeLabelsByIds = (ids: string[] = []): string[] => {
+    if (!Array.isArray(ids) || ids.length === 0) return [];
+    return ids
+      .map((id) => {
+        const normalized = String(id || '').trim();
+        const found = accessTypes.find((a) => String(a?._id || '') === normalized);
+        return String(found?.accessType || '');
+      })
+      .filter(Boolean);
+  };
+  const getActionLabelsByIds = (ids: string[] = []): string[] => {
+    if (!Array.isArray(ids) || ids.length === 0) return [];
+    return ids
+      .map((id) => {
+        const normalized = String(id || '').trim();
+        const found = accionesCatalogo.find((a) => String(a?._id || a?.iud || '').trim() === normalized);
+        if (!found) return '';
+        const method = String(found.method || '').trim().toUpperCase();
+        const etiqueta = String(found.etiquetas || '').trim();
+        return etiqueta ? `${method} | ${etiqueta}` : method;
+      })
+      .filter(Boolean);
+  };
+
+  const resolveCanManageBaja = (route: Route): boolean => {
+    const raw = (route as any)?.puedeGestionarBaja;
+    if (typeof raw === 'boolean') return raw;
+    if (typeof raw === 'number') return raw === 1;
+    if (typeof raw === 'string') {
+      const normalized = raw.trim().toLowerCase();
+      if (normalized === 'true' || normalized === '1') return true;
+      if (normalized === 'false' || normalized === '0') return false;
+    }
+
+    const action = String((route as any)?.accionBajaPermitida || '').trim().toUpperCase();
+    if (action === 'ELIMINAR' || action === 'DESACTIVAR') return true;
+
+    // Fallback para no ocultar el icono cuando el backend aun no envia flags.
+    return true;
+  };
 
   const getParentOptions = (typeId: string): Route[] => {
     const currentLevel = Number(getTypeById(typeId)?.order ?? 0);
     if (currentLevel <= 1) return [];
     const parentLevel = currentLevel - 1;
-    return routes.filter((route) => getRouteTypeOrder(route) === parentLevel);
+    const editingId = editingRoute ? resolveRouteId(editingRoute) : '';
+    return routes.filter((route) => {
+      if (getRouteTypeOrder(route) !== parentLevel) return false;
+      if (!editingId) return true;
+      return resolveRouteId(route) !== editingId;
+    });
+  };
+  const resolveSuiteIdForCurrentForm = (): string => {
+    if (isSuiteType) return '';
+    if (isModuloType) return String(formData.padreId || '');
+    if (isFormularioType) return String(selectedSuiteIdForForm || '');
+    return '';
+  };
+  const resolveSuiteComponentForCurrentForm = (): string => {
+    const suiteId = resolveSuiteIdForCurrentForm();
+    if (!suiteId) return '';
+    const suite = routes.find((route) => resolveRouteId(route) === suiteId);
+    return String(suite?.component || '');
+  };
+  const resolveSuiteComponentById = (suiteId: string): string => {
+    if (!suiteId) return '';
+    const suite = routes.find((route) => resolveRouteId(route) === String(suiteId));
+    return String(suite?.component || '');
   };
 
   const suiteOptions = useMemo(
@@ -235,9 +343,11 @@ export default function GestionRutas(): React.ReactElement {
     () => routes.filter((route) => {
       if (getRouteTypeOrder(route) !== Number(moduloType?.order ?? 2)) return false;
       if (!selectedSuiteIdForForm) return false;
+      const editingId = editingRoute ? resolveRouteId(editingRoute) : '';
+      if (editingId && resolveRouteId(route) === editingId) return false;
       return String(resolveParentId(route) || '') === String(selectedSuiteIdForForm);
     }),
-    [routes, selectedSuiteIdForForm, nodeTypes]
+    [routes, selectedSuiteIdForForm, nodeTypes, editingRoute]
   );
 
   const treeNodes = useMemo(() => {
@@ -351,14 +461,31 @@ export default function GestionRutas(): React.ReactElement {
   };
 
   const resolvePreviewPath = (routePath: string): string => {
-    const normalized = normalizePath(routePath || '');
+    const normalized = normalizeRoutePath(routePath || '');
     if (!normalized || normalized === '/') return '/';
     return normalized;
   };
 
-  const handlePreviewRoute = (route: Route): void => {
-    const previewPath = resolvePreviewPath(route.path);
-    window.open(previewPath, '_blank', 'noopener,noreferrer');
+  const handlePreviewRoute = async (route: Route): Promise<void> => {
+    try {
+      const routeId = resolveRouteId(route);
+      if (!routeId) {
+        toast.error('No se pudo resolver el id de la ruta');
+        return;
+      }
+
+      const response = await previewRoute(routeId);
+      if (!response?.success || !response?.data?.path) {
+        toast.error('No se pudo resolver la ruta a visualizar');
+        return;
+      }
+
+      const previewPath = resolvePreviewPath(response.data.path);
+      window.open(previewPath, '_blank', 'noopener,noreferrer');
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'No autorizado para visualizar esta ruta';
+      toast.error(message);
+    }
   };
 
   const loadRoutes = async (): Promise<void> => {
@@ -391,6 +518,36 @@ export default function GestionRutas(): React.ReactElement {
     }
   };
 
+  const loadAccessTypes = async (): Promise<void> => {
+    try {
+      const response = await getAccessTypes();
+      if (response.success) {
+        const items = Array.isArray(response.data) ? response.data : [];
+        setAccessTypes(items);
+        setFormData((prev) => ({
+          ...prev,
+          accessType: Array.isArray(prev.accessType)
+            ? prev.accessType
+            : (prev.accessType ? [String(prev.accessType)] : []),
+        }));
+      }
+    } catch (error) {
+      console.error('Error loading access types:', error);
+    }
+  };
+
+  const loadAccionesCatalogo = async (): Promise<void> => {
+    try {
+      const response = await getAccionesCatalogo();
+      if (response.success) {
+        const items = Array.isArray(response.data) ? response.data : [];
+        setAccionesCatalogo(items.filter((item) => item?.estadoAccion !== false));
+      }
+    } catch (error) {
+      console.error('Error loading acciones catalogo:', error);
+    }
+  };
+
   const resetRouteForm = (typeId?: string): void => {
     const resolvedTypeId = String(typeId || creationType || resolveNodeTypeId(formularioType) || '');
     const resolvedType = getTypeById(resolvedTypeId);
@@ -403,7 +560,10 @@ export default function GestionRutas(): React.ReactElement {
       tipoNodoId: String(resolvedType ? resolveNodeTypeId(resolvedType) : ''),
       padreId: null,
       mostrarEnSidebar: true,
+      accessType: [],
+      acciones: [],
     });
+    setUseCustomComponent(false);
   };
 
   const openRouteModal = (route?: Route, forceTypeId?: string): void => {
@@ -418,7 +578,11 @@ export default function GestionRutas(): React.ReactElement {
         const modulo = routes.find((r) => resolveRouteId(r) === String(routeParentId || ''));
         suiteForForm = resolveParentId(modulo as Route) || '';
       }
+      const inheritedFromSuite = resolveSuiteComponentById(suiteForForm);
+      const isCustomForNonSuite = routeTypeOrder > Number(suiteType?.order ?? 1)
+        && String(route.component || '').trim() !== String(inheritedFromSuite || '').trim();
       setSelectedSuiteIdForForm(suiteForForm);
+      setUseCustomComponent(isCustomForNonSuite);
       setEditingRoute(route);
       setFormData({
         name: route.name,
@@ -429,12 +593,15 @@ export default function GestionRutas(): React.ReactElement {
         tipoNodoId: routeTypeId,
         padreId: resolveParentId(route),
         mostrarEnSidebar: route?.mostrarEnSidebar !== false,
+        accessType: resolveAccessTypeIds(route),
+        acciones: resolveActionIds(route),
       });
     } else {
       const typeId = String(forceTypeId || resolveNodeTypeId(formularioType) || '');
       setCreationType(typeId);
       setEditingRoute(null);
       setSelectedSuiteIdForForm('');
+      setUseCustomComponent(false);
       resetRouteForm(typeId);
     }
     setIsModalOpen(true);
@@ -444,6 +611,7 @@ export default function GestionRutas(): React.ReactElement {
     setIsModalOpen(false);
     setEditingRoute(null);
     setSelectedSuiteIdForForm('');
+    setUseCustomComponent(false);
     resetRouteForm();
   };
 
@@ -461,7 +629,7 @@ export default function GestionRutas(): React.ReactElement {
       return;
     }
 
-    if (!formData.name || !formData.path || !formData.component) {
+    if (!formData.name || !formData.path) {
       toast.error('Complete all required fields');
       return;
     }
@@ -470,6 +638,30 @@ export default function GestionRutas(): React.ReactElement {
 
     if (selectedTypeOrder > 1 && !formData.padreId) {
       toast.error('You must select a parent for this node type');
+      return;
+    }
+
+    const resolvedComponent = (() => {
+      if (isSuiteType) return String(formData.component || '').trim();
+      const custom = String(formData.component || '').trim();
+      if (useCustomComponent && custom) return custom;
+      return String(resolveSuiteComponentForCurrentForm() || '').trim();
+    })();
+
+    if (!resolvedComponent) {
+      toast.error('Componente no disponible. Configura primero el componente en la suite.');
+      return;
+    }
+
+    const selectedAccessTypeIds = Array.isArray(formData.accessType)
+      ? formData.accessType.filter(Boolean)
+      : (formData.accessType ? [String(formData.accessType)] : []);
+    const selectedAccionesIds = Array.isArray(formData.acciones)
+      ? formData.acciones.filter(Boolean)
+      : (formData.acciones ? [String(formData.acciones)] : []);
+
+    if (isFormularioType && selectedAccessTypeIds.length === 0) {
+      toast.error('Selecciona tipo de acceso para formulario');
       return;
     }
 
@@ -491,6 +683,7 @@ export default function GestionRutas(): React.ReactElement {
       const payload: CreateRouteDto = {
         ...formData,
         path: normalizePath(formData.path || ''),
+        component: resolvedComponent,
         layout: resolvedLayout as 'PublicLayout' | 'AuthLayout' | 'AdminLayout',
         tipoNodo: String(selectedTypeDoc.codigo || ''),
         tipoNodoId: resolveNodeTypeId(selectedTypeDoc),
@@ -498,6 +691,26 @@ export default function GestionRutas(): React.ReactElement {
           ? null
           : (formData.padreId || null),
       };
+
+      const editingId = editingRoute ? resolveRouteId(editingRoute) : '';
+      const payloadParentId = String((payload as any).padreId || '').trim();
+      if (editingId && payloadParentId && payloadParentId === editingId) {
+        toast.error('No puedes asignar la misma ruta como padre');
+        return;
+      }
+
+      if (isModuloType) {
+        delete (payload as any).accessType;
+        payload.acciones = selectedAccionesIds;
+      }
+      if (isSuiteType) {
+        delete (payload as any).accessType;
+        delete (payload as any).acciones;
+      }
+      if (isFormularioType) {
+        payload.accessType = selectedAccessTypeIds;
+        payload.acciones = selectedAccionesIds;
+      }
 
       if (editingRoute) {
         await updateRoute(resolveRouteId(editingRoute), payload);
@@ -519,9 +732,11 @@ export default function GestionRutas(): React.ReactElement {
     }
   };
   const handleDeleteRoute = async (route: Route): Promise<void> => {
+    const actionType = String((route as any)?.accionBajaPermitida || 'DESACTIVAR').toUpperCase();
+    const actionLabel = actionType === 'ELIMINAR' ? 'eliminada' : 'desactivada';
     const result = await swalFire({
       title: 'Are you sure?',
-      text: `Route "${route.name}" will be deleted or deactivated according to your role`,
+      text: `Route "${route.name}" sera ${actionLabel} segun tus permisos`,
       icon: 'warning',
       showCancelButton: true,
       confirmButtonText: 'Yes, continue',
@@ -602,6 +817,70 @@ export default function GestionRutas(): React.ReactElement {
     }
   };
 
+  const resetAccessTypeForm = (): void => {
+    setAccessTypeForm({ accessType: '' });
+    setEditingAccessTypeId('');
+  };
+
+  const handleOpenAccessTypeModal = (): void => {
+    resetAccessTypeForm();
+    setIsAccessTypeModalOpen(true);
+  };
+
+  const handleSubmitAccessType = async (e: React.FormEvent): Promise<void> => {
+    e.preventDefault();
+    const value = String(accessTypeForm.accessType || '').trim().toUpperCase();
+    if (!value) {
+      toast.error('El tipo de acceso es obligatorio');
+      return;
+    }
+
+    try {
+      setAccessTypeSubmitting(true);
+      if (editingAccessTypeId) {
+        await updateAccessType(editingAccessTypeId, { accessType: value });
+        toast.success('Tipo de acceso actualizado');
+      } else {
+        await createAccessType({ accessType: value });
+        toast.success('Tipo de acceso creado');
+      }
+      resetAccessTypeForm();
+      await loadAccessTypes();
+    } catch (error: any) {
+      console.error('Error guardando tipo de acceso:', error);
+      toast.error(error?.message || 'Error guardando tipo de acceso');
+    } finally {
+      setAccessTypeSubmitting(false);
+    }
+  };
+
+  const handleEditAccessType = (item: AccessTypeOption): void => {
+    setEditingAccessTypeId(String(item?._id || ''));
+    setAccessTypeForm({ accessType: String(item?.accessType || '') });
+  };
+
+  const handleDeactivateAccessType = async (id: string): Promise<void> => {
+    const result = await swalFire({
+      title: 'Desactivar tipo de acceso?',
+      text: 'Este tipo de acceso dejara de estar disponible para nuevas parametrizaciones.',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Desactivar',
+      cancelButtonText: 'Cancelar',
+    });
+    if (!result.isConfirmed) return;
+
+    try {
+      await deactivateAccessType(id);
+      toast.success('Tipo de acceso desactivado');
+      if (editingAccessTypeId === id) resetAccessTypeForm();
+      await loadAccessTypes();
+    } catch (error: any) {
+      console.error('Error desactivando tipo de acceso:', error);
+      toast.error(error?.message || 'Error desactivando tipo de acceso');
+    }
+  };
+
   const renderTree = (nodes: RouteTreeNode[], level = 0): React.ReactNode => {
     return nodes.map((node) => (
       <div key={node.id} style={{ paddingLeft: `${level * 18}px` }} className="py-1">
@@ -635,6 +914,10 @@ export default function GestionRutas(): React.ReactElement {
             <Button variant="outline" onClick={() => setIsNodeTypeModalOpen(true)}>
               <Plus className="h-4 w-4 mr-2" />
               Param. Tipos
+            </Button>
+            <Button variant="outline" onClick={handleOpenAccessTypeModal}>
+              <Plus className="h-4 w-4 mr-2" />
+              Param. Accesos
             </Button>
             <Button variant="outline" onClick={() => openRouteModal(undefined, resolveNodeTypeId(suiteType) || '')}>
               <Plus className="h-4 w-4 mr-2" />
@@ -694,6 +977,8 @@ export default function GestionRutas(): React.ReactElement {
                   <TableRow>
                     <TableHead>Nombre</TableHead>
                     <TableHead>Tipo</TableHead>
+                    <TableHead>Acceso</TableHead>
+                    <TableHead>Acciones HTTP</TableHead>
                     <TableHead>Padre</TableHead>
                     <TableHead>Ruta</TableHead>
                     <TableHead>Componente</TableHead>
@@ -705,7 +990,7 @@ export default function GestionRutas(): React.ReactElement {
                 <TableBody>
                   {tableRows.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center text-muted-foreground">
+                      <TableCell colSpan={10} className="text-center text-muted-foreground">
                         No hay rutas que coincidan con los filtros aplicados.
                       </TableCell>
                     </TableRow>
@@ -737,6 +1022,32 @@ export default function GestionRutas(): React.ReactElement {
                         <TableCell>
                           <Badge variant="outline">{getRouteType(route)}</Badge>
                         </TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1">
+                            {getAccessTypeLabelsByIds(resolveAccessTypeIds(route)).length > 0 ? (
+                              getAccessTypeLabelsByIds(resolveAccessTypeIds(route)).map((label) => (
+                                <Badge key={`${resolveRouteId(route)}-${label}`} variant="outline">
+                                  {label}
+                                </Badge>
+                              ))
+                            ) : (
+                              <Badge variant="outline">-</Badge>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1">
+                            {getActionLabelsByIds(resolveActionIds(route)).length > 0 ? (
+                              getActionLabelsByIds(resolveActionIds(route)).map((label) => (
+                                <Badge key={`${resolveRouteId(route)}-accion-${label}`} variant="outline">
+                                  {label}
+                                </Badge>
+                              ))
+                            ) : (
+                              <Badge variant="outline">-</Badge>
+                            )}
+                          </div>
+                        </TableCell>
                         <TableCell>{getRouteNameById(resolveParentId(route))}</TableCell>
                         <TableCell>
                           <code className="px-2 py-1 bg-muted rounded text-xs">{route.path}</code>
@@ -753,15 +1064,22 @@ export default function GestionRutas(): React.ReactElement {
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
-                            <Button variant="ghost" size="icon" onClick={() => handlePreviewRoute(route)} title="Previsualizar">
+                            <Button variant="ghost" size="icon" onClick={() => void handlePreviewRoute(route)} title="Previsualizar">
                               <Eye className="h-4 w-4" />
                             </Button>
                             <Button variant="ghost" size="icon" onClick={() => openRouteModal(route)}>
                               <Edit className="h-4 w-4" />
                             </Button>
-                            <Button variant="ghost" size="icon" onClick={() => void handleDeleteRoute(route)}>
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
+                            {resolveCanManageBaja(route) && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => void handleDeleteRoute(route)}
+                                title={String(route.accionBajaPermitida || '').toUpperCase() === 'ELIMINAR' ? 'Eliminar' : 'Desactivar'}
+                              >
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -775,7 +1093,7 @@ export default function GestionRutas(): React.ReactElement {
       </Card>
 
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-        <DialogContent className="sm:max-w-[560px]">
+        <DialogContent className="sm:max-w-[980px]">
           <form onSubmit={(e) => void handleSubmitRoute(e)}>
             <DialogHeader>
               <DialogTitle>{editingRoute ? 'Editar Ruta' : getCreateDialogTitle()}</DialogTitle>
@@ -783,7 +1101,7 @@ export default function GestionRutas(): React.ReactElement {
                 Parametriza nodos jerarquicos (suite, modulo, formulario)
               </DialogDescription>
             </DialogHeader>
-            <div className="grid gap-4 py-4">
+            <div className="grid gap-4 py-4 md:grid-cols-2">
               {editingRoute ? (
                 <div className="space-y-2">
                   <Label htmlFor="tipoNodo">Tipo de nodo *</Label>
@@ -918,7 +1236,7 @@ export default function GestionRutas(): React.ReactElement {
                     setFormData((prev) => ({
                       ...prev,
                       name: nextName,
-                      component: editingRoute ? prev.component : toPascalCase(nextName),
+                      component: isSuiteType ? toPascalCase(nextName) : prev.component,
                       path: editingRoute
                         ? prev.path
                         : isSuiteType
@@ -952,9 +1270,9 @@ export default function GestionRutas(): React.ReactElement {
                   </p>
                 )}
               </div>
-              {editingRoute && (
-                <div className="space-y-2">
-                  <Label htmlFor="component">Componente *</Label>
+              <div className="space-y-2 md:col-span-2">
+                <Label htmlFor="component">Componente *</Label>
+                {isSuiteType ? (
                   <Input
                     id="component"
                     value={formData.component}
@@ -962,10 +1280,35 @@ export default function GestionRutas(): React.ReactElement {
                     placeholder="Ej: Gobernanza"
                     required
                   />
-                </div>
-              )}
+                ) : (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between rounded-md border px-3 py-2">
+                      <Label htmlFor="useCustomComponent" className="cursor-pointer text-sm">
+                        Usar componente personalizado
+                      </Label>
+                      <Switch
+                        id="useCustomComponent"
+                        checked={useCustomComponent}
+                        onCheckedChange={(checked) => setUseCustomComponent(checked)}
+                      />
+                    </div>
+                    <Input
+                      id="component"
+                      value={useCustomComponent ? String(formData.component || '') : (resolveSuiteComponentForCurrentForm() || '')}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, component: e.target.value }))}
+                      placeholder={useCustomComponent ? 'Ej: ParametrosAvanzados' : 'Heredado desde suite'}
+                      disabled={!useCustomComponent}
+                    />
+                  </div>
+                )}
+                {!isSuiteType && (
+                  <p className="text-xs text-muted-foreground">
+                    Si no activas personalizado, el componente se hereda desde la suite.
+                  </p>
+                )}
+              </div>
               {(editingRoute || !isFormularioType) ? (
-                <div className="space-y-2">
+                <div className="space-y-2 md:col-span-2">
                   <Label htmlFor="layout">Layout *</Label>
                   <Select
                     value={formData.layout}
@@ -984,7 +1327,7 @@ export default function GestionRutas(): React.ReactElement {
                   </Select>
                 </div>
               ) : (
-                <div className="space-y-2">
+                <div className="space-y-2 md:col-span-2">
                   <Label>Layout</Label>
                   <Input
                     value={
@@ -998,7 +1341,87 @@ export default function GestionRutas(): React.ReactElement {
                   </p>
                 </div>
               )}
-              <div className="flex items-center justify-between rounded-md border px-3 py-2">
+              {isFormularioType && (
+                <div className="space-y-2 md:col-span-2">
+                  <Label>Tipo de acceso *</Label>
+                  <div className="rounded-md border p-3 space-y-2">
+                    {accessTypes.filter((item) => item.estadoAcces !== false).map((item) => {
+                      const id = String(item._id || '');
+                      const selected = Array.isArray(formData.accessType) && formData.accessType.includes(id);
+                      return (
+                        <label key={id} className="flex items-center gap-2 text-sm cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={selected}
+                            onChange={(e) => {
+                              const checked = e.target.checked;
+                              setFormData((prev) => {
+                                const current = Array.isArray(prev.accessType)
+                                  ? [...prev.accessType]
+                                  : (prev.accessType ? [String(prev.accessType)] : []);
+                                const next = checked
+                                  ? [...new Set([...current, id])]
+                                  : current.filter((value) => value !== id);
+                                return { ...prev, accessType: next };
+                              });
+                            }}
+                          />
+                          <span>{String(item.accessType || 'N/A')}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Puedes seleccionar uno o ambos tipos de acceso.
+                  </p>
+                </div>
+              )}
+              {(isModuloType || isFormularioType) && (
+                <div className="space-y-2 md:col-span-2">
+                  <Label htmlFor="acciones">Acciones (ObjectId de acciones)</Label>
+                  <div className="rounded-md border p-3 space-y-2">
+                    {accionesCatalogo.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No hay acciones disponibles.</p>
+                    ) : (
+                      accionesCatalogo.map((accion) => {
+                        const id = String(accion?._id || accion?.iud || '').trim();
+                        const method = String(accion?.method || '').trim().toUpperCase();
+                        const etiqueta = String(accion?.etiquetas || '').trim();
+                        const label = etiqueta ? `${method} | ${etiqueta}` : method;
+                        const selected = Array.isArray(formData.acciones)
+                          ? formData.acciones.map((v) => String(v)).includes(id)
+                          : String(formData.acciones || '') === id;
+                        if (!id) return null;
+                        return (
+                          <label key={id} className="flex items-center gap-2 text-sm cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={selected}
+                              onChange={(e) => {
+                                const checked = e.target.checked;
+                                setFormData((prev) => {
+                                  const current = Array.isArray(prev.acciones)
+                                    ? [...prev.acciones.map((v) => String(v))]
+                                    : (prev.acciones ? [String(prev.acciones)] : []);
+                                  const next = checked
+                                    ? [...new Set([...current, id])]
+                                    : current.filter((value) => value !== id);
+                                  return { ...prev, acciones: next };
+                                });
+                              }}
+                            />
+                            <span>{label}</span>
+                          </label>
+                        );
+                      })
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Selecciona una o varias acciones. Se enviara como array de ObjectId.
+                  </p>
+                </div>
+              )}
+              <div className="flex items-center justify-between rounded-md border px-3 py-2 md:col-span-2">
                 <Label htmlFor="mostrarEnSidebar" className="cursor-pointer">Mostrar en sidebar</Label>
                 <Switch
                   id="mostrarEnSidebar"
@@ -1044,6 +1467,96 @@ export default function GestionRutas(): React.ReactElement {
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsTreeModalOpen(false)}>Cerrar</Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={isAccessTypeModalOpen}
+        onOpenChange={(open) => {
+          setIsAccessTypeModalOpen(open);
+          if (!open) resetAccessTypeForm();
+        }}
+      >
+        <DialogContent className="sm:max-w-[620px]">
+          <DialogHeader>
+            <DialogTitle>Parametrizacion de Tipos de Acceso</DialogTitle>
+            <DialogDescription>
+              Crea, modifica y desactiva los tipos de acceso disponibles para rutas.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={(e) => void handleSubmitAccessType(e)} className="grid gap-3 py-2">
+            <div className="space-y-2">
+              <Label>Tipo de acceso</Label>
+              <Input
+                value={accessTypeForm.accessType}
+                onChange={(e) => setAccessTypeForm({ accessType: e.target.value })}
+                placeholder="PUBLIC o PRIVATE"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              {editingAccessTypeId ? (
+                <Button type="button" variant="outline" onClick={resetAccessTypeForm} disabled={accessTypeSubmitting}>
+                  Cancelar edicion
+                </Button>
+              ) : null}
+              <Button type="submit" disabled={accessTypeSubmitting}>
+                {accessTypeSubmitting
+                  ? 'Guardando...'
+                  : editingAccessTypeId
+                    ? 'Actualizar'
+                    : 'Crear'}
+              </Button>
+            </div>
+          </form>
+
+          <div className="rounded-md border max-h-[300px] overflow-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Tipo</TableHead>
+                  <TableHead>Estado</TableHead>
+                  <TableHead className="text-right">Acciones</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {accessTypes.map((item) => {
+                  const id = String(item?._id || '');
+                  const active = item?.estadoAcces !== false;
+                  return (
+                    <TableRow key={id}>
+                      <TableCell>{String(item?.accessType || '-')}</TableCell>
+                      <TableCell>
+                        <Badge variant={active ? 'outline' : 'secondary'}>
+                          {active ? 'Activo' : 'Inactivo'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleEditAccessType(item)}
+                            disabled={!active}
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => void handleDeactivateAccessType(id)}
+                            disabled={!active}
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
         </DialogContent>
       </Dialog>
 

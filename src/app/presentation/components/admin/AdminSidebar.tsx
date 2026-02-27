@@ -25,7 +25,8 @@ import {
     ChevronRight
 } from 'lucide-react';
 
-import { getAdminSidebarTree, type AdminNavTreeItem } from '@/app/services/routeService';
+import { getAdminSidebarFallbackTree, getAdminSidebarTreeWithContext, type AdminNavTreeItem } from '@/app/services/routeService';
+import { normalizeRoutePath } from '@/app/services/routePathNormalizer';
 import type { AdminSidebarProps } from '@/types/components';
 
 const DRAWER_WIDTH = '260px';
@@ -37,10 +38,6 @@ interface MenuItem {
     label: string;
     icon: React.ReactNode;
     path: string;
-}
-
-interface MenuLinkProps {
-    item: MenuItem;
 }
 
 interface MenuTreeItem extends MenuItem {
@@ -56,22 +53,9 @@ export default function AdminSidebar({ mobileOpen, setMobileOpen }: AdminSidebar
     const [dynamicTree, setDynamicTree] = useState<MenuTreeItem[]>([]);
     const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({});
 
-    const fallbackMenu: MenuItem[] = [
-        { label: 'Dashboard', icon: <LayoutDashboard className='w-5 h-5' />, path: '/admin/dashboard' },
-        { label: 'Productos', icon: <Package className='w-5 h-5' />, path: '/admin/productos' },
-        { label: 'Categorias', icon: <Tags className='w-5 h-5' />, path: '/admin/categorias' },
-        { label: 'Usuarios', icon: <Users className='w-5 h-5' />, path: '/admin/usuarios' },
-        { label: 'Referidos', icon: <Network className='w-5 h-5' />, path: '/admin/referidos' },
-        { label: 'Pedidos', icon: <ScrollText className='w-5 h-5' />, path: '/admin/pedidos' },
-        { label: 'Rutas', icon: <Route className='w-5 h-5' />, path: '/admin/rutas' },
-        { label: 'Parametrizacion', icon: <Wrench className='w-5 h-5' />, path: '/admin/parametrizacion' },
-        { label: 'Parametrizacion Corporativa', icon: <Building2 className='w-5 h-5' />, path: '/admin/parametrizacion-corporativa' },
-        { label: 'Publicidad y Posts', icon: <Palette className='w-5 h-5' />, path: '/admin/personalizacion/modal-inicio' },
-        { label: 'Configuracion', icon: <Settings className='w-5 h-5' />, path: '/admin/configuracion' },
-    ];
 
     const iconByPath = (path: string): React.ReactNode => {
-        const normalized = String(path || '').toLowerCase();
+        const normalized = normalizeRoutePath(path).toLowerCase();
         if (normalized.includes('/dashboard')) return <LayoutDashboard className='w-5 h-5' />;
         if (normalized.includes('/productos')) return <Package className='w-5 h-5' />;
         if (normalized.includes('/categorias')) return <Tags className='w-5 h-5' />;
@@ -80,6 +64,7 @@ export default function AdminSidebar({ mobileOpen, setMobileOpen }: AdminSidebar
         if (normalized.includes('/pedidos')) return <ScrollText className='w-5 h-5' />;
         if (normalized.includes('/rutas')) return <Route className='w-5 h-5' />;
         if (normalized.includes('/parametrizacion-corporativa')) return <Building2 className='w-5 h-5' />;
+        if (normalized.includes('/gobernanza') || normalized.includes('/gobernaza')) return <Building2 className='w-5 h-5' />;
         if (normalized.includes('/parametrizacion')) return <Wrench className='w-5 h-5' />;
         if (normalized.includes('/personalizacion') || normalized.includes('/posts')) return <Palette className='w-5 h-5' />;
         if (normalized.includes('/configuracion')) return <Settings className='w-5 h-5' />;
@@ -89,10 +74,48 @@ export default function AdminSidebar({ mobileOpen, setMobileOpen }: AdminSidebar
     useEffect(() => {
         let active = true;
 
+        const staticSuperAdminMenu: MenuTreeItem[] = [
+            { id: 'static:/admin/dashboard', label: 'Dashboard', path: '/admin/dashboard', icon: iconByPath('/admin/dashboard'), tipoNodo: 'FORMULARIO', children: [] },
+            { id: 'static:/admin/productos', label: 'Productos', path: '/admin/productos', icon: iconByPath('/admin/productos'), tipoNodo: 'FORMULARIO', children: [] },
+            { id: 'static:/admin/categorias', label: 'Categorias', path: '/admin/categorias', icon: iconByPath('/admin/categorias'), tipoNodo: 'FORMULARIO', children: [] },
+            { id: 'static:/admin/usuarios', label: 'Usuarios', path: '/admin/usuarios', icon: iconByPath('/admin/usuarios'), tipoNodo: 'FORMULARIO', children: [] },
+            { id: 'static:/admin/referidos', label: 'Referidos', path: '/admin/referidos', icon: iconByPath('/admin/referidos'), tipoNodo: 'FORMULARIO', children: [] },
+            { id: 'static:/admin/pedidos', label: 'Pedidos', path: '/admin/pedidos', icon: iconByPath('/admin/pedidos'), tipoNodo: 'FORMULARIO', children: [] },
+            { id: 'static:/admin/rutas', label: 'Rutas', path: '/admin/rutas', icon: iconByPath('/admin/rutas'), tipoNodo: 'FORMULARIO', children: [] },
+            { id: 'static:/admin/parametrizacion', label: 'Parametrizacion', path: '/admin/parametrizacion', icon: iconByPath('/admin/parametrizacion'), tipoNodo: 'FORMULARIO', children: [] },
+            { id: 'static:/admin/parametrizacion-corporativa', label: 'Parametrizacion Corporativa', path: '/admin/parametrizacion-corporativa', icon: iconByPath('/admin/parametrizacion-corporativa'), tipoNodo: 'FORMULARIO', children: [] },
+            { id: 'static:/admin/gobernanza', label: 'Gobernanza', path: '/admin/gobernanza/parametros/parametros-gobernanza', icon: iconByPath('/admin/gobernanza/parametros/parametros-gobernanza'), tipoNodo: 'FORMULARIO', children: [] },
+            { id: 'static:/admin/personalizacion/modal-inicio', label: 'Publicidad y Posts', path: '/admin/personalizacion/modal-inicio', icon: iconByPath('/admin/personalizacion/modal-inicio'), tipoNodo: 'FORMULARIO', children: [] },
+            { id: 'static:/admin/configuracion', label: 'Configuracion', path: '/admin/configuracion', icon: iconByPath('/admin/configuracion'), tipoNodo: 'FORMULARIO', children: [] }
+        ];
+
         const loadDynamicMenu = async (): Promise<void> => {
             try {
-                const routes = await getAdminSidebarTree();
-                if (!active || !routes.length) return;
+                const { tree: routes, actorTipo: actor } = await getAdminSidebarTreeWithContext();
+                if (!active) return;
+                if (!routes.length) {
+                    const fallbackTree = await getAdminSidebarFallbackTree(actor);
+                    if (!active) return;
+                    if (fallbackTree.length > 0) {
+                        const mappedFallbackTree: MenuTreeItem[] = fallbackTree.map(function mapFallbackNode(node): MenuTreeItem {
+                            return {
+                                id: node.id,
+                                label: node.label,
+                                path: node.path,
+                                icon: iconByPath(node.path),
+                                tipoNodo: node.tipoNodo,
+                                children: (node.children || []).map(mapFallbackNode)
+                            };
+                        });
+                        setDynamicTree(mappedFallbackTree);
+                    } else if (actor === 'SUPERADMIN') {
+                        setDynamicTree(staticSuperAdminMenu);
+                    } else {
+                        setDynamicTree([]);
+                    }
+                    setExpandedNodes({});
+                    return;
+                }
                 const mappedTree: MenuTreeItem[] = routes.map((route) => ({
                     id: route.id,
                     label: route.label,
@@ -110,6 +133,7 @@ export default function AdminSidebar({ mobileOpen, setMobileOpen }: AdminSidebar
                         };
                     })
                 }));
+                // SUPERADMIN con herencia activa: mostrar solo rutas de BD.
                 setDynamicTree(mappedTree);
                 const initialExpanded: Record<string, boolean> = {};
                 mappedTree.forEach((node) => {
@@ -134,47 +158,6 @@ export default function AdminSidebar({ mobileOpen, setMobileOpen }: AdminSidebar
         };
     }, []);
 
-    const menu: MenuItem[] = dynamicTree.length ? [] : fallbackMenu;
-
-    const MenuLink = ({ item }: MenuLinkProps): React.ReactElement => {
-        const isActive = location.pathname === item.path;
-
-        const linkClasses = `
-            flex items-center space-x-3 p-3 mb-1 rounded-md cursor-pointer transition-all duration-200
-            ${isActive
-                ? `${PRIMARY_BG_LIGHT_CLASS} ${PRIMARY_COLOR_CLASS} font-semibold`
-                : `text-muted-foreground ${HOVER_BG_CLASS} hover:${PRIMARY_COLOR_CLASS}`
-            }
-        `;
-
-        const iconClasses = `
-            flex-shrink-0 w-5 h-5 
-            ${isActive ? PRIMARY_COLOR_CLASS : 'text-muted-foreground'}
-        `;
-
-        const handleClick = (): void => {
-            navigate(item.path);
-            if (setMobileOpen) {
-                setMobileOpen(false);
-            }
-        };
-
-        return (
-            <div
-                key={item.label}
-                className={linkClasses}
-                onClick={handleClick}
-            >
-                <span className={iconClasses}>
-                    {item.icon}
-                </span>
-                <span className="text-sm">
-                    {item.label}
-                </span>
-            </div>
-        );
-    };
-
     const toggleNode = (id: string): void => {
         setExpandedNodes((prev) => ({ ...prev, [id]: !prev[id] }));
     };
@@ -182,7 +165,7 @@ export default function AdminSidebar({ mobileOpen, setMobileOpen }: AdminSidebar
     const TreeNode = ({ node, level = 0 }: { node: MenuTreeItem; level?: number }): React.ReactElement => {
         const hasChildren = Array.isArray(node.children) && node.children.length > 0;
         const isExpanded = !!expandedNodes[node.id];
-        const isActive = location.pathname === node.path;
+        const isActive = normalizeRoutePath(location.pathname) === normalizeRoutePath(node.path);
 
         const linkClasses = `
             flex items-center justify-between p-3 mb-1 rounded-md cursor-pointer transition-all duration-200
@@ -243,9 +226,7 @@ export default function AdminSidebar({ mobileOpen, setMobileOpen }: AdminSidebar
             </div>
 
             <nav className="px-2 space-y-1">
-                {dynamicTree.length > 0
-                    ? dynamicTree.map((node) => <TreeNode key={node.id} node={node} />)
-                    : menu.map((m) => <MenuLink key={m.label} item={m} />)}
+                {dynamicTree.map((node) => <TreeNode key={node.id} node={node} />)}
             </nav>
 
             <div className="flex-grow" />

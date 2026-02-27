@@ -1,4 +1,4 @@
-import { Routes, Route, useLocation } from 'react-router-dom';
+import { Routes, Route, useLocation, Navigate } from 'react-router-dom';
 import { useState, useEffect, ReactElement } from 'react';
 import { useAuth } from '@/app/providers/AuthProvider';
 import { getAuthorizedRoutes } from '@/app/services/routeService';
@@ -45,6 +45,7 @@ import PostsParametrizables from '@/app/presentation/pages/admin/PostsParametriz
 import PerfilCorporativo from '../presentation/pages/admin/PerfilCorporativo';
 import DesactivarRepresentante from '../presentation/pages/admin/DesactivarRepresentante';
 import ParametrosGobernanza from '@/app/presentation/pages/admin/ParametrosGobernanza';
+import ParametrizacionCatologTenant from '@/app/presentation/pages/admin/ParametrizacionCatologTenant';
 
 // Types for route system
 interface RouteConfig {
@@ -100,6 +101,8 @@ const componentMap: ComponentMapType = {
     PerfilCorporativo,
     DesactivarRepresentante,
     ParametrosGobernanza,
+    ParametrizacionCatologTenant,
+    ParametrizacionCatalogTenant: ParametrizacionCatologTenant,
     // Alias dinamico para rutas parametrizadas de perfil
     ConfiguracionPerfil: Perfil,
 };

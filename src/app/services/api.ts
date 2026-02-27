@@ -9,6 +9,28 @@ export type ApiOptions = Omit<RequestInit, 'body' | 'headers'> & {
     logoutOn401?: boolean;
 };
 
+const buildSafeHeaders = (
+    headers: ApiHeaders | undefined,
+    useAuth: boolean,
+    token: string | null
+): ApiHeaders => {
+    const safeHeaders: ApiHeaders = {
+        'Content-Type': 'application/json',
+        ...(headers || {}),
+    };
+
+    if (useAuth && token) {
+        safeHeaders['metasploit'] = token;
+        safeHeaders['Authorization'] = `Bearer ${token}`;
+    } else {
+        delete safeHeaders['metasploit'];
+        delete safeHeaders['Authorization'];
+        delete safeHeaders['x-token'];
+    }
+
+    return safeHeaders;
+};
+
 export const apiFetch = async (
     endpoint: string,
     options: ApiOptions
@@ -16,32 +38,20 @@ export const apiFetch = async (
     const token: string | null = localStorage.getItem('token');
     const useAuth: boolean = options.useAuth ?? true;
     const logoutOn401: boolean = options.logoutOn401 ?? true;
+    const requestOptions: ApiOptions = { ...options };
 
-    const defaultHeaders: ApiHeaders = {
-        'Content-Type': 'application/json',
-        ...options.headers,
-    };
+    requestOptions.headers = buildSafeHeaders(requestOptions.headers, useAuth, token);
 
-    if (useAuth && token) {
-        defaultHeaders['metasploit'] = token;
-        defaultHeaders['Authorization'] = `Bearer ${token}`;
+    if (requestOptions.body && !(requestOptions.body instanceof FormData)) {
+        requestOptions.body = JSON.stringify(requestOptions.body);
     }
 
-    options.headers = {
-        ...defaultHeaders,
-        ...options.headers,
-    };
-
-    if (options.body && !(options.body instanceof FormData)) {
-        options.body = JSON.stringify(options.body);
-    }
-
-    if (options.body instanceof FormData) {
-        delete (options.headers as ApiHeaders)['Content-Type'];
+    if (requestOptions.body instanceof FormData) {
+        delete (requestOptions.headers as ApiHeaders)['Content-Type'];
     }
 
     try {
-        const response: Response = await fetch(endpoint, options as RequestInit);
+        const response: Response = await fetch(endpoint, requestOptions as RequestInit);
 
         // Verificar si es 401 Unauthorized en endpoints autenticados
         if (response.status === 401 && useAuth && logoutOn401) {
@@ -51,7 +61,7 @@ export const apiFetch = async (
             throw new Error('Sesion expirada. Por favor inicia sesion nuevamente.');
         }
 
-        if (options.responseType === 'raw') {
+        if (requestOptions.responseType === 'raw') {
             if (!response.ok) {
                 throw new Error(response.statusText || 'Error de red en respuesta raw');
             }
@@ -77,4 +87,15 @@ export const apiFetch = async (
         console.error(`Error en fetch a ${endpoint}:`, error.message);
         throw error;
     }
+};
+
+export const apiFetchPublic = async (
+    endpoint: string,
+    options: Omit<ApiOptions, 'useAuth' | 'logoutOn401'> = {}
+): Promise<any | Response | null> => {
+    return apiFetch(endpoint, {
+        ...options,
+        useAuth: false,
+        logoutOn401: false,
+    });
 };

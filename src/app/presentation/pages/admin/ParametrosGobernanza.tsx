@@ -39,7 +39,13 @@ type EndpointSpec = {
 
 type Vista = { id: string; label: string; path: string };
 type Accion = { id: string; label: string; method: string };
-type TenantGlobal = { id: string; label: string; corporativo: string };
+type TenantGlobal = {
+  id: string;
+  label: string;
+  corporativo: string;
+  tenantSuperAdmin?: string;
+  tenantGlobalAdmin?: string;
+};
 type PermisoItem = { vistaId: string; accionId: string[] };
 type ReglaOption = { id: string; label: string };
 type ContextOption = { id: string; label: string };
@@ -47,6 +53,9 @@ type RuleCatalog = { id: string; raw: any };
 type HeredaGlobalOption = { id: string; label: string };
 type CatalogSelection = { vistas: string[]; acciones: string[] };
 type TenantCorporativoOption = { id: string; label: string; tenantGlobalId: string };
+type GenericSelectOption = { id: string; label: string; rol?: string };
+type HeredaScope = 'tenantSuperAdmin' | 'tenantGlobal' | 'unknown';
+const TENANT_SUPERADMIN_SCOPE_PREFIX = '__tsa_scope__:';
 
 const METHOD_STYLE: Record<HttpMethod, string> = {
   GET: 'bg-blue-100 text-blue-700 border-blue-200',
@@ -60,7 +69,7 @@ const ENDPOINTS: EndpointSpec[] = [
   {
     id: 'tenant-crear-global-usuario',
     section: 'tenant',
-    actor: 'ambos',
+    actor: 'tenantSuperAdmin',
     method: 'POST',
     path: '/api/config/global/creacion/usu/tenant/global',
     title: 'Crear tenant global (usuario)',
@@ -68,6 +77,8 @@ const ENDPOINTS: EndpointSpec[] = [
     fields: [
       { name: 'nvlGeneracionTenant', label: 'Nivel generacion tenant', type: 'id', required: true },
       { name: 'tipo_tenant', label: 'Tipo tenant', type: 'id', required: true },
+      { name: 'coporativo', label: 'Corporativo (empresa)', type: 'id' },
+      { name: 'tenantGlobalRef', label: 'Tenant global ref', type: 'id' },
       { name: 'ownerType', label: 'Owner type', type: 'id', required: true },
       { name: 'apisDominios', label: 'Apis dominios', type: 'id', required: true },
       { name: 'accionesUsu', label: 'Accion usuario', type: 'id', required: true },
@@ -77,7 +88,7 @@ const ENDPOINTS: EndpointSpec[] = [
   {
     id: 'tenant-crear-global-admin',
     section: 'tenant',
-    actor: 'tenantSuperAdmin',
+    actor: 'ambos',
     method: 'POST',
     path: '/api/config/global/creacion/admin/tenant/global',
     title: 'Crear tenant global (admin)',
@@ -85,6 +96,8 @@ const ENDPOINTS: EndpointSpec[] = [
     fields: [
       { name: 'nvlGeneracionTenant', label: 'Nivel generacion tenant', type: 'id', required: true },
       { name: 'tipo_tenant', label: 'Tipo tenant', type: 'id', required: true },
+      { name: 'coporativo', label: 'Corporativo (empresa)', type: 'id' },
+      { name: 'tenantGlobalRef', label: 'Tenant global ref', type: 'id' },
       { name: 'apisDominios', label: 'Apis dominios', type: 'id', required: true },
       { name: 'accionesUsu', label: 'Accion usuario', type: 'id', required: true },
       { name: 'rolesMabs', label: 'Rol mabs', type: 'id', required: true },
@@ -224,7 +237,7 @@ const ENDPOINTS: EndpointSpec[] = [
     section: 'permisos',
     actor: 'tenantSuperAdmin',
     method: 'GET',
-    path: '/api/config/permisos/creacion/admin/tenant/global',
+    path: '/api/config/permisos/creacion/admin/tenant/global?incluirSuperAdmin=false',
     title: 'Listar herencias admin/global',
     description: 'Lista registros creados en flujo admin/tenant/global.',
     fields: [],
@@ -238,10 +251,8 @@ const ENDPOINTS: EndpointSpec[] = [
     title: 'Actualizar herencia admin/global',
     description: 'Actualiza una herencia por id.',
     fields: [
-      { name: 'id', label: 'ID herencia', type: 'id', required: true, pathParam: true },
       { name: 'tenantGlobal', label: 'Tenant global', type: 'id' },
-      { name: 'tenantCorporativo', label: 'Tenant corporativo', type: 'id' },
-      { name: 'heredaGlobal', label: 'Herencia global', type: 'id' },
+      { name: 'herenciaAsociada', label: 'Herencia asociada', type: 'id', required: true, pathParam: true },
       { name: 'permisos', label: 'Permisos por vista/accion', type: 'permisos' },
     ],
   },
@@ -267,7 +278,7 @@ const ENDPOINTS: EndpointSpec[] = [
   },
   {
     id: 'perm-crear-coporativo',
-    section: 'permisos',
+    section: 'tenant',
     actor: 'tenantGlobal',
     method: 'POST',
     path: '/api/config/permisos/creacion/usu/tenant/coporativo',
@@ -284,7 +295,7 @@ const ENDPOINTS: EndpointSpec[] = [
   },
   {
     id: 'perm-crear-corporativo-alias',
-    section: 'permisos',
+    section: 'tenant',
     actor: 'tenantGlobal',
     method: 'POST',
     path: '/api/config/permisos/creacion/usu/tenant/corporativo',
@@ -301,7 +312,7 @@ const ENDPOINTS: EndpointSpec[] = [
   },
   {
     id: 'perm-actualizar-corporativo',
-    section: 'permisos',
+    section: 'tenant',
     actor: 'tenantGlobal',
     method: 'PUT',
     path: '/api/config/permisos/corporativo/actualizar/tenant/:id',
@@ -319,7 +330,7 @@ const ENDPOINTS: EndpointSpec[] = [
   },
   {
     id: 'perm-desactivar-corporativo',
-    section: 'permisos',
+    section: 'tenant',
     actor: 'tenantGlobal',
     method: 'DELETE',
     path: '/api/config/permisos/corporativo/desactivar/tenant/:id',
@@ -329,7 +340,7 @@ const ENDPOINTS: EndpointSpec[] = [
   },
   {
     id: 'perm-eliminar-corporativo',
-    section: 'permisos',
+    section: 'tenant',
     actor: 'tenantGlobal',
     method: 'DELETE',
     path: '/api/config/permisos/corporativo/eliminar/tenant/:id',
@@ -339,7 +350,7 @@ const ENDPOINTS: EndpointSpec[] = [
   },
   {
     id: 'perm-corporativo-guardar-catalogo',
-    section: 'permisos',
+    section: 'tenant',
     actor: 'tenantGlobal',
     method: 'POST',
     path: '/api/config/permisos/corporativo/guardar/catologo/tenant/corporativo',
@@ -352,7 +363,7 @@ const ENDPOINTS: EndpointSpec[] = [
   },
   {
     id: 'perm-corporativo-guardar-rol',
-    section: 'permisos',
+    section: 'tenant',
     actor: 'tenantGlobal',
     method: 'POST',
     path: '/api/config/permisos/corporativo/guardar/roles/tenant/corporativo',
@@ -362,7 +373,7 @@ const ENDPOINTS: EndpointSpec[] = [
   },
   {
     id: 'perm-corporativo-crear-tenant',
-    section: 'permisos',
+    section: 'tenant',
     actor: 'tenantGlobal',
     method: 'POST',
     path: '/api/config/permisos/corporativo/crear/tenant',
@@ -393,7 +404,7 @@ const ENDPOINTS: EndpointSpec[] = [
   },
   {
     id: 'perm-corporativo-crear-nivel',
-    section: 'permisos',
+    section: 'tenant',
     actor: 'tenantGlobal',
     method: 'POST',
     path: '/api/config/permisos/corporativo/crear/tenant/nvl/corporativo',
@@ -436,6 +447,8 @@ const pickTenantCorporate = (row: any): string => {
     'Sin corporativo'
   );
 };
+const isTenantSuperAdminScopeOption = (value: string): boolean =>
+  String(value || '').trim().startsWith(TENANT_SUPERADMIN_SCOPE_PREFIX);
 
 const ParametrosGobernanza: React.FC = () => {
   const [activeSection, setActiveSection] = useState<EndpointSection>('tenant');
@@ -454,12 +467,21 @@ const ParametrosGobernanza: React.FC = () => {
   const [contextos, setContextos] = useState<ContextOption[]>([]);
   const [ruleCatalog, setRuleCatalog] = useState<Record<string, any>>({});
   const [heredaGlobalOptions, setHeredaGlobalOptions] = useState<HeredaGlobalOption[]>([]);
+  const [heredaGlobalScopeById, setHeredaGlobalScopeById] = useState<Record<string, HeredaScope>>({});
   const [catalogSelection, setCatalogSelection] = useState<Record<string, CatalogSelection>>({});
   const [bulkAllMode, setBulkAllMode] = useState<Record<string, boolean>>({});
   const [tenantCorporativos, setTenantCorporativos] = useState<TenantCorporativoOption[]>([]);
+  const [tenantGlobalSelects, setTenantGlobalSelects] = useState<Record<string, GenericSelectOption[]>>({});
+  const [tenantGlobalActor, setTenantGlobalActor] = useState<{ rol?: string; tenantGlobalId?: string | null; tenantSuperAdminId?: string | null; tenantCorporativoId?: string | null }>({});
+  const [tenantGlobalSelectsDebug, setTenantGlobalSelectsDebug] = useState<string>('');
   const [tenantCorpLoadingByEndpoint, setTenantCorpLoadingByEndpoint] = useState<Record<string, boolean>>({});
   const [tenantCorpErrorByEndpoint, setTenantCorpErrorByEndpoint] = useState<Record<string, string>>({});
   const [herenciasUsuario, setHerenciasUsuario] = useState<any[]>([]);
+  const [herenciaAsociadaOptionsByEndpoint, setHerenciaAsociadaOptionsByEndpoint] = useState<Record<string, GenericSelectOption[]>>({});
+  const [herenciaAsociadaDataByEndpoint, setHerenciaAsociadaDataByEndpoint] = useState<Record<string, Record<string, any>>>({});
+  const [syncInfoByEndpoint, setSyncInfoByEndpoint] = useState<Record<string, any>>({});
+  const [syncRunningByEndpoint, setSyncRunningByEndpoint] = useState<Record<string, boolean>>({});
+  const [herenciaDetalle, setHerenciaDetalle] = useState<any | null>(null);
 
   const primaryTenantForm = useMemo(() => ENDPOINTS.find((e) => e.primary), []);
   const endpointsBySection = useMemo(
@@ -480,7 +502,13 @@ const ParametrosGobernanza: React.FC = () => {
   const hydrateData = async () => {
     setLoadingData(true);
     try {
-      const [tenantsRes, rutasRes, accionesRes, herenciasRes, reglasRes, tenantsDestinoRes, contextosRes, tenantCorpRes] = await Promise.allSettled([
+      let actorTenantSuperAdminId = '';
+      let actorTenantGlobalId = '';
+      let vistasResolved: Vista[] = [];
+      let accionesResolved: Accion[] = [];
+
+      const [selectsRes, tenantsRes, rutasRes, accionesRes, herenciasRes, reglasRes, tenantsDestinoRes, contextosRes, tenantCorpRes] = await Promise.allSettled([
+        apiFetch('/api/config/global/creacion/usu/tenant/global/selects', { method: 'GET' }),
         apiFetch('/api/config/global/creacion/usu/tenant/libres', { method: 'GET' }),
         apiFetch('/api/config/tenant/tipo/listar/vistas/contexto/roles', { method: 'GET' }),
         apiFetch('/api/config/parametrizacion/widget/branding/acciones', { method: 'GET' }),
@@ -491,13 +519,99 @@ const ParametrosGobernanza: React.FC = () => {
         apiFetch('/api/config/permisos/creacion/admin/tenant/corporativos', { method: 'GET' }),
       ]);
       const heredaOptionsMap = new Map<string, HeredaGlobalOption>();
+      const heredaScopeMap: Record<string, HeredaScope> = {};
+
+      if (selectsRes.status === 'fulfilled') {
+        const data = (selectsRes.value as any)?.data || {};
+        actorTenantSuperAdminId = String(data?.actor?.tenantSuperAdminId || '').trim();
+        actorTenantGlobalId = String(data?.actor?.tenantGlobalId || '').trim();
+        setTenantGlobalActor({
+          rol: String(data?.actor?.rol || '').trim(),
+          tenantGlobalId: data?.actor?.tenantGlobalId ? String(data.actor.tenantGlobalId) : null,
+          tenantSuperAdminId: data?.actor?.tenantSuperAdminId ? String(data.actor.tenantSuperAdminId) : null,
+          tenantCorporativoId: data?.actor?.tenantCorporativoId ? String(data.actor.tenantCorporativoId) : null,
+        });
+        const mapOptions = (rows: any[] | undefined, fallbackKey: string): GenericSelectOption[] =>
+          (Array.isArray(rows) ? rows : [])
+            .map((row: any) => {
+              const id = String(row?.id || row?._id || '').trim();
+              if (!id) return null;
+              const label = String(row?.label || row?.[fallbackKey] || id);
+              return { id, label };
+            })
+            .filter(Boolean) as GenericSelectOption[];
+
+        const rawRolesMabs = Array.isArray(data.rolesMabs)
+          ? data.rolesMabs
+          : Array.isArray(data.roles)
+          ? data.roles
+          : [];
+        setTenantGlobalSelects({
+          tipo_tenant: mapOptions(data.tiposTenant, 'tipo_acceso_apis'),
+          ownerType: mapOptions(data.ownerTypes, 'tipo_comprador'),
+          nvlGeneracionTenant: mapOptions(data.nivelesGlobales, 'generation_tenant'),
+          apisDominios: mapOptions(data.dominios, 'dominio'),
+          accionesUsu: mapOptions(data.acciones, 'method'),
+          rolesMabs: rawRolesMabs
+            .map((row: any) => {
+              const id = String(row?.id || row?._id || '').trim();
+              if (!id) return null;
+              const rol = String(row?.rol || '').trim();
+              const label = String(row?.label || rol || id);
+              return { id, label, rol };
+            })
+            .filter(Boolean) as GenericSelectOption[],
+          coporativo: mapOptions(data.corporativosDisponibles, 'razon_social'),
+          tenantGlobalRef: (Array.isArray(data.tenantGlobalesRegistrados) ? data.tenantGlobalesRegistrados : [])
+            .map((row: any) => {
+              const id = String(row?.id || row?._id || '').trim();
+              if (!id) return null;
+              const rol = String(row?.rol || 'TENANT').trim();
+              const corp = String(row?.coporativoNombre || '').trim();
+              const suffix = corp ? ` | ${corp}` : '';
+              return { id, label: `${rol} | ${id}${suffix}` };
+            })
+            .filter(Boolean) as GenericSelectOption[],
+        });
+        setTenantGlobalSelectsDebug(
+          `Selects: niveles=${Array.isArray(data.nivelesGlobales) ? data.nivelesGlobales.length : 0}, tipos=${Array.isArray(data.tiposTenant) ? data.tiposTenant.length : 0}, dominios=${Array.isArray(data.dominios) ? data.dominios.length : 0}, acciones=${Array.isArray(data.acciones) ? data.acciones.length : 0}, roles=${rawRolesMabs.length}, corporativos=${Array.isArray(data.corporativosDisponibles) ? data.corporativosDisponibles.length : 0}`
+        );
+      } else {
+        const reason = (selectsRes as PromiseRejectedResult)?.reason as any;
+        const msg = String(
+          reason?.message ||
+          reason?.msg ||
+          'No se pudieron cargar los selects de creacion tenant global'
+        );
+        toast.error(`Selects tenant global: ${msg}`);
+        setTenantGlobalSelects({});
+        setTenantGlobalActor({});
+        setTenantGlobalSelectsDebug(`Error selects: ${msg}`);
+      }
 
       {
         const allById = new Map<string, TenantGlobal>();
 
         // Fuente principal para select JWT-driven (scope por rol/contexto).
         if (tenantsDestinoRes.status === 'fulfilled') {
-          const destinoRows = pickArray(tenantsDestinoRes.value, ['data', 'items']);
+          const destinoPayload: any = tenantsDestinoRes.value;
+          const actorDesdeContexto =
+            destinoPayload?.data?.actor ||
+            destinoPayload?.actor ||
+            null;
+          if (actorDesdeContexto) {
+            setTenantGlobalActor({
+              rol: String(actorDesdeContexto?.rol || '').trim() || undefined,
+              tenantGlobalId: actorDesdeContexto?.tenantGlobalId ? String(actorDesdeContexto.tenantGlobalId) : null,
+              tenantSuperAdminId: actorDesdeContexto?.tenantSuperAdminId ? String(actorDesdeContexto.tenantSuperAdminId) : null,
+              tenantCorporativoId: actorDesdeContexto?.tenantCorporativoId ? String(actorDesdeContexto.tenantCorporativoId) : null,
+            });
+          }
+
+          const destinoRows =
+            pickArray(destinoPayload, ['data', 'items']).length > 0
+              ? pickArray(destinoPayload, ['data', 'items'])
+              : pickArray(destinoPayload?.data, ['items', 'data']);
           destinoRows.forEach((row: any) => {
             const id = String(row?.tenantGlobalId || row?.id || row?._id || row?.iud || '').trim();
             if (!id) return;
@@ -514,6 +628,8 @@ const ParametrosGobernanza: React.FC = () => {
               id,
               label,
               corporativo: pickTenantCorporate(row),
+              tenantSuperAdmin: String(row?.tenantSuperAdmin || '').trim() || undefined,
+              tenantGlobalAdmin: String(row?.tenantGlobalAdmin || '').trim() || undefined,
             });
           });
         }
@@ -536,6 +652,8 @@ const ParametrosGobernanza: React.FC = () => {
               id,
               label,
               corporativo: pickTenantCorporate(row),
+              tenantSuperAdmin: String(row?.tenantSuperAdmin || '').trim() || undefined,
+              tenantGlobalAdmin: String(row?.tenantGlobalAdmin || '').trim() || undefined,
             });
           });
         }
@@ -564,25 +682,21 @@ const ParametrosGobernanza: React.FC = () => {
 
       if (rutasRes.status === 'fulfilled') {
         const rows = pickArray(rutasRes.value, ['data', 'rutas', 'items']);
-        setVistas(
-          rows
-            .filter((r: any) => r?.estadoRuta !== false)
-            .map((r: any) => ({ id: String(r?._id || ''), label: String(r?.name || r?.path || r?._id || ''), path: String(r?.path || '') }))
-            .filter((v: Vista) => v.id)
-        );
+        vistasResolved = rows
+          .filter((r: any) => r?.estadoRuta !== false)
+          .map((r: any) => ({ id: String(r?._id || r?.id || ''), label: String(r?.name || r?.path || r?._id || ''), path: String(r?.path || '') }))
+          .filter((v: Vista) => v.id);
       }
 
       if (accionesRes.status === 'fulfilled') {
         const source = Array.isArray(accionesRes.value?.accionesSistema) ? accionesRes.value.accionesSistema : [];
-        setAcciones(
-          source
-            .filter((a: any) => a?.estadoAccion !== false)
-            .map((a: any) => ({ id: String(a?._id || ''), label: String(a?.etiquetas || a?.method || a?._id || ''), method: String(a?.method || '') }))
-            .filter((a: Accion) => a.id)
-        );
+        accionesResolved = source
+          .filter((a: any) => a?.estadoAccion !== false)
+          .map((a: any) => ({ id: String(a?._id || a?.id || ''), label: String(a?.etiquetas || a?.method || a?._id || ''), method: String(a?.method || '') }))
+          .filter((a: Accion) => a.id);
       }
 
-      if (herenciasRes.status === 'fulfilled' && accionesRes.status !== 'fulfilled') {
+      if (herenciasRes.status === 'fulfilled' && (!accionesResolved.length || accionesRes.status !== 'fulfilled')) {
         const herencias = Array.isArray(herenciasRes.value?.herencias) ? herenciasRes.value.herencias : [];
         const map = new Map<string, Accion>();
         herencias.forEach((h: any) => {
@@ -593,10 +707,11 @@ const ParametrosGobernanza: React.FC = () => {
             map.set(id, { id, label: String(a?.etiquetas || a?.method || id), method: String(a?.method || '') });
           });
         });
-        setAcciones(Array.from(map.values()));
+        const fromHerencia = Array.from(map.values());
+        if (fromHerencia.length) accionesResolved = fromHerencia;
       }
 
-      if (herenciasRes.status === 'fulfilled' && (!vistas.length || rutasRes.status !== 'fulfilled')) {
+      if (herenciasRes.status === 'fulfilled' && (!vistasResolved.length || rutasRes.status !== 'fulfilled')) {
         const herencias = pickArray(herenciasRes.value, ['herencias', 'data']);
         const map = new Map<string, Vista>();
         herencias.forEach((h: any) => {
@@ -611,8 +726,42 @@ const ParametrosGobernanza: React.FC = () => {
             });
           });
         });
-        if (map.size) setVistas(Array.from(map.values()));
+        if (map.size) vistasResolved = Array.from(map.values());
       }
+
+      // Fallback SOLO para tenantSuperAdmin sin herencia dinámica:
+      // usar rutas de seguridad y acciones del sistema.
+      const actorEsSoloSuperAdmin = !!actorTenantSuperAdminId && !actorTenantGlobalId;
+      if (actorEsSoloSuperAdmin && !vistasResolved.length) {
+        try {
+          const fallbackRutas: any = await apiFetch('/api/seguridad/rutas/listarRutas/admin', { method: 'GET' });
+          const rowsFallback = pickArray(fallbackRutas, ['data', 'items', 'rutas']);
+          const mapped = rowsFallback
+            .filter((r: any) => r?.estadoRuta !== false)
+            .map((r: any) => ({ id: String(r?._id || r?.iud || r?.id || ''), label: String(r?.name || r?.path || r?._id || ''), path: String(r?.path || '') }))
+            .filter((v: Vista) => v.id);
+          if (mapped.length) vistasResolved = mapped;
+        } catch (_error) {
+          // noop
+        }
+      }
+
+      if (actorEsSoloSuperAdmin && !accionesResolved.length) {
+        try {
+          const fallbackAcciones: any = await apiFetch('/api/config/parametrizacion/widget/branding/acciones/publico', { method: 'GET' });
+          const rowsFallback = Array.isArray(fallbackAcciones?.acciones) ? fallbackAcciones.acciones : [];
+          const mapped = rowsFallback
+            .filter((a: any) => a?.estadoAccion !== false)
+            .map((a: any) => ({ id: String(a?._id || a?.id || ''), label: String(a?.etiquetas || a?.method || a?._id || ''), method: String(a?.method || '') }))
+            .filter((a: Accion) => a.id);
+          if (mapped.length) accionesResolved = mapped;
+        } catch (_error) {
+          // noop
+        }
+      }
+
+      setVistas(vistasResolved);
+      setAcciones(accionesResolved);
 
       if (herenciasRes.status === 'fulfilled') {
         const herencias = pickArray(herenciasRes.value, ['herencias', 'data', 'items']);
@@ -622,9 +771,37 @@ const ParametrosGobernanza: React.FC = () => {
           if (!heredaId || heredaOptionsMap.has(heredaId)) return;
           const vCount = Array.isArray(h?.vistas) ? h.vistas.length : 0;
           const aCount = Array.isArray(h?.acciones) ? h.acciones.length : 0;
+          const tenantGlobalId = String(
+            h?.tenantGlobal?._id ||
+            h?.tenantGlobal?.id ||
+            h?.tenantGlobal ||
+            ''
+          ).trim();
+          const tenantCorporativoId = String(
+            h?.tenantCorporativo?._id ||
+            h?.tenantCorporativo?.id ||
+            h?.tenantCorporativo ||
+            ''
+          ).trim();
+          const tenantLabel = tenantGlobalId
+            ? `TG:${tenantGlobalId}${tenantCorporativoId ? ` | TC:${tenantCorporativoId}` : ''}`
+            : 'TG:-';
+          const fuente = String(h?.fuenteHerencia || h?.fuente || '').toLowerCase();
+          const tenantSuperRef = String(
+            h?.tenantSuperTenant?._id ||
+            h?.tenantSuperTenant ||
+            h?.tenantSuperAdmin?._id ||
+            h?.tenantSuperAdmin ||
+            ''
+          ).trim();
+          const esScopeSuperAdmin =
+            fuente.includes('superadmin') ||
+            fuente.includes('dios') ||
+            !!tenantSuperRef;
+          heredaScopeMap[heredaId] = esScopeSuperAdmin ? 'tenantSuperAdmin' : 'tenantGlobal';
           heredaOptionsMap.set(heredaId, {
             id: heredaId,
-            label: `${heredaId} | Vistas:${vCount} | Acciones:${aCount}`,
+            label: `${heredaId} | ${tenantLabel} | Vistas:${vCount} | Acciones:${aCount}`,
           });
         });
       }
@@ -664,6 +841,7 @@ const ParametrosGobernanza: React.FC = () => {
                 });
                 if (ridRaw && !heredaOptionsMap.has(ridRaw)) {
                   heredaOptionsMap.set(ridRaw, { id: ridRaw, label: `[REGLA] ${base} | ${ridRaw}` });
+                  heredaScopeMap[ridRaw] = r?.securityPlatform === true ? 'tenantSuperAdmin' : 'tenantGlobal';
                 }
                 return rid ? { id: rid, label: `[${platformFlag}] ${base} | ${ridEncrypted || ridRaw}` } : null;
               })
@@ -674,6 +852,7 @@ const ParametrosGobernanza: React.FC = () => {
       }
 
       setHeredaGlobalOptions(Array.from(heredaOptionsMap.values()));
+      setHeredaGlobalScopeById(heredaScopeMap);
 
       if (contextosRes.status === 'fulfilled') {
         const rows = pickArray(contextosRes.value, ['data', 'contextos', 'items']);
@@ -715,9 +894,80 @@ const ParametrosGobernanza: React.FC = () => {
   const setBulkAllFor = (endpointId: string, enabled: boolean) => {
     setBulkAllMode((prev) => ({ ...prev, [endpointId]: enabled }));
   };
+  const actorEsTenantSuperAdmin = (): boolean =>
+    Boolean(String(tenantGlobalActor?.tenantSuperAdminId || '').trim());
+  const getHeredaGlobalOptionsPermitidas = (): HeredaGlobalOption[] => {
+    if (!actorEsTenantSuperAdmin()) return [];
+    return heredaGlobalOptions;
+  };
+  const getTenantSuperAdminOptionsForPermUsuario = (): HeredaGlobalOption[] => {
+    const unique = new Map<string, HeredaGlobalOption>();
+    const actorTsa = String(tenantGlobalActor?.tenantSuperAdminId || '').trim();
+    if (actorTsa) {
+      unique.set(actorTsa, {
+        id: actorTsa,
+        label: `tenantSuperAdmin (DIOS) | ${actorTsa}`,
+      });
+    }
+    tenantGlobales.forEach((t) => {
+      const tsa = String(t?.tenantSuperAdmin || '').trim();
+      if (!tsa || unique.has(tsa)) return;
+      unique.set(tsa, {
+        id: tsa,
+        label: `tenantSuperAdmin (DIOS) | ${tsa}`,
+      });
+    });
+    return Array.from(unique.values());
+  };
+  const getHeredaOptionsPermitidasPorTenantSuperAdmin = (tenantSuperAdminId: string): HeredaGlobalOption[] => {
+    const tsa = String(tenantSuperAdminId || '').trim();
+    if (!tsa) return [];
+    const ids = new Set<string>();
+    const tenantGlobalById = new Map<string, any>(
+      (Array.isArray(tenantGlobales) ? tenantGlobales : []).map((t: any) => [String(t?.id || '').trim(), t])
+    );
+    herenciasUsuario.forEach((h: any) => {
+      const tenantSuperH = String(
+        h?.tenantSuperTenant?._id ||
+        h?.tenantSuperTenant ||
+        h?.tenantSuperAdmin?._id ||
+        h?.tenantSuperAdmin ||
+        ''
+      ).trim();
+      const tenantGlobalH = String(
+        h?.tenantGlobal?._id ||
+        h?.tenantGlobal?.id ||
+        h?.tenantGlobal ||
+        ''
+      ).trim();
+      const tenantGlobalDoc = tenantGlobalById.get(tenantGlobalH);
+      const tenantSuperDesdeGlobal = String(tenantGlobalDoc?.tenantSuperAdmin || '').trim();
+      const perteneceASuperAdmin = tenantSuperH === tsa || tenantSuperDesdeGlobal === tsa;
+      if (!perteneceASuperAdmin) return;
+      const heredaId = String(h?.heredaGlobal?._id || h?.heredaGlobal || '').trim();
+      if (heredaId) ids.add(heredaId);
+    });
+    return getHeredaGlobalOptionsPermitidas().filter((opt) => ids.has(opt.id));
+  };
+  const getReglaDiosOptionsByTenantSuperAdmin = (tenantSuperAdminId: string): HeredaGlobalOption[] => {
+    const tsa = String(tenantSuperAdminId || '').trim();
+    if (!tsa) return [];
+    return Object.entries(ruleCatalog || {})
+      .map(([ruleId, raw]) => ({ ruleId, raw }))
+      .filter(({ raw }) => raw?.securityPlatform === true)
+      .filter(({ raw }) => {
+        const gens = Array.isArray(raw?.generacionTenatGlobales) ? raw.generacionTenatGlobales : [];
+        if (!gens.length) return true;
+        return gens.some((g: any) => String(g?._id || g || '').trim() === tsa);
+      })
+      .map(({ ruleId, raw }) => {
+        const base = String(raw?.nombre || raw?.name || raw?.titulo || 'Regla DIOS').trim();
+        return { id: ruleId, label: `[REGLA] ${base} | ${ruleId}` };
+      });
+  };
   const getTenantCorporativoOptions = (endpointId: string): TenantCorporativoOption[] => {
     const tenantGlobalId = getFieldValue(endpointId, 'tenantGlobal').trim();
-    if (!tenantGlobalId) return [];
+    if (!tenantGlobalId || isTenantSuperAdminScopeOption(tenantGlobalId)) return [];
     const unique = new Map<string, TenantCorporativoOption>();
     tenantCorporativos
       .filter((c) => c.tenantGlobalId === tenantGlobalId)
@@ -732,7 +982,425 @@ const ParametrosGobernanza: React.FC = () => {
 
     return Array.from(unique.values());
   };
+  const getTenantGlobalOptions = (endpointId: string): TenantGlobal[] => {
+    const actorTenantGlobal = String(tenantGlobalActor.tenantGlobalId || '').trim();
+    const actorTenantSuper = String(tenantGlobalActor.tenantSuperAdminId || '').trim();
+    const actorTenantCorporativo = String(tenantGlobalActor.tenantCorporativoId || '').trim();
+    const isHerenciaEndpoint =
+      endpointId === 'perm-admin-tenant-global' ||
+      endpointId === 'perm-admin-tenant-global-actualizar' ||
+      endpointId === 'perm-listar-herencias';
+
+    if (!isHerenciaEndpoint) return tenantGlobales;
+
+    const expandByTree = (seedIds: string[]): Set<string> => {
+      const allowed = new Set(seedIds.filter(Boolean));
+      let changed = true;
+      while (changed) {
+        changed = false;
+        tenantGlobales.forEach((t) => {
+          const id = String(t.id || '').trim();
+          const parent = String(t.tenantGlobalAdmin || '').trim();
+          if (!id || !parent) return;
+          if (allowed.has(parent) && !allowed.has(id)) {
+            allowed.add(id);
+            changed = true;
+          }
+        });
+      }
+      return allowed;
+    };
+
+    // Condicion principal: rol DIOS (tenantSuperAdmin) controla su arbol de tenantGlobal.
+    if (actorTenantSuper) {
+      const roots = tenantGlobales
+        .filter((t) => String(t.tenantSuperAdmin || '').trim() === actorTenantSuper)
+        .map((t) => String(t.id || '').trim())
+        .filter(Boolean);
+      const allowed = expandByTree(roots);
+      const visibles = tenantGlobales.filter((t) => allowed.has(String(t.id || '').trim()));
+      const scopeOption: TenantGlobal = {
+        id: `${TENANT_SUPERADMIN_SCOPE_PREFIX}${actorTenantSuper}`,
+        label: `tenantSuperAdmin (DIOS) | ${actorTenantSuper}`,
+        corporativo: 'SCOPE_DIOS',
+        tenantSuperAdmin: actorTenantSuper,
+      };
+      const base = visibles.length ? visibles : tenantGlobales;
+      return [scopeOption, ...base];
+    }
+
+    if (actorTenantGlobal) {
+      const allowed = expandByTree([actorTenantGlobal]);
+      const visibles = tenantGlobales.filter((t) => allowed.has(String(t.id || '').trim()));
+      return visibles.length ? visibles : tenantGlobales;
+    }
+
+    if (actorTenantCorporativo) {
+      if (actorTenantGlobal) {
+        const visibles = tenantGlobales.filter((t) => String(t.id || '').trim() === actorTenantGlobal);
+        if (visibles.length) return visibles;
+      }
+      const tgFromHerencias = new Set(
+        herenciasUsuario
+          .filter((h: any) => String(h?.tenantCorporativo?._id || h?.tenantCorporativo || '').trim() === actorTenantCorporativo)
+          .map((h: any) => String(h?.tenantGlobal?._id || h?.tenantGlobal || '').trim())
+          .filter(Boolean)
+      );
+      const visibles = tenantGlobales.filter((t) => tgFromHerencias.has(String(t.id || '').trim()));
+      return visibles.length ? visibles : tenantGlobales;
+    }
+
+    return [];
+  };
+  const runHerenciaSyncCheck = async (endpointId: string, sincronizar: boolean) => {
+    try {
+      let tenantGlobalSelection = getFieldValue(endpointId, 'tenantGlobal').trim();
+      const tenantCorporativoId = getFieldValue(endpointId, 'tenantCorporativo').trim();
+      const esTenantSuperAdmin = !!String(tenantGlobalActor?.tenantSuperAdminId || '').trim();
+      if (!tenantGlobalSelection && esTenantSuperAdmin) {
+        const options = getTenantGlobalOptions(endpointId);
+        const firstTenantId = String(options?.[0]?.id || '').trim();
+        if (firstTenantId) {
+          tenantGlobalSelection = firstTenantId;
+          setFieldValue(endpointId, 'tenantGlobal', firstTenantId);
+          await fetchHerenciasAsociadasByTenantGlobal(endpointId, firstTenantId);
+        }
+      }
+      if (!tenantGlobalSelection && !esTenantSuperAdmin) {
+        toast.error('Selecciona tenant global antes de validar sincronizacion');
+        return;
+      }
+      const tenantGlobalId = isTenantSuperAdminScopeOption(tenantGlobalSelection) ? '' : tenantGlobalSelection;
+
+      setSyncRunningByEndpoint((prev) => ({ ...prev, [endpointId]: true }));
+
+      const qs = new URLSearchParams();
+      if (tenantGlobalId) qs.set('tenantGlobal', tenantGlobalId);
+      if (tenantCorporativoId) qs.set('tenantCorporativo', tenantCorporativoId);
+      if (sincronizar) qs.set('sincronizar', 'true');
+
+      const payload = await apiFetch(`/api/config/permisos/creacion/admin/tenant/global?${qs.toString()}`, {
+        method: 'GET',
+      });
+
+      setSyncInfoByEndpoint((prev) => ({ ...prev, [endpointId]: payload }));
+      if (tenantGlobalSelection) {
+        await fetchHerenciasAsociadasByTenantGlobal(endpointId, tenantGlobalSelection);
+      }
+      if (sincronizar) {
+        const syncResumen = (payload as any)?.sincronizacionResumen || {};
+        const sincronizados = Number(syncResumen?.contextosSincronizados || 0);
+        if (sincronizados > 0) toast.success(`Sincronizacion aplicada en ${sincronizados} contexto(s)`);
+        else toast.success('Sincronizacion ejecutada (sin cambios pendientes)');
+      }
+    } catch (error: any) {
+      toast.error(String(error?.message || 'No se pudo ejecutar la sincronizacion'));
+    } finally {
+      setSyncRunningByEndpoint((prev) => ({ ...prev, [endpointId]: false }));
+    }
+  };
+  const applyHerenciaAsociadaSelection = (endpointId: string, herenciaId: string) => {
+    const byId = herenciaAsociadaDataByEndpoint[endpointId] || {};
+    const row = byId[herenciaId];
+    if (!row) {
+      setCatalogSelectionFor(endpointId, { vistas: [], acciones: [] });
+      setPermisos(endpointId, [{ vistaId: '', accionId: [] }]);
+      return;
+    }
+
+    const vistasIds = Array.isArray(row?.vistas)
+      ? row.vistas.map((v: any) => String(v?._id || v || '').trim()).filter(Boolean)
+      : [];
+    const accionesIds = Array.isArray(row?.acciones)
+      ? row.acciones.map((a: any) => String(a?._id || a || '').trim()).filter(Boolean)
+      : [];
+
+    setCatalogSelectionFor(endpointId, {
+      vistas: vistasIds,
+      acciones: accionesIds,
+    });
+
+    const permisos = vistasIds.map((vistaId: string) => ({
+      vistaId,
+      accionId: accionesIds,
+    }));
+    setPermisos(endpointId, permisos.length ? permisos : [{ vistaId: '', accionId: [] }]);
+  };
+  const fetchHerenciasAsociadasByTenantGlobal = async (endpointId: string, tenantGlobalId: string) => {
+    try {
+      const tgSelection = String(tenantGlobalId || '').trim();
+      if (!tgSelection) {
+        setHerenciaAsociadaOptionsByEndpoint((prev) => ({ ...prev, [endpointId]: [] }));
+        setHerenciaAsociadaDataByEndpoint((prev) => ({ ...prev, [endpointId]: {} }));
+        setFieldValue(endpointId, 'herenciaAsociada', '');
+        return;
+      }
+      const isTsaScope = isTenantSuperAdminScopeOption(tgSelection);
+      const tg = isTsaScope ? '' : tgSelection;
+
+      const qs = new URLSearchParams();
+      if (tg) qs.set('tenantGlobal', tg);
+      qs.set('soloActivos', 'true');
+      const res: any = await apiFetch(
+        `/api/config/permisos/creacion/admin/tenant/global?${qs.toString()}`,
+        { method: 'GET' }
+      );
+      const rows = pickArray(res, ['data', 'items', 'herencias']);
+      const byId: Record<string, any> = {};
+      const options = rows
+        .map((row: any) => {
+          const id = String(row?._id || row?.iud || '').trim();
+          if (!id) return null;
+          byId[id] = row;
+          const fuente = String(row?.fuenteHerencia || 'tenantGlobal').trim();
+          const rol = String(row?.rolId?.rol || row?.rolId?._id || row?.rolId || 'SIN_ROL').trim();
+          const tc = String(row?.tenantCorporativo?._id || row?.tenantCorporativo || '').trim();
+          const usuario = String(row?.usuarioId?.nombre || row?.usuarioId?.name || row?.usuarioId?._id || '-').trim();
+          const rutasPreview = (Array.isArray(row?.vistas) ? row.vistas : [])
+            .slice(0, 2)
+            .map((v: any) => String(v?.name || v?.path || v?._id || '').trim())
+            .filter(Boolean)
+            .join(', ');
+          const vCount = Array.isArray(row?.vistas) ? row.vistas.length : 0;
+          const aCount = Array.isArray(row?.acciones) ? row.acciones.length : 0;
+          const suffix = tc ? ` | TC:${tc}` : '';
+          const rutasTxt = rutasPreview ? ` | Rutas:${rutasPreview}` : '';
+          const fuenteTxt = fuente === 'tenantSuperAdmin' ? '[SUPERADMIN]' : '[TENANT]';
+          return { id, label: `${fuenteTxt} ${id}${suffix} | Rol:${rol} | Usu:${usuario} | V:${vCount} A:${aCount}${rutasTxt}` };
+        })
+        .filter(Boolean) as GenericSelectOption[];
+
+      setHerenciaAsociadaOptionsByEndpoint((prev) => ({ ...prev, [endpointId]: options }));
+      setHerenciaAsociadaDataByEndpoint((prev) => ({ ...prev, [endpointId]: byId }));
+
+      const current = getFieldValue(endpointId, 'herenciaAsociada').trim();
+      const nextId = (!current || !options.some((o) => o.id === current)) ? (options[0]?.id || '') : current;
+      setFieldValue(endpointId, 'herenciaAsociada', nextId);
+      if (nextId) applyHerenciaAsociadaSelection(endpointId, nextId);
+    } catch (error: any) {
+      const msg = String(error?.message || 'No se pudieron cargar herencias asociadas').trim();
+      toast.error(msg);
+      setHerenciaAsociadaOptionsByEndpoint((prev) => ({ ...prev, [endpointId]: [] }));
+      setHerenciaAsociadaDataByEndpoint((prev) => ({ ...prev, [endpointId]: {} }));
+      setFieldValue(endpointId, 'herenciaAsociada', '');
+    }
+  };
+  const fetchTenantGlobalesFromHerenciasJwt = async (): Promise<TenantGlobal[]> => {
+    try {
+      const res: any = await apiFetch('/api/config/permisos/creacion/admin/tenant/global?soloActivos=true', {
+        method: 'GET',
+      });
+      const rows = pickArray(res, ['data', 'items', 'herencias']);
+      const byId = new Map<string, TenantGlobal>();
+      rows.forEach((row: any) => {
+        const tgId = String(row?.tenantGlobal?._id || row?.tenantGlobal || '').trim();
+        if (!tgId) return;
+        if (byId.has(tgId)) return;
+        const tgLabel = String(row?.tenantGlobal?.label || row?.tenantGlobal?.nombre || row?.tenantGlobal?.name || '').trim();
+        byId.set(tgId, {
+          id: tgId,
+          label: tgLabel ? `${tgLabel} | ${tgId}` : tgId,
+          corporativo: String(row?.tenantGlobal?.corporativo || '').trim(),
+          tenantSuperAdmin: String(row?.tenantGlobal?.tenantSuperAdmin || '').trim() || undefined,
+          tenantGlobalAdmin: String(row?.tenantGlobal?.tenantGlobalAdmin || '').trim() || undefined,
+        });
+      });
+      return Array.from(byId.values());
+    } catch {
+      return [];
+    }
+  };
   const getPermisosCatalog = (endpointId: string): { vistasCatalogo: Vista[]; accionesCatalogo: Accion[] } => {
+    if (endpointId === 'perm-usuario-tenant-global') {
+      const selectedHeredaGlobal = getFieldValue(endpointId, 'heredaGlobal').trim();
+      if (!selectedHeredaGlobal) return { vistasCatalogo: [], accionesCatalogo: [] };
+
+      const getId = (value: any): string => String(value?._id || value || '').trim();
+      const herenciasMatch = herenciasUsuario.filter((h: any) => {
+        const heredaId = String(h?.heredaGlobal?._id || h?.heredaGlobal || '').trim();
+        return heredaId === selectedHeredaGlobal;
+      });
+      const herenciaConDatos = herenciasMatch.find((h: any) => {
+        const vs = Array.isArray(h?.vistas) ? h.vistas : [];
+        const ac = Array.isArray(h?.acciones) ? h.acciones : [];
+        return vs.length > 0 && ac.length > 0;
+      });
+
+      if (herenciaConDatos) {
+        const vistasCatalogo = (Array.isArray(herenciaConDatos?.vistas) ? herenciaConDatos.vistas : [])
+          .map((v: any) => {
+            const id = getId(v);
+            if (!id) return null;
+            return {
+              id,
+              label: String(v?.name || v?.path || id),
+              path: String(v?.path || ''),
+            };
+          })
+          .filter(Boolean) as Vista[];
+
+        const accionesCatalogo = (Array.isArray(herenciaConDatos?.acciones) ? herenciaConDatos.acciones : [])
+          .map((a: any) => {
+            const id = getId(a);
+            if (!id) return null;
+            return {
+              id,
+              label: String(a?.etiquetas || a?.method || id),
+              method: String(a?.method || ''),
+            };
+          })
+          .filter(Boolean) as Accion[];
+
+        if (vistasCatalogo.length && accionesCatalogo.length) {
+          return { vistasCatalogo, accionesCatalogo };
+        }
+      }
+
+      // Fallback: si la herencia no trae datos, usar recurso/acciones de la regla.
+      const rule = ruleCatalog[selectedHeredaGlobal];
+      if (rule) {
+        const recursoIds = (Array.isArray(rule?.recurso) ? rule.recurso : [])
+          .map((v: any) => getId(v))
+          .filter(Boolean);
+        const accionIds = (Array.isArray(rule?.accionesUsu) ? rule.accionesUsu : [])
+          .map((a: any) => getId(a))
+          .filter(Boolean);
+
+        const vistaById = new Map(vistas.map((v) => [v.id, v]));
+        const accionById = new Map(acciones.map((a) => [a.id, a]));
+
+        const vistasCatalogo = recursoIds.map((id: string) => vistaById.get(id) || { id, label: id, path: '' });
+        const accionesCatalogo = accionIds.length
+          ? accionIds.map((id: string) => accionById.get(id) || { id, label: id, method: '' })
+          : [];
+
+        if (vistasCatalogo.length && accionesCatalogo.length) {
+          return { vistasCatalogo, accionesCatalogo };
+        }
+      }
+
+      return { vistasCatalogo: [], accionesCatalogo: [] };
+    }
+
+    if (endpointId === 'perm-admin-tenant-global') {
+      const byId = herenciaAsociadaDataByEndpoint[endpointId] || {};
+      const selectedHerenciaId = getFieldValue(endpointId, 'herenciaAsociada').trim();
+      const row = byId[selectedHerenciaId] || (Object.keys(byId).length ? byId[Object.keys(byId)[0]] : null);
+
+      if (!row) return { vistasCatalogo: [], accionesCatalogo: [] };
+
+      const vistasCatalogo = (Array.isArray(row?.vistas) ? row.vistas : [])
+        .map((v: any) => {
+          const id = String(v?._id || v || '').trim();
+          if (!id) return null;
+          return {
+            id,
+            label: String(v?.name || v?.path || id),
+            path: String(v?.path || ''),
+          };
+        })
+        .filter(Boolean) as Vista[];
+
+      const accionesCatalogo = (Array.isArray(row?.acciones) ? row.acciones : [])
+        .map((a: any) => {
+          const id = String(a?._id || a || '').trim();
+          if (!id) return null;
+          return {
+            id,
+            label: String(a?.etiquetas || a?.method || id),
+            method: String(a?.method || ''),
+          };
+        })
+        .filter(Boolean) as Accion[];
+
+      return { vistasCatalogo, accionesCatalogo };
+    }
+
+    // Actualizar herencia admin/global: priorizar catalogo de la herencia seleccionada
+    // (contexto resuelto desde JWT + tenant + herencia asociada).
+    if (endpointId === 'perm-admin-tenant-global-actualizar') {
+      const selectedHerenciaId = getFieldValue(endpointId, 'herenciaAsociada').trim();
+      if (!selectedHerenciaId) {
+        return { vistasCatalogo: [], accionesCatalogo: [] };
+      }
+      const byId = herenciaAsociadaDataByEndpoint[endpointId] || {};
+      const row = byId[selectedHerenciaId];
+      if (row) {
+        const vistasCatalogo = (Array.isArray(row?.vistas) ? row.vistas : [])
+          .map((v: any) => {
+            const id = String(v?._id || v || '').trim();
+            if (!id) return null;
+            return {
+              id,
+              label: String(v?.name || v?.path || id),
+              path: String(v?.path || ''),
+            };
+          })
+          .filter(Boolean) as Vista[];
+
+        const accionesCatalogo = (Array.isArray(row?.acciones) ? row.acciones : [])
+          .map((a: any) => {
+            const id = String(a?._id || a || '').trim();
+            if (!id) return null;
+            return {
+              id,
+              label: String(a?.etiquetas || a?.method || id),
+              method: String(a?.method || ''),
+            };
+          })
+          .filter(Boolean) as Accion[];
+
+        return { vistasCatalogo, accionesCatalogo };
+      }
+    }
+
+    if (endpointId === 'tenant-crear-global-reglas' || endpointId === 'tenant-actualizar-global-reglas') {
+      const tenantGlobalId = getFieldValue(endpointId, 'tenantGlobal').trim();
+      if (!tenantGlobalId) return { vistasCatalogo: vistas, accionesCatalogo: acciones };
+
+      const tenantSel = tenantGlobales.find((t) => t.id === tenantGlobalId);
+      let superAdminRef = String(tenantSel?.tenantSuperAdmin || '').trim();
+      if (!superAdminRef) {
+        const parentTenantId = String(tenantSel?.tenantGlobalAdmin || '').trim();
+        if (parentTenantId) {
+          const tenantPadre = tenantGlobales.find((t) => t.id === parentTenantId);
+          superAdminRef = String(tenantPadre?.tenantSuperAdmin || '').trim();
+        }
+      }
+      if (!superAdminRef) return { vistasCatalogo: vistas, accionesCatalogo: acciones };
+
+      const reglasRows = Object.values(ruleCatalog || {});
+      const reglaDios = reglasRows.find((r: any) => {
+        if (r?.securityPlatform !== true) return false;
+        const gens = Array.isArray(r?.generacionTenatGlobales) ? r.generacionTenatGlobales : [];
+        return gens.some((g: any) => String(g?._id || g || '').trim() === superAdminRef);
+      }) as any;
+
+      if (!reglaDios) return { vistasCatalogo: vistas, accionesCatalogo: acciones };
+
+      const recursoIds = Array.isArray(reglaDios?.recurso)
+        ? reglaDios.recurso.map((v: any) => String(v?._id || v || '').trim()).filter(Boolean)
+        : [];
+      const accionIds = Array.isArray(reglaDios?.accionesUsu)
+        ? reglaDios.accionesUsu.map((a: any) => String(a?._id || a || '').trim()).filter(Boolean)
+        : [];
+
+      if (!recursoIds.length) return { vistasCatalogo: vistas, accionesCatalogo: acciones };
+
+      const vistaById = new Map(vistas.map((v) => [v.id, v]));
+      const accionById = new Map(acciones.map((a) => [a.id, a]));
+
+      const vistasDesdeRegla = recursoIds.map((id) => {
+        const vista = vistaById.get(id);
+        return vista || { id, label: id, path: '' };
+      });
+      const accionesDesdeRegla = accionIds.length
+        ? accionIds.map((id) => accionById.get(id) || { id, label: id, method: '' })
+        : acciones;
+
+      return { vistasCatalogo: vistasDesdeRegla, accionesCatalogo: accionesDesdeRegla };
+    }
+
     if (endpointId !== 'perm-admin-tenant-global' && endpointId !== 'perm-admin-tenant-global-actualizar') {
       return { vistasCatalogo: vistas, accionesCatalogo: acciones };
     }
@@ -742,24 +1410,48 @@ const ParametrosGobernanza: React.FC = () => {
 
     const vistaPermitida = new Set<string>();
     const accionPermitida = new Set<string>();
+    const actorTenantGlobal = String(tenantGlobalActor.tenantGlobalId || '').trim();
+    const actorTenantSuper = String(tenantGlobalActor.tenantSuperAdminId || '').trim();
+
+    const getId = (value: any): string => String(value?._id || value || '').trim();
+    const matchesSuperAdminContext = (h: any): boolean => {
+      if (!actorTenantSuper) return false;
+      const tenantSuperH = String(h?.tenantSuperTenant?._id || h?.tenantSuperTenant || '').trim();
+      return tenantSuperH === actorTenantSuper;
+    };
+    const matchesGlobalContext = (h: any): boolean => {
+      if (!actorTenantGlobal) return false;
+      const tgH = getId(h?.tenantGlobal);
+      return tgH === actorTenantGlobal;
+    };
+    const matchesTargetTenant = (h: any): boolean => {
+      const tgH = getId(h?.tenantGlobal);
+      return tgH === tenantGlobalId;
+    };
 
     herenciasUsuario.forEach((h: any) => {
-      const tg = String(h?.tenantGlobal?._id || h?.tenantGlobal || '').trim();
-      if (tg !== tenantGlobalId) return;
+      // SUPERADMIN: acepta herencias del superadmin, priorizando las que apunten al tenantGlobal objetivo.
+      // TENANTGLOBAL: solo herencias del tenantGlobal autenticado y del tenant objetivo.
+      const inSuperCtx = matchesSuperAdminContext(h);
+      const inGlobalCtx = matchesGlobalContext(h);
+      const inTarget = matchesTargetTenant(h);
+      if (!((inSuperCtx && (inTarget || !getId(h?.tenantGlobal))) || (inGlobalCtx && inTarget))) return;
+
       const vs = Array.isArray(h?.vistas) ? h.vistas : [];
       const ac = Array.isArray(h?.acciones) ? h.acciones : [];
       vs.forEach((v: any) => {
-        const id = String(v?._id || v || '').trim();
+        const id = getId(v);
         if (id) vistaPermitida.add(id);
       });
       ac.forEach((a: any) => {
-        const id = String(a?._id || a || '').trim();
+        const id = getId(a);
         if (id) accionPermitida.add(id);
       });
     });
 
+    // Para flujo de herencia admin/global: sin herencia efectiva en ese tenant, no se expone catalogo.
     if (!vistaPermitida.size || !accionPermitida.size) {
-      return { vistasCatalogo: vistas, accionesCatalogo: acciones };
+      return { vistasCatalogo: [], accionesCatalogo: [] };
     }
 
     return {
@@ -893,6 +1585,14 @@ const ParametrosGobernanza: React.FC = () => {
     if (!endpointModal) return;
     const needsTenantGlobal =
       endpointModal.fields.some((f) => f.name === 'tenantGlobal' || f.name === 'tenantGlobalId');
+    const needsTenantGlobalSelects =
+      endpointModal.id === 'tenant-crear-global-usuario' ||
+      endpointModal.id === 'tenant-crear-global-admin' ||
+      endpointModal.id === 'tenant-actualizar-global';
+    if (needsTenantGlobalSelects && !loadingData) {
+      hydrateData();
+      return;
+    }
     if (!needsTenantGlobal) return;
     if (tenantGlobales.length === 0 && !loadingData) {
       hydrateData();
@@ -900,16 +1600,137 @@ const ParametrosGobernanza: React.FC = () => {
   }, [endpointModal, tenantGlobales.length, loadingData]);
 
   useEffect(() => {
+    if (!endpointModal) return;
+    const isHerenciaEndpoint =
+      endpointModal.id === 'perm-admin-tenant-global' ||
+      endpointModal.id === 'perm-admin-tenant-global-actualizar' ||
+      endpointModal.id === 'perm-admin-tenant-global-desactivar' ||
+      endpointModal.id === 'perm-admin-tenant-global-eliminar' ||
+      endpointModal.id === 'perm-listar-herencias';
+    if (!isHerenciaEndpoint) return;
+    if (loadingData) return;
+    if (tenantGlobales.length > 0) return;
+
+    let cancelled = false;
+    (async () => {
+      const fallback = await fetchTenantGlobalesFromHerenciasJwt();
+      if (cancelled || !fallback.length) return;
+      setTenantGlobales((prev) => {
+        if (prev.length) return prev;
+        return fallback;
+      });
+      if (endpointModal.id === 'perm-admin-tenant-global-actualizar' && fallback.length === 1) {
+        const onlyId = String(fallback[0]?.id || '').trim();
+        if (onlyId) {
+          setFieldValue(endpointModal.id, 'tenantGlobal', onlyId);
+          fetchHerenciasAsociadasByTenantGlobal(endpointModal.id, onlyId);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [endpointModal, loadingData, tenantGlobales.length]);
+
+  useEffect(() => {
+    if (!endpointModal) return;
+    const endpointId = endpointModal.id;
+    const isHerenciaEndpoint =
+      endpointId === 'perm-admin-tenant-global' ||
+      endpointId === 'perm-admin-tenant-global-actualizar' ||
+      endpointId === 'perm-admin-tenant-global-desactivar' ||
+      endpointId === 'perm-admin-tenant-global-eliminar' ||
+      endpointId === 'perm-listar-herencias';
+    if (!isHerenciaEndpoint || loadingData) return;
+
+    const currentTenantGlobal = getFieldValue(endpointId, 'tenantGlobal').trim();
+    if (currentTenantGlobal) return;
+
+    const options = getTenantGlobalOptions(endpointId);
+    const firstTenantGlobalId = String(options?.[0]?.id || '').trim();
+    if (!firstTenantGlobalId) return;
+
+    setFieldValue(endpointId, 'tenantGlobal', firstTenantGlobalId);
+    fetchHerenciasAsociadasByTenantGlobal(endpointId, firstTenantGlobalId);
+  }, [
+    endpointModal,
+    loadingData,
+    tenantGlobales.length,
+    herenciasUsuario.length,
+    tenantGlobalActor?.tenantSuperAdminId,
+    tenantGlobalActor?.tenantGlobalId,
+    tenantGlobalActor?.tenantCorporativoId,
+  ]);
+
+  useEffect(() => {
     const endpointId = 'perm-usuario-tenant-global';
-    const current = getFieldValue(endpointId, 'heredaGlobal');
-    if (!current && heredaGlobalOptions.length > 0) {
-      setFieldValue(endpointId, 'heredaGlobal', heredaGlobalOptions[0].id);
+    const currentHereda = getFieldValue(endpointId, 'heredaGlobal').trim();
+    const currentTsa = getFieldValue(endpointId, 'tenantSuperAdminScope').trim();
+    const currentRegla = getFieldValue(endpointId, 'reglaGlobalFallback').trim();
+
+    if (!actorEsTenantSuperAdmin()) {
+      if (currentHereda) setFieldValue(endpointId, 'heredaGlobal', '');
+      if (currentTsa) setFieldValue(endpointId, 'tenantSuperAdminScope', '');
+      if (currentRegla) setFieldValue(endpointId, 'reglaGlobalFallback', '');
+      return;
     }
-  }, [heredaGlobalOptions.length]);
+
+    const tsaOptions = getTenantSuperAdminOptionsForPermUsuario();
+    const resolvedTsa = tsaOptions.some((opt) => opt.id === currentTsa)
+      ? currentTsa
+      : String(tsaOptions[0]?.id || '').trim();
+    if (!resolvedTsa) return;
+    if (resolvedTsa !== currentTsa) {
+      setFieldValue(endpointId, 'tenantSuperAdminScope', resolvedTsa);
+    }
+
+    const herenciasDisponibles = getHeredaOptionsPermitidasPorTenantSuperAdmin(resolvedTsa);
+    const reglasDisponibles = getReglaDiosOptionsByTenantSuperAdmin(resolvedTsa);
+
+    if (herenciasDisponibles.length > 0) {
+      if (!herenciasDisponibles.some((h) => h.id === currentHereda)) {
+        const nextHereda = String(herenciasDisponibles[0]?.id || '').trim();
+        if (nextHereda) setFieldValue(endpointId, 'heredaGlobal', nextHereda);
+      }
+      if (currentRegla) setFieldValue(endpointId, 'reglaGlobalFallback', '');
+      return;
+    }
+
+    const resolvedRegla = reglasDisponibles.some((r) => r.id === currentRegla)
+      ? currentRegla
+      : String(reglasDisponibles[0]?.id || '').trim();
+    if (resolvedRegla && resolvedRegla !== currentRegla) {
+      setFieldValue(endpointId, 'reglaGlobalFallback', resolvedRegla);
+    }
+    if (resolvedRegla && resolvedRegla !== currentHereda) {
+      setFieldValue(endpointId, 'heredaGlobal', resolvedRegla);
+    }
+  }, [
+    heredaGlobalOptions.length,
+    herenciasUsuario.length,
+    tenantGlobales.length,
+    tenantGlobalActor?.tenantSuperAdminId,
+    Object.keys(ruleCatalog || {}).length,
+  ]);
 
   const runEndpoint = async (endpoint: EndpointSpec) => {
     try {
       setRunning((prev) => ({ ...prev, [endpoint.id]: true }));
+      setResult((prev) => ({
+        ...prev,
+        [endpoint.id]: JSON.stringify(
+          {
+            ok: true,
+            status: 'running',
+            endpoint: endpoint.path,
+            method: endpoint.method,
+            startedAt: new Date().toISOString()
+          },
+          null,
+          2
+        )
+      }));
       const body: Record<string, unknown> = {};
       const headers: Record<string, string> = {};
       let resolvedPath = endpoint.path;
@@ -935,8 +1756,29 @@ const ParametrosGobernanza: React.FC = () => {
           return;
         }
         const raw = getFieldValue(endpoint.id, field.name);
-        const value = field.type === 'json' ? parseMaybeJson(raw) : raw.trim();
-        if (field.required && (value === '' || (Array.isArray(value) && !value.length))) throw new Error(`Completa: ${field.label}`);
+        const isOwnerTypeDisabledByCorporativo =
+          field.name === 'ownerType' &&
+          (
+            endpoint.id === 'tenant-crear-global-usuario' ||
+            endpoint.id === 'tenant-crear-global-admin' ||
+            endpoint.id === 'tenant-actualizar-global'
+          ) &&
+          !!getFieldValue(endpoint.id, 'coporativo').trim();
+        const isAccionUsuarioMulti =
+          field.name === 'accionesUsu' &&
+          (
+            endpoint.id === 'tenant-crear-global-usuario' ||
+            endpoint.id === 'tenant-crear-global-admin' ||
+            endpoint.id === 'tenant-actualizar-global'
+          );
+        const value = isAccionUsuarioMulti
+          ? raw.split(',').map((v) => v.trim()).filter(Boolean)
+          : field.type === 'json'
+          ? parseMaybeJson(raw)
+          : raw.trim();
+        if (!isOwnerTypeDisabledByCorporativo && field.required && (value === '' || (Array.isArray(value) && !value.length))) {
+          throw new Error(`Completa: ${field.label}`);
+        }
         if (field.pathParam) {
           if (value) {
             resolvedPath = resolvedPath
@@ -952,25 +1794,70 @@ const ParametrosGobernanza: React.FC = () => {
         if (value !== '') body[field.name] = value;
       });
 
+      if (endpoint.id === 'perm-admin-tenant-global-actualizar') {
+        const herenciaId = getFieldValue(endpoint.id, 'herenciaAsociada').trim();
+        if (!herenciaId) throw new Error('Completa: Herencia asociada');
+        resolvedPath = resolvedPath
+          .replace(':id', encodeURIComponent(herenciaId))
+          .replace('{id}', encodeURIComponent(herenciaId));
+        delete (body as any).herenciaAsociada;
+      }
+      if (
+        endpoint.id === 'perm-admin-tenant-global-desactivar' ||
+        endpoint.id === 'perm-admin-tenant-global-eliminar'
+      ) {
+        const tenantGlobalSel = getFieldValue(endpoint.id, 'tenantGlobal').trim();
+        const herenciaId = getFieldValue(endpoint.id, 'herenciaAsociada').trim() || getFieldValue(endpoint.id, 'id').trim();
+        if (!tenantGlobalSel) throw new Error('Selecciona tenant global');
+        if (!herenciaId) throw new Error('Selecciona herencia asociada');
+        resolvedPath = resolvedPath
+          .replace(':id', encodeURIComponent(herenciaId))
+          .replace('{id}', encodeURIComponent(herenciaId));
+        setFieldValue(endpoint.id, 'id', herenciaId);
+      }
+
       if (endpoint.id === 'perm-usuario-tenant-global') {
+        if (!actorEsTenantSuperAdmin()) {
+          throw new Error('Solo tenantSuperAdmin (DIOS) puede ejecutar esta operacion');
+        }
+        const tenantSuperAdminScope = getFieldValue(endpoint.id, 'tenantSuperAdminScope').trim();
+        if (!tenantSuperAdminScope) {
+          throw new Error('Selecciona tenantSuperAdmin');
+        }
         const selectedHeredaGlobal = String(body.heredaGlobal || '').trim();
         if (!selectedHeredaGlobal) throw new Error('Completa: Herencia global');
+        const herenciasDisponibles = getHeredaOptionsPermitidasPorTenantSuperAdmin(tenantSuperAdminScope);
+        const reglasDisponibles = getReglaDiosOptionsByTenantSuperAdmin(tenantSuperAdminScope);
 
-        if (!vistas.length || !acciones.length) {
-          throw new Error('No hay catalogo de vistas/acciones disponible para seleccionar');
+        if (herenciasDisponibles.length > 0) {
+          if (!herenciasDisponibles.some((opt) => opt.id === selectedHeredaGlobal)) {
+            throw new Error('La herencia seleccionada no pertenece al tenantSuperAdmin');
+          }
+        } else {
+          if (!reglasDisponibles.some((opt) => opt.id === selectedHeredaGlobal)) {
+            throw new Error('No hay herencias; debes seleccionar una regla DIOS parametrizada');
+          }
+        }
+
+        const { vistasCatalogo, accionesCatalogo } = getPermisosCatalog(endpoint.id);
+        if (!vistasCatalogo.length || !accionesCatalogo.length) {
+          throw new Error('La herencia no tiene datos y tampoco hay regla con acciones/vistas para fallback');
         }
 
         const selected = getCatalogSelection(endpoint.id);
-        body.vistasSeleccionadas = selected.vistas.length ? selected.vistas : vistas.map((v) => v.id);
-        body.accionesSeleccionadas = selected.acciones.length ? selected.acciones : acciones.map((a) => a.id);
+        body.vistasSeleccionadas = selected.vistas.length ? selected.vistas : vistasCatalogo.map((v) => v.id);
+        body.accionesSeleccionadas = selected.acciones.length ? selected.acciones : accionesCatalogo.map((a) => a.id);
       }
 
       if (endpoint.id === 'perm-admin-tenant-global' || endpoint.id === 'perm-admin-tenant-global-actualizar') {
-        const tg = String(body.tenantGlobal || '').trim();
+        const tgRaw = String(body.tenantGlobal || '').trim();
+        const tg = isTenantSuperAdminScopeOption(tgRaw) ? '' : tgRaw;
         const tc = String(body.tenantCorporativo || '').trim();
         if (tc && !tg) {
           throw new Error('tenantGlobal es obligatorio cuando seleccionas tenantCorporativo');
         }
+        if (tg) body.tenantGlobal = tg;
+        else delete body.tenantGlobal;
 
         const { vistasCatalogo, accionesCatalogo } = getPermisosCatalog(endpoint.id);
         const selected = getCatalogSelection(endpoint.id);
@@ -985,6 +1872,61 @@ const ParametrosGobernanza: React.FC = () => {
         delete body.heredaGlobal;
         if (endpoint.id === 'perm-admin-tenant-global' && !permisosGenerados.length) {
           throw new Error('Debes seleccionar al menos un permiso válido para el tenantGlobal');
+        }
+      }
+      if (
+        endpoint.id === 'tenant-crear-global-usuario' ||
+        endpoint.id === 'tenant-crear-global-admin' ||
+        endpoint.id === 'tenant-actualizar-global'
+      ) {
+        const ownerTypeDisabled = !!String(body.coporativo || '').trim();
+        if (ownerTypeDisabled) {
+          delete body.ownerType;
+        }
+        const selectedNvlId = String(body.nvlGeneracionTenant || '').trim();
+        const selectedNvlLabel = (tenantGlobalSelects.nvlGeneracionTenant || [])
+          .find((opt) => opt.id === selectedNvlId)?.label || '';
+        const nvlEsTenantCorporativo = /tenant-(co?rporativo)|nvl 2/i.test(String(selectedNvlLabel));
+        if (!nvlEsTenantCorporativo && 'tenantGlobalRef' in body) {
+          delete body.tenantGlobalRef;
+        }
+        const refsDisponibles = tenantGlobalSelects.tenantGlobalRef || [];
+        const debeExigirTenantGlobalRef = nvlEsTenantCorporativo && refsDisponibles.length > 0;
+        if (debeExigirTenantGlobalRef && !String(body.tenantGlobalRef || '').trim()) {
+          throw new Error('Completa: Tenant global ref');
+        }
+      }
+
+      if (endpoint.id === 'perm-listar-herencias') {
+        const esSuperAdmin = Boolean(String(tenantGlobalActor?.tenantSuperAdminId || '').trim());
+        const esTenantGlobal = Boolean(String(tenantGlobalActor?.tenantGlobalId || '').trim()) && !esSuperAdmin;
+        const esTenantCorporativo = Boolean(String(tenantGlobalActor?.tenantCorporativoId || '').trim()) && !esSuperAdmin;
+        const qs = new URLSearchParams();
+        if (esTenantGlobal) {
+          qs.set('soloMios', 'true');
+        } else if (esTenantCorporativo) {
+          qs.set('soloMios', 'true');
+        } else if (esSuperAdmin) {
+          qs.set('soloMios', 'false');
+        }
+        const tenantGlobalRaw = getFieldValue(endpoint.id, 'tenantGlobal').trim();
+        const tenantGlobalSel = isTenantSuperAdminScopeOption(tenantGlobalRaw) ? '' : tenantGlobalRaw;
+        const tenantCorporativoSel = getFieldValue(endpoint.id, 'tenantCorporativo').trim();
+        if (tenantGlobalSel) qs.set('tenantGlobal', tenantGlobalSel);
+        if (tenantCorporativoSel) qs.set('tenantCorporativo', tenantCorporativoSel);
+        if (qs.toString()) {
+          resolvedPath = `${resolvedPath}${resolvedPath.includes('?') ? '&' : '?'}${qs.toString()}`;
+        }
+      }
+      if (endpoint.id === 'perm-admin-tenant-global-listar') {
+        const qs = new URLSearchParams();
+        const tenantGlobalRaw = getFieldValue(endpoint.id, 'tenantGlobal').trim();
+        const tenantGlobalSel = isTenantSuperAdminScopeOption(tenantGlobalRaw) ? '' : tenantGlobalRaw;
+        const tenantCorporativoSel = getFieldValue(endpoint.id, 'tenantCorporativo').trim();
+        if (tenantGlobalSel) qs.set('tenantGlobal', tenantGlobalSel);
+        if (tenantCorporativoSel) qs.set('tenantCorporativo', tenantCorporativoSel);
+        if (qs.toString()) {
+          resolvedPath = `${resolvedPath}${resolvedPath.includes('?') ? '&' : '?'}${qs.toString()}`;
         }
       }
 
@@ -1052,38 +1994,222 @@ const ParametrosGobernanza: React.FC = () => {
     );
   };
 
+  const renderActualizarReglaDiosResultado = () => {
+    const raw = resultData['tenant-actualizar-regla-dios'];
+    const payload = (raw as any)?.data ? (raw as any).data : raw;
+    const sync = (payload as any)?.sincronizacion;
+    const regla = (payload as any)?.regla;
+
+    if (!sync) {
+      return <pre className="max-h-48 overflow-auto rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-800">{result['tenant-actualizar-regla-dios'] || 'Aun sin respuesta'}</pre>;
+    }
+
+    const vistasFaltantes = Array.isArray(sync?.vistasFaltantes) ? sync.vistasFaltantes : [];
+    const accionesFaltantes = Array.isArray(sync?.accionesFaltantes) ? sync.accionesFaltantes : [];
+    const vistasRegla = Array.isArray(regla?.recurso) ? regla.recurso : [];
+    const accionesRegla = Array.isArray(regla?.accionesUsu) ? regla.accionesUsu : [];
+
+    return (
+      <div className="space-y-3">
+        <div className="grid gap-2 text-xs md:grid-cols-2">
+          <div className="rounded border border-emerald-200 bg-emerald-50 p-2">
+            Vistas faltantes detectadas: <span className="font-semibold">{Number(sync?.vistasFaltantesTotal || 0)}</span>
+          </div>
+          <div className="rounded border border-emerald-200 bg-emerald-50 p-2">
+            Acciones faltantes detectadas: <span className="font-semibold">{Number(sync?.accionesFaltantesTotal || 0)}</span>
+          </div>
+          <div className="rounded border border-slate-200 bg-slate-50 p-2">
+            Vistas extra detectadas: <span className="font-semibold">{Number(sync?.vistasExtraTotal || 0)}</span>
+          </div>
+          <div className="rounded border border-slate-200 bg-slate-50 p-2">
+            Acciones extra detectadas: <span className="font-semibold">{Number(sync?.accionesExtraTotal || 0)}</span>
+          </div>
+        </div>
+
+        <div className="overflow-auto rounded-lg border border-slate-200 bg-white">
+          <div className="border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700">
+            DataTable - Vistas faltantes detectadas
+          </div>
+          {!vistasFaltantes.length ? (
+            <p className="p-3 text-xs text-slate-500">No hay vistas faltantes.</p>
+          ) : (
+            <table className="w-full min-w-[760px] text-left text-xs">
+              <thead className="bg-slate-100 text-slate-700">
+                <tr>
+                  <th className="px-3 py-2">ID</th>
+                  <th className="px-3 py-2">Nombre</th>
+                  <th className="px-3 py-2">Path</th>
+                  <th className="px-3 py-2">Estado</th>
+                </tr>
+              </thead>
+              <tbody>
+                {vistasFaltantes.map((v: any, idx: number) => (
+                  <tr key={String(v?.id || idx)} className="border-t border-slate-100">
+                    <td className="px-3 py-2 font-mono">{String(v?.id || '-')}</td>
+                    <td className="px-3 py-2">{String(v?.name || 'Vista')}</td>
+                    <td className="px-3 py-2">{String(v?.path || '-')}</td>
+                    <td className="px-3 py-2">{v?.estadoRuta ? 'Activa' : 'Inactiva'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        <div className="overflow-auto rounded-lg border border-slate-200 bg-white">
+          <div className="border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700">
+            DataTable - Acciones faltantes detectadas
+          </div>
+          {!accionesFaltantes.length ? (
+            <p className="p-3 text-xs text-slate-500">No hay acciones faltantes.</p>
+          ) : (
+            <table className="w-full min-w-[760px] text-left text-xs">
+              <thead className="bg-slate-100 text-slate-700">
+                <tr>
+                  <th className="px-3 py-2">ID</th>
+                  <th className="px-3 py-2">Etiqueta</th>
+                  <th className="px-3 py-2">Metodo</th>
+                  <th className="px-3 py-2">Estado</th>
+                </tr>
+              </thead>
+              <tbody>
+                {accionesFaltantes.map((a: any, idx: number) => (
+                  <tr key={String(a?.id || idx)} className="border-t border-slate-100">
+                    <td className="px-3 py-2 font-mono">{String(a?.id || '-')}</td>
+                    <td className="px-3 py-2">{String(a?.etiquetas || '-')}</td>
+                    <td className="px-3 py-2">{String(a?.method || '-')}</td>
+                    <td className="px-3 py-2">{a?.estadoAccion ? 'Activa' : 'Inactiva'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        <div className="overflow-auto rounded-lg border border-slate-200 bg-white">
+          <div className="border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700">
+            Regla DIOS actualizada (populate de vistas y acciones)
+          </div>
+          <div className="grid gap-3 p-3 md:grid-cols-2">
+            <div>
+              <p className="mb-2 text-xs font-semibold text-slate-700">Vistas en regla ({vistasRegla.length})</p>
+              <div className="max-h-36 overflow-auto rounded border border-slate-200">
+                <table className="w-full min-w-[320px] text-left text-xs">
+                  <thead className="bg-slate-100 text-slate-700">
+                    <tr>
+                      <th className="px-2 py-1.5">Nombre</th>
+                      <th className="px-2 py-1.5">Path</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {vistasRegla.map((v: any, idx: number) => (
+                      <tr key={String(v?._id || idx)} className="border-t border-slate-100">
+                        <td className="px-2 py-1.5">{String(v?.name || v?._id || '-')}</td>
+                        <td className="px-2 py-1.5">{String(v?.path || '-')}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div>
+              <p className="mb-2 text-xs font-semibold text-slate-700">Acciones en regla ({accionesRegla.length})</p>
+              <div className="max-h-36 overflow-auto rounded border border-slate-200">
+                <table className="w-full min-w-[320px] text-left text-xs">
+                  <thead className="bg-slate-100 text-slate-700">
+                    <tr>
+                      <th className="px-2 py-1.5">Etiqueta</th>
+                      <th className="px-2 py-1.5">Metodo</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {accionesRegla.map((a: any, idx: number) => (
+                      <tr key={String(a?._id || idx)} className="border-t border-slate-100">
+                        <td className="px-2 py-1.5">{String(a?.etiquetas || a?._id || '-')}</td>
+                        <td className="px-2 py-1.5">{String(a?.method || '-')}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <pre className="max-h-48 overflow-auto rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-800">
+          {JSON.stringify(raw, null, 2)}
+        </pre>
+      </div>
+    );
+  };
+
   const renderHerenciasAdminTable = () => {
-    const rows = pickArray(resultData['perm-admin-tenant-global-listar'], ['data', 'items', 'herencias']);
-    if (!rows.length) {
+    const raw = resultData['perm-admin-tenant-global-listar'] as any;
+    const grupos = Array.isArray(raw?.grupos) ? raw.grupos : [];
+    const rows = pickArray(raw, ['data', 'items', 'herencias']);
+    const rowsFromGrupos = grupos.flatMap((g: any) => (Array.isArray(g?.items) ? g.items : []));
+    const dataRows = rows.length ? rows : rowsFromGrupos;
+    const formatDate = (value: any): string => {
+      const txt = String(value || '').trim();
+      if (!txt) return '-';
+      const date = new Date(txt);
+      if (Number.isNaN(date.getTime())) return txt;
+      return date.toLocaleString();
+    };
+    if (!dataRows.length) {
       return <pre className="max-h-48 overflow-auto rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-800">{result['perm-admin-tenant-global-listar'] || 'Aun sin respuesta'}</pre>;
     }
 
     return (
       <div className="overflow-auto rounded-lg border border-slate-200 bg-white">
-        <table className="w-full min-w-[920px] text-left text-xs">
+        <table className="w-full min-w-[1400px] text-left text-xs">
           <thead className="bg-slate-100 text-slate-700">
             <tr>
               <th className="px-3 py-2">ID</th>
+              <th className="px-3 py-2">Rol</th>
               <th className="px-3 py-2">Estado</th>
               <th className="px-3 py-2">Tenant Global</th>
               <th className="px-3 py-2">Tenant Corporativo</th>
               <th className="px-3 py-2">Usuario</th>
               <th className="px-3 py-2">Vistas</th>
               <th className="px-3 py-2">Acciones</th>
+              <th className="px-3 py-2">Fecha asignación</th>
+              <th className="px-3 py-2">Creado</th>
+              <th className="px-3 py-2">Actualizado</th>
+              <th className="px-3 py-2">Fuente</th>
             </tr>
           </thead>
           <tbody>
-            {rows.map((row: any, idx: number) => (
+            {dataRows.map((row: any, idx: number) => {
+              const vistasArr = Array.isArray(row?.vistas) ? row.vistas : [];
+              const accionesArr = Array.isArray(row?.acciones) ? row.acciones : [];
+              const vistasPreview = vistasArr
+                .slice(0, 2)
+                .map((v: any) => String(v?.name || v?.path || v?._id || '').trim())
+                .filter(Boolean)
+                .join(', ');
+              const accionesPreview = accionesArr
+                .slice(0, 3)
+                .map((a: any) => String(a?.etiquetas || a?.method || a?._id || '').trim())
+                .filter(Boolean)
+                .join(', ');
+              return (
               <tr key={String(row?._id || row?.iud || idx)} className="border-t border-slate-100">
                 <td className="px-3 py-2 font-mono">{String(row?._id || row?.iud || '-')}</td>
+                <td className="px-3 py-2">{String(row?.rolId?.rol || row?.rol || '-')}</td>
                 <td className="px-3 py-2">{row?.estado === false ? 'Inactivo' : 'Activo'}</td>
                 <td className="px-3 py-2">{String(row?.tenantGlobal?._id || row?.tenantGlobal || '-')}</td>
                 <td className="px-3 py-2">{String(row?.tenantCorporativo?._id || row?.tenantCorporativo || '-')}</td>
                 <td className="px-3 py-2">{String(row?.usuarioId?.nombre || row?.usuarioId?.name || row?.usuarioId?._id || row?.usuarioId || '-')}</td>
-                <td className="px-3 py-2">{Array.isArray(row?.vistas) ? row.vistas.length : 0}</td>
-                <td className="px-3 py-2">{Array.isArray(row?.acciones) ? row.acciones.length : 0}</td>
+                <td className="px-3 py-2">{vistasArr.length}{vistasPreview ? ` | ${vistasPreview}` : ''}</td>
+                <td className="px-3 py-2">{accionesArr.length}{accionesPreview ? ` | ${accionesPreview}` : ''}</td>
+                <td className="px-3 py-2">{formatDate(row?.fechaAsignacion)}</td>
+                <td className="px-3 py-2">{formatDate(row?.createdAt)}</td>
+                <td className="px-3 py-2">{formatDate(row?.updatedAt)}</td>
+                <td className="px-3 py-2">{String(row?.fuenteHerencia || 'tenantGlobal')}</td>
               </tr>
-            ))}
+            );
+            })}
           </tbody>
         </table>
       </div>
@@ -1111,7 +2237,28 @@ const ParametrosGobernanza: React.FC = () => {
             {rows.map((row: any, idx: number) => (
               <tr key={String(row?._id || row?.iud || idx)} className="border-t border-slate-100">
                 <td className="px-3 py-2 font-mono">{String(row?._id || row?.iud || '-')}</td>
-                <td className="px-3 py-2">{String(row?.name || row?.nombre || row?.titulo || '-')}</td>
+                <td className="px-3 py-2">
+                  {(() => {
+                    const id = String(row?._id || row?.iud || '').trim();
+                    const rolDirecto = String(
+                      row?.rolNombre ||
+                      row?.nombre ||
+                      row?.rolesMabs?.rol ||
+                      (Array.isArray(row?.rolesMabs) ? row.rolesMabs[0]?.rol : '') ||
+                      row?.name ||
+                      row?.titulo ||
+                      ''
+                    ).trim();
+                    if (rolDirecto) return rolDirecto;
+
+                    const tenantCtx = tenantGlobales.find((t) => t.id === id);
+                    const labelCtx = String(tenantCtx?.label || '').trim();
+                    if (labelCtx.includes('|')) {
+                      return labelCtx.split('|')[0].trim() || '-';
+                    }
+                    return labelCtx || '-';
+                  })()}
+                </td>
                 <td className="px-3 py-2">{pickTenantCorporate(row)}</td>
                 <td className="px-3 py-2">{row?.estado === false ? 'Inactivo' : 'Activo'}</td>
               </tr>
@@ -1123,39 +2270,194 @@ const ParametrosGobernanza: React.FC = () => {
   };
 
   const renderHerenciasUsuarioTable = () => {
-    const rows = pickArray(resultData['perm-listar-herencias'], ['herencias', 'data', 'items']);
-    if (!rows.length) {
-      return <pre className="max-h-48 overflow-auto rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-800">{result['perm-listar-herencias'] || 'Aun sin respuesta'}</pre>;
-    }
+    const raw = resultData['perm-listar-herencias'] as any;
+    const rows = pickArray(raw, ['herencias', 'data', 'items']);
+    const gruposRaw = Array.isArray(raw?.grupos) ? raw.grupos : [];
+    const contexto = raw?.contexto || {};
+    const jerarquia = raw?.jerarquia || {};
+    const soloMios = Boolean(contexto?.soloMios);
+
+    const grupos = gruposRaw.length
+      ? gruposRaw
+      : Object.values(
+          rows.reduce((acc: Record<string, any>, row: any) => {
+            const userId = String(row?.usuarioId?._id || row?.usuarioId || 'SIN_USUARIO').trim();
+            const userLabel = String(
+              row?.usuarioId?.nombre ||
+              row?.usuarioId?.name ||
+              row?.usuarioId?.correo ||
+              row?.usuarioId?.email ||
+              userId
+            );
+            if (!acc[userId]) {
+              acc[userId] = {
+                usuarioId: userId === 'SIN_USUARIO' ? null : userId,
+                usuario: userLabel,
+                totalHerencias: 0,
+                tenantGlobales: [] as string[],
+                tenantCorporativos: [] as string[],
+                vistasPromedio: 0,
+                accionesPromedio: 0,
+                _vistasTotal: 0,
+                _accionesTotal: 0,
+                items: [] as any[],
+              };
+            }
+            const tg = String(row?.tenantGlobal?._id || row?.tenantGlobal || '').trim();
+            const tc = String(row?.tenantCorporativo?._id || row?.tenantCorporativo || '').trim();
+            if (tg && !acc[userId].tenantGlobales.includes(tg)) acc[userId].tenantGlobales.push(tg);
+            if (tc && !acc[userId].tenantCorporativos.includes(tc)) acc[userId].tenantCorporativos.push(tc);
+            acc[userId].totalHerencias += 1;
+            acc[userId]._vistasTotal += Array.isArray(row?.vistas) ? row.vistas.length : 0;
+            acc[userId]._accionesTotal += Array.isArray(row?.acciones) ? row.acciones.length : 0;
+            acc[userId].items.push(row);
+            return acc;
+          }, {})
+        ).map((g: any) => ({
+          ...g,
+          vistasPromedio: Number(((g._vistasTotal || 0) / (g.totalHerencias || 1)).toFixed(2)),
+          accionesPromedio: Number(((g._accionesTotal || 0) / (g.totalHerencias || 1)).toFixed(2)),
+        }));
+
+    const tgPermitidos = Array.isArray(jerarquia?.tenantGlobalesPermitidos) ? jerarquia.tenantGlobalesPermitidos.length : 0;
+    const tcPermitidos = Array.isArray(jerarquia?.tenantCorporativosPermitidos) ? jerarquia.tenantCorporativosPermitidos.length : 0;
 
     return (
-      <div className="overflow-auto rounded-lg border border-slate-200 bg-white">
-        <table className="w-full min-w-[980px] text-left text-xs">
-          <thead className="bg-slate-100 text-slate-700">
-            <tr>
-              <th className="px-3 py-2">ID</th>
-              <th className="px-3 py-2">Tenant Global</th>
-              <th className="px-3 py-2">Tenant Corporativo</th>
-              <th className="px-3 py-2">Rol</th>
-              <th className="px-3 py-2">Vistas</th>
-              <th className="px-3 py-2">Acciones</th>
-              <th className="px-3 py-2">Fecha</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row: any, idx: number) => (
-              <tr key={String(row?._id || row?.iud || idx)} className="border-t border-slate-100">
-                <td className="px-3 py-2 font-mono">{String(row?._id || row?.iud || '-')}</td>
-                <td className="px-3 py-2">{String(row?.tenantGlobal?._id || row?.tenantGlobal || '-')}</td>
-                <td className="px-3 py-2">{String(row?.tenantCorporativo?._id || row?.tenantCorporativo || '-')}</td>
-                <td className="px-3 py-2">{String(row?.rolId?.rol || row?.rolId?._id || row?.rolId || '-')}</td>
-                <td className="px-3 py-2">{Array.isArray(row?.vistas) ? row.vistas.length : 0}</td>
-                <td className="px-3 py-2">{Array.isArray(row?.acciones) ? row.acciones.length : 0}</td>
-                <td className="px-3 py-2">{String(row?.fechaAsignacion || row?.createdAt || '-')}</td>
+      <div className="space-y-3">
+        <div className="grid gap-2 text-xs md:grid-cols-3">
+          <div className="rounded border border-slate-200 bg-slate-50 p-2">
+            Usuario JWT: <span className="font-semibold">{String(raw?.usuarioId || '-')}</span>
+          </div>
+          <div className="rounded border border-slate-200 bg-slate-50 p-2">
+            Scope: <span className="font-semibold">{String(contexto?.scope || '-')}</span>
+          </div>
+          <div className="rounded border border-slate-200 bg-slate-50 p-2">
+            Rol JWT: <span className="font-semibold">{String(contexto?.rolJWT || '-')}</span>
+          </div>
+          <div className="rounded border border-slate-200 bg-slate-50 p-2">
+            Total herencias: <span className="font-semibold">{Number(raw?.total || rows.length || 0)}</span>
+          </div>
+          <div className="rounded border border-slate-200 bg-slate-50 p-2">
+            TenantSuperAdmin: <span className="font-semibold">{String(contexto?.tenantSuperTenant || '-')}</span>
+          </div>
+          <div className="rounded border border-slate-200 bg-slate-50 p-2">
+            TenantGlobal JWT: <span className="font-semibold">{String(contexto?.tenantGlobal || '-')}</span>
+          </div>
+          <div className="rounded border border-slate-200 bg-slate-50 p-2">
+            TenantCorporativo JWT: <span className="font-semibold">{String(contexto?.tenantCorporativo || '-')}</span>
+          </div>
+        </div>
+
+        <div className="rounded border border-emerald-200 bg-emerald-50 p-2 text-xs text-emerald-800">
+          Jerarquia visible - TenantGlobal: <span className="font-semibold">{tgPermitidos}</span> | TenantCorporativo: <span className="font-semibold">{tcPermitidos}</span>
+        </div>
+        <div className="rounded border border-slate-200 bg-slate-50 p-2 text-xs text-slate-700">
+          Modo consulta: <span className="font-semibold">{soloMios ? 'solo mis herencias (JWT)' : 'todas las herencias del alcance JWT'}</span>
+        </div>
+
+        <div className="overflow-auto rounded-lg border border-slate-200 bg-white">
+          <div className="border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700">
+            Vistas heredadas (filtro actual)
+          </div>
+          <table className="w-full min-w-[980px] text-left text-xs">
+            <thead className="bg-slate-100 text-slate-700">
+              <tr>
+                <th className="px-3 py-2">ID herencia</th>
+                <th className="px-3 py-2">Vista</th>
+                <th className="px-3 py-2">TenantGlobal</th>
+                <th className="px-3 py-2">TenantCorporativo</th>
+                <th className="px-3 py-2">Detalle</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {rows.length ? (
+                rows.flatMap((row: any, idx: number) => {
+                  const vistasRow = Array.isArray(row?.vistas) && row.vistas.length ? row.vistas : [null];
+                  return vistasRow.map((v: any, vIdx: number) => {
+                    const vistaTxt = v ? String(v?.name || v?.path || v?._id || '-') : '-';
+                    const tg = String(row?.tenantGlobal?._id || row?.tenantGlobal || '-');
+                    const tc = String(row?.tenantCorporativo?._id || row?.tenantCorporativo || '-');
+                    const usuario = String(row?.usuarioId?.nombre || row?.usuarioId?.correo || row?.usuarioId?._id || row?.usuarioId || '-');
+                    return (
+                      <tr key={`${String(row?._id || idx)}-${vIdx}`} className="border-t border-slate-100">
+                        <td className="px-3 py-2 font-mono">{String(row?._id || row?.iud || '-')}</td>
+                        <td className="px-3 py-2">{vistaTxt}</td>
+                        <td className="px-3 py-2 font-mono">{tg}</td>
+                        <td className="px-3 py-2 font-mono">{tc}</td>
+                        <td className="px-3 py-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() =>
+                              setHerenciaDetalle({
+                                usuarioId: row?.usuarioId?._id || row?.usuarioId || null,
+                                usuario,
+                                totalHerencias: 1,
+                                tenantGlobales: tg !== '-' ? [tg] : [],
+                                tenantCorporativos: tc !== '-' ? [tc] : [],
+                                items: [row],
+                              })
+                            }
+                          >
+                            Ver detalle
+                          </Button>
+                        </td>
+                      </tr>
+                    );
+                  });
+                })
+              ) : (
+                <tr className="border-t border-slate-100">
+                  <td className="px-3 py-3 text-slate-500" colSpan={5}>
+                    Sin vistas/herencias para el filtro actual.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="overflow-auto rounded-lg border border-slate-200 bg-white">
+          <table className="w-full min-w-[980px] text-left text-xs">
+            <thead className="bg-slate-100 text-slate-700">
+              <tr>
+                <th className="px-3 py-2">Usuario</th>
+                <th className="px-3 py-2">Total herencias</th>
+                <th className="px-3 py-2">Tenant globales</th>
+                <th className="px-3 py-2">Tenant corporativos</th>
+                <th className="px-3 py-2">Vistas (promedio)</th>
+                <th className="px-3 py-2">Acciones (promedio)</th>
+                <th className="px-3 py-2">Detalle</th>
+              </tr>
+            </thead>
+            <tbody>
+              {grupos.length ? (
+                grupos.map((g: any, idx: number) => (
+                  <tr key={String(g?.usuarioId || g?.usuario || idx)} className="border-t border-slate-100">
+                    <td className="px-3 py-2">{String(g?.usuario || g?.usuarioId || '-')}</td>
+                    <td className="px-3 py-2">{Number(g?.totalHerencias || g?.total || 0)}</td>
+                    <td className="px-3 py-2">{Array.isArray(g?.tenantGlobales) ? g.tenantGlobales.length : 0}</td>
+                    <td className="px-3 py-2">{Array.isArray(g?.tenantCorporativos) ? g.tenantCorporativos.length : 0}</td>
+                    <td className="px-3 py-2">{Number(g?.vistasPromedio || 0).toFixed(2)}</td>
+                    <td className="px-3 py-2">{Number(g?.accionesPromedio || 0).toFixed(2)}</td>
+                    <td className="px-3 py-2">
+                      <Button type="button" size="sm" variant="outline" onClick={() => setHerenciaDetalle(g)}>
+                        Ver detalle
+                      </Button>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr className="border-t border-slate-100">
+                  <td className="px-3 py-3 text-slate-500" colSpan={7}>
+                    Sin herencias para el contexto JWT actual.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     );
   };
@@ -1324,7 +2626,7 @@ const ParametrosGobernanza: React.FC = () => {
     return (
       <div className="rounded-xl border border-emerald-100 bg-white/80 p-3">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <p className="text-xs font-medium text-emerald-700">Selecciona vistas y acciones (o usa Todas)</p>
+          <p className="text-xs font-medium text-emerald-700">Elige la vista que quieres cambiarle los permisos</p>
           <div className="flex flex-wrap gap-2">
             <Button
               type="button"
@@ -1351,7 +2653,7 @@ const ParametrosGobernanza: React.FC = () => {
         </div>
         {!vistasCatalogo.length || !accionesCatalogo.length ? (
           <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-            Faltan datos para construir checks de vistas/acciones.
+            Primero elige una herencia y luego marca la vista a la que le quieres cambiar permisos.
             <Button className="ml-2 h-7 px-2 text-xs" type="button" variant="outline" onClick={hydrateData} disabled={loadingData}>
               Recargar datos
             </Button>
@@ -1396,7 +2698,264 @@ const ParametrosGobernanza: React.FC = () => {
 
   const renderForm = (endpoint: EndpointSpec) => (
     <div className="space-y-3">
+      {endpoint.id === 'tenant-actualizar-regla-dios' ? (
+        <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900">
+          UI Sync Marker: tabla de faltantes habilitada.
+        </div>
+      ) : null}
+      {(
+        endpoint.id === 'tenant-crear-global-usuario' ||
+        endpoint.id === 'tenant-crear-global-admin' ||
+        endpoint.id === 'tenant-actualizar-global'
+      ) ? (
+        <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
+          {tenantGlobalSelectsDebug || 'Selects aun no cargados.'}
+        </div>
+      ) : null}
+      {(endpoint.id === 'perm-admin-tenant-global-actualizar' || endpoint.id === 'perm-admin-tenant-global') ? (
+        <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900">
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={!!syncRunningByEndpoint[endpoint.id]}
+              onClick={() => runHerenciaSyncCheck(endpoint.id, false)}
+            >
+              Validar rutas nuevas
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={!!syncRunningByEndpoint[endpoint.id]}
+              onClick={() => runHerenciaSyncCheck(endpoint.id, true)}
+            >
+              Sincronizar ahora
+            </Button>
+          </div>
+          {(() => {
+            const sync = syncInfoByEndpoint[endpoint.id];
+            if (!sync) return <p>Selecciona tenant y ejecuta validacion para ver rutas faltantes.</p>;
+            const resumen = sync?.sincronizacionResumen || {};
+            const permitida = sync?.sincronizacionPermitida;
+            const rows = Array.isArray(sync?.sincronizacion) ? sync.sincronizacion : [];
+            const pendientes = rows.reduce((acc: number, r: any) => acc + Number(r?.rutasNoAgregadasTotal || 0), 0);
+            return (
+              <div className="space-y-2">
+                <p>
+                  Permiso sincronizacion: <span className="font-semibold">{permitida ? 'HABILITADA (tenantSuperAdmin)' : 'SOLO DIAGNOSTICO'}</span>
+                </p>
+                <p>
+                  Contextos: <span className="font-semibold">{Number(resumen?.contextos || rows.length || 0)}</span> | Sincronizados:{' '}
+                  <span className="font-semibold">{Number(resumen?.contextosSincronizados || 0)}</span> | Rutas activas:{' '}
+                  <span className="font-semibold">{Number(resumen?.rutasActivasTotal || 0)}</span> | Pendientes:{' '}
+                  <span className="font-semibold">{pendientes}</span>
+                </p>
+                {rows.length ? (
+                  <div className="max-h-36 overflow-auto rounded border border-blue-200 bg-white p-2 text-[11px] text-slate-700">
+                    {rows.map((r: any, idx: number) => (
+                      <div key={`${r?.tenantGlobal || 'tg'}-${r?.tenantCorporativo || 'tc'}-${idx}`} className="mb-2 border-b border-slate-100 pb-1 last:mb-0 last:border-b-0">
+                        <p>
+                          TG: <span className="font-mono">{String(r?.tenantGlobal || '-')}</span> | TC:{' '}
+                          <span className="font-mono">{String(r?.tenantCorporativo || '-')}</span> | Faltantes:{' '}
+                          <span className="font-semibold">{Number(r?.rutasNoAgregadasTotal || 0)}</span>
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            );
+          })()}
+        </div>
+      ) : null}
+      {endpoint.id === 'perm-listar-herencias' ? (() => {
+        const tenantOptions = getTenantGlobalOptions(endpoint.id);
+        const tenantGlobalSelected = getFieldValue(endpoint.id, 'tenantGlobal').trim();
+        const actorRolJwt = String(tenantGlobalActor?.rol || '').trim();
+        const actorTsaJwt = String(tenantGlobalActor?.tenantSuperAdminId || '').trim();
+        const actorTgJwt = String(tenantGlobalActor?.tenantGlobalId || '').trim();
+        const actorTcJwt = String(tenantGlobalActor?.tenantCorporativoId || '').trim();
+        const herenciaSelected = getFieldValue(endpoint.id, 'herenciaAsociada').trim();
+        const herenciaOptions = herenciaAsociadaOptionsByEndpoint[endpoint.id] || [];
+        const herenciaById = herenciaAsociadaDataByEndpoint[endpoint.id] || {};
+        const tenantCorpError = String(tenantCorpErrorByEndpoint[endpoint.id] || '').trim();
+        return (
+          <div className="grid gap-3 md:grid-cols-2">
+            <div>
+              <Label>Tenant global</Label>
+              <select
+                className="mt-1 h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+                value={tenantGlobalSelected}
+                onChange={(e) => {
+                  const nextValue = e.target.value;
+                  setFieldValue(endpoint.id, 'tenantGlobal', nextValue);
+                  setFieldValue(endpoint.id, 'herenciaAsociada', '');
+                  setFieldValue(endpoint.id, 'tenantCorporativo', '');
+                  setHerenciaAsociadaOptionsByEndpoint((prev) => ({ ...prev, [endpoint.id]: [] }));
+                  setHerenciaAsociadaDataByEndpoint((prev) => ({ ...prev, [endpoint.id]: {} }));
+                  if (nextValue) fetchHerenciasAsociadasByTenantGlobal(endpoint.id, nextValue);
+                }}
+              >
+                <option value="">Todos los tenant globales del alcance JWT</option>
+                {tenantOptions.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
+              </select>
+              {(actorRolJwt || actorTsaJwt || actorTgJwt || actorTcJwt) ? (
+                <p className="mt-1 text-xs text-slate-500">
+                  {`JWT: ${actorRolJwt || 'SIN_ROL'} | TSA:${actorTsaJwt || '-'} | TG:${actorTgJwt || '-'} | TC:${actorTcJwt || '-'}`}
+                </p>
+              ) : null}
+            </div>
+            <div>
+              <Label>Herencia asociada</Label>
+              <select
+                className="mt-1 h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+                value={herenciaSelected}
+                onChange={(e) => {
+                  const nextId = e.target.value;
+                  setFieldValue(endpoint.id, 'herenciaAsociada', nextId);
+                  const row = herenciaById[nextId];
+                  const tc = String(row?.tenantCorporativo?._id || row?.tenantCorporativo || '').trim();
+                  setFieldValue(endpoint.id, 'tenantCorporativo', tc);
+                }}
+                disabled={!tenantGlobalSelected}
+              >
+                <option value="">
+                  {!tenantGlobalSelected
+                    ? 'Selecciona tenant global primero'
+                    : herenciaOptions.length
+                    ? 'Todas las herencias del tenant global'
+                    : 'Sin herencias asociadas'}
+                </option>
+                {herenciaOptions.map((h) => <option key={h.id} value={h.id}>{h.label}</option>)}
+              </select>
+              {tenantCorpError ? (
+                <p className="mt-1 text-xs text-rose-700">
+                  Error cargando herencias: {tenantCorpError}
+                </p>
+              ) : null}
+            </div>
+          </div>
+        );
+      })() : null}
+      {endpoint.id === 'perm-admin-tenant-global-listar' ? (() => {
+        const tenantOptions = getTenantGlobalOptions(endpoint.id);
+        const tenantGlobalSelected = getFieldValue(endpoint.id, 'tenantGlobal').trim();
+        const herenciaSelected = getFieldValue(endpoint.id, 'herenciaAsociada').trim();
+        const herenciaOptions = herenciaAsociadaOptionsByEndpoint[endpoint.id] || [];
+        const herenciaById = herenciaAsociadaDataByEndpoint[endpoint.id] || {};
+        return (
+          <div className="grid gap-3 md:grid-cols-2">
+            <div>
+              <Label>Tenant global</Label>
+              <select
+                className="mt-1 h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+                value={tenantGlobalSelected}
+                onChange={(e) => {
+                  const nextValue = e.target.value;
+                  setFieldValue(endpoint.id, 'tenantGlobal', nextValue);
+                  setFieldValue(endpoint.id, 'herenciaAsociada', '');
+                  setFieldValue(endpoint.id, 'tenantCorporativo', '');
+                  setHerenciaAsociadaOptionsByEndpoint((prev) => ({ ...prev, [endpoint.id]: [] }));
+                  setHerenciaAsociadaDataByEndpoint((prev) => ({ ...prev, [endpoint.id]: {} }));
+                  if (nextValue) fetchHerenciasAsociadasByTenantGlobal(endpoint.id, nextValue);
+                }}
+              >
+                <option value="">Todos los tenant globales del contexto JWT</option>
+                {tenantOptions.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <Label>Herencia asociada (visual)</Label>
+              <select
+                className="mt-1 h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+                value={herenciaSelected}
+                onChange={(e) => {
+                  const nextId = e.target.value;
+                  setFieldValue(endpoint.id, 'herenciaAsociada', nextId);
+                  const row = herenciaById[nextId];
+                  const tc = String(row?.tenantCorporativo?._id || row?.tenantCorporativo || '').trim();
+                  setFieldValue(endpoint.id, 'tenantCorporativo', tc);
+                }}
+                disabled={!tenantGlobalSelected}
+              >
+                <option value="">
+                  {!tenantGlobalSelected
+                    ? 'Selecciona tenant global primero'
+                    : herenciaOptions.length
+                    ? 'Selecciona herencia asociada'
+                    : 'Sin herencias asociadas'}
+                </option>
+                {herenciaOptions.map((h) => <option key={h.id} value={h.id}>{h.label}</option>)}
+              </select>
+            </div>
+          </div>
+        );
+      })() : null}
+      {(endpoint.id === 'perm-admin-tenant-global-desactivar' || endpoint.id === 'perm-admin-tenant-global-eliminar') ? (() => {
+        const tenantOptions = getTenantGlobalOptions(endpoint.id);
+        const tenantGlobalSelected = getFieldValue(endpoint.id, 'tenantGlobal').trim();
+        const herenciaSelected = getFieldValue(endpoint.id, 'herenciaAsociada').trim();
+        const herenciaOptions = herenciaAsociadaOptionsByEndpoint[endpoint.id] || [];
+        const herenciaById = herenciaAsociadaDataByEndpoint[endpoint.id] || {};
+        return (
+          <div className="grid gap-3 md:grid-cols-2">
+            <div>
+              <Label>Tenant global</Label>
+              <select
+                className="mt-1 h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+                value={tenantGlobalSelected}
+                onChange={(e) => {
+                  const nextValue = e.target.value;
+                  setFieldValue(endpoint.id, 'tenantGlobal', nextValue);
+                  setFieldValue(endpoint.id, 'herenciaAsociada', '');
+                  setFieldValue(endpoint.id, 'tenantCorporativo', '');
+                  setFieldValue(endpoint.id, 'id', '');
+                  setHerenciaAsociadaOptionsByEndpoint((prev) => ({ ...prev, [endpoint.id]: [] }));
+                  setHerenciaAsociadaDataByEndpoint((prev) => ({ ...prev, [endpoint.id]: {} }));
+                  if (nextValue) fetchHerenciasAsociadasByTenantGlobal(endpoint.id, nextValue);
+                }}
+              >
+                <option value="">Selecciona tenant global</option>
+                {tenantOptions.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <Label>Herencia asociada</Label>
+              <select
+                className="mt-1 h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+                value={herenciaSelected}
+                onChange={(e) => {
+                  const nextId = e.target.value;
+                  setFieldValue(endpoint.id, 'herenciaAsociada', nextId);
+                  setFieldValue(endpoint.id, 'id', nextId);
+                  const row = herenciaById[nextId];
+                  const tc = String(row?.tenantCorporativo?._id || row?.tenantCorporativo || '').trim();
+                  setFieldValue(endpoint.id, 'tenantCorporativo', tc);
+                }}
+                disabled={!tenantGlobalSelected}
+              >
+                <option value="">
+                  {!tenantGlobalSelected
+                    ? 'Selecciona tenant global primero'
+                    : herenciaOptions.length
+                    ? 'Selecciona herencia asociada'
+                    : 'Sin herencias asociadas'}
+                </option>
+                {herenciaOptions.map((h) => <option key={h.id} value={h.id}>{h.label}</option>)}
+              </select>
+            </div>
+          </div>
+        );
+      })() : null}
       {endpoint.fields.map((field) => {
+        if (
+          (endpoint.id === 'perm-admin-tenant-global-desactivar' || endpoint.id === 'perm-admin-tenant-global-eliminar') &&
+          field.name === 'id'
+        ) {
+          return null;
+        }
         if (field.type === 'permisos') {
           if (endpoint.id === 'perm-admin-tenant-global' || endpoint.id === 'perm-admin-tenant-global-actualizar') {
             return <div key={field.name}>{renderHerenciaSelectionBuilder(endpoint)}</div>;
@@ -1404,22 +2963,88 @@ const ParametrosGobernanza: React.FC = () => {
           return <div key={field.name}>{renderPermisosBuilder(endpoint)}</div>;
         }
         if (endpoint.id === 'perm-usuario-tenant-global' && field.name === 'heredaGlobal') {
+          const esSuperAdmin = actorEsTenantSuperAdmin();
+          const tsaOptions = getTenantSuperAdminOptionsForPermUsuario();
+          const tsaSelected = getFieldValue(endpoint.id, 'tenantSuperAdminScope').trim();
+          const herenciasDisponibles = getHeredaOptionsPermitidasPorTenantSuperAdmin(tsaSelected);
+          const reglasDisponibles = getReglaDiosOptionsByTenantSuperAdmin(tsaSelected);
+          const hayHerencias = herenciasDisponibles.length > 0;
+          const reglaFallback = getFieldValue(endpoint.id, 'reglaGlobalFallback').trim();
           return (
             <div key={field.name}>
-              <Label>{field.label} {field.required ? '*' : ''}</Label>
+              <Label>TenantSuperAdmin *</Label>
+              <select
+                className="mt-1 h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+                value={tsaSelected}
+                onChange={(e) => {
+                  const nextTsa = e.target.value;
+                  setFieldValue(endpoint.id, 'tenantSuperAdminScope', nextTsa);
+                  setFieldValue(endpoint.id, 'heredaGlobal', '');
+                  setFieldValue(endpoint.id, 'reglaGlobalFallback', '');
+                }}
+                disabled={!esSuperAdmin}
+              >
+                <option value="">{esSuperAdmin ? 'Selecciona tenantSuperAdmin' : 'Solo tenantSuperAdmin puede asignar'}</option>
+                {tsaOptions.map((opt) => <option key={opt.id} value={opt.id}>{opt.label}</option>)}
+              </select>
+
+              <Label className="mt-2 block">{field.label} {field.required ? '*' : ''}</Label>
               <select
                 className="mt-1 h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
                 value={getFieldValue(endpoint.id, field.name)}
                 onChange={(e) => setFieldValue(endpoint.id, field.name, e.target.value)}
+                disabled={!esSuperAdmin || !hayHerencias}
               >
-                <option value="">Selecciona herencia global</option>
-                {heredaGlobalOptions.map((h) => <option key={h.id} value={h.id}>{h.label}</option>)}
+                <option value="">
+                  {!esSuperAdmin
+                    ? 'Solo tenantSuperAdmin puede asignar'
+                    : !tsaSelected
+                    ? 'Selecciona tenantSuperAdmin primero'
+                    : hayHerencias
+                    ? 'Selecciona herencia'
+                    : 'Sin herencias para este tenantSuperAdmin'}
+                </option>
+                {herenciasDisponibles.map((h) => <option key={h.id} value={h.id}>{h.label}</option>)}
               </select>
-              <p className="mt-1 text-xs text-slate-500">Opciones tomadas del contexto existente de herencias/reglas.</p>
+
+              <Label className="mt-2 block">Regla parametrizada</Label>
+              <select
+                className="mt-1 h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+                value={reglaFallback}
+                onChange={(e) => {
+                  const nextRegla = e.target.value;
+                  setFieldValue(endpoint.id, 'reglaGlobalFallback', nextRegla);
+                  setFieldValue(endpoint.id, field.name, nextRegla);
+                }}
+                disabled={!esSuperAdmin || !tsaSelected || hayHerencias}
+              >
+                <option value="">
+                  {!esSuperAdmin
+                    ? 'Solo tenantSuperAdmin puede asignar'
+                    : !tsaSelected
+                    ? 'Selecciona tenantSuperAdmin primero'
+                    : hayHerencias
+                    ? 'Bloqueada: existe herencia'
+                    : 'Selecciona regla DIOS parametrizada'}
+                </option>
+                {reglasDisponibles.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
+              </select>
+              <p className="mt-1 text-xs text-slate-500">
+                {esSuperAdmin
+                  ? (hayHerencias
+                    ? 'Existe herencia: se habilitan herencias y se bloquea regla.'
+                    : 'Sin herencia: se habilita regla parametrizada para fallback.')
+                  : 'Flujo bloqueado para tenantGlobal.'}
+              </p>
             </div>
           );
         }
         if (field.name === 'tenantGlobal' || field.name === 'tenantGlobalId') {
+          const tenantOptions = getTenantGlobalOptions(endpoint.id);
+          const actorRolJwt = String(tenantGlobalActor?.rol || '').trim();
+          const actorTsaJwt = String(tenantGlobalActor?.tenantSuperAdminId || '').trim();
+          const actorTgJwt = String(tenantGlobalActor?.tenantGlobalId || '').trim();
+          const actorTcJwt = String(tenantGlobalActor?.tenantCorporativoId || '').trim();
           return (
             <div key={field.name}>
               <Label>{field.label} {field.required ? '*' : ''}</Label>
@@ -1430,21 +3055,43 @@ const ParametrosGobernanza: React.FC = () => {
                   const nextValue = e.target.value;
                   setFieldValue(endpoint.id, field.name, nextValue);
                   if (endpoint.id === 'perm-admin-tenant-global' || endpoint.id === 'perm-admin-tenant-global-actualizar') {
-                    setFieldValue(endpoint.id, 'tenantCorporativo', '');
                     setPermisos(endpoint.id, [{ vistaId: '', accionId: [] }]);
                     setCatalogSelectionFor(endpoint.id, { vistas: [], acciones: [] });
                     setBulkAllFor(endpoint.id, false);
+                    setSyncInfoByEndpoint((prev) => ({ ...prev, [endpoint.id]: null }));
+                    if (endpoint.id === 'perm-admin-tenant-global-actualizar') {
+                      setHerenciaAsociadaOptionsByEndpoint((prev) => ({ ...prev, [endpoint.id]: [] }));
+                      setHerenciaAsociadaDataByEndpoint((prev) => ({ ...prev, [endpoint.id]: {} }));
+                      setFieldValue(endpoint.id, 'herenciaAsociada', '');
+                      if (nextValue) fetchHerenciasAsociadasByTenantGlobal(endpoint.id, nextValue);
+                    }
+                    if (endpoint.id === 'perm-admin-tenant-global') {
+                      setHerenciaAsociadaOptionsByEndpoint((prev) => ({ ...prev, [endpoint.id]: [] }));
+                      setHerenciaAsociadaDataByEndpoint((prev) => ({ ...prev, [endpoint.id]: {} }));
+                      setFieldValue(endpoint.id, 'herenciaAsociada', '');
+                      if (nextValue) fetchHerenciasAsociadasByTenantGlobal(endpoint.id, nextValue);
+                    }
                     setTenantCorpErrorByEndpoint((prev) => ({ ...prev, [endpoint.id]: '' }));
-                    if (nextValue) fetchTenantCorporativosByGlobal(endpoint.id, nextValue);
+                    if (endpoint.id === 'perm-admin-tenant-global' && nextValue) {
+                      setFieldValue(endpoint.id, 'tenantCorporativo', '');
+                      if (!isTenantSuperAdminScopeOption(nextValue)) {
+                        fetchTenantCorporativosByGlobal(endpoint.id, nextValue);
+                      }
+                    }
                   }
                 }}
               >
                 <option value="">
-                  {loadingData ? 'Cargando tenants globales...' : 'Selecciona tenant global'}
+                  {loadingData ? 'Cargando tenants...' : 'Selecciona tenant'}
                 </option>
-                {tenantGlobales.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
+                {tenantOptions.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
               </select>
-              {!loadingData && tenantGlobales.length === 0 ? (
+              {(actorRolJwt || actorTsaJwt || actorTgJwt || actorTcJwt) ? (
+                <p className="mt-1 text-xs text-slate-500">
+                  {`JWT: ${actorRolJwt || 'SIN_ROL'} | TSA:${actorTsaJwt || '-'} | TG:${actorTgJwt || '-'} | TC:${actorTcJwt || '-'}`}
+                </p>
+              ) : null}
+              {!loadingData && tenantOptions.length === 0 ? (
                 <p className="mt-1 text-xs text-amber-700">
                   No hay tenants globales cargados. Pulsa "Recargar datos API".
                 </p>
@@ -1452,7 +3099,82 @@ const ParametrosGobernanza: React.FC = () => {
             </div>
           );
         }
-        if (field.name === 'tenantCorporativo' && (endpoint.id === 'perm-admin-tenant-global' || endpoint.id === 'perm-admin-tenant-global-actualizar')) {
+        if (field.name === 'herenciaAsociada' && endpoint.id === 'perm-admin-tenant-global-actualizar') {
+          const options = herenciaAsociadaOptionsByEndpoint[endpoint.id] || [];
+          const tenantGlobalSelected = getFieldValue(endpoint.id, 'tenantGlobal').trim();
+          const selectedId = getFieldValue(endpoint.id, field.name).trim();
+          const selectedRow = (herenciaAsociadaDataByEndpoint[endpoint.id] || {})[selectedId];
+          const selectedFuente = String(selectedRow?.fuenteHerencia || 'tenantGlobal').trim();
+          return (
+            <div key={field.name}>
+              <Label>{field.label} {field.required ? '*' : ''}</Label>
+              <select
+                className="mt-1 h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+                value={getFieldValue(endpoint.id, field.name)}
+                onChange={(e) => {
+                  const nextId = e.target.value;
+                  setFieldValue(endpoint.id, field.name, nextId);
+                  applyHerenciaAsociadaSelection(endpoint.id, nextId);
+                }}
+                disabled={!tenantGlobalSelected}
+              >
+                <option value="">
+                  {!tenantGlobalSelected
+                    ? 'Selecciona tenant global primero'
+                    : options.length
+                    ? 'Selecciona herencia'
+                    : 'Sin herencias asociadas'}
+                </option>
+                {options.map((opt) => (
+                  <option key={opt.id} value={opt.id}>{opt.label}</option>
+                ))}
+              </select>
+              {selectedId ? (
+                <p className="mt-1 text-xs text-slate-600">
+                  Fuente heredada: <span className="font-semibold">{selectedFuente === 'tenantSuperAdmin' ? 'tenantSuperAdmin (DIOS)' : 'tenantGlobal'}</span>
+                </p>
+              ) : null}
+            </div>
+          );
+        }
+        if (field.name === 'tenantCorporativo' && endpoint.id === 'perm-admin-tenant-global') {
+          const options = herenciaAsociadaOptionsByEndpoint[endpoint.id] || [];
+          const tenantGlobalSelected = getFieldValue(endpoint.id, 'tenantGlobal').trim();
+          const selectedId = getFieldValue(endpoint.id, 'herenciaAsociada').trim();
+          return (
+            <div key={field.name}>
+              <Label>Herencia asociada</Label>
+              <select
+                className="mt-1 h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+                value={selectedId}
+                onChange={(e) => {
+                  const nextId = e.target.value;
+                  setFieldValue(endpoint.id, 'herenciaAsociada', nextId);
+                  const row = (herenciaAsociadaDataByEndpoint[endpoint.id] || {})[nextId];
+                  const tc = String(row?.tenantCorporativo?._id || row?.tenantCorporativo || '').trim();
+                  setFieldValue(endpoint.id, 'tenantCorporativo', tc);
+                  applyHerenciaAsociadaSelection(endpoint.id, nextId);
+                }}
+                disabled={!tenantGlobalSelected}
+              >
+                <option value="">
+                  {!tenantGlobalSelected
+                    ? 'Selecciona tenant global primero'
+                    : options.length
+                    ? 'Selecciona herencia asociada'
+                    : 'Sin herencias asociadas'}
+                </option>
+                {options.map((opt) => (
+                  <option key={opt.id} value={opt.id}>{opt.label}</option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-slate-500">
+                Se usa la herencia como base de vistas y acciones para parametrizar.
+              </p>
+            </div>
+          );
+        }
+        if (field.name === 'tenantCorporativo' && endpoint.id === 'perm-admin-tenant-global-actualizar') {
           const options = getTenantCorporativoOptions(endpoint.id);
           const tenantGlobalSelected = getFieldValue(endpoint.id, 'tenantGlobal').trim();
           const loadingCorp = !!tenantCorpLoadingByEndpoint[endpoint.id];
@@ -1463,7 +3185,10 @@ const ParametrosGobernanza: React.FC = () => {
               <select
                 className="mt-1 h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
                 value={getFieldValue(endpoint.id, field.name)}
-                onChange={(e) => setFieldValue(endpoint.id, field.name, e.target.value)}
+                onChange={(e) => {
+                  setFieldValue(endpoint.id, field.name, e.target.value);
+                  setSyncInfoByEndpoint((prev) => ({ ...prev, [endpoint.id]: null }));
+                }}
                 disabled={!tenantGlobalSelected}
               >
                 <option value="">
@@ -1494,6 +3219,143 @@ const ParametrosGobernanza: React.FC = () => {
                 <option value="">Selecciona contexto</option>
                 {contextos.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
               </select>
+            </div>
+          );
+        }
+        const usesTenantGlobalSelects =
+          (
+            endpoint.id === 'tenant-crear-global-usuario' ||
+            endpoint.id === 'tenant-crear-global-admin' ||
+            endpoint.id === 'tenant-actualizar-global'
+          ) &&
+          ['tipo_tenant', 'ownerType', 'nvlGeneracionTenant', 'apisDominios', 'accionesUsu', 'rolesMabs', 'coporativo', 'tenantGlobalRef'].includes(field.name);
+        if (usesTenantGlobalSelects) {
+          const options = tenantGlobalSelects[field.name] || [];
+          const actorEsTenantGlobal = !!String(tenantGlobalActor.tenantGlobalId || '').trim();
+          const selectedNvl = getFieldValue(endpoint.id, 'nvlGeneracionTenant').trim();
+          const nvlLabel = (tenantGlobalSelects.nvlGeneracionTenant || []).find((opt) => opt.id === selectedNvl)?.label || '';
+          const nvlTexto = String(nvlLabel).toLowerCase();
+          const nvlEsLibre = nvlTexto.includes('libre') || nvlTexto.includes('nvl 0');
+          const nvlEsTenantGlobal = nvlTexto.includes('tenant-global') || nvlTexto.includes('nvl 1');
+          const nvlEsTenantCorporativo = /tenant-(co?rporativo)|nvl 2/i.test(String(nvlLabel));
+          const nvlPermiteCorporativo = nvlEsTenantGlobal || nvlEsTenantCorporativo;
+          const nvlBloqueaRolDios = nvlEsTenantGlobal || nvlEsTenantCorporativo;
+          const opcionesRolesPorNivel = field.name === 'rolesMabs'
+            ? (tenantGlobalSelects.rolesMabs || [])
+            : options;
+          const optionsRoles = field.name === 'rolesMabs'
+            ? opcionesRolesPorNivel.filter((opt) => !nvlBloqueaRolDios || String(opt.rol || '').toUpperCase() !== 'DIOS')
+            : opcionesRolesPorNivel;
+          const optionsFiltradas = field.name === 'coporativo'
+            ? (nvlPermiteCorporativo ? options : [])
+            : field.name === 'nvlGeneracionTenant'
+            ? (actorEsTenantGlobal
+              ? options.filter((opt) => {
+                  const txt = String(opt.label || '').toLowerCase();
+                  return !txt.includes('libre') && !txt.includes('nvl 0');
+                })
+              : options)
+            : field.name === 'tenantGlobalRef'
+            ? (nvlEsTenantCorporativo ? options : [])
+            : optionsRoles;
+          const disabled =
+            field.name === 'coporativo'
+              ? !selectedNvl || !nvlPermiteCorporativo
+              : field.name === 'tenantGlobalRef'
+              ? !selectedNvl || !nvlEsTenantCorporativo
+              : false;
+          const isAccionUsuarioMulti =
+            field.name === 'accionesUsu' &&
+            (
+              endpoint.id === 'tenant-crear-global-usuario' ||
+              endpoint.id === 'tenant-crear-global-admin' ||
+              endpoint.id === 'tenant-actualizar-global'
+            );
+          const selectedMultiValues = isAccionUsuarioMulti
+            ? getFieldValue(endpoint.id, field.name).split(',').map((v) => v.trim()).filter(Boolean)
+            : [];
+          return (
+            <div key={field.name}>
+              <Label>{field.label} {field.required ? '*' : ''}</Label>
+              {isAccionUsuarioMulti ? (
+                <div className="mt-1 rounded-lg border border-slate-300 bg-white p-2">
+                  <div className="mb-2 flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setFieldValue(endpoint.id, field.name, optionsFiltradas.map((opt) => opt.id).join(','))}
+                    >
+                      Seleccionar todas
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setFieldValue(endpoint.id, field.name, '')}
+                    >
+                      Limpiar
+                    </Button>
+                    <span className="ml-auto rounded bg-slate-100 px-2 py-1 text-xs text-slate-700">
+                      Seleccionadas: {selectedMultiValues.length}
+                    </span>
+                  </div>
+                  <div className="max-h-40 overflow-auto rounded-md border border-slate-200 bg-slate-50 p-2">
+                    {optionsFiltradas.map((opt) => {
+                      const checked = selectedMultiValues.includes(opt.id);
+                      return (
+                        <label key={opt.id} className="mb-1 flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm hover:bg-white">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(e) => {
+                              const set = new Set(selectedMultiValues);
+                              if (e.target.checked) set.add(opt.id);
+                              else set.delete(opt.id);
+                              setFieldValue(endpoint.id, field.name, Array.from(set).join(','));
+                            }}
+                          />
+                          <span>{opt.label}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : (
+                <select
+                  className="mt-1 h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+                  value={getFieldValue(endpoint.id, field.name)}
+                  onChange={(e) => {
+                    setFieldValue(endpoint.id, field.name, e.target.value);
+                    if (field.name === 'nvlGeneracionTenant') {
+                      // Cambio de nivel: limpiar dependencias
+                      const nextNvlLabel = (tenantGlobalSelects.nvlGeneracionTenant || []).find((opt) => opt.id === e.target.value)?.label || '';
+                      const nextNvlEsLibre = String(nextNvlLabel).toLowerCase().includes('libre') || String(nextNvlLabel).toLowerCase().includes('nvl 0');
+                      setFieldValue(endpoint.id, 'coporativo', '');
+                      setFieldValue(endpoint.id, 'tenantGlobalRef', '');
+                      if (nextNvlEsLibre) setFieldValue(endpoint.id, 'ownerType', '');
+                    }
+                    if (field.name === 'coporativo') {
+                    }
+                  }}
+                  disabled={disabled}
+                >
+                  <option value="">
+                    {loadingData ? 'Cargando opciones...' : `Selecciona ${field.label.toLowerCase()}`}
+                  </option>
+                  {optionsFiltradas.map((opt) => (
+                    <option key={opt.id} value={opt.id}>{opt.label}</option>
+                  ))}
+                </select>
+              )}
+              {isAccionUsuarioMulti ? <p className="mt-1 text-xs text-slate-500">Selecciona una o varias acciones.</p> : null}
+              {!loadingData && optionsFiltradas.length === 0 ? (
+                <p className="mt-1 text-xs text-amber-700">
+                  {field.name === 'coporativo' && nvlEsLibre
+                    ? 'Para NVL LIBRE no se requiere corporativo.'
+                    : 'Sin opciones para este campo. Verifica rol `tenantSuperAdmin` o la configuracion del nivel.'}
+                </p>
+              ) : null}
             </div>
           );
         }
@@ -1548,6 +3410,13 @@ const ParametrosGobernanza: React.FC = () => {
             setPermisos(endpoint.id, [{ vistaId: '', accionId: [] }]);
             setCatalogSelectionFor(endpoint.id, { vistas: [], acciones: [] });
             setBulkAllFor(endpoint.id, false);
+            if (endpoint.id === 'perm-admin-tenant-global-desactivar' || endpoint.id === 'perm-admin-tenant-global-eliminar') {
+              setFieldValue(endpoint.id, 'tenantGlobal', '');
+              setFieldValue(endpoint.id, 'herenciaAsociada', '');
+              setFieldValue(endpoint.id, 'tenantCorporativo', '');
+              setHerenciaAsociadaOptionsByEndpoint((prev) => ({ ...prev, [endpoint.id]: [] }));
+              setHerenciaAsociadaDataByEndpoint((prev) => ({ ...prev, [endpoint.id]: {} }));
+            }
             setResult((prev) => ({ ...prev, [endpoint.id]: '' }));
             setResultData((prev) => ({ ...prev, [endpoint.id]: null }));
           }}
@@ -1558,6 +3427,8 @@ const ParametrosGobernanza: React.FC = () => {
       </div>
       {endpoint.id === 'tenant-listar-reglas'
         ? renderReglasTable()
+        : endpoint.id === 'tenant-actualizar-regla-dios'
+        ? renderActualizarReglaDiosResultado()
         : endpoint.id === 'tenant-listar-libres'
         ? renderTenantLibresTable()
         : endpoint.id === 'perm-listar-herencias'
@@ -1660,6 +3531,72 @@ const ParametrosGobernanza: React.FC = () => {
         </div>
       </div>
 
+      <Dialog open={!!herenciaDetalle} onOpenChange={(open) => !open && setHerenciaDetalle(null)}>
+        <DialogContent className="max-h-[90vh] overflow-auto sm:max-w-5xl">
+          <DialogHeader>
+            <DialogTitle>Detalle de herencias por usuario/tenant</DialogTitle>
+          </DialogHeader>
+          {herenciaDetalle ? (
+            <div className="space-y-3 text-xs">
+              <div className="grid gap-2 md:grid-cols-3">
+                <div className="rounded border border-slate-200 bg-slate-50 p-2">Usuario: <span className="font-semibold">{String(herenciaDetalle?.usuario || herenciaDetalle?.usuarioId || '-')}</span></div>
+                <div className="rounded border border-slate-200 bg-slate-50 p-2">Total herencias: <span className="font-semibold">{Number(herenciaDetalle?.totalHerencias || herenciaDetalle?.total || 0)}</span></div>
+                <div className="rounded border border-slate-200 bg-slate-50 p-2">Tenant globales: <span className="font-semibold">{Array.isArray(herenciaDetalle?.tenantGlobales) ? herenciaDetalle.tenantGlobales.length : 0}</span></div>
+              </div>
+
+              <div className="overflow-auto rounded-lg border border-slate-200 bg-white">
+                <table className="w-full min-w-[980px] text-left text-xs">
+                  <thead className="bg-slate-100 text-slate-700">
+                    <tr>
+                      <th className="px-3 py-2">ID</th>
+                      <th className="px-3 py-2">TenantGlobal</th>
+                      <th className="px-3 py-2">TenantCorporativo</th>
+                      <th className="px-3 py-2">Rol</th>
+                      <th className="px-3 py-2">Vista(s)</th>
+                      <th className="px-3 py-2">Nodo/Formulario</th>
+                      <th className="px-3 py-2">Acciones (populate)</th>
+                      <th className="px-3 py-2">Fecha</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(Array.isArray(herenciaDetalle?.items) ? herenciaDetalle.items : []).map((row: any, idx: number) => (
+                      <tr key={String(row?._id || row?.iud || idx)} className="border-t border-slate-100">
+                        <td className="px-3 py-2 font-mono">{String(row?._id || row?.iud || '-')}</td>
+                        <td className="px-3 py-2">{String(row?.tenantGlobal?._id || row?.tenantGlobal || '-')}</td>
+                        <td className="px-3 py-2">{String(row?.tenantCorporativo?._id || row?.tenantCorporativo || '-')}</td>
+                        <td className="px-3 py-2">{String(row?.rolId?.rol || row?.rolId?._id || row?.rolId || '-')}</td>
+                        <td className="px-3 py-2">
+                          {Array.isArray(row?.vistas) && row.vistas.length
+                            ? row.vistas.map((v: any) => String(v?.name || v?.path || v?._id || '-')).join(', ')
+                            : '-'}
+                        </td>
+                        <td className="px-3 py-2">
+                          {Array.isArray(row?.vistas) && row.vistas.length
+                            ? row.vistas
+                                .map((v: any) => {
+                                  const nodo = String(v?.tipoNodo || '').trim();
+                                  const form = String(v?.formulariosConfig || '').trim();
+                                  if (nodo && form) return `${nodo}/${form}`;
+                                  return nodo || form || '-';
+                                })
+                                .join(', ')
+                            : '-'}
+                        </td>
+                        <td className="px-3 py-2">
+                          {Array.isArray(row?.acciones) && row.acciones.length
+                            ? row.acciones.map((a: any) => String(a?.etiquetas || a?.method || a?._id || '-')).join(', ')
+                            : '-'}
+                        </td>
+                        <td className="px-3 py-2">{String(row?.fechaAsignacion || row?.createdAt || '-')}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
       <Dialog open={!!endpointModal} onOpenChange={(open) => !open && setEndpointModal(null)}>
         <DialogContent className="max-h-[90vh] overflow-auto sm:max-w-4xl">
           {endpointModal && (
@@ -1679,3 +3616,8 @@ const ParametrosGobernanza: React.FC = () => {
 };
 
 export default ParametrosGobernanza;
+
+
+
+
+

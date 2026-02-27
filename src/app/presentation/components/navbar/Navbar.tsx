@@ -96,7 +96,7 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
                     setLogoUrl(DEFAULT_LOGO);
                 }
 
-                setMenuItems(dynamicRoutes.map((route) => ({
+                setMenuItems(dynamicRoutes.map((route: any) => ({
                     label: route.label,
                     path: route.path
                 })));
@@ -305,7 +305,7 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
             <div className="hidden md:block"><ThemeToggle /></div>
             <div className="hidden md:block relative">{renderCartDropdown}</div>
             {user ? renderProfileDropdown : (
-                <Button variant="default" onClick={() => navigate("/login")} className="h-9 px-4 text-sm font-semibold bg-black hover:bg-gray-800 text-white">
+                <Button variant="default" onClick={() => navigate("/public/render/view/login")} className="h-9 px-4 text-sm font-semibold bg-black hover:bg-gray-800 text-white">
                     <LogIn className="mr-2 h-4 w-4" /> Ingresar
                 </Button>
             )}
@@ -387,7 +387,7 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
                             </>
                         ) : (
                             <SheetClose asChild>
-                                <Button variant="default" onClick={() => navigate('/login')} className="w-full justify-start font-semibold py-3 rounded-xl bg-black hover:bg-gray-800 text-white">
+                                <Button variant="default" onClick={() => navigate('/public/render/view/login')} className="w-full justify-start font-semibold py-3 rounded-xl bg-black hover:bg-gray-800 text-white">
                                     <LogIn className="mr-3 h-4 w-4" /> Ingresar
                                 </Button>
                             </SheetClose>
