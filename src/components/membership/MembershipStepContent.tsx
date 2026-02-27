@@ -2,6 +2,19 @@ import React from 'react';
 import FormField from '@/components/common/FormField';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
+import { Card } from '@/components/ui/card';
+import {
+  Mail,
+  CheckCircle2,
+  Sparkles,
+  CreditCard,
+  Smartphone,
+  Building2,
+  Shield,
+  Zap,
+  Gift,
+  TrendingUp
+} from 'lucide-react';
 
 interface PersonalInfo {
   email: string;
@@ -20,6 +33,8 @@ interface PaymentInfo {
   pseLegalIdType?: 'CC' | 'CE' | 'NIT' | '';
   pseLegalId?: string;
   pseFinancialInstitution?: string;
+  fullName?: string;
+  phoneNumber?: string;
 }
 
 interface FormData {
@@ -41,338 +56,462 @@ export default function MembershipStepContent({
   handleFormChange,
   MEMBERSHIP_PRICE,
 }: MembershipStepContentProps): React.ReactElement | null {
-  
+
   switch (step) {
     case 0:
       // Email step
       return (
         <div className="space-y-6">
-          <div>
-            <FormField
-              id="email"
-              label="Correo Electrónico"
-              type="email"
-              required
-              value={formData.personalInfo.email}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                handleFormChange('personalInfo', 'email', e.target.value);
-              }}
-              placeholder="ejemplo@email.com"
-            />
+          <div className="text-center mb-6">
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 mb-4">
+              <Mail className="w-8 h-8 text-primary" />
+            </div>
+            <h3 className="text-lg font-semibold text-foreground mb-2">
+              ¿Cuál es tu correo electrónico?
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              Lo usaremos para enviarte la confirmación y acceso a tu cuenta
+            </p>
           </div>
+
+          <FormField
+            id="email"
+            label="Correo Electrónico"
+            type="email"
+            required
+            value={formData.personalInfo.email}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+              handleFormChange('personalInfo', 'email', e.target.value);
+            }}
+            placeholder="ejemplo@email.com"
+          />
         </div>
       );
 
     case 1:
-      // Summary step
+      // Summary step - Diseño minimalista
+      const benefits = [
+        { icon: Gift, text: 'Descuentos exclusivos en productos' },
+        { icon: TrendingUp, text: 'Programa de referidos activo' },
+        { icon: Zap, text: 'Ganancias por cada referencia' },
+        { icon: Shield, text: 'Acceso de por vida' }
+      ];
+
       return (
-        <div className="space-y-4">
-          <h3 className="text-xl font-semibold mb-4">Resumen de la Membresía</h3>
-          <div className="border rounded-lg p-4 bg-card shadow-sm">
-            <p className="text-lg font-semibold mb-1">Membresía Premium</p>
-            <p className="text-muted-foreground">• Acceso a descuentos exclusivos</p>
-            <p className="text-muted-foreground">• Programa de referidos</p>
-            <p className="text-muted-foreground">• Ganancias por referencias</p>
-            <div className="h-px bg-border my-4" />
-            <div className="space-y-2">
-              <div className="flex justify-between items-center">
-                <p className="text-sm text-muted-foreground">Email:</p>
-                <p className="text-sm font-medium">{formData.personalInfo.email}</p>
+        <div className="space-y-6">
+          {/* Header con ícono */}
+          <div className="text-center">
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 mb-4">
+              <Sparkles className="w-8 h-8 text-primary" />
+            </div>
+            <h3 className="text-2xl font-bold text-foreground mb-2">
+              Membresía Premium
+            </h3>
+            <p className="text-muted-foreground">
+              Revisa los detalles antes de continuar
+            </p>
+          </div>
+
+          {/* Benefits Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
+            {benefits.map((benefit, index) => (
+              <div
+                key={index}
+                className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 border border-border/40"
+              >
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                  <benefit.icon className="w-4 h-4 text-primary" />
+                </div>
+                <span className="text-sm text-foreground">{benefit.text}</span>
               </div>
-              <div className="h-px bg-border" />
-              <div className="flex justify-between items-center">
-                <p className="text-lg font-bold">Total:</p>
-                <p className="text-xl font-bold text-primary">COP ${MEMBERSHIP_PRICE?.toLocaleString('es-CO')}</p>
+            ))}
+          </div>
+
+          {/* Summary Card */}
+          <Card className="border-2 border-primary/20 overflow-hidden">
+            <div className="bg-gradient-to-r from-primary/5 to-transparent p-4 border-b border-border/40">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Mail className="w-4 h-4 text-muted-foreground" />
+                  <span className="text-sm text-muted-foreground">Email:</span>
+                </div>
+                <span className="text-sm font-medium text-foreground">
+                  {formData.personalInfo.email}
+                </span>
               </div>
+            </div>
+
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-muted-foreground">Membresía Premium</span>
+                <span className="text-sm text-muted-foreground">Pago único</span>
+              </div>
+              <div className="flex items-baseline justify-between">
+                <span className="text-2xl font-bold text-foreground">Total a pagar:</span>
+                <div className="text-right">
+                  <div className="text-3xl font-bold text-primary">
+                    ${MEMBERSHIP_PRICE?.toLocaleString('es-CO')}
+                  </div>
+                  <div className="text-xs text-muted-foreground">COP</div>
+                </div>
+              </div>
+            </div>
+          </Card>
+
+          {/* Trust badges */}
+          <div className="flex items-center justify-center gap-6 text-xs text-muted-foreground pt-4">
+            <div className="flex items-center gap-1">
+              <Shield className="w-4 h-4" />
+              <span>Pago seguro</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <Zap className="w-4 h-4" />
+              <span>Activación inmediata</span>
             </div>
           </div>
         </div>
       );
 
     case 2:
-      // Payment step
+      // Payment step - Diseño minimalista con cards
+      const paymentMethods = [
+        {
+          id: 'nequi',
+          name: 'Nequi',
+          description: 'Pago rápido desde tu app',
+          icon: Smartphone,
+          color: 'from-purple-500/10 to-pink-500/10'
+        },
+        {
+          id: 'card',
+          name: 'Tarjeta',
+          description: 'Crédito o débito',
+          icon: CreditCard,
+          color: 'from-blue-500/10 to-cyan-500/10'
+        },
+        {
+          id: 'pse',
+          name: 'PSE',
+          description: 'Desde tu banco',
+          icon: Building2,
+          color: 'from-green-500/10 to-emerald-500/10'
+        }
+      ];
+
       return (
         <div className="space-y-6">
-          <h3 className="text-xl font-semibold mb-4">Método de Pago</h3>
-          
-          {/* Payment Method Select */}
-          <div className="space-y-2">
-            <Label htmlFor="paymentMethod">
-              Selecciona el método de pago <span className="text-destructive">*</span>
-            </Label>
-            <Select
-              value={formData.paymentInfo.paymentMethod}
-              onValueChange={(value) => handleFormChange('paymentInfo', 'paymentMethod', value)}
-            >
-              <SelectTrigger id="paymentMethod">
-                <SelectValue placeholder="Selecciona un método" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="nequi">Nequi</SelectItem>
-                <SelectItem value="card">Tarjeta de Crédito/Débito</SelectItem>
-                <SelectItem value="pse">PSE (Pago Seguro en Línea)</SelectItem>
-              </SelectContent>
-            </Select>
+          {/* Header */}
+          <div className="text-center mb-6">
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 mb-4">
+              <CreditCard className="w-8 h-8 text-primary" />
+            </div>
+            <h3 className="text-xl font-bold text-foreground mb-2">
+              Selecciona tu método de pago
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              Todas las transacciones son 100% seguras
+            </p>
           </div>
 
-          {/* Nequi Fields */}
-          {formData.paymentInfo.paymentMethod === 'nequi' && (
-            <div className="space-y-4 animate-in fade-in-50">
-              <FormField
-                id="nequiPhone"
-                label="Número de teléfono Nequi"
-                type="tel"
-                required
-                value={formData.paymentInfo.nequiPhone || ''}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                  const value = e.target.value.replace(/[^0-9]/g, '').slice(0, 10);
-                  handleFormChange('paymentInfo', 'nequiPhone', value);
-                }}
-                placeholder="3001234567"
-              />
-              <p className="text-sm text-muted-foreground">
-                Ingresa un número colombiano válido (debe empezar con 3 y tener 10 dígitos). Recibirás una notificación en tu app de Nequi para aprobar el pago.
-              </p>
-            </div>
-          )}
-
-          {/* Card Fields */}
-          {formData.paymentInfo.paymentMethod === 'card' && (
-            <div className="space-y-4 animate-in fade-in-50">
-              <div className="space-y-2">
-                <Label htmlFor="cardType">
-                  Tipo de tarjeta <span className="text-destructive">*</span>
-                </Label>
-                <Select
-                  value={formData.paymentInfo.cardType || ''}
-                  onValueChange={(value) => {
-                    handleFormChange('paymentInfo', 'cardType', value);
-                    if (value === 'debit') {
-                      handleFormChange('paymentInfo', 'installments', 1);
-                    }
-                  }}
-                >
-                  <SelectTrigger id="cardType">
-                    <SelectValue placeholder="Crédito o Débito" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="credit">Crédito</SelectItem>
-                    <SelectItem value="debit">Débito</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {formData.paymentInfo.cardType === 'credit' && (
-                <div className="space-y-2">
-                  <Label htmlFor="installments">
-                    Cuotas <span className="text-destructive">*</span>
-                  </Label>
-                  <Select
-                    value={(formData.paymentInfo.installments || 1).toString()}
-                    onValueChange={(value) => handleFormChange('paymentInfo', 'installments', parseInt(value, 10))}
-                  >
-                    <SelectTrigger id="installments">
-                      <SelectValue placeholder="Selecciona cuotas" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="1">1 cuota</SelectItem>
-                      <SelectItem value="2">2 cuotas</SelectItem>
-                      <SelectItem value="3">3 cuotas</SelectItem>
-                      <SelectItem value="6">6 cuotas</SelectItem>
-                      <SelectItem value="12">12 cuotas</SelectItem>
-                    </SelectContent>
-                  </Select>
+          {/* Payment Method Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {paymentMethods.map((method) => (
+              <button
+                key={method.id}
+                onClick={() => handleFormChange('paymentInfo', 'paymentMethod', method.id)}
+                className={`
+                  relative p-4 rounded-xl border-2 transition-all duration-200
+                  hover:scale-105 hover:shadow-md
+                  ${formData.paymentInfo.paymentMethod === method.id
+                    ? 'border-primary bg-primary/5'
+                    : 'border-border/40 hover:border-primary/50'
+                  }
+                `}
+              >
+                <div className={`absolute inset-0 rounded-xl bg-gradient-to-br ${method.color} opacity-50`} />
+                <div className="relative">
+                  <div className="flex flex-col items-center gap-2">
+                    <method.icon className={`w-8 h-8 ${formData.paymentInfo.paymentMethod === method.id
+                      ? 'text-primary'
+                      : 'text-muted-foreground'
+                      }`} />
+                    <div className="text-center">
+                      <div className="font-semibold text-sm">{method.name}</div>
+                      <div className="text-xs text-muted-foreground">{method.description}</div>
+                    </div>
+                    {formData.paymentInfo.paymentMethod === method.id && (
+                      <CheckCircle2 className="absolute -top-2 -right-2 w-5 h-5 text-primary" />
+                    )}
+                  </div>
                 </div>
-              )}
+              </button>
+            ))}
+          </div>
 
-              <FormField
-                id="cardNumber"
-                label="Número de tarjeta"
-                type="text"
-                required
-                value={formData.paymentInfo.cardNumber || ''}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                  const value = e.target.value.replace(/[^0-9]/g, '').slice(0, 16);
-                  handleFormChange('paymentInfo', 'cardNumber', value);
-                }}
-                placeholder="1234 5678 9012 3456"
-              />
-              
-              <FormField
-                id="cardName"
-                label="Nombre en la tarjeta"
-                type="text"
-                required
-                value={formData.paymentInfo.cardName || ''}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                  handleFormChange('paymentInfo', 'cardName', e.target.value.toUpperCase());
-                }}
-                placeholder="JUAN PEREZ"
-              />
+          {/* Dynamic Payment Forms */}
+          {formData.paymentInfo.paymentMethod && (
+            <Card className="p-6 animate-in fade-in-50 slide-in-from-bottom-4 duration-300">
+              {/* Nequi Fields */}
+              {formData.paymentInfo.paymentMethod === 'nequi' && (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Smartphone className="w-5 h-5 text-primary" />
+                    <h4 className="font-semibold">Datos de Nequi</h4>
+                  </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <FormField
-                  id="expiryDate"
-                  label="Fecha de expiración"
-                  type="text"
-                  required
-                  value={formData.paymentInfo.expiryDate || ''}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                    let value = e.target.value.replace(/[^0-9]/g, '');
-                    if (value.length >= 2) {
-                      value = value.slice(0, 2) + '/' + value.slice(2, 4);
-                    }
-                    handleFormChange('paymentInfo', 'expiryDate', value);
-                  }}
-                  placeholder="MM/AA"
-                />
-                
-                <FormField
-                  id="cvv"
-                  label="CVV"
-                  type="text"
-                  required
-                  value={formData.paymentInfo.cvv || ''}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                    const value = e.target.value.replace(/[^0-9]/g, '').slice(0, 4);
-                    handleFormChange('paymentInfo', 'cvv', value);
-                  }}
-                  placeholder="123"
-                />
-              </div>
-            </div>
-          )}
-
-          {/* PSE Fields */}
-          {formData.paymentInfo.paymentMethod === 'pse' && (
-            <div className="space-y-4 animate-in fade-in-50">
-              {/* User Type */}
-              <div className="space-y-2">
-                <Label htmlFor="pseUserType">
-                  Tipo de persona <span className="text-destructive">*</span>
-                </Label>
-                <Select
-                  value={formData.paymentInfo.pseUserType || ''}
-                  onValueChange={(value) => handleFormChange('paymentInfo', 'pseUserType', value)}
-                >
-                  <SelectTrigger id="pseUserType">
-                    <SelectValue placeholder="Selecciona el tipo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="0">Persona Natural</SelectItem>
-                    <SelectItem value="1">Persona Jurídica</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Legal ID Type */}
-              <div className="space-y-2">
-                <Label htmlFor="pseLegalIdType">
-                  Tipo de documento <span className="text-destructive">*</span>
-                </Label>
-                <Select
-                  value={formData.paymentInfo.pseLegalIdType || ''}
-                  onValueChange={(value) => handleFormChange('paymentInfo', 'pseLegalIdType', value)}
-                >
-                  <SelectTrigger id="pseLegalIdType">
-                    <SelectValue placeholder="Selecciona el tipo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="CC">Cédula de Ciudadanía (CC)</SelectItem>
-                    <SelectItem value="CE">Cédula de Extranjería (CE)</SelectItem>
-                    <SelectItem value="NIT">NIT</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Legal ID */}
-              <FormField
-                id="pseLegalId"
-                label="Número de documento"
-                type="text"
-                required
-                value={formData.paymentInfo.pseLegalId || ''}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                  const value = e.target.value.replace(/[^0-9]/g, '');
-                  handleFormChange('paymentInfo', 'pseLegalId', value);
-                }}
-                placeholder="1099888777"
-              />
-
-              {/* Financial Institution */}
-              <div className="space-y-2">
-                <Label htmlFor="pseFinancialInstitution">
-                  Banco <span className="text-destructive">*</span>
-                </Label>
-                <Select
-                  value={formData.paymentInfo.pseFinancialInstitution || ''}
-                  onValueChange={(value) => handleFormChange('paymentInfo', 'pseFinancialInstitution', value)}
-                >
-                  <SelectTrigger id="pseFinancialInstitution">
-                    <SelectValue placeholder="Selecciona tu banco" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="1007">Bancolombia</SelectItem>
-                    <SelectItem value="1013">BBVA Colombia</SelectItem>
-                    <SelectItem value="1009">Citibank</SelectItem>
-                    <SelectItem value="1006">Itau</SelectItem>
-                    <SelectItem value="1012">Banco GNB Sudameris</SelectItem>
-                    <SelectItem value="1019">Scotiabank Colpatria</SelectItem>
-                    <SelectItem value="1023">Banco de Occidente</SelectItem>
-                    <SelectItem value="1002">Banco Popular</SelectItem>
-                    <SelectItem value="1032">Banco Falabella</SelectItem>
-                    <SelectItem value="1001">Banco Agrario</SelectItem>
-                    <SelectItem value="1040">Banco AV Villas</SelectItem>
-                    <SelectItem value="1052">Banco Pichincha</SelectItem>
-                    <SelectItem value="1060">Banco Caja Social</SelectItem>
-                    <SelectItem value="1061">Bancoomeva</SelectItem>
-                    <SelectItem value="1062">Banco Finandina</SelectItem>
-                    <SelectItem value="1063">Banco Davivienda</SelectItem>
-                    <SelectItem value="1283">Banco Cooperativo Coopcentral</SelectItem>
-                    <SelectItem value="1551">Daviplata</SelectItem>
-                    <SelectItem value="1507">Nequi</SelectItem>
-                    <SelectItem value="1151">Rappipay</SelectItem>
-                    <SelectItem value="1009">Lulo Bank</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <p className="text-sm text-muted-foreground mb-4">
-                Serás redirigido a la plataforma de tu banco para completar el pago de forma segura.
-              </p>
-
-              {/* PSE Customer Data */}
-              <div className="border-t pt-4">
-                <h4 className="font-semibold mb-4">Información de contacto</h4>
-                <div>
                   <FormField
-                    id="pseFullName"
-                    label="Nombre Completo"
-                    type="text"
-                    required
-                    value={formData.paymentInfo.fullName || ''}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                      handleFormChange('paymentInfo', 'fullName', e.target.value);
-                    }}
-                    placeholder="Juan Pérez"
-                  />
-                </div>
-                <div className="mt-4">
-                  <FormField
-                    id="psePhoneNumber"
-                    label="Número de Teléfono"
+                    id="nequiPhone"
+                    label="Número de teléfono Nequi"
                     type="tel"
                     required
-                    value={formData.paymentInfo.phoneNumber || ''}
+                    value={formData.paymentInfo.nequiPhone || ''}
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                       const value = e.target.value.replace(/[^0-9]/g, '').slice(0, 10);
-                      handleFormChange('paymentInfo', 'phoneNumber', value);
+                      handleFormChange('paymentInfo', 'nequiPhone', value);
                     }}
                     placeholder="3001234567"
                   />
+
+                  <div className="flex items-start gap-2 p-3 bg-blue-500/5 border border-blue-500/20 rounded-lg">
+                    <Shield className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
+                    <p className="text-xs text-muted-foreground">
+                      Recibirás una notificación en tu app de Nequi para aprobar el pago de forma segura.
+                    </p>
+                  </div>
                 </div>
-              </div>
-            </div>
+              )}
+
+              {/* Card Fields */}
+              {formData.paymentInfo.paymentMethod === 'card' && (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2 mb-4">
+                    <CreditCard className="w-5 h-5 text-primary" />
+                    <h4 className="font-semibold">Datos de la tarjeta</h4>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="cardType">Tipo de tarjeta *</Label>
+                      <Select
+                        value={formData.paymentInfo.cardType || ''}
+                        onValueChange={(value) => {
+                          handleFormChange('paymentInfo', 'cardType', value);
+                          if (value === 'debit') {
+                            handleFormChange('paymentInfo', 'installments', 1);
+                          }
+                        }}
+                      >
+                        <SelectTrigger id="cardType">
+                          <SelectValue placeholder="Selecciona" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="credit">💳 Crédito</SelectItem>
+                          <SelectItem value="debit">🏦 Débito</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {formData.paymentInfo.cardType === 'credit' && (
+                      <div className="space-y-2">
+                        <Label htmlFor="installments">Cuotas *</Label>
+                        <Select
+                          value={(formData.paymentInfo.installments || 1).toString()}
+                          onValueChange={(value) => handleFormChange('paymentInfo', 'installments', parseInt(value, 10))}
+                        >
+                          <SelectTrigger id="installments">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {[1, 2, 3, 6, 12].map(num => (
+                              <SelectItem key={num} value={num.toString()}>
+                                {num} {num === 1 ? 'cuota' : 'cuotas'}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                  </div>
+
+                  <FormField
+                    id="cardNumber"
+                    label="Número de tarjeta"
+                    type="text"
+                    required
+                    value={formData.paymentInfo.cardNumber || ''}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                      const value = e.target.value.replace(/[^0-9]/g, '').slice(0, 16);
+                      handleFormChange('paymentInfo', 'cardNumber', value);
+                    }}
+                    placeholder="•••• •••• •••• ••••"
+                  />
+
+                  <FormField
+                    id="cardName"
+                    label="Nombre en la tarjeta"
+                    type="text"
+                    required
+                    value={formData.paymentInfo.cardName || ''}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                      handleFormChange('paymentInfo', 'cardName', e.target.value.toUpperCase());
+                    }}
+                    placeholder="JUAN PEREZ"
+                  />
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                      id="expiryDate"
+                      label="Vencimiento"
+                      type="text"
+                      required
+                      value={formData.paymentInfo.expiryDate || ''}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                        let value = e.target.value.replace(/[^0-9]/g, '');
+                        if (value.length >= 2) {
+                          value = value.slice(0, 2) + '/' + value.slice(2, 4);
+                        }
+                        handleFormChange('paymentInfo', 'expiryDate', value);
+                      }}
+                      placeholder="MM/AA"
+                    />
+
+                    <FormField
+                      id="cvv"
+                      label="CVV"
+                      type="text"
+                      required
+                      value={formData.paymentInfo.cvv || ''}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                        const value = e.target.value.replace(/[^0-9]/g, '').slice(0, 4);
+                        handleFormChange('paymentInfo', 'cvv', value);
+                      }}
+                      placeholder="•••"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* PSE Fields */}
+              {formData.paymentInfo.paymentMethod === 'pse' && (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Building2 className="w-5 h-5 text-primary" />
+                    <h4 className="font-semibold">Datos para PSE</h4>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="pseUserType">Tipo de persona *</Label>
+                      <Select
+                        value={formData.paymentInfo.pseUserType || ''}
+                        onValueChange={(value) => handleFormChange('paymentInfo', 'pseUserType', value)}
+                      >
+                        <SelectTrigger id="pseUserType">
+                          <SelectValue placeholder="Selecciona" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="0">👤 Natural</SelectItem>
+                          <SelectItem value="1">🏢 Jurídica</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="pseLegalIdType">Tipo de documento *</Label>
+                      <Select
+                        value={formData.paymentInfo.pseLegalIdType || ''}
+                        onValueChange={(value) => handleFormChange('paymentInfo', 'pseLegalIdType', value)}
+                      >
+                        <SelectTrigger id="pseLegalIdType">
+                          <SelectValue placeholder="Selecciona" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="CC">CC - Cédula</SelectItem>
+                          <SelectItem value="CE">CE - Extranjería</SelectItem>
+                          <SelectItem value="NIT">NIT</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <FormField
+                    id="pseLegalId"
+                    label="Número de documento"
+                    type="text"
+                    required
+                    value={formData.paymentInfo.pseLegalId || ''}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                      const value = e.target.value.replace(/[^0-9]/g, '');
+                      handleFormChange('paymentInfo', 'pseLegalId', value);
+                    }}
+                    placeholder="1099888777"
+                  />
+
+                  <div className="space-y-2">
+                    <Label htmlFor="pseFinancialInstitution">Banco *</Label>
+                    <Select
+                      value={formData.paymentInfo.pseFinancialInstitution || ''}
+                      onValueChange={(value) => handleFormChange('paymentInfo', 'pseFinancialInstitution', value)}
+                    >
+                      <SelectTrigger id="pseFinancialInstitution">
+                        <SelectValue placeholder="Selecciona tu banco" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="1007">Bancolombia</SelectItem>
+                        <SelectItem value="1013">BBVA</SelectItem>
+                        <SelectItem value="1063">Davivienda</SelectItem>
+                        <SelectItem value="1023">Occidente</SelectItem>
+                        <SelectItem value="1002">Popular</SelectItem>
+                        <SelectItem value="1019">Colpatria</SelectItem>
+                        <SelectItem value="1060">Caja Social</SelectItem>
+                        <SelectItem value="1040">AV Villas</SelectItem>
+                        <SelectItem value="1032">Falabella</SelectItem>
+                        <SelectItem value="1507">Nequi</SelectItem>
+                        <SelectItem value="1551">Daviplata</SelectItem>
+                        <SelectItem value="1009">Lulo Bank</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="border-t border-border/40 pt-4 mt-6">
+                    <h5 className="font-medium mb-4 text-sm">Información de contacto</h5>
+                    <div className="space-y-4">
+                      <FormField
+                        id="pseFullName"
+                        label="Nombre completo"
+                        type="text"
+                        required
+                        value={formData.paymentInfo.fullName || ''}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                          handleFormChange('paymentInfo', 'fullName', e.target.value);
+                        }}
+                        placeholder="Juan Pérez"
+                      />
+
+                      <FormField
+                        id="psePhoneNumber"
+                        label="Teléfono"
+                        type="tel"
+                        required
+                        value={formData.paymentInfo.phoneNumber || ''}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                          const value = e.target.value.replace(/[^0-9]/g, '').slice(0, 10);
+                          handleFormChange('paymentInfo', 'phoneNumber', value);
+                        }}
+                        placeholder="3001234567"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-2 p-3 bg-green-500/5 border border-green-500/20 rounded-lg mt-4">
+                    <Shield className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" />
+                    <p className="text-xs text-muted-foreground">
+                      Serás redirigido a la plataforma de tu banco para completar el pago de forma segura.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </Card>
           )}
         </div>
       );

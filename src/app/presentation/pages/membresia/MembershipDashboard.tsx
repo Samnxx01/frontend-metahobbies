@@ -18,7 +18,7 @@ import {
 } from '@/components/ui/table';
 
 // Lucide icons
-import { Copy, Share2, DollarSign, Users, TrendingUp, Loader2 } from 'lucide-react';
+import { Copy, Share2, DollarSign, Users, TrendingUp, Loader2, Calendar, Hash, FileText } from 'lucide-react';
 
 interface Voucher {
     _id: string;
@@ -112,7 +112,7 @@ export default function MembershipDashboard(): React.ReactElement {
             handleCopy(referralData.enlaceCompleto, 'Enlace');
         }
     };
-    
+
     const handleCopyCode = (): void => {
         if (referralData?.codigoReferido) {
             handleCopy(referralData.codigoReferido, 'Código');
@@ -276,7 +276,7 @@ export default function MembershipDashboard(): React.ReactElement {
                                             {totalReferrals}
                                         </span>
                                     </div>
-                                    
+
                                     <div className="flex justify-between items-center py-3 border-b border-border/40">
                                         <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
                                             <DollarSign className="w-4 h-4" />
@@ -286,7 +286,7 @@ export default function MembershipDashboard(): React.ReactElement {
                                             {formatCurrency(totalEarnings)}
                                         </span>
                                     </div>
-                                    
+
                                     <div className="flex justify-between items-center py-3 border-b border-border/40">
                                         <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
                                             <TrendingUp className="w-4 h-4" />
@@ -296,7 +296,7 @@ export default function MembershipDashboard(): React.ReactElement {
                                             {formatCurrency(totalPagado)}
                                         </span>
                                     </div>
-                                    
+
                                     <div className="flex justify-between items-center py-3">
                                         <span className="text-sm font-medium text-muted-foreground">
                                             Pendiente de Pago
@@ -328,35 +328,53 @@ export default function MembershipDashboard(): React.ReactElement {
                                 <p>No tienes vouchers de comisiones aún</p>
                             </div>
                         ) : (
-                            <div className="rounded-lg overflow-hidden">
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow className="bg-muted/50 hover:bg-muted/50">
-                                            <TableHead className="font-semibold">Fecha</TableHead>
-                                            <TableHead className="font-semibold">Ciclo</TableHead>
-                                            <TableHead className="font-semibold">Monto</TableHead>
-                                            <TableHead className="font-semibold">Motivo</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {visibleVouchers.map((voucher) => (
-                                            <TableRow key={voucher._id} className="hover:bg-muted/30">
-                                                <TableCell className="text-muted-foreground">
-                                                    {formatDate(voucher.fecha)}
-                                                </TableCell>
-                                                <TableCell className="font-medium">
-                                                    Ciclo {voucher.ciclo}
-                                                </TableCell>
-                                                <TableCell className="font-semibold text-primary">
+                            <div className="space-y-3">
+                                {visibleVouchers.map((voucher, index) => (
+                                    <div
+                                        key={voucher._id}
+                                        className="group relative p-4 rounded-lg border border-border/40 hover:border-primary/30 hover:bg-muted/20 transition-all duration-200"
+                                    >
+                                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                                            {/* Lado izquierdo: Info principal */}
+                                            <div className="flex items-start gap-4">
+                                                {/* Número de voucher */}
+                                                <div className="flex-shrink-0 w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                                                    <span className="text-sm font-bold text-primary">
+                                                        #{index + 1}
+                                                    </span>
+                                                </div>
+
+                                                {/* Detalles */}
+                                                <div className="space-y-1">
+                                                    <div className="flex items-center gap-2">
+                                                        <Calendar className="w-4 h-4 text-muted-foreground" />
+                                                        <span className="text-sm text-muted-foreground">
+                                                            {formatDate(voucher.fecha)}
+                                                        </span>
+                                                        <span className="text-muted-foreground">•</span>
+                                                        <Hash className="w-4 h-4 text-muted-foreground" />
+                                                        <span className="text-sm font-medium text-foreground">
+                                                            Ciclo {voucher.ciclo}
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        <FileText className="w-4 h-4 text-muted-foreground" />
+                                                        <span className="text-sm text-muted-foreground">
+                                                            {voucher.motivo}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Lado derecho: Monto */}
+                                            <div className="flex items-center justify-end">
+                                                <span className="text-2xl font-bold text-primary">
                                                     {formatCurrency(voucher.montoGanado)}
-                                                </TableCell>
-                                                <TableCell className="text-sm">
-                                                    {voucher.motivo}
-                                                </TableCell>
-                                            </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
                             </div>
                         )}
                     </CardContent>

@@ -96,7 +96,7 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
                     setLogoUrl(DEFAULT_LOGO);
                 }
 
-                setMenuItems(dynamicRoutes.map((route) => ({
+                setMenuItems(dynamicRoutes.map((route: any) => ({
                     label: route.label,
                     path: route.path
                 })));
