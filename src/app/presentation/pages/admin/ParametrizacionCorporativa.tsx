@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import RepresentanteEmpresarial from './RepresentanteEmpresarial';
 import SociedadesCorporativas from './SociedadesCorporativas';
@@ -13,32 +13,89 @@ import { apiFetch } from '../../../services/api';
 import { useAuth } from '@/app/providers/AuthProvider';
 // import { Loader2 } from 'lucide-react';
 
+type AccionHerencia = {
+  method?: string;
+  etiquetas?: string;
+};
+
+type HerenciaPermiso = {
+  acciones?: AccionHerencia[];
+};
+
+const normalizePermissionKey = (value: unknown): string =>
+  String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]+/g, '')
+    .trim()
+    .toLowerCase();
+
+const PERFIL_CORPORATIVO_ACTION_KEYS = new Set([
+  'perfilcorporativo',
+  'perfilcoporativo',
+]);
+
 export default function ParametrizacionCorporativa() {
   const { user } = useAuth();
   const normalizedRole = String(user?.role || user?.rol || '').toUpperCase();
   const isTenantSuperAdmin = normalizedRole === 'DIOS';
-  const [representanteId, setRepresentanteId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('representante');
+  const [canManagePerfilCorporativo, setCanManagePerfilCorporativo] = useState(isTenantSuperAdmin);
 
   useEffect(() => {
-    const fetchId = async () => {
+    let active = true;
+
+    const resolvePerfilPermission = async () => {
       try {
-        const res = await apiFetch('/api/configuracion/listar/user/coporativo/perfil/publico', { method: 'GET' });
-        if (res?.ok && res.perfil?.representante_empresarial) {
-          const id = res.perfil.representante_empresarial._id || res.perfil.representante_empresarial.id;
-          setRepresentanteId(id);
+        if (isTenantSuperAdmin) {
+          if (active) setCanManagePerfilCorporativo(true);
+          return;
         }
+
+        const res = await apiFetch('/api/config/permisos/listar/usu/tenant/libres', {
+          method: 'GET',
+          useAuth: true
+        }) as { ok?: boolean; herencias?: HerenciaPermiso[] } | null;
+
+        const herencias = Array.isArray(res?.herencias) ? res.herencias : [];
+        const hasPerfilAction = herencias.some((herencia) => {
+          const acciones = Array.isArray(herencia?.acciones) ? herencia.acciones : [];
+          return acciones.some((accion) => {
+            const methodKey = normalizePermissionKey(accion?.method);
+            const etiquetaKey = normalizePermissionKey(accion?.etiquetas);
+            return PERFIL_CORPORATIVO_ACTION_KEYS.has(methodKey) || PERFIL_CORPORATIVO_ACTION_KEYS.has(etiquetaKey);
+          });
+        });
+
+        if (active) setCanManagePerfilCorporativo(hasPerfilAction);
       } catch (error) {
-        console.error("Error obteniendo ID del representante:", error);
+        console.error('Error resolviendo permiso de Perfil Corporativo:', error);
+        if (active) setCanManagePerfilCorporativo(isTenantSuperAdmin);
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
     };
-    fetchId();
-  }, []);
+
+    void resolvePerfilPermission();
+
+    return () => {
+      active = false;
+    };
+  }, [isTenantSuperAdmin]);
+
+  useEffect(() => {
+    if (!canManagePerfilCorporativo && activeTab === 'perfil') {
+      setActiveTab('representante');
+    }
+  }, [activeTab, canManagePerfilCorporativo]);
+
+  if (loading) {
+    return <div className="p-4 text-sm text-muted-foreground">Cargando permisos...</div>;
+  }
 
   return (
-    <Tabs defaultValue="representante" className="w-full">
+    <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
       <div className="w-full flex flex-col items-center">
         <TabsList className="flex flex-wrap w-full max-w-[80vw] md:max-w-[80%] gap-2 justify-center mb-4 min-h-[88px] md:min-h-[44px]">
           <TabsTrigger value="representante">Representante Empresarial</TabsTrigger>
@@ -47,7 +104,9 @@ export default function ParametrizacionCorporativa() {
           <TabsTrigger value="documentos">Documentos Corporativos</TabsTrigger>
           <TabsTrigger value="logos">Logos Corporativos</TabsTrigger>
           <TabsTrigger value="sector">Sector/Industria Empresa</TabsTrigger>
-          <TabsTrigger value="perfil">Perfil Corporativo</TabsTrigger>
+          {canManagePerfilCorporativo && (
+            <TabsTrigger value="perfil">Perfil Corporativo</TabsTrigger>
+          )}
           {isTenantSuperAdmin && (
             <TabsTrigger value="desactivar-perfil" className="text-destructive">
               Desactivar Perfil
@@ -74,9 +133,11 @@ export default function ParametrizacionCorporativa() {
       <TabsContent value="sector">
         <SectorIndustriaEmpresa />
       </TabsContent>
-      <TabsContent value="perfil">
-        <PerfilCorporativo />
-      </TabsContent>
+      {canManagePerfilCorporativo && (
+        <TabsContent value="perfil">
+          <PerfilCorporativo />
+        </TabsContent>
+      )}
       {isTenantSuperAdmin && (
         <TabsContent value="desactivar-perfil">
           <DesactivarPerfilCorporativo />

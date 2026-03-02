@@ -19,7 +19,7 @@ interface RouteResponse {
         estadoRuta: boolean;
         mostrarEnSidebar?: boolean;
         mostrarEnNavbarPublico?: boolean;
-        accessType: { _id: string; accessType: string };
+        accessType: { _id: string; accessType: string; layout?: string } | Array<{ _id: string; accessType: string; layout?: string }>;
         order: number;
     }>;
 }
@@ -66,7 +66,12 @@ interface AuthorizedRoutes {
 }
 
 const normalizeLayout = (layout: string): string =>
-    (layout || "").replace(/\//g, "").trim();
+    (layout || "").replace(/\//g, "").trim().toLowerCase();
+
+const isAdminLayout = (layout: string): boolean => {
+    const nl = normalizeLayout(layout);
+    return nl === "adminlayout" || nl === "privatelayout";
+};
 
 const getHerenciaAdminPermitida = async (): Promise<{
     idsPermitidos: Set<string>;
@@ -93,7 +98,7 @@ const getHerenciaAdminPermitida = async (): Promise<{
             vistas.forEach((vista) => {
                 if (!vista) return;
                 if (vista.estadoRuta === false) return;
-                if (vista.layout && normalizeLayout(vista.layout) !== "AdminLayout") return;
+                if (vista.layout && !isAdminLayout(vista.layout)) return;
 
                 const vistaId = String(vista._id || vista.iud || "").trim();
                 if (vistaId) idsPermitidos.add(vistaId);
@@ -245,7 +250,7 @@ export const getAuthorizedRoutes = async (): Promise<AuthorizedRoutes> => {
 
         // PUBLIC
         const publicRoutes = result.data
-            .filter(r => r.estadoRuta && r.layout.replace("/", "").trim() === "PublicLayout")
+            .filter(r => r.estadoRuta && normalizeLayout(r.layout) === "publiclayout")
             .map(r => ({
                 path: toRelativeRoutePath(r.path),
                 component: normalizeComponent(r.component),
@@ -253,7 +258,7 @@ export const getAuthorizedRoutes = async (): Promise<AuthorizedRoutes> => {
 
         // AUTH
         const authRoutes = result.data
-            .filter(r => r.estadoRuta && r.layout.replace("/", "").trim() === "AuthLayout")
+            .filter(r => r.estadoRuta && normalizeLayout(r.layout) === "authlayout")
             .map(r => ({
                 path: toRelativeRoutePath(r.path),
                 component: normalizeComponent(r.component),
@@ -276,7 +281,7 @@ export const getAuthorizedRoutes = async (): Promise<AuthorizedRoutes> => {
                 // SUPERADMIN: si ya hay herencia (rutas dinamicas), usar solo BD.
                 adminRoutes = dynamicRoutes;
             } else {
-                const adminSource = result.data.filter((r) => r.estadoRuta && normalizeLayout(r.layout) === "AdminLayout");
+                const adminSource = result.data.filter((r) => r.estadoRuta && isAdminLayout(r.layout));
                 const hasHerenciaAdmin = herencia.idsPermitidos.size > 0 || herencia.pathsPermitidos.size > 0;
                 const adminFiltrado = hasHerenciaAdmin
                     ? adminSource.filter((r) => {
@@ -316,7 +321,7 @@ export const getPublicNavigationRoutes = async (): Promise<PublicNavItem[]> => {
         return result.data
             .filter((route) =>
                 route.estadoRuta &&
-                route.layout.replace(/\//g, "").trim() === "PublicLayout" &&
+                normalizeLayout(route.layout) === "publiclayout" &&
                 route.mostrarEnNavbarPublico === true
             )
             .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
@@ -339,7 +344,7 @@ export const getFooterPublicRoutes = async (): Promise<FooterNavItem[]> => {
         return result.data
             .filter((route) =>
                 route.estadoRuta &&
-                normalizeLayout(route.layout) === "PublicLayout" &&
+                normalizeLayout(route.layout) === "publiclayout" &&
                 String(route.path || "").trim() !== "/"
             )
             .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
@@ -366,7 +371,7 @@ export const getAdminSidebarRoutes = async (): Promise<AdminNavItem[]> => {
 
         if (!result?.success || !Array.isArray(result?.data)) return [];
 
-        const adminSource = result.data.filter((r) => r.estadoRuta && normalizeLayout(r.layout) === "AdminLayout");
+        const adminSource = result.data.filter((r) => r.estadoRuta && isAdminLayout(r.layout));
         const hasHerenciaAdmin = herencia.idsPermitidos.size > 0 || herencia.pathsPermitidos.size > 0;
         const adminFiltrado = hasHerenciaAdmin
             ? adminSource.filter((r) => {
@@ -425,7 +430,7 @@ export const getAdminSidebarFallbackTree = async (actorTipo: AdminActorTipo): Pr
 
         const adminSource = result.data.filter((r) =>
             r.estadoRuta &&
-            normalizeLayout(r.layout) === "AdminLayout" &&
+            isAdminLayout(r.layout) &&
             r.mostrarEnSidebar !== false
         );
 

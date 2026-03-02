@@ -17,6 +17,7 @@ export interface Route {
   tipoNodo?: string | null;
   tipoNodoId?: string | null;
   padreId?: string | null | { _id?: string; iud?: string; name?: string };
+  heredaDeRuta?: string | null | { _id?: string; iud?: string; name?: string };
   formulariosConfig?: {
     habilitado: boolean;
     modoAsignacion: 'TENANT' | 'USUARIO' | 'NINGUNO';
@@ -35,8 +36,8 @@ export interface Route {
   accionBajaPermitida?: 'ELIMINAR' | 'DESACTIVAR' | 'NINGUNA' | string;
   accessType?:
     | string
-    | { _id?: string; iud?: string; accessType?: string }
-    | Array<string | { _id?: string; iud?: string; accessType?: string }>;
+    | { _id?: string; iud?: string; accessType?: string; layout?: string }
+    | Array<string | { _id?: string; iud?: string; accessType?: string; layout?: string }>;
   acciones?:
     | string
     | { _id?: string; iud?: string; method?: string; etiquetas?: string }
@@ -47,7 +48,7 @@ export interface CreateRouteDto {
   name: string;
   path: string;
   component: string;
-  layout: 'PublicLayout' | 'AuthLayout' | 'AdminLayout';
+  layout: string;
   icon?: string;
   allowedRoles?: string[];
   isActive?: boolean;
@@ -56,6 +57,7 @@ export interface CreateRouteDto {
   tipoNodo?: string;
   tipoNodoId?: string;
   padreId?: string | null;
+  heredaDeRuta?: string | null;
   formulariosConfig?: {
     habilitado: boolean;
     modoAsignacion: 'TENANT' | 'USUARIO' | 'NINGUNO';
@@ -72,7 +74,7 @@ export interface UpdateRouteDto {
   name?: string;
   path?: string;
   component?: string;
-  layout?: 'PublicLayout' | 'AuthLayout' | 'AdminLayout';
+  layout?: string;
   icon?: string | null;
   allowedRoles?: string[];
   isActive?: boolean;
@@ -81,6 +83,7 @@ export interface UpdateRouteDto {
   tipoNodo?: string;
   tipoNodoId?: string;
   padreId?: string | null;
+  heredaDeRuta?: string | null;
   formulariosConfig?: {
     habilitado: boolean;
     modoAsignacion: 'TENANT' | 'USUARIO' | 'NINGUNO';
@@ -186,6 +189,7 @@ export interface TipoNodoResponse {
 export interface AccessTypeOption {
   _id: string;
   accessType: 'PUBLIC' | 'PRIVATE' | string;
+  layout?: string;
   estadoAcces?: boolean;
 }
 
@@ -333,7 +337,7 @@ export const getAccionesCatalogo = async (): Promise<AccionesResponse> => {
   };
 };
 
-export const createAccessType = async (payload: { accessType: string }): Promise<AccessTypeResponse> => {
+export const createAccessType = async (payload: { accessType: string; layout: string }): Promise<AccessTypeResponse> => {
   const response = await apiFetch(`${API_BASE_URL}/seguridad/rutas/parametrizacion/permisos`, {
     method: 'POST',
     body: payload,
@@ -341,7 +345,7 @@ export const createAccessType = async (payload: { accessType: string }): Promise
   return response;
 };
 
-export const updateAccessType = async (id: string, payload: { accessType: string }): Promise<AccessTypeResponse> => {
+export const updateAccessType = async (id: string, payload: { accessType: string; layout: string }): Promise<AccessTypeResponse> => {
   const response = await apiFetch(`${API_BASE_URL}/seguridad/rutas/parametrizacion/permisos/${id}`, {
     method: 'PUT',
     body: payload,
