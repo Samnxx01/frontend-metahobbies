@@ -46,7 +46,8 @@ import PerfilCorporativo from '../presentation/pages/admin/PerfilCorporativo';
 import DesactivarRepresentante from '../presentation/pages/admin/DesactivarRepresentante';
 import ParametrosGobernanza from '@/app/presentation/pages/admin/ParametrosGobernanza';
 import ParametrizacionCatologTenant from '@/app/presentation/pages/admin/ParametrizacionCatologTenant';
-
+import ParametrizacionMembresia from '../presentation/pages/admin/ParametrizacionMembresia/ParametrizacionMembresia';
+import Comisiones from '../presentation/pages/admin/ParametrizacionMembresia/comisiones/Comisiones';
 // Types for route system
 interface RouteConfig {
     path: string;
@@ -105,6 +106,8 @@ const componentMap: ComponentMapType = {
     ParametrizacionCatalogTenant: ParametrizacionCatologTenant,
     // Alias dinamico para rutas parametrizadas de perfil
     ConfiguracionPerfil: Perfil,
+    ParametrizacionMembresia,
+    Comisiones,
 };
 
 export default function LayoutRoutes(): ReactElement {

@@ -12,7 +12,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 // Lucide icons
 import {
     Loader2, DollarSign, Users, TrendingUp, Calendar, CheckCircle,
-    Clock, Network, Mail, Hash, Eye, ArrowUpRight, ArrowDownLeft
+    Clock, Network, Mail, Hash, Eye, ArrowUpRight, ArrowDownLeft, ChevronRight
 } from 'lucide-react';
 
 interface Voucher {
@@ -23,11 +23,13 @@ interface Voucher {
     fecha: string;
     status: 'pendiente' | 'pagado';
     motivo: string;
+    commissionlevel?: string;
 }
 
 interface UsuarioReferido {
     usuarioId: string;
     correo: string;
+    nombre?: string;
     saldoInicial: number;
     saldoActual: number;
     totalPagado: number;
@@ -52,9 +54,21 @@ interface VoucherDetail extends Voucher {
     usuarioPropietario?: UserDetail;
     usuarioReferido?: UserDetail;
 }
+interface ReferralChainNode {
+    usuarioId: string;
+    correo: string;
+    nombre?: string;
+    isOrigen: boolean;
+    isDestino: boolean;
+    isCurrent: boolean;
+}
 
-// Componente auxiliar para el diseño del ticket
-const DetailBox = ({ icon, label, value, mono = false }: { icon: React.ReactNode, label: string, value: string | number, mono?: boolean }) => (
+const DetailBox = ({ icon, label, value, mono = false }: {
+    icon: React.ReactNode;
+    label: string;
+    value: string | number;
+    mono?: boolean;
+}) => (
     <div className="p-3 bg-muted/30 rounded-lg space-y-1">
         <div className="flex items-center gap-2 text-muted-foreground">
             {icon}
@@ -66,6 +80,126 @@ const DetailBox = ({ icon, label, value, mono = false }: { icon: React.ReactNode
     </div>
 );
 
+const ReferralChain = ({ chain }: { chain: ReferralChainNode[] }) => {
+    if (chain.length === 0) return null;
+
+    return (
+        <div className="relative">
+            {/* Línea vertical continua de fondo */}
+            <div className="absolute left-[17px] top-5 bottom-5 w-px bg-border/50 z-0" />
+
+            <div className="space-y-1.5 relative z-10">
+                {chain.map((node, index) => {
+                    const label = node.isOrigen
+                        ? 'Referidor'
+                        : node.isDestino
+                            ? 'Beneficiario'
+                            : `Nivel ${index}`;
+
+                    return (
+                        <div key={`${node.usuarioId}-${index}`} className="flex items-center gap-3">
+                            {/* Burbuja numerada con ring para "levantar" del fondo */}
+                            <div
+                                className={`
+                                    w-[34px] h-[34px] rounded-full flex items-center justify-center
+                                    text-xs font-bold flex-shrink-0 ring-2 ring-card
+                                    ${node.isDestino
+                                        ? 'bg-primary text-primary-foreground shadow-sm shadow-primary/30'
+                                        : node.isOrigen
+                                            ? 'bg-green-700 text-white shadow-sm shadow-green-700/30'
+                                            : 'bg-muted-foreground/15 text-muted-foreground'
+                                    }
+                                `}
+                            >
+                                {index + 1}
+                            </div>
+
+                            {/* Tarjeta del nodo */}
+                            <div
+                                className={`
+                                    flex-1 flex items-center justify-between px-3 py-2 rounded-lg border min-w-0
+                                    ${node.isDestino
+                                        ? 'bg-primary/5 border-primary/20'
+                                        : node.isOrigen
+                                            ? 'bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800'
+                                            : 'bg-background border-border/50'
+                                    }
+                                `}
+                            >
+                                <div className="min-w-0 flex-1 mr-2">
+                                    <p className="text-sm font-medium text-foreground truncate leading-snug">
+                                        {node.nombre || node.correo}
+                                    </p>
+                                    {node.nombre && (
+                                        <p className="text-[11px] text-muted-foreground truncate">{node.correo}</p>
+                                    )}
+                                </div>
+
+                                <span
+                                    className={`
+                                        flex-shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full border
+                                        ${node.isDestino
+                                            ? 'bg-primary/10 text-primary border-primary/25'
+                                            : node.isOrigen
+                                                ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 border-green-300 dark:border-green-700'
+                                                : 'bg-muted/60 text-muted-foreground border-border/60'
+                                        }
+                                    `}
+                                >
+                                    {label}
+                                </span>
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
+};
+
+const buildReferralChain = (
+    voucherReferidoId: string,
+    propietarioId: string,
+    allUsuarios: UsuarioReferido[]
+): ReferralChainNode[] => {
+    const userMap = new Map<string, UsuarioReferido>();
+    allUsuarios.forEach((u) => userMap.set(u.usuarioId, u));
+
+    const findUpstream = (targetId: string): string | null => {
+        for (const u of allUsuarios) {
+            for (const v of u.vouchers) {
+                if (v.referidoId === targetId) return u.usuarioId;
+            }
+        }
+        return null;
+    };
+
+    const upstreamChain: string[] = [];
+    let current: string | null = voucherReferidoId;
+    const visited = new Set<string>();
+
+    while (current && !visited.has(current)) {
+        visited.add(current);
+        upstreamChain.unshift(current);
+        current = findUpstream(current);
+        if (upstreamChain.length > 20) break;
+    }
+
+    const chainIds = Array.from(new Set([...upstreamChain, propietarioId]));
+
+    return chainIds.map((id, index) => {
+        const u = userMap.get(id);
+        return {
+            usuarioId: id,
+            correo: u?.correo ?? id,
+            nombre: u?.nombre,
+            isOrigen: index === 0,
+            isDestino: index === chainIds.length - 1,
+            isCurrent: id === voucherReferidoId,
+        };
+    });
+};
+
 function GestionReferidos(): React.ReactElement {
     const [loading, setLoading] = useState<boolean>(true);
     const [data, setData] = useState<ReferidosResponse | null>(null);
@@ -74,6 +208,7 @@ function GestionReferidos(): React.ReactElement {
     const [modalOpen, setModalOpen] = useState<boolean>(false);
     const [loadingVoucherDetail, setLoadingVoucherDetail] = useState<boolean>(false);
     const [usersCache, setUsersCache] = useState<Map<string, UserDetail>>(new Map());
+    const [referralChain, setReferralChain] = useState<ReferralChainNode[]>([]);
 
     useEffect(() => {
         fetchReferidos();
@@ -115,11 +250,10 @@ function GestionReferidos(): React.ReactElement {
         });
     };
 
-    const fetchUserDetails = async (userId: string): Promise<UserDetail | null> => {
+    const fetchUserDetails = async (userId: string): Promise<{ user: UserDetail | null; fullCache: Map<string, UserDetail> }> => {
         if (usersCache.has(userId)) {
-            return usersCache.get(userId)!;
+            return { user: usersCache.get(userId)!, fullCache: usersCache };
         }
-
         try {
             const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api';
             const response = await apiFetch(`${API_BASE_URL}/registro/listarRegistro`, {
@@ -136,24 +270,32 @@ function GestionReferidos(): React.ReactElement {
                     });
                 });
                 setUsersCache(newCache);
-                return newCache.get(userId) || null;
+                return { user: newCache.get(userId) || null, fullCache: newCache };
             }
-            return null;
+            return { user: null, fullCache: usersCache };
         } catch (error) {
             console.error('Error al obtener detalles del usuario:', error);
-            return null;
+            return { user: null, fullCache: usersCache };
         }
     };
 
     const handleVoucherClick = async (voucher: Voucher, usuarioPropietarioId: string, usuarioPropietarioEmail: string): Promise<void> => {
         setLoadingVoucherDetail(true);
         setModalOpen(true);
+        setReferralChain([]);
 
         try {
-            const [propietario, referido] = await Promise.all([
+            const [propietarioResult, referidoResult] = await Promise.all([
                 fetchUserDetails(usuarioPropietarioId),
                 fetchUserDetails(voucher.referidoId)
             ]);
+
+            const propietario = propietarioResult.user;
+            const referido = referidoResult.user;
+            // El fullCache más reciente es el que tenga más entradas
+            const latestCache = propietarioResult.fullCache.size >= referidoResult.fullCache.size
+                ? propietarioResult.fullCache
+                : referidoResult.fullCache;
 
             const voucherDetail: VoucherDetail = {
                 ...voucher,
@@ -162,6 +304,37 @@ function GestionReferidos(): React.ReactElement {
             };
 
             setSelectedVoucher(voucherDetail);
+
+            // Construir la red de referidos con los datos ya disponibles en memoria
+            if (data?.usuarios) {
+                const chain = buildReferralChain(
+                    voucher.referidoId,
+                    usuarioPropietarioId,
+                    data.usuarios
+                );
+
+                const unresolvedIds = chain
+                    .filter((node) => node.correo === node.usuarioId)
+                    .map((node) => node.usuarioId);
+
+                if (unresolvedIds.length > 0) {
+                    const { fullCache } = await fetchUserDetails(unresolvedIds[0]);
+
+                    const enrichedChain = chain.map((node) => {
+                        if (node.correo !== node.usuarioId) return node;
+                        const detail = fullCache.get(node.usuarioId) || latestCache.get(node.usuarioId);
+                        if (!detail) return node;
+                        return {
+                            ...node,
+                            correo: detail.correo,
+                            nombre: detail.nombre,
+                        };
+                    });
+                    setReferralChain(enrichedChain);
+                } else {
+                    setReferralChain(chain);
+                }
+            }
         } catch (error) {
             console.error('Error al cargar detalle del voucher:', error);
             toast.error('Error al cargar los detalles del voucher');
@@ -200,7 +373,7 @@ function GestionReferidos(): React.ReactElement {
         <div className="p-4 md:p-6 lg:p-8 bg-background min-h-screen">
             <div className="max-w-7xl mx-auto space-y-8">
 
-                {/* Header Minimalista */}
+                {/* Header */}
                 <div className="space-y-2">
                     <div className="flex items-center gap-3">
                         <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
@@ -215,7 +388,7 @@ function GestionReferidos(): React.ReactElement {
                     </p>
                 </div>
 
-                {/* KPIs Minimalistas */}
+                {/* KPIs */}
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
                     <Card className="border-0 shadow-sm hover:shadow-md transition-shadow">
                         <CardContent className="p-4 md:p-6">
@@ -290,12 +463,11 @@ function GestionReferidos(): React.ReactElement {
                     </Card>
                 </div>
 
-                {/* Lista de Usuarios Minimalista */}
+                {/* Lista de Usuarios */}
                 <div className="space-y-3">
                     {data?.usuarios.map((usuario) => (
                         <Card key={usuario.usuarioId} className="border-0 shadow-sm hover:shadow-md transition-all">
                             <CardContent className="p-4 md:p-6">
-                                {/* Header del Usuario */}
                                 <div className="flex items-start justify-between mb-4">
                                     <div className="flex items-center gap-3 flex-1">
                                         <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
@@ -313,7 +485,6 @@ function GestionReferidos(): React.ReactElement {
                                     </Badge>
                                 </div>
 
-                                {/* Stats Grid Minimalista */}
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
                                     <div className="p-3 rounded-lg bg-muted/30">
                                         <p className="text-xs text-muted-foreground mb-1">Saldo Inicial</p>
@@ -333,7 +504,6 @@ function GestionReferidos(): React.ReactElement {
                                     </div>
                                 </div>
 
-                                {/* Acordeón Minimalista */}
                                 {usuario.vouchers.length > 0 && (
                                     <Accordion type="single" collapsible className="w-full">
                                         <AccordionItem value="vouchers" className="border-0">
@@ -423,10 +593,9 @@ function GestionReferidos(): React.ReactElement {
                         </CardContent>
                     </Card>
                 )}
-
             </div>
 
-            {/* Modal - Nuevo Diseño tipo Ticket/Voucher */}
+            {/* Modal - Detalle Voucher con Red de Referidos */}
             <Dialog open={modalOpen} onOpenChange={setModalOpen}>
                 <DialogContent className="max-w-md p-0 overflow-hidden border-none shadow-2xl">
                     {loadingVoucherDetail ? (
@@ -436,48 +605,79 @@ function GestionReferidos(): React.ReactElement {
                         </div>
                     ) : selectedVoucher ? (
                         <div className="flex flex-col">
-                            {/* Cabecera Tipo Ticket */}
+                            {/* Cabecera tipo ticket */}
                             <div className="bg-primary px-6 py-8 text-primary-foreground relative overflow-hidden">
-                                <div className="absolute top-0 right-0 p-4 opacity-10"><DollarSign className="w-32 h-32" /></div>
+                                <div className="absolute top-0 right-0 p-4 opacity-10">
+                                    <DollarSign className="w-32 h-32" />
+                                </div>
                                 <div className="relative z-10 text-center space-y-2">
-                                    <p className="text-primary-foreground/80 text-xs font-medium uppercase tracking-widest">Comisión Generada</p>
-                                    <h2 className="text-4xl font-bold tracking-tight">{formatCurrency(selectedVoucher.montoGanado)}</h2>
-                                    <Badge className={`mt-2 border-0 ${selectedVoucher.status === 'pagado' ? 'bg-white/20 text-white hover:bg-white/30' : 'bg-black/20 text-white hover:bg-black/30'}`}>
-                                        {selectedVoucher.status === 'pagado' ? <CheckCircle className="w-3 h-3 mr-1" /> : <Clock className="w-3 h-3 mr-1" />}
+                                    <p className="text-primary-foreground/80 text-xs font-medium uppercase tracking-widest">
+                                        Comisión Generada
+                                    </p>
+                                    <h2 className="text-4xl font-bold tracking-tight">
+                                        {formatCurrency(selectedVoucher.montoGanado)}
+                                    </h2>
+                                    <Badge
+                                        className={`mt-2 border-0 ${selectedVoucher.status === 'pagado'
+                                            ? 'bg-white/20 text-white hover:bg-white/30'
+                                            : 'bg-black/20 text-white hover:bg-black/30'
+                                            }`}
+                                    >
+                                        {selectedVoucher.status === 'pagado'
+                                            ? <CheckCircle className="w-3 h-3 mr-1" />
+                                            : <Clock className="w-3 h-3 mr-1" />
+                                        }
                                         {selectedVoucher.status.toUpperCase()}
                                     </Badge>
                                 </div>
                             </div>
 
-                            {/* Cuerpo del Ticket */}
+                            {/* Cuerpo del ticket */}
                             <ScrollArea className="max-h-[60vh]">
                                 <div className="p-6 space-y-6 bg-card">
 
-                                    {/* Grid de Metadatos */}
+                                    {/* Metadatos */}
                                     <div className="grid grid-cols-2 gap-4">
-                                        <DetailBox icon={<Calendar className="w-4 h-4" />} label="Fecha" value={formatDate(selectedVoucher.fecha)} />
-                                        <DetailBox icon={<Network className="w-4 h-4" />} label="Nivel" value={`Generación ${selectedVoucher.ciclo}`} />
+                                        <DetailBox
+                                            icon={<Calendar className="w-4 h-4" />}
+                                            label="Fecha"
+                                            value={formatDate(selectedVoucher.fecha)}
+                                        />
+                                        <DetailBox
+                                            icon={<Network className="w-4 h-4" />}
+                                            label="Nivel"
+                                            value={`Generación ${selectedVoucher.ciclo}`}
+                                        />
                                         <div className="col-span-2">
-                                            <DetailBox icon={<Hash className="w-4 h-4" />} label="ID Transacción" value={selectedVoucher._id} mono />
+                                            <DetailBox
+                                                icon={<Hash className="w-4 h-4" />}
+                                                label="ID Transacción"
+                                                value={selectedVoucher._id}
+                                                mono
+                                            />
                                         </div>
                                     </div>
 
                                     <Separator />
 
-                                    {/* Flujo de Dinero (From -> To) */}
+                                    {/* Flujo puntual generado por → recibido por (sin cambios) */}
                                     <div className="space-y-4">
                                         <div className="flex items-start gap-4">
                                             <div className="mt-1 bg-green-100 p-2 rounded-full">
                                                 <ArrowUpRight className="w-4 h-4 text-green-700" />
                                             </div>
                                             <div>
-                                                <p className="text-xs text-muted-foreground font-semibold uppercase">Generado por (Referido)</p>
+                                                <p className="text-xs text-muted-foreground font-semibold uppercase">
+                                                    Generado por (Referido)
+                                                </p>
                                                 <p className="text-sm font-medium mt-0.5">
                                                     {selectedVoucher.usuarioReferido?.nombre
                                                         ? `${selectedVoucher.usuarioReferido.nombre} ${selectedVoucher.usuarioReferido.apellido || ''}`
                                                         : 'Usuario Referido'}
                                                 </p>
-                                                <p className="text-xs text-muted-foreground">{selectedVoucher.usuarioReferido?.correo}</p>
+                                                <p className="text-xs text-muted-foreground">
+                                                    {selectedVoucher.usuarioReferido?.correo}
+                                                </p>
                                             </div>
                                         </div>
 
@@ -488,31 +688,74 @@ function GestionReferidos(): React.ReactElement {
                                                 <ArrowDownLeft className="w-4 h-4 text-blue-700" />
                                             </div>
                                             <div>
-                                                <p className="text-xs text-muted-foreground font-semibold uppercase">Recibido por (Beneficiario)</p>
+                                                <p className="text-xs text-muted-foreground font-semibold uppercase">
+                                                    Recibido por (Beneficiario)
+                                                </p>
                                                 <p className="text-sm font-medium mt-0.5">
                                                     {selectedVoucher.usuarioPropietario?.nombre
                                                         ? `${selectedVoucher.usuarioPropietario.nombre} ${selectedVoucher.usuarioPropietario.apellido || ''}`
                                                         : 'Usuario Beneficiario'}
                                                 </p>
-                                                <p className="text-xs text-muted-foreground">{selectedVoucher.usuarioPropietario?.correo}</p>
+                                                <p className="text-xs text-muted-foreground">
+                                                    {selectedVoucher.usuarioPropietario?.correo}
+                                                </p>
                                             </div>
                                         </div>
                                     </div>
 
                                     <div className="bg-muted/30 p-3 rounded-lg text-center">
-                                        <p className="text-xs text-muted-foreground">Motivo: <span className="font-medium text-foreground">{selectedVoucher.motivo}</span></p>
+                                        <p className="text-xs text-muted-foreground">
+                                            Motivo:{' '}
+                                            <span className="font-medium text-foreground">
+                                                {selectedVoucher.motivo}
+                                            </span>
+                                        </p>
                                     </div>
+
+                                    {/* ── Red completa de referidos ── */}
+                                    {referralChain.length > 0 && (
+                                        <>
+                                            <Separator />
+                                            <div className="space-y-3">
+                                                <div className="flex items-center gap-2.5">
+                                                    <div className="w-7 h-7 rounded-md bg-primary/10 flex items-center justify-center flex-shrink-0">
+                                                        <Network className="w-3.5 h-3.5 text-primary" />
+                                                    </div>
+                                                    <div className="flex-1">
+                                                        <p className="text-sm font-semibold text-foreground leading-none">
+                                                            Red de referidos
+                                                        </p>
+                                                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                                                            Cadena completa de esta comisión
+                                                        </p>
+                                                    </div>
+                                                    <span className="text-[11px] font-medium text-muted-foreground bg-muted/50 border border-border/50 px-2 py-0.5 rounded-full">
+                                                        {referralChain.length} {referralChain.length === 1 ? 'nodo' : 'nodos'}
+                                                    </span>
+                                                </div>
+                                                <div className="rounded-xl border border-border/50 bg-muted/10 p-3">
+                                                    <ReferralChain chain={referralChain} />
+                                                </div>
+                                            </div>
+                                        </>
+                                    )}
+
                                 </div>
                             </ScrollArea>
 
                             <div className="p-4 bg-muted/20 border-t text-center">
-                                <Button variant="outline" className="w-full" onClick={() => setModalOpen(false)}>Cerrar Recibo</Button>
+                                <Button
+                                    variant="outline"
+                                    className="w-full"
+                                    onClick={() => setModalOpen(false)}
+                                >
+                                    Cerrar Recibo
+                                </Button>
                             </div>
                         </div>
                     ) : null}
                 </DialogContent>
             </Dialog>
-
         </div>
     );
 }
