@@ -3252,7 +3252,9 @@ const ParametrosGobernanza: React.FC = () => {
             ? (actorEsTenantGlobal
               ? options.filter((opt) => {
                   const txt = String(opt.label || '').toLowerCase();
-                  return !txt.includes('libre') && !txt.includes('nvl 0');
+                  const esNvl1 = txt.includes('tenant-global') || txt.includes('nvl 1');
+                  const esNvl2 = /tenant-(co?rporativo)|nvl 2/i.test(String(opt.label || ''));
+                  return esNvl1 || esNvl2;
                 })
               : options)
             : field.name === 'tenantGlobalRef'
@@ -3518,12 +3520,10 @@ const ParametrosGobernanza: React.FC = () => {
                     <Settings2 className="mr-2 h-4 w-4" />
                     Configurar
                   </Button>
-                  {endpoint.fields.length === 0 ? (
-                    <Button className="flex-1" onClick={() => runEndpoint(endpoint)} disabled={!!running[endpoint.id]}>
-                      {running[endpoint.id] ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
-                      Ejecutar
-                    </Button>
-                  ) : null}
+                  <Button className="flex-1" onClick={() => endpoint.fields.length === 0 ? runEndpoint(endpoint) : setEndpointModal(endpoint)} disabled={!!running[endpoint.id]}>
+                    {running[endpoint.id] ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
+                    Ejecutar
+                  </Button>
                 </div>
               </CardContent>
             </Card>

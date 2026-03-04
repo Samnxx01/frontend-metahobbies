@@ -49,7 +49,6 @@ import {
 } from '@/components/ui/table';
 import { ChevronDown, ChevronRight, Edit, Eye, Loader2, Network, Plus, RefreshCw, Trash2 } from 'lucide-react';
 
-const LAYOUTS = ['PublicLayout', 'AuthLayout', 'AdminLayout'] as const;
 type NodeTypeRef = string;
 
 interface RouteTreeNode extends Route {
@@ -71,6 +70,7 @@ interface NodeTypeFormState {
 
 interface AccessTypeFormState {
   accessType: string;
+  layout: string;
 }
 
 export default function GestionRutas(): React.ReactElement {
@@ -102,6 +102,7 @@ export default function GestionRutas(): React.ReactElement {
   });
   const [accessTypeForm, setAccessTypeForm] = useState<AccessTypeFormState>({
     accessType: '',
+    layout: '',
   });
 
   const [formData, setFormData] = useState<CreateRouteDto>({
@@ -112,6 +113,7 @@ export default function GestionRutas(): React.ReactElement {
     tipoNodo: '',
     tipoNodoId: '',
     padreId: null,
+    heredaDeRuta: null,
     mostrarEnSidebar: true,
     accessType: [],
     acciones: [],
@@ -264,13 +266,20 @@ export default function GestionRutas(): React.ReactElement {
     const found = routes.find((route) => resolveRouteId(route) === String(id));
     return found?.name || '-';
   };
+
+  const resolveInheritedRouteId = (route: Route): string | null => {
+    const inherited = route?.heredaDeRuta as any;
+    if (!inherited) return null;
+    if (typeof inherited === 'string') return inherited;
+    return String(inherited?._id || inherited?.iud || '');
+  };
   const getAccessTypeLabelsByIds = (ids: string[] = []): string[] => {
     if (!Array.isArray(ids) || ids.length === 0) return [];
     return ids
       .map((id) => {
         const normalized = String(id || '').trim();
         const found = accessTypes.find((a) => String(a?._id || '') === normalized);
-        return String(found?.accessType || '');
+        return String(found?.layout || found?.accessType || '');
       })
       .filter(Boolean);
   };
@@ -559,6 +568,7 @@ export default function GestionRutas(): React.ReactElement {
       tipoNodo: String(resolvedType?.codigo || ''),
       tipoNodoId: String(resolvedType ? resolveNodeTypeId(resolvedType) : ''),
       padreId: null,
+      heredaDeRuta: null,
       mostrarEnSidebar: true,
       accessType: [],
       acciones: [],
@@ -588,10 +598,11 @@ export default function GestionRutas(): React.ReactElement {
         name: route.name,
         path: route.path,
         component: route.component,
-        layout: route.layout as typeof LAYOUTS[number],
+        layout: route.layout,
         tipoNodo: String(getTypeById(routeTypeId)?.codigo || route.tipoNodo || ''),
         tipoNodoId: routeTypeId,
         padreId: resolveParentId(route),
+        heredaDeRuta: resolveInheritedRouteId(route),
         mostrarEnSidebar: route?.mostrarEnSidebar !== false,
         accessType: resolveAccessTypeIds(route),
         acciones: resolveActionIds(route),
@@ -674,28 +685,38 @@ export default function GestionRutas(): React.ReactElement {
 
       const resolvedLayout = (() => {
         if (editingRoute) return formData.layout;
-        if (selectedTypeOrder === Number(formularioType?.order ?? 3)) {
-          return parentRoute?.layout || formData.layout || 'AdminLayout';
+        if (isFormularioType) {
+          // Formulario: el layout se deriva del primer accessType seleccionado
+          const selectedAtIds = Array.isArray(formData.accessType) ? formData.accessType : [];
+          const firstAt = accessTypes.find((a) => selectedAtIds.includes(String(a._id || '')));
+          if (firstAt?.layout) return firstAt.layout;
+          return parentRoute?.layout || formData.layout || '';
         }
-        return formData.layout || 'AdminLayout';
+        return formData.layout || '';
       })();
 
       const payload: CreateRouteDto = {
         ...formData,
         path: normalizePath(formData.path || ''),
         component: resolvedComponent,
-        layout: resolvedLayout as 'PublicLayout' | 'AuthLayout' | 'AdminLayout',
+        layout: resolvedLayout,
         tipoNodo: String(selectedTypeDoc.codigo || ''),
         tipoNodoId: resolveNodeTypeId(selectedTypeDoc),
         padreId: selectedTypeOrder <= 1
           ? null
           : (formData.padreId || null),
+        heredaDeRuta: formData.heredaDeRuta || null,
       };
 
       const editingId = editingRoute ? resolveRouteId(editingRoute) : '';
       const payloadParentId = String((payload as any).padreId || '').trim();
       if (editingId && payloadParentId && payloadParentId === editingId) {
         toast.error('No puedes asignar la misma ruta como padre');
+        return;
+      }
+      const payloadInheritedId = String((payload as any).heredaDeRuta || '').trim();
+      if (editingId && payloadInheritedId && payloadInheritedId === editingId) {
+        toast.error('No puedes heredar de la misma ruta');
         return;
       }
 
@@ -818,7 +839,7 @@ export default function GestionRutas(): React.ReactElement {
   };
 
   const resetAccessTypeForm = (): void => {
-    setAccessTypeForm({ accessType: '' });
+    setAccessTypeForm({ accessType: '', layout: '' });
     setEditingAccessTypeId('');
   };
 
@@ -837,11 +858,12 @@ export default function GestionRutas(): React.ReactElement {
 
     try {
       setAccessTypeSubmitting(true);
+      const payload = { accessType: value, layout: accessTypeForm.layout.trim().toUpperCase() };
       if (editingAccessTypeId) {
-        await updateAccessType(editingAccessTypeId, { accessType: value });
+        await updateAccessType(editingAccessTypeId, payload);
         toast.success('Tipo de acceso actualizado');
       } else {
-        await createAccessType({ accessType: value });
+        await createAccessType(payload);
         toast.success('Tipo de acceso creado');
       }
       resetAccessTypeForm();
@@ -856,7 +878,10 @@ export default function GestionRutas(): React.ReactElement {
 
   const handleEditAccessType = (item: AccessTypeOption): void => {
     setEditingAccessTypeId(String(item?._id || ''));
-    setAccessTypeForm({ accessType: String(item?.accessType || '') });
+    setAccessTypeForm({
+      accessType: String(item?.accessType || ''),
+      layout: String(item?.layout || ''),
+    });
   };
 
   const handleDeactivateAccessType = async (id: string): Promise<void> => {
@@ -1312,13 +1337,19 @@ export default function GestionRutas(): React.ReactElement {
                   <Label htmlFor="layout">Layout *</Label>
                   <Select
                     value={formData.layout}
-                    onValueChange={(value) => setFormData({ ...formData, layout: value as typeof LAYOUTS[number] })}
+                    onValueChange={(value) => setFormData({ ...formData, layout: value })}
                   >
                     <SelectTrigger id="layout">
                       <SelectValue placeholder="Selecciona layout" />
                     </SelectTrigger>
                     <SelectContent>
-                      {LAYOUTS.map((layout) => (
+                      {Array.from(
+                        new Set(
+                          accessTypes
+                            .filter((a) => a.estadoAcces !== false && a.layout)
+                            .map((a) => a.layout as string)
+                        )
+                      ).map((layout) => (
                         <SelectItem key={layout} value={layout}>
                           {layout}
                         </SelectItem>
@@ -1330,10 +1361,13 @@ export default function GestionRutas(): React.ReactElement {
                 <div className="space-y-2 md:col-span-2">
                   <Label>Layout</Label>
                   <Input
-                    value={
-                      routes.find((r) => resolveRouteId(r) === String(formData.padreId || ''))?.layout
-                      || 'Se heredara del modulo padre'
-                    }
+                    value={(() => {
+                      const selectedAtIds = Array.isArray(formData.accessType) ? formData.accessType : [];
+                      const firstAt = accessTypes.find((a) => selectedAtIds.includes(String(a._id || '')));
+                      if (firstAt?.layout) return firstAt.layout;
+                      return routes.find((r) => resolveRouteId(r) === String(formData.padreId || ''))?.layout
+                        || 'Se heredara del accessType seleccionado';
+                    })()}
                     disabled
                   />
                   <p className="text-xs text-muted-foreground">
@@ -1341,11 +1375,14 @@ export default function GestionRutas(): React.ReactElement {
                   </p>
                 </div>
               )}
+
               {isFormularioType && (
                 <div className="space-y-2 md:col-span-2">
                   <Label>Tipo de acceso *</Label>
-                  <div className="rounded-md border p-3 space-y-2">
-                    {accessTypes.filter((item) => item.estadoAcces !== false).map((item) => {
+                  <div className="rounded-md border p-3 flex flex-wrap gap-6">
+                    {accessTypes
+                      .filter((item) => item.estadoAcces !== false)
+                      .map((item) => {
                       const id = String(item._id || '');
                       const selected = Array.isArray(formData.accessType) && formData.accessType.includes(id);
                       return (
@@ -1366,7 +1403,7 @@ export default function GestionRutas(): React.ReactElement {
                               });
                             }}
                           />
-                          <span>{String(item.accessType || 'N/A')}</span>
+                          <span>{String(item.layout || item.accessType || 'N/A')}</span>
                         </label>
                       );
                     })}
@@ -1490,8 +1527,17 @@ export default function GestionRutas(): React.ReactElement {
               <Label>Tipo de acceso</Label>
               <Input
                 value={accessTypeForm.accessType}
-                onChange={(e) => setAccessTypeForm({ accessType: e.target.value })}
+                onChange={(e) => setAccessTypeForm((prev) => ({ ...prev, accessType: e.target.value }))}
                 placeholder="PUBLIC o PRIVATE"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Layout</Label>
+              <Input
+                value={accessTypeForm.layout}
+                onChange={(e) => setAccessTypeForm((prev) => ({ ...prev, layout: e.target.value.toUpperCase() }))}
+                placeholder="Ej: AUTHLAYOUT"
+                required
               />
             </div>
             <div className="flex justify-end gap-2">
@@ -1515,6 +1561,7 @@ export default function GestionRutas(): React.ReactElement {
               <TableHeader>
                 <TableRow>
                   <TableHead>Tipo</TableHead>
+                  <TableHead>Layouts</TableHead>
                   <TableHead>Estado</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
@@ -1526,6 +1573,12 @@ export default function GestionRutas(): React.ReactElement {
                   return (
                     <TableRow key={id}>
                       <TableCell>{String(item?.accessType || '-')}</TableCell>
+                      <TableCell>
+                        {item?.layout
+                          ? <Badge variant="secondary" className="text-xs">{item.layout}</Badge>
+                          : <span className="text-muted-foreground text-xs">—</span>
+                        }
+                      </TableCell>
                       <TableCell>
                         <Badge variant={active ? 'outline' : 'secondary'}>
                           {active ? 'Activo' : 'Inactivo'}
