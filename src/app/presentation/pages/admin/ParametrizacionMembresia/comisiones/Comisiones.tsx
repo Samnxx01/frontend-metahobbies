@@ -1,6 +1,5 @@
 import { BarChart3 } from 'lucide-react';
 import KPIGlobal from './KPIGlobal';
-import KPIUsuarioMembresia from './KPIUsuarioMembresia';
 
 export default function Comisiones() {
     return (
@@ -25,7 +24,6 @@ export default function Comisiones() {
             {/* Secciones hijas */}
             <div className="max-w-7xl mx-auto px-6 py-8 space-y-10">
                 <KPIGlobal />
-                <KPIUsuarioMembresia />
             </div>
         </div>
     );

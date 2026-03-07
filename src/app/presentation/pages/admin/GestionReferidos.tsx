@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '@/app/services/api';
 import { toast } from 'react-toastify';
-// Shadcn UI components
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
@@ -292,7 +291,7 @@ function GestionReferidos(): React.ReactElement {
 
             const propietario = propietarioResult.user;
             const referido = referidoResult.user;
-            // El fullCache más reciente es el que tenga más entradas
+
             const latestCache = propietarioResult.fullCache.size >= referidoResult.fullCache.size
                 ? propietarioResult.fullCache
                 : referidoResult.fullCache;
@@ -305,7 +304,6 @@ function GestionReferidos(): React.ReactElement {
 
             setSelectedVoucher(voucherDetail);
 
-            // Construir la red de referidos con los datos ya disponibles en memoria
             if (data?.usuarios) {
                 const chain = buildReferralChain(
                     voucher.referidoId,
@@ -660,7 +658,7 @@ function GestionReferidos(): React.ReactElement {
 
                                     <Separator />
 
-                                    {/* Flujo puntual generado por → recibido por (sin cambios) */}
+                                    {/* Flujo puntual generado */}
                                     <div className="space-y-4">
                                         <div className="flex items-start gap-4">
                                             <div className="mt-1 bg-green-100 p-2 rounded-full">

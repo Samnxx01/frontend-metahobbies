@@ -1,15 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useMembership } from '../../../providers/MembershipProvider';
-import CustomStepper from '@/components/common/CustomStepper';
 import MembershipStepContent from '@/components/membership/MembershipStepContent';
 import { useMembershipPaymentForm } from '@/app/hooks/useMembershipPaymentForm';
-
-// Shadcn UI components
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-
-// Lucide icons
 import { Loader2, ArrowRight, ArrowLeft, CreditCard, Sparkles } from 'lucide-react';
 
 const steps = [
