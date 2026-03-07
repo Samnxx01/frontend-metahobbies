@@ -48,6 +48,8 @@ import ParametrosGobernanza from '@/app/presentation/pages/admin/ParametrosGober
 import ParametrizacionCatologTenant from '@/app/presentation/pages/admin/ParametrizacionCatologTenant';
 import ParametrizacionMembresia from '../presentation/pages/admin/ParametrizacionMembresia/ParametrizacionMembresia';
 import Comisiones from '../presentation/pages/admin/ParametrizacionMembresia/comisiones/Comisiones';
+import ActivacionCuenta from '../presentation/pages/activar-cuenta/ActivaciónCuenta';
+import RecuperarContrasenaToken from '../presentation/pages/recuperar-contrasena/RecuperarContrasenaToken';
 // Types for route system
 interface RouteConfig {
     path: string;
@@ -108,6 +110,8 @@ const componentMap: ComponentMapType = {
     ConfiguracionPerfil: Perfil,
     ParametrizacionMembresia,
     Comisiones,
+    ActivacionCuenta,
+    RecuperarContrasenaToken,
 };
 
 export default function LayoutRoutes(): ReactElement {
@@ -178,6 +182,7 @@ export default function LayoutRoutes(): ReactElement {
                 {/* Rutas especiales que no vienen del backend */}
                 <Route path="membresia/*" element={<MembershipRoutes />} />
                 <Route path="cambiar-contrasena-provisional" element={<CambiarContrasenaProvisional />} />
+                <Route path="activar-cuenta" element={<ActivacionCuenta />} />
                 {user && <Route path="perfil" element={<Perfil />} />}
             </Route>
 

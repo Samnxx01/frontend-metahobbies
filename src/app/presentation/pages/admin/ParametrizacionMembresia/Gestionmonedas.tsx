@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '@/app/services/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
 import {
@@ -20,18 +19,7 @@ interface Moneda {
 }
 
 type MensajeTipo = 'success' | 'error';
-interface Mensaje {
-    tipo: MensajeTipo;
-    texto: string;
-}
-
-
-// Mapa de colores por símbolo de moneda
-const MONEDA_COLOR: Record<string, string> = {
-    COP: 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300',
-    USD: 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300',
-    EUR: 'bg-violet-100 dark:bg-violet-900/30 text-violet-800 dark:text-violet-300',
-};
+interface Mensaje { tipo: MensajeTipo; texto: string }
 
 export default function GestionMonedas() {
     const [monedas, setMonedas] = useState<Moneda[]>([]);
@@ -48,7 +36,7 @@ export default function GestionMonedas() {
     const listarMonedas = useCallback(async () => {
         setLoadingLista(true);
         try {
-            const data = await apiFetch('/api/seguridad/listar/monedas', { method: 'GET' });
+            const data = await apiFetch('/api/monedas/seguridad/listar/monedas', { method: 'GET' });
             if (data?.monedas) setMonedas(data.monedas);
         } catch (err: any) {
             mostrarMensaje('error', err.message || 'Error al listar monedas.');
@@ -113,8 +101,7 @@ export default function GestionMonedas() {
                         </div>
                     </div>
                     <Button
-                        size="icon"
-                        variant="ghost"
+                        size="icon" variant="ghost"
                         onClick={listarMonedas}
                         disabled={loadingLista}
                         className="w-8 h-8 text-muted-foreground hover:text-foreground"
@@ -146,15 +133,14 @@ export default function GestionMonedas() {
                     </div>
                 )}
 
-                {/* Acción: inicializar */}
+                {/* Inicializar */}
                 <div className="flex items-center justify-between p-3.5 rounded-xl bg-muted/40 border border-border/40">
                     <div>
                         <p className="text-xs font-semibold text-foreground">Inicializar monedas base</p>
                         <p className="text-xs text-muted-foreground mt-0.5">Crea COP, USD y EUR en el sistema</p>
                     </div>
                     <Button
-                        size="sm"
-                        variant="outline"
+                        size="sm" variant="outline"
                         onClick={crearMonedas}
                         disabled={loadingCrear}
                         className="gap-2 shrink-0"
@@ -169,7 +155,7 @@ export default function GestionMonedas() {
 
                 <Separator />
 
-                {/* Lista de monedas */}
+                {/* Lista */}
                 {loadingLista && monedas.length === 0 ? (
                     <div className="flex items-center justify-center py-10 gap-2 text-muted-foreground">
                         <Loader2 className="w-4 h-4 animate-spin" />
@@ -189,9 +175,9 @@ export default function GestionMonedas() {
                                 {monedas.length} moneda{monedas.length !== 1 ? 's' : ''} configurada{monedas.length !== 1 ? 's' : ''}
                             </p>
                             <p className="text-xs text-muted-foreground">
-                                <span className="text-emerald-600 font-medium">{activas} activa{activas !== 1 ? 's' : ''}</span>
+                                <span className="text-primary font-medium">{activas} activa{activas !== 1 ? 's' : ''}</span>
                                 {' · '}
-                                <span className="text-muted-foreground">{monedas.length - activas} inactiva{(monedas.length - activas) !== 1 ? 's' : ''}</span>
+                                <span>{monedas.length - activas} inactiva{(monedas.length - activas) !== 1 ? 's' : ''}</span>
                             </p>
                         </div>
 
@@ -207,17 +193,18 @@ export default function GestionMonedas() {
                                 `}
                             >
                                 <div className="flex items-center gap-3">
-                                    {/* Badge de moneda con color específico */}
-                                    <span className={`
-                                        inline-flex items-center justify-center w-10 h-7 rounded-md text-xs font-bold tracking-wider
-                                        ${MONEDA_COLOR[moneda.monedas] ?? 'bg-muted text-muted-foreground'}
-                                    `}>
+                                    {/* Badge con color del tema (primary) */}
+                                    <span className="
+                                        inline-flex items-center justify-center w-10 h-7 rounded-md
+                                        text-xs font-bold tracking-wider
+                                        bg-primary/10 text-primary border border-primary/20
+                                    ">
                                         {moneda.monedas}
                                     </span>
                                     <div>
                                         <div className="flex items-center gap-1.5">
                                             {moneda.estadoMoneda
-                                                ? <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                                                ? <CheckCircle2 className="w-3 h-3 text-primary" />
                                                 : <XCircle className="w-3 h-3 text-muted-foreground/60" />
                                             }
                                             <span className={`text-xs font-medium ${moneda.estadoMoneda ? 'text-foreground' : 'text-muted-foreground'}`}>
@@ -232,7 +219,6 @@ export default function GestionMonedas() {
                                     </div>
                                 </div>
 
-                                {/* Toggle */}
                                 {loadingToggle === moneda._id ? (
                                     <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
                                 ) : (
