@@ -67,6 +67,8 @@ export interface Product {
 export interface CartItem extends Product {
   quantity: number;
   addedAt: string;
+  /** _id del subdocumento en el carrito del backend (necesario para update/delete) */
+  backendItemId?: string;
 }
 
 // Cart summary interface

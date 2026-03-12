@@ -460,7 +460,7 @@ export default function MembershipDashboard(): React.ReactElement {
                         )}
                     </CardContent>
                 </Card>
-                <KPIUsuarioMembresia />
+                <KPIUsuarioMembresia showTable={false} />
             </div>
         </div>
     );

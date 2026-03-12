@@ -50,6 +50,8 @@ import ParametrizacionMembresia from '../presentation/pages/admin/Parametrizacio
 import Comisiones from '../presentation/pages/admin/ParametrizacionMembresia/comisiones/Comisiones';
 import ActivacionCuenta from '../presentation/pages/activar-cuenta/ActivaciónCuenta';
 import RecuperarContrasenaToken from '../presentation/pages/recuperar-contrasena/RecuperarContrasenaToken';
+import UsuariosTenant from '../presentation/pages/admin/UsuariosTenant';
+import TenantCorporativo from '../presentation/pages/admin/TenantCorporativo';
 // Types for route system
 interface RouteConfig {
     path: string;
@@ -112,7 +114,12 @@ const componentMap: ComponentMapType = {
     Comisiones,
     ActivacionCuenta,
     RecuperarContrasenaToken,
-};
+    UsuariosTenant,
+    TenantCorporativo,
+    tenantCorporativo: TenantCorporativo,
+    TenantCorportativo: TenantCorporativo,
+    tenantCorportativo: TenantCorporativo,
+  };
 
 export default function LayoutRoutes(): ReactElement {
     const [authorizedRoutes, setAuthorizedRoutes] = useState<AuthorizedRoutes | null>(null);

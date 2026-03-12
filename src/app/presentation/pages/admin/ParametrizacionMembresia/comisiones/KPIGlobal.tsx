@@ -109,40 +109,51 @@ const donutOption = (labels: string[], data: number[]) => {
     };
 };
 
-const lineOption = (labels: string[], data: number[]) => ({
-    tooltip: { trigger: 'axis', ...tooltipBase },
-    grid: { left: 8, right: 8, top: 8, bottom: 0, containLabel: true },
-    xAxis: {
-        type: 'category',
-        data: labels,
-        axisLabel: { color: C_MUTED, fontSize: 11 },
-        axisLine: { lineStyle: { color: C_BORDER } },
-        axisTick: { show: false },
-    },
-    yAxis: {
-        type: 'value',
-        axisLabel: { color: C_MUTED, fontSize: 11 },
-        splitLine: { lineStyle: { color: C_BORDER, type: 'dashed' } },
-    },
-    series: [{
-        type: 'line',
-        data,
-        smooth: true,
-        symbol: 'circle',
-        symbolSize: 5,
-        lineStyle: { color: C_PRIMARY, width: 2 },
-        itemStyle: { color: C_PRIMARY },
-        areaStyle: {
-            color: {
-                type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
-                colorStops: [
-                    { offset: 0, color: `${C_PRIMARY}33` },
-                    { offset: 1, color: `${C_PRIMARY}00` },
-                ],
-            },
+const lineOption = (labels: string[], data: number[]) => {
+    const hasSinglePoint = labels.length <= 1;
+
+    return {
+        tooltip: { trigger: 'axis', ...tooltipBase },
+        grid: { left: 8, right: 8, top: 12, bottom: 0, containLabel: true },
+        xAxis: {
+            type: 'category',
+            data: labels,
+            axisLabel: { color: C_MUTED, fontSize: 11 },
+            axisLine: { lineStyle: { color: C_BORDER } },
+            axisTick: { show: false },
+            boundaryGap: hasSinglePoint,
         },
-    }],
-});
+        yAxis: {
+            type: 'value',
+            minInterval: 1,
+            axisLabel: { color: C_MUTED, fontSize: 11 },
+            splitLine: { lineStyle: { color: C_BORDER, type: 'dashed' } },
+        },
+        series: [{
+            type: hasSinglePoint ? 'bar' : 'line',
+            data,
+            smooth: !hasSinglePoint,
+            symbol: 'circle',
+            showSymbol: true,
+            symbolSize: 8,
+            barMaxWidth: 40,
+            lineStyle: { color: C_PRIMARY, width: 2 },
+            itemStyle: { color: C_PRIMARY, borderRadius: hasSinglePoint ? [6, 6, 0, 0] : 0 },
+            label: hasSinglePoint
+                ? { show: true, position: 'top', color: C_MUTED, fontSize: 11 }
+                : undefined,
+            areaStyle: hasSinglePoint ? undefined : {
+                color: {
+                    type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+                    colorStops: [
+                        { offset: 0, color: `${C_PRIMARY}33` },
+                        { offset: 1, color: `${C_PRIMARY}00` },
+                    ],
+                },
+            },
+        }],
+    };
+};
 
 function KPICard({
     icon, label, value, sub, accent = 'default',

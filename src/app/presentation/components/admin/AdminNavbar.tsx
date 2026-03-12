@@ -5,6 +5,7 @@ import { useAuth } from '@/app/providers/AuthProvider'
 import { useTheme } from 'next-themes'
 import { useMembership } from '@/app/hooks/useMembership'
 import { apiFetch } from '@/app/services/api'
+import { getUserShortcutRoutes } from '@/app/services/routeService'
 
 // Shadcn UI components
 import { Button } from "@/components/ui/button"
@@ -25,6 +26,8 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
     const { hasActiveMembership } = useMembership()
     const [logoUrl, setLogoUrl] = useState<string>(DEFAULT_LOGO)
     const [logoError, setLogoError] = useState<boolean>(false)
+    const [profilePath, setProfilePath] = useState<string>('/perfil')
+    const [membershipPath, setMembershipPath] = useState<string>('/membresia/dashboard')
 
     useEffect(() => {
         let active = true
@@ -73,6 +76,29 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
             active = false
         }
     }, [user?._id, user?.correo, user?.rol])
+
+    useEffect(() => {
+        let active = true
+
+        const cargarShortcuts = async (): Promise<void> => {
+            try {
+                const shortcuts = await getUserShortcutRoutes()
+                if (!active) return
+                setProfilePath(shortcuts.perfil || '/perfil')
+                setMembershipPath(shortcuts.membresia || '/membresia/dashboard')
+            } catch (_error) {
+                if (!active) return
+                setProfilePath('/perfil')
+                setMembershipPath('/membresia/dashboard')
+            }
+        }
+
+        cargarShortcuts()
+
+        return () => {
+            active = false
+        }
+    }, [user?._id])
 
     const toggleTheme = (): void => {
         setTheme(theme === 'dark' ? 'light' : 'dark')
@@ -135,7 +161,7 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
                     </div>
                 </div>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => navigate("/perfil")} className="cursor-pointer py-2.5">
+                <DropdownMenuItem onClick={() => navigate(profilePath)} className="cursor-pointer py-2.5">
                     <UserIcon className="mr-2 h-4 w-4" />
                     Mi Perfil
                 </DropdownMenuItem>
@@ -146,7 +172,7 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
                 </DropdownMenuItem>
 
                 {hasActiveMembership && (
-                    <DropdownMenuItem onClick={() => navigate("/membresia/dashboard")} className="cursor-pointer py-2.5">
+                    <DropdownMenuItem onClick={() => navigate(membershipPath)} className="cursor-pointer py-2.5">
                         <Crown className="mr-2 h-4 w-4" />
                         Membresía
                     </DropdownMenuItem>

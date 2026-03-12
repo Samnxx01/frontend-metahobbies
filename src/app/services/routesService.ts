@@ -14,6 +14,10 @@ export interface Route {
   estadoRuta: boolean;
   mostrarEnNavbarPublico?: boolean;
   mostrarEnSidebar?: boolean;
+  mostrarEnMenuUsuario?: boolean;
+  menuUsuarioKey?: 'PANEL_ADMIN' | 'MI_PERFIL' | 'MI_MEMBRESIA' | string | null;
+  menuUsuarioLabel?: string | null;
+  menuUsuarioOrder?: number;
   tipoNodo?: string | null;
   tipoNodoId?: string | null;
   padreId?: string | null | { _id?: string; iud?: string; name?: string };
@@ -54,6 +58,10 @@ export interface CreateRouteDto {
   isActive?: boolean;
   mostrarEnNavbarPublico?: boolean;
   mostrarEnSidebar?: boolean;
+  mostrarEnMenuUsuario?: boolean;
+  menuUsuarioKey?: 'PANEL_ADMIN' | 'MI_PERFIL' | 'MI_MEMBRESIA' | string | null;
+  menuUsuarioLabel?: string | null;
+  menuUsuarioOrder?: number;
   tipoNodo?: string;
   tipoNodoId?: string;
   padreId?: string | null;
@@ -80,6 +88,10 @@ export interface UpdateRouteDto {
   isActive?: boolean;
   mostrarEnNavbarPublico?: boolean;
   mostrarEnSidebar?: boolean;
+  mostrarEnMenuUsuario?: boolean;
+  menuUsuarioKey?: 'PANEL_ADMIN' | 'MI_PERFIL' | 'MI_MEMBRESIA' | string | null;
+  menuUsuarioLabel?: string | null;
+  menuUsuarioOrder?: number;
   tipoNodo?: string;
   tipoNodoId?: string;
   padreId?: string | null;

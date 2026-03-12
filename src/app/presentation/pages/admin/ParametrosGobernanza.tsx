@@ -104,23 +104,6 @@ const ENDPOINTS: EndpointSpec[] = [
     ],
   },
   {
-    id: 'tenant-crear-corporativo-global',
-    section: 'tenant',
-    actor: 'tenantGlobal',
-    method: 'POST',
-    path: '/api/config/global/creacion/usu/tenant/corporativo',
-    title: 'Crear tenant corporativo (global)',
-    description: 'Crea tenant corporativo desde flujo de tenant global.',
-    fields: [
-      { name: 'nvlGeneracionCoporativoTenant', label: 'Nivel generacion corporativo', type: 'id', required: true },
-      { name: 'tipo_tenant', label: 'Tipo tenant', type: 'id', required: true },
-      { name: 'ownerType', label: 'Owner type', type: 'id', required: true },
-      { name: 'apisDominios', label: 'Apis dominios', type: 'id', required: true },
-      { name: 'accionesUsu', label: 'Accion usuario', type: 'id', required: true },
-      { name: 'rolesMabs', label: 'Rol mabs', type: 'id', required: true },
-    ],
-  },
-  {
     id: 'tenant-actualizar-global',
     section: 'tenant',
     actor: 'tenantSuperAdmin',
@@ -275,147 +258,6 @@ const ENDPOINTS: EndpointSpec[] = [
     title: 'Eliminar herencia admin/global',
     description: 'Eliminación definitiva (requiere estar desactivada).',
     fields: [{ name: 'id', label: 'ID herencia', type: 'id', required: true, pathParam: true }],
-  },
-  {
-    id: 'perm-crear-coporativo',
-    section: 'tenant',
-    actor: 'tenantGlobal',
-    method: 'POST',
-    path: '/api/config/permisos/creacion/usu/tenant/coporativo',
-    title: 'Crear tenant corporativo',
-    description: 'Flujo tenantGlobal (ADMIN).',
-    fields: [
-      { name: 'nvlGeneracionCoporativoTenant', label: 'Nivel generacion corporativo', type: 'id', required: true },
-      { name: 'tipo_tenant', label: 'Tipo tenant', type: 'id', required: true },
-      { name: 'ownerType', label: 'Owner type', type: 'id', required: true },
-      { name: 'apisDominios', label: 'Apis dominios', type: 'id', required: true },
-      { name: 'accionesUsu', label: 'Accion usuario', type: 'id', required: true },
-      { name: 'rolesMabs', label: 'Rol mabs', type: 'id', required: true },
-    ],
-  },
-  {
-    id: 'perm-crear-corporativo-alias',
-    section: 'tenant',
-    actor: 'tenantGlobal',
-    method: 'POST',
-    path: '/api/config/permisos/creacion/usu/tenant/corporativo',
-    title: 'Crear tenant corporativo (alias)',
-    description: 'Alias canónico del endpoint corporativo.',
-    fields: [
-      { name: 'nvlGeneracionCoporativoTenant', label: 'Nivel generacion corporativo', type: 'id', required: true },
-      { name: 'tipo_tenant', label: 'Tipo tenant', type: 'id', required: true },
-      { name: 'ownerType', label: 'Owner type', type: 'id', required: true },
-      { name: 'apisDominios', label: 'Apis dominios', type: 'id', required: true },
-      { name: 'accionesUsu', label: 'Accion usuario', type: 'id', required: true },
-      { name: 'rolesMabs', label: 'Rol mabs', type: 'id', required: true },
-    ],
-  },
-  {
-    id: 'perm-actualizar-corporativo',
-    section: 'tenant',
-    actor: 'tenantGlobal',
-    method: 'PUT',
-    path: '/api/config/permisos/corporativo/actualizar/tenant/:id',
-    title: 'Actualizar herencia corporativa',
-    description: 'Actualiza datos del tenant corporativo por id.',
-    fields: [
-      { name: 'id', label: 'ID registro', type: 'id', required: true, pathParam: true },
-      { name: 'nvlGeneracionCoporativoTenant', label: 'Nivel generacion corporativo', type: 'id' },
-      { name: 'tipo_tenant', label: 'Tipo tenant', type: 'id' },
-      { name: 'ownerType', label: 'Owner type', type: 'id' },
-      { name: 'apisDominios', label: 'Apis dominios', type: 'id' },
-      { name: 'accionesUsu', label: 'Accion usuario', type: 'id' },
-      { name: 'rolesMabs', label: 'Rol mabs', type: 'id' },
-    ],
-  },
-  {
-    id: 'perm-desactivar-corporativo',
-    section: 'tenant',
-    actor: 'tenantGlobal',
-    method: 'DELETE',
-    path: '/api/config/permisos/corporativo/desactivar/tenant/:id',
-    title: 'Desactivar registro (opcional)',
-    description: 'Desactiva herencia corporativa sin eliminar físicamente.',
-    fields: [{ name: 'id', label: 'ID registro', type: 'id', required: true, pathParam: true }],
-  },
-  {
-    id: 'perm-eliminar-corporativo',
-    section: 'tenant',
-    actor: 'tenantGlobal',
-    method: 'DELETE',
-    path: '/api/config/permisos/corporativo/eliminar/tenant/:id',
-    title: 'Eliminar registro (opcional)',
-    description: 'Elimina registro corporativo de forma definitiva.',
-    fields: [{ name: 'id', label: 'ID registro', type: 'id', required: true, pathParam: true }],
-  },
-  {
-    id: 'perm-corporativo-guardar-catalogo',
-    section: 'tenant',
-    actor: 'tenantGlobal',
-    method: 'POST',
-    path: '/api/config/permisos/corporativo/guardar/catologo/tenant/corporativo',
-    title: 'Guardar catalogo corporativo',
-    description: 'Crea catalogo de tipo comprador corporativo.',
-    fields: [
-      { name: 'tipo_comprador', label: 'Tipo comprador', type: 'text', required: true },
-      { name: 'sigla', label: 'Sigla', type: 'text', required: true },
-    ],
-  },
-  {
-    id: 'perm-corporativo-guardar-rol',
-    section: 'tenant',
-    actor: 'tenantGlobal',
-    method: 'POST',
-    path: '/api/config/permisos/corporativo/guardar/roles/tenant/corporativo',
-    title: 'Guardar rol corporativo',
-    description: 'Crea rol corporativo para tenant.',
-    fields: [{ name: 'rol', label: 'Rol', type: 'text', required: true }],
-  },
-  {
-    id: 'perm-corporativo-crear-tenant',
-    section: 'tenant',
-    actor: 'tenantGlobal',
-    method: 'POST',
-    path: '/api/config/permisos/corporativo/crear/tenant',
-    title: 'Crear tenant corporativo (modulo corporativo)',
-    description: 'Crea tenant corporativo desde modulo corporativo.',
-    fields: [
-      { name: 'coporativo', label: 'Corporativo (ID o valor)', type: 'text' },
-      { name: 'nvlGeneracionCoporativoTenant', label: 'Nivel generacion corporativo', type: 'id', required: true },
-      { name: 'tenantGlobalId', label: 'Tenant global destino', type: 'id' },
-    ],
-  },
-  {
-    id: 'perm-corporativo-crear-herencia',
-    section: 'permisos',
-    actor: 'tenantGlobal',
-    method: 'POST',
-    path: '/api/config/permisos/corporativo/crear/herencia/permisos/tenant',
-    title: 'Crear herencia permisos corporativos',
-    description: 'Asigna herencia de vistas y acciones a tenant corporativo.',
-    fields: [
-      { name: 'usuarioId', label: 'Usuario destino', type: 'id' },
-      { name: 'rolId', label: 'Rol ID', type: 'id', required: true },
-      { name: 'tenantCorporativoId', label: 'Tenant corporativo ID', type: 'id', required: true },
-      { name: 'tenantGlobal', label: 'Tenant global ID', type: 'id' },
-      { name: 'acciones', label: 'Acciones (array JSON)', type: 'json', required: true, placeholder: '["id_accion_1","id_accion_2"]' },
-      { name: 'vistas', label: 'Vistas (array JSON)', type: 'json', placeholder: '["id_vista_1","id_vista_2"]' },
-    ],
-  },
-  {
-    id: 'perm-corporativo-crear-nivel',
-    section: 'tenant',
-    actor: 'tenantGlobal',
-    method: 'POST',
-    path: '/api/config/permisos/corporativo/crear/tenant/nvl/corporativo',
-    title: 'Crear nivel corporativo',
-    description: 'Crea nivel corporativo con acciones permitidas.',
-    fields: [
-      { name: 'nombre', label: 'Nombre del nivel', type: 'text', required: true },
-      { name: 'accionesPermitidas', label: 'Acciones permitidas (array JSON)', type: 'json', required: true, placeholder: '["crear","editar","ver"]' },
-      { name: 'heredarPermisos', label: 'Heredar permisos (true/false)', type: 'json', placeholder: 'true' },
-      { name: 'tenantGlobalId', label: 'Tenant global ID', type: 'id' },
-    ],
   },
 ];
 
@@ -1210,6 +1052,92 @@ const ParametrosGobernanza: React.FC = () => {
       return [];
     }
   };
+  const renderHerenciaAsociadaDetalle = (endpointId: string): React.ReactElement | null => {
+    const selectedHerenciaId = getFieldValue(endpointId, 'herenciaAsociada').trim();
+    if (!selectedHerenciaId) return null;
+
+    const byId = herenciaAsociadaDataByEndpoint[endpointId] || {};
+    const row = byId[selectedHerenciaId];
+    if (!row) return null;
+
+    const vistasDetalle = (Array.isArray(row?.vistas) ? row.vistas : [])
+      .map((vista: any) => ({
+        id: String(vista?._id || vista || '').trim(),
+        label: String(vista?.name || vista?.path || vista?._id || vista || '').trim(),
+        path: String(vista?.path || '').trim(),
+      }))
+      .filter((vista) => vista.id);
+
+    const accionesDetalle = (Array.isArray(row?.acciones) ? row.acciones : [])
+      .map((accion: any) => ({
+        id: String(accion?._id || accion || '').trim(),
+        label: String(accion?.etiquetas || accion?.method || accion?._id || accion || '').trim(),
+        method: String(accion?.method || '').trim(),
+      }))
+      .filter((accion) => accion.id);
+    const puedeSeleccionarVista = endpointId === 'perm-admin-tenant-global-desactivar';
+    const vistaObjetivoId = getFieldValue(endpointId, 'vistaObjetivoId').trim();
+
+    return (
+      <div className="md:col-span-2 rounded-lg border border-rose-100 bg-rose-50/50 p-3">
+        <div className="mb-3 flex flex-wrap gap-2">
+          <Badge variant="outline">Vistas: {vistasDetalle.length}</Badge>
+          <Badge variant="outline">Acciones: {accionesDetalle.length}</Badge>
+        </div>
+        <div className="grid gap-3 md:grid-cols-2">
+          <div className="rounded-md border border-slate-200 bg-white p-3">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Vistas parametrizadas</p>
+            {vistasDetalle.length ? (
+              <div className="max-h-48 space-y-2 overflow-auto pr-1">
+                {vistasDetalle.map((vista) => (
+                  <label
+                    key={vista.id}
+                    className={`block rounded border px-2 py-1.5 ${puedeSeleccionarVista && vistaObjetivoId === vista.id ? 'border-rose-300 bg-rose-100' : 'border-slate-100 bg-slate-50'} ${puedeSeleccionarVista ? 'cursor-pointer' : ''}`}
+                  >
+                    {puedeSeleccionarVista ? (
+                      <div className="mb-1 flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name={`${endpointId}-vista-objetivo`}
+                          checked={vistaObjetivoId === vista.id}
+                          onChange={() => setFieldValue(endpointId, 'vistaObjetivoId', vista.id)}
+                        />
+                        <span className="text-xs font-medium text-rose-700">Seleccionar para desactivar</span>
+                      </div>
+                    ) : null}
+                    <p className="text-sm font-medium text-slate-800">{vista.label}</p>
+                    {vista.path ? <p className="text-xs text-slate-500">{vista.path}</p> : null}
+                  </label>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-slate-500">Sin vistas parametrizadas.</p>
+            )}
+            {puedeSeleccionarVista ? (
+              <p className="mt-2 text-xs text-slate-500">
+                Si seleccionas una vista, se quitará solo esa vista de la herencia. Si no seleccionas ninguna, se desactivará la herencia completa.
+              </p>
+            ) : null}
+          </div>
+          <div className="rounded-md border border-slate-200 bg-white p-3">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Acciones parametrizadas</p>
+            {accionesDetalle.length ? (
+              <div className="max-h-48 space-y-2 overflow-auto pr-1">
+                {accionesDetalle.map((accion) => (
+                  <div key={accion.id} className="rounded border border-slate-100 bg-slate-50 px-2 py-1.5">
+                    <p className="text-sm font-medium text-slate-800">{accion.label}</p>
+                    {accion.method ? <p className="text-xs text-slate-500">{accion.method}</p> : null}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-slate-500">Sin acciones parametrizadas.</p>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
   const getPermisosCatalog = (endpointId: string): { vistasCatalogo: Vista[]; accionesCatalogo: Accion[] } => {
     if (endpointId === 'perm-usuario-tenant-global') {
       const selectedHeredaGlobal = getFieldValue(endpointId, 'heredaGlobal').trim();
@@ -1755,7 +1683,16 @@ const ParametrosGobernanza: React.FC = () => {
           body[field.name] = selected ? [selected] : [];
           return;
         }
-        const raw = getFieldValue(endpoint.id, field.name);
+        let raw = getFieldValue(endpoint.id, field.name);
+        if (
+          field.name === 'id' &&
+          (
+            endpoint.id === 'perm-admin-tenant-global-desactivar' ||
+            endpoint.id === 'perm-admin-tenant-global-eliminar'
+          )
+        ) {
+          raw = getFieldValue(endpoint.id, 'herenciaAsociada').trim() || raw;
+        }
         const isOwnerTypeDisabledByCorporativo =
           field.name === 'ownerType' &&
           (
@@ -1814,6 +1751,48 @@ const ParametrosGobernanza: React.FC = () => {
           .replace(':id', encodeURIComponent(herenciaId))
           .replace('{id}', encodeURIComponent(herenciaId));
         setFieldValue(endpoint.id, 'id', herenciaId);
+      }
+
+      let payload: any = { method: endpoint.method, headers };
+      if (endpoint.method !== 'GET' && endpoint.method !== 'DELETE') payload.body = body;
+
+      if (endpoint.id === 'perm-admin-tenant-global-desactivar') {
+        const herenciaId = getFieldValue(endpoint.id, 'herenciaAsociada').trim() || getFieldValue(endpoint.id, 'id').trim();
+        const vistaObjetivoId = getFieldValue(endpoint.id, 'vistaObjetivoId').trim();
+        const row = (herenciaAsociadaDataByEndpoint[endpoint.id] || {})[herenciaId];
+
+        if (vistaObjetivoId) {
+          if (!row) throw new Error('No se pudo resolver la herencia seleccionada');
+
+          const vistasRestantes = (Array.isArray(row?.vistas) ? row.vistas : [])
+            .map((vista: any) => String(vista?._id || vista || '').trim())
+            .filter((id: string) => id && id !== vistaObjetivoId);
+
+          if (!vistasRestantes.length) {
+            throw new Error('Esta herencia solo tiene una vista. Si deseas quitarla, desactiva la herencia completa.');
+          }
+
+          const accionesActuales = (Array.isArray(row?.acciones) ? row.acciones : [])
+            .map((accion: any) => String(accion?._id || accion || '').trim())
+            .filter(Boolean);
+
+          if (!accionesActuales.length) {
+            throw new Error('La herencia no tiene acciones activas para reconstruir la parametrización.');
+          }
+
+          payload = {
+            method: 'PUT',
+            headers,
+            body: {
+              tenantGlobal: getFieldValue(endpoint.id, 'tenantGlobal').trim(),
+              tenantCorporativo: getFieldValue(endpoint.id, 'tenantCorporativo').trim() || undefined,
+              permisos: vistasRestantes.map((vistaId: string) => ({
+                vistaId,
+                accionId: accionesActuales
+              }))
+            }
+          };
+        }
       }
 
       if (endpoint.id === 'perm-usuario-tenant-global') {
@@ -1930,8 +1909,6 @@ const ParametrosGobernanza: React.FC = () => {
         }
       }
 
-      const payload: any = { method: endpoint.method, headers };
-      if (endpoint.method !== 'GET' && endpoint.method !== 'DELETE') payload.body = body;
       const response = await apiFetch(resolvedPath, payload);
       setResultData((prev) => ({ ...prev, [endpoint.id]: response }));
       setResult((prev) => ({ ...prev, [endpoint.id]: JSON.stringify(response, null, 2) }));
@@ -2836,6 +2813,7 @@ const ParametrosGobernanza: React.FC = () => {
                 </p>
               ) : null}
             </div>
+            {renderHerenciaAsociadaDetalle(endpoint.id)}
           </div>
         );
       })() : null}
@@ -2890,6 +2868,7 @@ const ParametrosGobernanza: React.FC = () => {
                 {herenciaOptions.map((h) => <option key={h.id} value={h.id}>{h.label}</option>)}
               </select>
             </div>
+            {renderHerenciaAsociadaDetalle(endpoint.id)}
           </div>
         );
       })() : null}
@@ -2911,6 +2890,7 @@ const ParametrosGobernanza: React.FC = () => {
                   setFieldValue(endpoint.id, 'tenantGlobal', nextValue);
                   setFieldValue(endpoint.id, 'herenciaAsociada', '');
                   setFieldValue(endpoint.id, 'tenantCorporativo', '');
+                  setFieldValue(endpoint.id, 'vistaObjetivoId', '');
                   setFieldValue(endpoint.id, 'id', '');
                   setHerenciaAsociadaOptionsByEndpoint((prev) => ({ ...prev, [endpoint.id]: [] }));
                   setHerenciaAsociadaDataByEndpoint((prev) => ({ ...prev, [endpoint.id]: {} }));
@@ -2930,6 +2910,7 @@ const ParametrosGobernanza: React.FC = () => {
                   const nextId = e.target.value;
                   setFieldValue(endpoint.id, 'herenciaAsociada', nextId);
                   setFieldValue(endpoint.id, 'id', nextId);
+                  setFieldValue(endpoint.id, 'vistaObjetivoId', '');
                   const row = herenciaById[nextId];
                   const tc = String(row?.tenantCorporativo?._id || row?.tenantCorporativo || '').trim();
                   setFieldValue(endpoint.id, 'tenantCorporativo', tc);
@@ -2946,6 +2927,7 @@ const ParametrosGobernanza: React.FC = () => {
                 {herenciaOptions.map((h) => <option key={h.id} value={h.id}>{h.label}</option>)}
               </select>
             </div>
+            {renderHerenciaAsociadaDetalle(endpoint.id)}
           </div>
         );
       })() : null}
@@ -3416,6 +3398,7 @@ const ParametrosGobernanza: React.FC = () => {
               setFieldValue(endpoint.id, 'tenantGlobal', '');
               setFieldValue(endpoint.id, 'herenciaAsociada', '');
               setFieldValue(endpoint.id, 'tenantCorporativo', '');
+              setFieldValue(endpoint.id, 'vistaObjetivoId', '');
               setHerenciaAsociadaOptionsByEndpoint((prev) => ({ ...prev, [endpoint.id]: [] }));
               setHerenciaAsociadaDataByEndpoint((prev) => ({ ...prev, [endpoint.id]: {} }));
             }

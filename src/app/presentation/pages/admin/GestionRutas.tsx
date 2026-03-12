@@ -115,6 +115,10 @@ export default function GestionRutas(): React.ReactElement {
     padreId: null,
     heredaDeRuta: null,
     mostrarEnSidebar: true,
+    mostrarEnMenuUsuario: false,
+    menuUsuarioKey: null,
+    menuUsuarioLabel: '',
+    menuUsuarioOrder: 0,
     accessType: [],
     acciones: [],
   });
@@ -570,6 +574,10 @@ export default function GestionRutas(): React.ReactElement {
       padreId: null,
       heredaDeRuta: null,
       mostrarEnSidebar: true,
+      mostrarEnMenuUsuario: false,
+      menuUsuarioKey: null,
+      menuUsuarioLabel: '',
+      menuUsuarioOrder: 0,
       accessType: [],
       acciones: [],
     });
@@ -604,6 +612,10 @@ export default function GestionRutas(): React.ReactElement {
         padreId: resolveParentId(route),
         heredaDeRuta: resolveInheritedRouteId(route),
         mostrarEnSidebar: route?.mostrarEnSidebar !== false,
+        mostrarEnMenuUsuario: route?.mostrarEnMenuUsuario === true,
+        menuUsuarioKey: route?.menuUsuarioKey || null,
+        menuUsuarioLabel: route?.menuUsuarioLabel || '',
+        menuUsuarioOrder: Number(route?.menuUsuarioOrder ?? 0),
         accessType: resolveAccessTypeIds(route),
         acciones: resolveActionIds(route),
       });
@@ -706,6 +718,14 @@ export default function GestionRutas(): React.ReactElement {
           ? null
           : (formData.padreId || null),
         heredaDeRuta: formData.heredaDeRuta || null,
+        mostrarEnMenuUsuario: formData.mostrarEnMenuUsuario === true,
+        menuUsuarioKey: formData.mostrarEnMenuUsuario === true ? (formData.menuUsuarioKey || null) : null,
+        menuUsuarioLabel: formData.mostrarEnMenuUsuario === true
+          ? String(formData.menuUsuarioLabel || '').trim()
+          : null,
+        menuUsuarioOrder: formData.mostrarEnMenuUsuario === true
+          ? Number(formData.menuUsuarioOrder ?? 0)
+          : 0,
       };
 
       const editingId = editingRoute ? resolveRouteId(editingRoute) : '';

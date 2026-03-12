@@ -19,6 +19,10 @@ interface RouteResponse {
         estadoRuta: boolean;
         mostrarEnSidebar?: boolean;
         mostrarEnNavbarPublico?: boolean;
+        mostrarEnMenuUsuario?: boolean;
+        menuUsuarioKey?: string | null;
+        menuUsuarioLabel?: string | null;
+        menuUsuarioOrder?: number;
         accessType: { _id: string; accessType: string; layout?: string } | Array<{ _id: string; accessType: string; layout?: string }>;
         order: number;
     }>;
@@ -120,6 +124,16 @@ export interface RouteCatalogItem {
     layout: string;
     component: string;
     name: string;
+    mostrarEnMenuUsuario?: boolean;
+    menuUsuarioKey?: string | null;
+    menuUsuarioLabel?: string | null;
+    menuUsuarioOrder?: number;
+}
+
+export interface UserShortcutRoutes {
+    admin: string;
+    perfil: string;
+    membresia: string;
 }
 
 export interface PublicNavItem {
@@ -154,19 +168,13 @@ export interface AdminSidebarTreeContext {
     tree: AdminNavTreeItem[];
 }
 
-const STATIC_SUPERADMIN_ADMIN_ROUTES: Array<{ path: string; component: string }> = [
-    { path: 'dashboard', component: 'DashboardAdmin' },
-    { path: 'productos', component: 'GestionProductos' },
-    { path: 'categorias', component: 'GestionCategorias' },
-    { path: 'usuarios', component: 'GestionUsuarios' },
-    { path: 'referidos', component: 'GestionReferidos' },
-    { path: 'pedidos', component: 'PedidosAdmin' },
-    { path: 'rutas', component: 'GestionRutas' },
-    { path: 'parametrizacion', component: 'Parametrizacion' },
-    { path: 'parametrizacion-corporativa', component: 'ParametrizacionCorporativa' },
-    { path: 'personalizacion/modal-inicio', component: 'ModalInicio' },
-    { path: 'configuracion', component: 'ConfiguracionAdmin' }
-];
+const isFormularioNode = (node: { tipoNodo?: string | null; children?: any[] }): boolean =>
+    String(node?.tipoNodo || '').trim().toUpperCase() === 'FORMULARIO';
+
+const filterRootsByActorTipo = (roots: AdminNavTreeItem[], actorTipo: AdminActorTipo): AdminNavTreeItem[] => {
+    if (actorTipo === 'SUPERADMIN') return roots;
+    return roots.filter((node) => !isFormularioNode(node) || (Array.isArray(node.children) && node.children.length > 0));
+};
 
 const fetchAllSecurityRoutes = async (useAuth: boolean): Promise<RouteResponse | null> => {
     try {
@@ -212,11 +220,92 @@ export const getRouteCatalog = async (): Promise<RouteCatalogItem[]> => {
                 path: normalizeRoutePath(r.path),
                 layout: r.layout.replace("/", "").trim(),
                 component: r.component.replace(/\.(jsx|tsx|js|ts)$/i, ""),
-                name: r.name
+                name: r.name,
+                mostrarEnMenuUsuario: r.mostrarEnMenuUsuario === true,
+                menuUsuarioKey: String(r.menuUsuarioKey || '').trim() || null,
+                menuUsuarioLabel: String(r.menuUsuarioLabel || '').trim() || null,
+                menuUsuarioOrder: Number(r.menuUsuarioOrder ?? 0),
             }));
     } catch (error) {
         console.error("Error al obtener catalogo de rutas:", error);
         return [];
+    }
+};
+
+const normalizeText = (value: string): string =>
+    String(value || '').trim().toLowerCase();
+
+const toAppRoutePath = (route: RouteCatalogItem): string => {
+    const normalizedPath = normalizeRoutePath(route.path);
+    if (isAdminLayout(route.layout)) {
+        return normalizedPath.startsWith('/admin')
+            ? normalizedPath
+            : `/admin/${toRelativeRoutePath(normalizedPath)}`;
+    }
+    return normalizedPath;
+};
+
+const findCatalogRoute = (
+    catalog: RouteCatalogItem[],
+    options: {
+        paths?: string[];
+        components?: string[];
+        names?: string[];
+    }
+): RouteCatalogItem | undefined => {
+    const expectedPaths = (options.paths || []).map((value) => normalizeRoutePath(value));
+    const expectedComponents = (options.components || []).map(normalizeText);
+    const expectedNames = (options.names || []).map(normalizeText);
+
+    return catalog.find((route) => {
+        const routePath = normalizeRoutePath(route.path);
+        const routeComponent = normalizeText(route.component);
+        const routeName = normalizeText(route.name);
+
+        return expectedPaths.includes(routePath)
+            || expectedComponents.includes(routeComponent)
+            || expectedNames.includes(routeName);
+    });
+};
+
+export const getUserShortcutRoutes = async (): Promise<UserShortcutRoutes> => {
+    try {
+        const catalog = await getRouteCatalog();
+
+        const adminByMenu = catalog.find((route) => route.mostrarEnMenuUsuario && route.menuUsuarioKey === 'PANEL_ADMIN');
+        const perfilByMenu = catalog.find((route) => route.mostrarEnMenuUsuario && route.menuUsuarioKey === 'MI_PERFIL');
+        const membresiaByMenu = catalog.find((route) => route.mostrarEnMenuUsuario && route.menuUsuarioKey === 'MI_MEMBRESIA');
+
+        const adminRoute = adminByMenu || findCatalogRoute(catalog, {
+            paths: ['/admin/gestor-rutas/administracion/dashboardadmin', '/admin/dashboardadmin', '/admin/dashboard'],
+            components: ['DashboardAdmin'],
+            names: ['DashboardAdmin', 'Panel Admin', 'Dashboard'],
+        });
+
+        const perfilRoute = perfilByMenu || findCatalogRoute(catalog, {
+            paths: ['/perfil', '/mi-perfil', '/perfil/usuario'],
+            components: ['Perfil', 'ConfiguracionPerfil'],
+            names: ['Perfil', 'Mi Perfil'],
+        });
+
+        const membresiaRoute = membresiaByMenu || findCatalogRoute(catalog, {
+            paths: ['/membresia/dashboard', '/mi-membresia'],
+            components: ['MembershipDashboard'],
+            names: ['Mi Membresía', 'Mi Membresia', 'Membresía', 'Membresia'],
+        });
+
+        return {
+            admin: adminRoute ? toAppRoutePath(adminRoute) : '/admin/dashboard',
+            perfil: perfilRoute ? toAppRoutePath(perfilRoute) : '/perfil',
+            membresia: membresiaRoute ? toAppRoutePath(membresiaRoute) : '/membresia/dashboard',
+        };
+    } catch (error) {
+        console.error('Error al resolver shortcuts de usuario:', error);
+        return {
+            admin: '/admin/dashboard',
+            perfil: '/perfil',
+            membresia: '/membresia/dashboard',
+        };
     }
 };
 
@@ -295,10 +384,6 @@ export const getAuthorizedRoutes = async (): Promise<AuthorizedRoutes> => {
                     path: toRelativeRoutePath(String(r.path || '').replace(/^\/admin\//i, '')),
                     component: normalizeComponent(r.component),
                 }));
-                if (actorTipo === 'SUPERADMIN') {
-                    // SUPERADMIN sin herencia: usar BD; si no hay datos, fallback quemado.
-                    adminRoutes = adminRoutes.length > 0 ? adminRoutes : [...STATIC_SUPERADMIN_ADMIN_ROUTES];
-                }
             }
         }
 
@@ -473,7 +558,9 @@ export const getAdminSidebarFallbackTree = async (actorTipo: AdminActorTipo): Pr
 
             if (parentId && nodesById.has(parentId)) {
                 nodesById.get(parentId)?.children.push(currentNode);
-            } else {
+            } else if (parentId && actorTipo === 'SUPERADMIN') {
+                roots.push(currentNode);
+            } else if (!parentId) {
                 roots.push(currentNode);
             }
         });
@@ -484,7 +571,7 @@ export const getAdminSidebarFallbackTree = async (actorTipo: AdminActorTipo): Pr
         };
         sortTree(roots);
 
-        return roots;
+        return filterRootsByActorTipo(roots, actorTipo);
     } catch (error) {
         console.error("Error al construir arbol fallback admin dinamico:", error);
         return [];
@@ -508,7 +595,7 @@ export const getAdminSidebarTreeWithContext = async (): Promise<AdminSidebarTree
             const actorTipo = String(treeResult?.actorTipo || '').trim().toUpperCase() as AdminActorTipo;
             return {
                 actorTipo: actorTipo || 'UNKNOWN',
-                tree: mapTreeNodes(treeResult.data)
+                tree: filterRootsByActorTipo(mapTreeNodes(treeResult.data), actorTipo || 'UNKNOWN')
             };
         }
         return { actorTipo: 'UNKNOWN', tree: [] };
@@ -520,11 +607,11 @@ export const getAdminSidebarTreeWithContext = async (): Promise<AdminSidebarTree
 
 export const getPrivateHomeRoute = async (): Promise<string> => {
     try {
-        const adminRoutes = await getAdminSidebarRoutes();
-        if (!adminRoutes.length) return "/admin/dashboard";
-
-        const firstRoute = adminRoutes[0];
-        return firstRoute.path.startsWith("/") ? firstRoute.path : `/${firstRoute.path}`;
+        const shortcuts = await getUserShortcutRoutes();
+        if (shortcuts.admin && shortcuts.admin.trim()) {
+            return shortcuts.admin;
+        }
+        return "/admin/dashboard";
     } catch (_error) {
         return "/admin/dashboard";
     }

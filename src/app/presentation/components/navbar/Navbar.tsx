@@ -19,7 +19,7 @@ import { Menu, ShoppingCart, User, X, Trash2, ShieldCheck, LogOut, LogIn, Chevro
 import ThemeToggle from "@/app/presentation/components/common/ThemeToggle";
 
 import { apiFetch } from "@/app/services/api";
-import { getPrivateHomeRoute, getPublicNavigationRoutes } from "@/app/services/routeService";
+import { getPrivateHomeRoute, getPublicNavigationRoutes, getUserShortcutRoutes } from "@/app/services/routeService";
 
 import type { NavbarProps } from '@/types/components';
 
@@ -57,6 +57,8 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
     const [logoError, setLogoError] = useState<boolean>(false);
     const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
     const [privateHomePath, setPrivateHomePath] = useState<string>('/admin/dashboard');
+    const [profilePath, setProfilePath] = useState<string>('/perfil');
+    const [membershipPath, setMembershipPath] = useState<string>('/membresia/dashboard');
     const menuItemsWithoutCart = menuItems.filter((item) => {
         const normalizedLabel = String(item.label || '').trim().toLowerCase();
         const normalizedPath = String(item.path || '').trim().toLowerCase();
@@ -69,20 +71,16 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
     useEffect(() => {
         const fetchHeaderData = async (): Promise<void> => {
             try {
-                const requests: Promise<any>[] = [
+                const [logoRes, dynamicRoutes, privateHome, shortcutRoutes] = await Promise.all([
                     apiFetch('/api/config/parametrizacion/listar/logos/coporativo', {
                         method: 'GET',
                         useAuth: false,
                         logoutOn401: false
                     }),
                     getPublicNavigationRoutes(),
-                ];
-
-                if (hasAdminScope) {
-                    requests.push(getPrivateHomeRoute());
-                }
-
-                const [logoRes, dynamicRoutes, privateHome] = await Promise.all(requests);
+                    hasAdminScope ? getPrivateHomeRoute() : Promise.resolve<string | null>(null),
+                    user ? getUserShortcutRoutes() : Promise.resolve(null)
+                ]);
 
                 if (logoRes?.ok && logoRes?.logo) {
                     const { base64, mimetype } = logoRes.logo;
@@ -104,6 +102,18 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
                 if (typeof privateHome === 'string' && privateHome.trim()) {
                     setPrivateHomePath(privateHome);
                 }
+
+                if (shortcutRoutes && typeof shortcutRoutes === 'object') {
+                    if (typeof shortcutRoutes.perfil === 'string' && shortcutRoutes.perfil.trim()) {
+                        setProfilePath(shortcutRoutes.perfil);
+                    }
+                    if (typeof shortcutRoutes.membresia === 'string' && shortcutRoutes.membresia.trim()) {
+                        setMembershipPath(shortcutRoutes.membresia);
+                    }
+                    if (!hasAdminScope && typeof shortcutRoutes.admin === 'string' && shortcutRoutes.admin.trim()) {
+                        setPrivateHomePath(shortcutRoutes.admin);
+                    }
+                }
             } catch (err) {
                 console.error('Error en el flujo de header dinamico:', err);
                 setLogoError(true);
@@ -113,7 +123,7 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
         };
 
         fetchHeaderData();
-    }, [hasAdminScope]);
+    }, [hasAdminScope, user]);
 
     useEffect(() => {
         const handleScroll = (): void => {
@@ -279,7 +289,7 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
                     </div>
                 </div>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => navigate("/perfil")} className="cursor-pointer py-2.5">
+                <DropdownMenuItem onClick={() => navigate(profilePath)} className="cursor-pointer py-2.5">
                     <User className="mr-2 h-4 w-4" /> Mi Perfil
                 </DropdownMenuItem>
                 {hasAdminScope && (
@@ -288,7 +298,7 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
                     </DropdownMenuItem>
                 )}
                 {user && hasActiveMembership && (
-                    <DropdownMenuItem onClick={() => navigate("/membresia/dashboard")} className="cursor-pointer py-2.5">
+                    <DropdownMenuItem onClick={() => navigate(membershipPath)} className="cursor-pointer py-2.5">
                         <Crown className="mr-2 h-4 w-4" /> Mi Membresía
                     </DropdownMenuItem>
                 )}
@@ -354,7 +364,7 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
                         )}
                         {user && hasActiveMembership && (
                             <SheetClose asChild>
-                                <Link to="/membresia/dashboard" className="flex items-center justify-between px-4 py-3 text-base font-medium rounded-xl transition-all duration-200 border border-transparent hover:bg-accent/50 hover:border-accent text-foreground">
+                                <Link to={membershipPath} className="flex items-center justify-between px-4 py-3 text-base font-medium rounded-xl transition-all duration-200 border border-transparent hover:bg-accent/50 hover:border-accent text-foreground">
                                     <span className="font-semibold flex items-center"><Crown className="mr-3 h-5 w-5" /> Mi Membresía</span>
                                     <ChevronRight className="h-4 w-4 text-muted-foreground" />
                                 </Link>
@@ -375,7 +385,7 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
                         {user ? (
                             <>
                                 <SheetClose asChild>
-                                    <Button variant="outline" onClick={() => navigate('/perfil')} className="w-full justify-start font-semibold py-3 rounded-xl border-border/50 hover:border-primary/50">
+                                    <Button variant="outline" onClick={() => navigate(profilePath)} className="w-full justify-start font-semibold py-3 rounded-xl border-border/50 hover:border-primary/50">
                                         <User className="mr-3 h-4 w-4" /> Mi Perfil
                                     </Button>
                                 </SheetClose>
