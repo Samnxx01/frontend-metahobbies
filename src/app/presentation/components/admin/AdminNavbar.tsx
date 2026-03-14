@@ -1,22 +1,29 @@
-// src/presentation/components/admin/AdminNavbar.tsx
 import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useAuth } from '@/app/providers/AuthProvider'
 import { useTheme } from 'next-themes'
+import { useAuth } from '@/app/providers/AuthProvider'
 import { useMembership } from '@/app/hooks/useMembership'
 import { apiFetch } from '@/app/services/api'
-
-// Shadcn UI components
+import { getPrivateHomeRoute, getUserShortcutRoutes } from '@/app/services/routeService'
+import { resolveCurrentRouteMenuTags, RouteMenuTag } from '@/app/services/routesService'
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-
-// Lucide icons
-import { Menu, Sun, Moon, Home, LogOut, User as UserIcon, Crown } from 'lucide-react'
-
+import { Crown, Home, Landmark, LayoutDashboard, LogOut, Menu, Moon, Settings, Sun, User as UserIcon } from 'lucide-react'
 import type { AdminNavbarProps } from '@/types/components'
 
 const DEFAULT_LOGO = "/assets/logo.png"
+const ADMIN_PROFILE_VIEW_PATH = '/admin/parametros/perfil/visualizacion'
+
+const MENU_ICON_MAP: Record<string, React.ElementType> = {
+    USER: UserIcon,
+    HOME: Home,
+    CROWN: Crown,
+    LAYOUT_DASHBOARD: LayoutDashboard,
+    SETTINGS: Settings,
+    LANDMARK: Landmark,
+    CIRCLE: UserIcon,
+}
 
 export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarProps): React.ReactElement {
     const navigate = useNavigate()
@@ -25,6 +32,10 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
     const { hasActiveMembership } = useMembership()
     const [logoUrl, setLogoUrl] = useState<string>(DEFAULT_LOGO)
     const [logoError, setLogoError] = useState<boolean>(false)
+    const [adminHomePath, setAdminHomePath] = useState<string>('/admin')
+    const [profilePath, setProfilePath] = useState<string>(ADMIN_PROFILE_VIEW_PATH)
+    const [membershipPath, setMembershipPath] = useState<string>('/membresia/dashboard')
+    const [dynamicMenuTags, setDynamicMenuTags] = useState<RouteMenuTag[]>([])
 
     useEffect(() => {
         let active = true
@@ -74,6 +85,55 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
         }
     }, [user?._id, user?.correo, user?.rol])
 
+    useEffect(() => {
+        let active = true
+
+        const cargarShortcuts = async (): Promise<void> => {
+            try {
+                const [shortcuts, privateHome] = await Promise.all([
+                    getUserShortcutRoutes(),
+                    getPrivateHomeRoute()
+                ])
+
+                if (!active) return
+                setAdminHomePath(privateHome || '/admin')
+                setProfilePath(ADMIN_PROFILE_VIEW_PATH)
+                setMembershipPath(shortcuts.membresia || '/membresia/dashboard')
+            } catch (_error) {
+                if (!active) return
+                setAdminHomePath('/admin')
+                setProfilePath(ADMIN_PROFILE_VIEW_PATH)
+                setMembershipPath('/membresia/dashboard')
+            }
+        }
+
+        cargarShortcuts()
+        return () => {
+            active = false
+        }
+    }, [user?._id])
+
+    useEffect(() => {
+        let active = true
+
+        const cargarMenuDinamico = async (): Promise<void> => {
+            try {
+                const response = await resolveCurrentRouteMenuTags({ menuTipo: 'USER_DROPDOWN' })
+                if (!active) return
+                setDynamicMenuTags(Array.isArray(response?.data) ? response.data.filter((item) => item.estado !== false) : [])
+            } catch (error) {
+                if (!active) return
+                console.error('Error cargando menu dinamico del avatar:', error)
+                setDynamicMenuTags([])
+            }
+        }
+
+        cargarMenuDinamico()
+        return () => {
+            active = false
+        }
+    }, [user?._id])
+
     const toggleTheme = (): void => {
         setTheme(theme === 'dark' ? 'light' : 'dark')
     }
@@ -107,7 +167,14 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
         return user?.correo || 'admin@example.com'
     }
 
-    // Dropdown de perfil mejorado y seguro (estilo PublicLayout)
+    const menuItems = dynamicMenuTags.map((tag) => ({
+        key: tag.iud,
+        label: tag.label,
+        path: tag.ruta?.path || tag.routePath,
+        Icon: MENU_ICON_MAP[String(tag.iconKey || '').toUpperCase()] || UserIcon,
+        visible: true,
+    }))
+
     const renderProfileDropdown = (
         <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -119,10 +186,7 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
                     </Avatar>
                 </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent
-                className="w-56 backdrop-blur-lg border-none shadow-xl"
-                align="end"
-            >
+            <DropdownMenuContent className="w-56 backdrop-blur-lg border-none shadow-xl" align="end">
                 <div className="flex items-center gap-2 p-3">
                     <Avatar className="h-9 w-9">
                         <AvatarFallback className="bg-primary text-primary-foreground text-sm">
@@ -135,52 +199,43 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
                     </div>
                 </div>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => navigate("/perfil")} className="cursor-pointer py-2.5">
-                    <UserIcon className="mr-2 h-4 w-4" />
-                    Mi Perfil
-                </DropdownMenuItem>
-
-                <DropdownMenuItem onClick={() => navigate("/")} className="cursor-pointer py-2.5">
-                    <Home className="mr-2 h-4 w-4" />
-                    Inicio
-                </DropdownMenuItem>
-
-                {hasActiveMembership && (
-                    <DropdownMenuItem onClick={() => navigate("/membresia/dashboard")} className="cursor-pointer py-2.5">
-                        <Crown className="mr-2 h-4 w-4" />
-                        Membresía
-                    </DropdownMenuItem>
-                )}
-
-                <DropdownMenuSeparator />
+                {menuItems.filter((item) => item.visible && item.path).length > 0 ? (
+                    <>
+                        {menuItems.filter((item) => item.visible && item.path).map((item) => {
+                            const Icon = item.Icon
+                            return (
+                                <DropdownMenuItem key={item.key} onClick={() => navigate(item.path)} className="cursor-pointer py-2.5">
+                                    <Icon className="mr-2 h-4 w-4" />
+                                    {item.label}
+                                </DropdownMenuItem>
+                            )
+                        })}
+                        <DropdownMenuSeparator />
+                    </>
+                ) : null}
                 <DropdownMenuItem onClick={handleLogout} className="cursor-pointer text-destructive focus:text-destructive py-2.5">
                     <LogOut className="mr-2 h-4 w-4" />
-                    Cerrar Sesión
+                    Cerrar Sesion
                 </DropdownMenuItem>
             </DropdownMenuContent>
         </DropdownMenu>
     )
 
     return (
-        <header
-            className="fixed top-0 left-0 right-0 z-50 shadow-lg backdrop-blur-md bg-background/95 border-b border-border h-16"
-        >
+        <header className="fixed top-0 left-0 right-0 z-50 shadow-lg backdrop-blur-md bg-background/95 border-b border-border h-16">
             <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-
-                {/* --- IZQUIERDA: Logo y Menú Mobile --- */}
                 <div className="flex items-center gap-4">
                     <Button variant="ghost" size="icon" className="md:hidden" onClick={handleMenuToggle}>
                         <Menu className="h-6 w-6" />
                         <span className="sr-only">Toggle sidebar</span>
                     </Button>
 
-                    {/* Logo */}
                     <div className="dark:bg-white dark:rounded-lg dark:p-1.5 dark:shadow-sm">
                         <img
                             src={logoError ? DEFAULT_LOGO : logoUrl}
                             alt="Mabs Logo"
                             className="h-7 md:h-8 cursor-pointer flex-shrink-0 hover:opacity-80 transition-opacity"
-                            onClick={() => navigate("/admin/dashboard")}
+                            onClick={() => navigate(adminHomePath)}
                             onError={() => {
                                 setLogoError(true)
                                 setLogoUrl(DEFAULT_LOGO)
@@ -189,18 +244,12 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
                     </div>
                 </div>
 
-                {/* --- DERECHA: Toggle Theme y Perfil --- */}
                 <div className="flex items-center gap-2">
-                    
-                    {/* Toggle Theme */}
                     <Button variant="ghost" size="icon" onClick={toggleTheme} className="h-9 w-9">
                         {theme === 'dark' ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5" />}
                         <span className="sr-only">Toggle theme</span>
                     </Button>
-
-                    {/* Avatar Dropdown */}
                     {renderProfileDropdown}
-
                 </div>
             </div>
         </header>

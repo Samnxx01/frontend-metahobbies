@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import ReactECharts from 'echarts-for-react';
 import { apiFetch } from '@/app/services/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
     Loader2, Users, AlertCircle, RefreshCcw,
@@ -167,11 +166,22 @@ function MembresiaFila({ item }: { item: MembresiasSinReferidoItem }) {
     );
 }
 
-export default function KPIUsuarioMembresia() {
+interface KPIUsuarioMembresiaProps {
+    filtro?: string;
+    showTable?: boolean;
+    showSearch?: boolean;
+    onFiltroChange?: (value: string) => void;
+}
+
+export default function KPIUsuarioMembresia({
+    filtro = '',
+    showTable = true,
+    showSearch = false,
+    onFiltroChange,
+}: KPIUsuarioMembresiaProps) {
     const [data, setData] = useState<RawData | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [filtro, setFiltro] = useState('');
     const [pagina, setPagina] = useState(1);
     const POR_PAGINA = 10;
 
@@ -241,10 +251,9 @@ export default function KPIUsuarioMembresia() {
     const paginaActual = Math.min(pagina, totalPaginas);
     const itemsPagina = itemsFiltrados.slice((paginaActual - 1) * POR_PAGINA, paginaActual * POR_PAGINA);
 
-    const handleFiltro = (e: React.ChangeEvent<HTMLInputElement>) => {
-        setFiltro(e.target.value);
-        setPagina(1); // resetear al buscar
-    };
+    useEffect(() => {
+        setPagina(1);
+    }, [filtro]);
 
     if (loading) return (
         <div className="flex items-center justify-center py-16 gap-2 text-muted-foreground">
@@ -347,30 +356,31 @@ export default function KPIUsuarioMembresia() {
             </div>
 
             {/* Tabla de membresías */}
-            <Card className="border border-border/50 shadow-sm">
-                {/* Buscador + contador */}
-                <div className="px-5 pt-4 pb-3 border-b border-border/40 flex items-center gap-3 flex-wrap">
+            {showTable && (
+                <Card className="border border-border/50 shadow-sm">
+                {/* Encabezado de tabla */}
+                <div className="px-5 pt-4 pb-3 border-b border-border/40 flex items-center justify-between gap-3 flex-wrap">
                     <div className="flex items-center gap-2 shrink-0">
                         <Hash className="w-3.5 h-3.5 text-muted-foreground" />
                         <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">
                             Registro de membresías
                         </span>
                     </div>
-                    <input
-                        type="text"
-                        value={filtro}
-                        onChange={handleFiltro}
-                        placeholder="Buscar por correo o referencia..."
-                        className="
-                            flex-1 min-w-[200px] h-8 px-3 rounded-lg border border-border/60 bg-muted/30
-                            text-xs text-foreground placeholder:text-muted-foreground
-                            focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/40
-                            transition-colors
-                        "
-                    />
-                    <Badge variant="secondary" className="text-[10px] shrink-0">
-                        {itemsFiltrados.length} resultado{itemsFiltrados.length !== 1 ? 's' : ''}
-                    </Badge>
+                    {showSearch && (
+                        <div className="flex items-center gap-2 rounded-xl border border-border/50 bg-background/90 px-3 py-2 shadow-sm w-full sm:w-auto sm:min-w-[320px]">
+                            <Hash className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                            <input
+                                type="text"
+                                value={filtro}
+                                onChange={(e) => onFiltroChange?.(e.target.value)}
+                                placeholder="Buscar por correo o referencia..."
+                                className="
+                                    h-7 w-full bg-transparent text-xs text-foreground placeholder:text-muted-foreground
+                                    focus:outline-none
+                                "
+                            />
+                        </div>
+                    )}
                 </div>
 
                 {/* Tabla */}
@@ -519,7 +529,8 @@ export default function KPIUsuarioMembresia() {
                         </div>
                     )}
                 </CardContent>
-            </Card>
+                </Card>
+            )}
         </section>
     );
 }

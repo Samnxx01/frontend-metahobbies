@@ -67,6 +67,8 @@ export interface Product {
 export interface CartItem extends Product {
   quantity: number;
   addedAt: string;
+  /** _id del subdocumento en el carrito del backend (necesario para update/delete) */
+  backendItemId?: string;
 }
 
 // Cart summary interface
@@ -91,6 +93,16 @@ export interface User {
   telefono?: string;
   direccion?: string;
   fechaCreacion?: string;
+  tenantSuperAdminId?: string | null;
+  tenantGlobalId?: string | null;
+  tenantCorporativoId?: string | null;
+  auth?: {
+    tenantScope?: {
+      tenantSuperAdminId?: string | null;
+      tenantGlobalId?: string | null;
+      tenantCorporativoId?: string | null;
+    };
+  };
 }
 
 // Tipos para respuestas de API
@@ -127,4 +139,42 @@ export interface ClientProfile {
   paisId: string;
   departamentoId: string;
   ciudadId: string;
+}
+
+export interface BankAccountType {
+  codigo: string;
+  nombre: string;
+  iud?: string;
+}
+
+export interface WompiBankCatalogItem {
+  iud: string;
+  wompiBankId: string;
+  nombre: string;
+  codigo?: string | null;
+  estado: boolean;
+}
+
+export interface BankAccount {
+  iud: string;
+  nombre_titular: string;
+  tipo_documento?: {
+    iud?: string;
+    _id?: string;
+    tipos?: string;
+    nombreDocumento?: string;
+  } | string | null;
+  numero_documento: string;
+  banco: string;
+  banco_codigo?: string | null;
+  tipo_cuenta_codigo: 'AHORROS' | 'CORRIENTE';
+  numero_cuenta: string;
+  numero_cuenta_mascara?: string;
+  correo_titular?: string | null;
+  telefono_titular?: string | null;
+  es_principal: boolean;
+  permite_pago_automatico: boolean;
+  estado: boolean;
+  creadoEl?: string;
+  actualizadoEl?: string;
 }

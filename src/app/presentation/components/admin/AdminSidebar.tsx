@@ -74,27 +74,12 @@ export default function AdminSidebar({ mobileOpen, setMobileOpen }: AdminSidebar
     useEffect(() => {
         let active = true;
 
-        const staticSuperAdminMenu: MenuTreeItem[] = [
-            { id: 'static:/admin/dashboard', label: 'Dashboard', path: '/admin/dashboard', icon: iconByPath('/admin/dashboard'), tipoNodo: 'FORMULARIO', children: [] },
-            { id: 'static:/admin/productos', label: 'Productos', path: '/admin/productos', icon: iconByPath('/admin/productos'), tipoNodo: 'FORMULARIO', children: [] },
-            { id: 'static:/admin/categorias', label: 'Categorias', path: '/admin/categorias', icon: iconByPath('/admin/categorias'), tipoNodo: 'FORMULARIO', children: [] },
-            { id: 'static:/admin/usuarios', label: 'Usuarios', path: '/admin/usuarios', icon: iconByPath('/admin/usuarios'), tipoNodo: 'FORMULARIO', children: [] },
-            { id: 'static:/admin/referidos', label: 'Referidos', path: '/admin/referidos', icon: iconByPath('/admin/referidos'), tipoNodo: 'FORMULARIO', children: [] },
-            { id: 'static:/admin/pedidos', label: 'Pedidos', path: '/admin/pedidos', icon: iconByPath('/admin/pedidos'), tipoNodo: 'FORMULARIO', children: [] },
-            { id: 'static:/admin/rutas', label: 'Rutas', path: '/admin/rutas', icon: iconByPath('/admin/rutas'), tipoNodo: 'FORMULARIO', children: [] },
-            { id: 'static:/admin/parametrizacion', label: 'Parametrizacion', path: '/admin/parametrizacion', icon: iconByPath('/admin/parametrizacion'), tipoNodo: 'FORMULARIO', children: [] },
-            { id: 'static:/admin/parametrizacion-corporativa', label: 'Parametrizacion Corporativa', path: '/admin/parametrizacion-corporativa', icon: iconByPath('/admin/parametrizacion-corporativa'), tipoNodo: 'FORMULARIO', children: [] },
-            { id: 'static:/admin/gobernanza', label: 'Gobernanza', path: '/admin/gobernanza/parametros/parametros-gobernanza', icon: iconByPath('/admin/gobernanza/parametros/parametros-gobernanza'), tipoNodo: 'FORMULARIO', children: [] },
-            { id: 'static:/admin/personalizacion/modal-inicio', label: 'Publicidad y Posts', path: '/admin/personalizacion/modal-inicio', icon: iconByPath('/admin/personalizacion/modal-inicio'), tipoNodo: 'FORMULARIO', children: [] },
-            { id: 'static:/admin/configuracion', label: 'Configuracion', path: '/admin/configuracion', icon: iconByPath('/admin/configuracion'), tipoNodo: 'FORMULARIO', children: [] }
-        ];
-
         const loadDynamicMenu = async (): Promise<void> => {
             try {
-                const { tree: routes, actorTipo: actor } = await getAdminSidebarTreeWithContext();
+                const { tree: routes, actorTipo } = await getAdminSidebarTreeWithContext();
                 if (!active) return;
                 if (!routes.length) {
-                    const fallbackTree = await getAdminSidebarFallbackTree(actor);
+                    const fallbackTree = await getAdminSidebarFallbackTree(actorTipo);
                     if (!active) return;
                     if (fallbackTree.length > 0) {
                         const mappedFallbackTree: MenuTreeItem[] = fallbackTree.map(function mapFallbackNode(node): MenuTreeItem {
@@ -108,8 +93,6 @@ export default function AdminSidebar({ mobileOpen, setMobileOpen }: AdminSidebar
                             };
                         });
                         setDynamicTree(mappedFallbackTree);
-                    } else if (actor === 'SUPERADMIN') {
-                        setDynamicTree(staticSuperAdminMenu);
                     } else {
                         setDynamicTree([]);
                     }

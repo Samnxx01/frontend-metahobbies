@@ -5,7 +5,6 @@ import { toast } from 'react-toastify';
 // Importar Providers
 import { useAuth } from "@/app/providers/AuthProvider";
 import { useCart } from "@/app/providers/CartProvider";
-import { useMembership } from "@/app/providers/MembershipProvider";
 // Shadcn UI components
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetClose } from "@/components/ui/sheet";
@@ -19,7 +18,7 @@ import { Menu, ShoppingCart, User, X, Trash2, ShieldCheck, LogOut, LogIn, Chevro
 import ThemeToggle from "@/app/presentation/components/common/ThemeToggle";
 
 import { apiFetch } from "@/app/services/api";
-import { getPrivateHomeRoute, getPublicNavigationRoutes } from "@/app/services/routeService";
+import { getPublicNavigationRoutes, getMenuUsuarioRoutes, MenuUsuarioItem } from "@/app/services/routeService";
 
 import type { NavbarProps } from '@/types/components';
 
@@ -49,40 +48,31 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
     const { cartItems, removeFromCart } = useCart();
     const totalItems = cartItems.reduce((sum, item) => sum + item.quantity, 0);
     const cartTotal = cartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-    const { hasActiveMembership } = useMembership();
     const [isScrolled, setIsScrolled] = useState<boolean>(false);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
 
     const [logoUrl, setLogoUrl] = useState<string>(DEFAULT_LOGO);
     const [logoError, setLogoError] = useState<boolean>(false);
     const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
-    const [privateHomePath, setPrivateHomePath] = useState<string>('/admin/dashboard');
+    const [menuUsuarioItems, setMenuUsuarioItems] = useState<MenuUsuarioItem[]>([]);
     const menuItemsWithoutCart = menuItems.filter((item) => {
         const normalizedLabel = String(item.label || '').trim().toLowerCase();
         const normalizedPath = String(item.path || '').trim().toLowerCase();
         return normalizedLabel !== 'carrito' && normalizedPath !== '/carrito';
     });
 
-    const userRole = String(user?.role || user?.rol || '').toUpperCase();
-    const hasAdminScope = ['ADMIN', 'DIOS', 'DESAROLLADOR'].includes(userRole);
-
     useEffect(() => {
         const fetchHeaderData = async (): Promise<void> => {
             try {
-                const requests: Promise<any>[] = [
+                const [logoRes, dynamicRoutes, usuarioItems] = await Promise.all([
                     apiFetch('/api/config/parametrizacion/listar/logos/coporativo', {
                         method: 'GET',
                         useAuth: false,
                         logoutOn401: false
                     }),
                     getPublicNavigationRoutes(),
-                ];
-
-                if (hasAdminScope) {
-                    requests.push(getPrivateHomeRoute());
-                }
-
-                const [logoRes, dynamicRoutes, privateHome] = await Promise.all(requests);
+                    user ? getMenuUsuarioRoutes() : Promise.resolve([])
+                ]);
 
                 if (logoRes?.ok && logoRes?.logo) {
                     const { base64, mimetype } = logoRes.logo;
@@ -101,9 +91,7 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
                     path: route.path
                 })));
 
-                if (typeof privateHome === 'string' && privateHome.trim()) {
-                    setPrivateHomePath(privateHome);
-                }
+                setMenuUsuarioItems(usuarioItems);
             } catch (err) {
                 console.error('Error en el flujo de header dinamico:', err);
                 setLogoError(true);
@@ -113,7 +101,7 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
         };
 
         fetchHeaderData();
-    }, [hasAdminScope]);
+    }, [user]);
 
     useEffect(() => {
         const handleScroll = (): void => {
@@ -255,6 +243,16 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
         </DropdownMenu>
     );
 
+    const ICON_MAP: Record<string, React.ReactNode> = {
+        USER:         <User className="mr-2 h-4 w-4" />,
+        SHIELD_CHECK: <ShieldCheck className="mr-2 h-4 w-4" />,
+        CROWN:        <Crown className="mr-2 h-4 w-4" />,
+        LOG_OUT:      <LogOut className="mr-2 h-4 w-4" />,
+    };
+
+    const resolveIcon = (icon: string | null): React.ReactNode =>
+        (icon && ICON_MAP[icon.toUpperCase()]) ?? <ChevronRight className="mr-2 h-4 w-4" />;
+
     const renderProfileDropdown = (
         <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -279,19 +277,11 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
                     </div>
                 </div>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => navigate("/perfil")} className="cursor-pointer py-2.5">
-                    <User className="mr-2 h-4 w-4" /> Mi Perfil
-                </DropdownMenuItem>
-                {hasAdminScope && (
-                    <DropdownMenuItem onClick={() => navigate(privateHomePath)} className="cursor-pointer py-2.5">
-                        <ShieldCheck className="mr-2 h-4 w-4" /> Panel Admin
+                {menuUsuarioItems.map((item) => (
+                    <DropdownMenuItem key={item.key ?? item.path} onClick={() => navigate(item.path)} className="cursor-pointer py-2.5">
+                        {resolveIcon(item.icon)} {item.label}
                     </DropdownMenuItem>
-                )}
-                {user && hasActiveMembership && (
-                    <DropdownMenuItem onClick={() => navigate("/membresia/dashboard")} className="cursor-pointer py-2.5">
-                        <Crown className="mr-2 h-4 w-4" /> Mi Membresía
-                    </DropdownMenuItem>
-                )}
+                ))}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleLogout} className="cursor-pointer text-destructive focus:text-destructive py-2.5">
                     <LogOut className="mr-2 h-4 w-4" /> Cerrar Sesión
@@ -344,22 +334,14 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
                                 </SheetClose>
                             );
                         })}
-                        {hasAdminScope && (
-                            <SheetClose asChild>
-                                <Link to={privateHomePath} className="flex items-center justify-between px-4 py-3 text-base font-medium rounded-xl transition-all duration-200 border border-transparent hover:bg-accent/50 hover:border-accent text-foreground">
-                                    <span className="font-semibold flex items-center"><ShieldCheck className="mr-3 h-5 w-5" /> Panel Admin</span>
+                        {menuUsuarioItems.map((item) => (
+                            <SheetClose asChild key={item.key ?? item.path}>
+                                <Link to={item.path} className="flex items-center justify-between px-4 py-3 text-base font-medium rounded-xl transition-all duration-200 border border-transparent hover:bg-accent/50 hover:border-accent text-foreground">
+                                    <span className="font-semibold flex items-center">{resolveIcon(item.icon)} {item.label}</span>
                                     <ChevronRight className="h-4 w-4 text-muted-foreground" />
                                 </Link>
                             </SheetClose>
-                        )}
-                        {user && hasActiveMembership && (
-                            <SheetClose asChild>
-                                <Link to="/membresia/dashboard" className="flex items-center justify-between px-4 py-3 text-base font-medium rounded-xl transition-all duration-200 border border-transparent hover:bg-accent/50 hover:border-accent text-foreground">
-                                    <span className="font-semibold flex items-center"><Crown className="mr-3 h-5 w-5" /> Mi Membresía</span>
-                                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                                </Link>
-                            </SheetClose>
-                        )}
+                        ))}
                     </div>
                     <div className="flex flex-col gap-3 p-6 border-t border-border/30 bg-background/50 backdrop-blur-md">
                         <div className="flex items-center justify-between px-4 py-3 rounded-xl bg-accent/30">
@@ -374,11 +356,6 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
                         </SheetClose>
                         {user ? (
                             <>
-                                <SheetClose asChild>
-                                    <Button variant="outline" onClick={() => navigate('/perfil')} className="w-full justify-start font-semibold py-3 rounded-xl border-border/50 hover:border-primary/50">
-                                        <User className="mr-3 h-4 w-4" /> Mi Perfil
-                                    </Button>
-                                </SheetClose>
                                 <SheetClose asChild>
                                     <Button variant="destructive" onClick={handleLogout} className="w-full justify-start font-semibold py-3 rounded-xl">
                                         <LogOut className="mr-3 h-4 w-4" /> Cerrar Sesión
