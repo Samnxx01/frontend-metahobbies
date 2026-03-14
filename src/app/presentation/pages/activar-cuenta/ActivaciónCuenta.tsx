@@ -12,7 +12,7 @@ export default function ActivacionCuenta() {
     const error = params.get('error');   // 'token-invalido' | 'ya-verificado' | null
 
     useEffect(() => {
-        const t = setTimeout(() => setVisible(true), 80);
+        const t = setTimeout(() => setVisible(true), 8000);
         return () => clearTimeout(t);
     }, []);
 

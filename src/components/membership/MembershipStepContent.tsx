@@ -47,6 +47,7 @@ interface MembershipStepContentProps {
   formData: FormData;
   handleFormChange: (section: 'personalInfo' | 'paymentInfo', field: string, value: any) => void;
   MEMBERSHIP_PRICE: number | null;
+  MEMBERSHIP_NOMBRE?: string;
   token: string;
 }
 
@@ -55,11 +56,12 @@ export default function MembershipStepContent({
   formData,
   handleFormChange,
   MEMBERSHIP_PRICE,
+  MEMBERSHIP_NOMBRE,
 }: MembershipStepContentProps): React.ReactElement | null {
 
   switch (step) {
+    // Step 0: Email 
     case 0:
-      // Email step
       return (
         <div className="space-y-6">
           <div className="text-center mb-6">
@@ -88,31 +90,30 @@ export default function MembershipStepContent({
         </div>
       );
 
-    case 1:
-      // Summary step - Diseño minimalista
+    // Step 1: Resumen
+    case 1: {
       const benefits = [
         { icon: Gift, text: 'Descuentos exclusivos en productos' },
         { icon: TrendingUp, text: 'Programa de referidos activo' },
         { icon: Zap, text: 'Ganancias por cada referencia' },
-        { icon: Shield, text: 'Acceso de por vida' }
+        { icon: Shield, text: 'Acceso de por vida' },
       ];
+
+      // Nombre del plan: usa el dinámico si viene, si no fallback genérico
+      const nombrePlan = MEMBERSHIP_NOMBRE || 'Membresía Premium';
 
       return (
         <div className="space-y-6">
-          {/* Header con ícono */}
+          {/* Hero */}
           <div className="text-center">
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 mb-4">
               <Sparkles className="w-8 h-8 text-primary" />
             </div>
-            <h3 className="text-2xl font-bold text-foreground mb-2">
-              Membresía Premium
-            </h3>
-            <p className="text-muted-foreground">
-              Revisa los detalles antes de continuar
-            </p>
+            <h3 className="text-2xl font-bold text-foreground mb-2">{nombrePlan}</h3>
+            <p className="text-muted-foreground">Revisa los detalles antes de continuar</p>
           </div>
 
-          {/* Benefits Grid */}
+          {/* Beneficios */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
             {benefits.map((benefit, index) => (
               <div
@@ -127,7 +128,7 @@ export default function MembershipStepContent({
             ))}
           </div>
 
-          {/* Summary Card */}
+          {/* Card resumen */}
           <Card className="border-2 border-primary/20 overflow-hidden">
             <div className="bg-gradient-to-r from-primary/5 to-transparent p-4 border-b border-border/40">
               <div className="flex items-center justify-between">
@@ -143,16 +144,23 @@ export default function MembershipStepContent({
 
             <div className="p-6">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-muted-foreground">Membresía Premium</span>
+                {/* Nombre dinámico del plan seleccionado */}
+                <span className="text-muted-foreground">{nombrePlan}</span>
                 <span className="text-sm text-muted-foreground">Pago único</span>
               </div>
               <div className="flex items-baseline justify-between">
                 <span className="text-2xl font-bold text-foreground">Total a pagar:</span>
                 <div className="text-right">
-                  <div className="text-3xl font-bold text-primary">
-                    ${MEMBERSHIP_PRICE?.toLocaleString('es-CO')}
-                  </div>
-                  <div className="text-xs text-muted-foreground">COP</div>
+                  {MEMBERSHIP_PRICE != null ? (
+                    <>
+                      <div className="text-3xl font-bold text-primary">
+                        ${MEMBERSHIP_PRICE.toLocaleString('es-CO')}
+                      </div>
+                      <div className="text-xs text-muted-foreground">COP</div>
+                    </>
+                  ) : (
+                    <div className="text-sm text-muted-foreground italic">No disponible</div>
+                  )}
                 </div>
               </div>
             </div>
@@ -171,31 +179,32 @@ export default function MembershipStepContent({
           </div>
         </div>
       );
+    }
 
-    case 2:
-      // Payment step - Diseño minimalista con cards
+    // Step 2: Pago
+    case 2: {
       const paymentMethods = [
         {
           id: 'nequi',
           name: 'Nequi',
           description: 'Pago rápido desde tu app',
           icon: Smartphone,
-          color: 'from-purple-500/10 to-pink-500/10'
+          color: 'from-purple-500/10 to-pink-500/10',
         },
         {
           id: 'card',
           name: 'Tarjeta',
           description: 'Crédito o débito',
           icon: CreditCard,
-          color: 'from-blue-500/10 to-cyan-500/10'
+          color: 'from-blue-500/10 to-cyan-500/10',
         },
         {
           id: 'pse',
           name: 'PSE',
           description: 'Desde tu banco',
           icon: Building2,
-          color: 'from-green-500/10 to-emerald-500/10'
-        }
+          color: 'from-green-500/10 to-emerald-500/10',
+        },
       ];
 
       return (
@@ -213,7 +222,7 @@ export default function MembershipStepContent({
             </p>
           </div>
 
-          {/* Payment Method Cards */}
+          {/* Cards de métodos */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {paymentMethods.map((method) => (
               <button
@@ -248,17 +257,17 @@ export default function MembershipStepContent({
             ))}
           </div>
 
-          {/* Dynamic Payment Forms */}
+          {/* Formularios dinámicos por método */}
           {formData.paymentInfo.paymentMethod && (
             <Card className="p-6 animate-in fade-in-50 slide-in-from-bottom-4 duration-300">
-              {/* Nequi Fields */}
+
+              {/* ── Nequi ── */}
               {formData.paymentInfo.paymentMethod === 'nequi' && (
                 <div className="space-y-4">
                   <div className="flex items-center gap-2 mb-4">
                     <Smartphone className="w-5 h-5 text-primary" />
                     <h4 className="font-semibold">Datos de Nequi</h4>
                   </div>
-
                   <FormField
                     id="nequiPhone"
                     label="Número de teléfono Nequi"
@@ -271,7 +280,6 @@ export default function MembershipStepContent({
                     }}
                     placeholder="3001234567"
                   />
-
                   <div className="flex items-start gap-2 p-3 bg-blue-500/5 border border-blue-500/20 rounded-lg">
                     <Shield className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
                     <p className="text-xs text-muted-foreground">
@@ -281,7 +289,7 @@ export default function MembershipStepContent({
                 </div>
               )}
 
-              {/* Card Fields */}
+              {/* Tarjeta */}
               {formData.paymentInfo.paymentMethod === 'card' && (
                 <div className="space-y-4">
                   <div className="flex items-center gap-2 mb-4">
@@ -296,14 +304,10 @@ export default function MembershipStepContent({
                         value={formData.paymentInfo.cardType || ''}
                         onValueChange={(value) => {
                           handleFormChange('paymentInfo', 'cardType', value);
-                          if (value === 'debit') {
-                            handleFormChange('paymentInfo', 'installments', 1);
-                          }
+                          if (value === 'debit') handleFormChange('paymentInfo', 'installments', 1);
                         }}
                       >
-                        <SelectTrigger id="cardType">
-                          <SelectValue placeholder="Selecciona" />
-                        </SelectTrigger>
+                        <SelectTrigger id="cardType"><SelectValue placeholder="Selecciona" /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="credit">💳 Crédito</SelectItem>
                           <SelectItem value="debit">🏦 Débito</SelectItem>
@@ -316,11 +320,9 @@ export default function MembershipStepContent({
                         <Label htmlFor="installments">Cuotas *</Label>
                         <Select
                           value={(formData.paymentInfo.installments || 1).toString()}
-                          onValueChange={(value) => handleFormChange('paymentInfo', 'installments', parseInt(value, 10))}
+                          onValueChange={(v) => handleFormChange('paymentInfo', 'installments', parseInt(v, 10))}
                         >
-                          <SelectTrigger id="installments">
-                            <SelectValue />
-                          </SelectTrigger>
+                          <SelectTrigger id="installments"><SelectValue /></SelectTrigger>
                           <SelectContent>
                             {[1, 2, 3, 6, 12].map(num => (
                               <SelectItem key={num} value={num.toString()}>
@@ -334,23 +336,15 @@ export default function MembershipStepContent({
                   </div>
 
                   <FormField
-                    id="cardNumber"
-                    label="Número de tarjeta"
-                    type="text"
-                    required
+                    id="cardNumber" label="Número de tarjeta" type="text" required
                     value={formData.paymentInfo.cardNumber || ''}
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                      const value = e.target.value.replace(/[^0-9]/g, '').slice(0, 16);
-                      handleFormChange('paymentInfo', 'cardNumber', value);
+                      handleFormChange('paymentInfo', 'cardNumber', e.target.value.replace(/[^0-9]/g, '').slice(0, 16));
                     }}
                     placeholder="•••• •••• •••• ••••"
                   />
-
                   <FormField
-                    id="cardName"
-                    label="Nombre en la tarjeta"
-                    type="text"
-                    required
+                    id="cardName" label="Nombre en la tarjeta" type="text" required
                     value={formData.paymentInfo.cardName || ''}
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                       handleFormChange('paymentInfo', 'cardName', e.target.value.toUpperCase());
@@ -360,30 +354,20 @@ export default function MembershipStepContent({
 
                   <div className="grid grid-cols-2 gap-4">
                     <FormField
-                      id="expiryDate"
-                      label="Vencimiento"
-                      type="text"
-                      required
+                      id="expiryDate" label="Vencimiento" type="text" required
                       value={formData.paymentInfo.expiryDate || ''}
                       onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                        let value = e.target.value.replace(/[^0-9]/g, '');
-                        if (value.length >= 2) {
-                          value = value.slice(0, 2) + '/' + value.slice(2, 4);
-                        }
-                        handleFormChange('paymentInfo', 'expiryDate', value);
+                        let v = e.target.value.replace(/[^0-9]/g, '');
+                        if (v.length >= 2) v = v.slice(0, 2) + '/' + v.slice(2, 4);
+                        handleFormChange('paymentInfo', 'expiryDate', v);
                       }}
                       placeholder="MM/AA"
                     />
-
                     <FormField
-                      id="cvv"
-                      label="CVV"
-                      type="text"
-                      required
+                      id="cvv" label="CVV" type="text" required
                       value={formData.paymentInfo.cvv || ''}
                       onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                        const value = e.target.value.replace(/[^0-9]/g, '').slice(0, 4);
-                        handleFormChange('paymentInfo', 'cvv', value);
+                        handleFormChange('paymentInfo', 'cvv', e.target.value.replace(/[^0-9]/g, '').slice(0, 4));
                       }}
                       placeholder="•••"
                     />
@@ -391,7 +375,7 @@ export default function MembershipStepContent({
                 </div>
               )}
 
-              {/* PSE Fields */}
+              {/* PSE */}
               {formData.paymentInfo.paymentMethod === 'pse' && (
                 <div className="space-y-4">
                   <div className="flex items-center gap-2 mb-4">
@@ -404,27 +388,22 @@ export default function MembershipStepContent({
                       <Label htmlFor="pseUserType">Tipo de persona *</Label>
                       <Select
                         value={formData.paymentInfo.pseUserType || ''}
-                        onValueChange={(value) => handleFormChange('paymentInfo', 'pseUserType', value)}
+                        onValueChange={(v) => handleFormChange('paymentInfo', 'pseUserType', v)}
                       >
-                        <SelectTrigger id="pseUserType">
-                          <SelectValue placeholder="Selecciona" />
-                        </SelectTrigger>
+                        <SelectTrigger id="pseUserType"><SelectValue placeholder="Selecciona" /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="0">👤 Natural</SelectItem>
                           <SelectItem value="1">🏢 Jurídica</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
-
                     <div className="space-y-2">
                       <Label htmlFor="pseLegalIdType">Tipo de documento *</Label>
                       <Select
                         value={formData.paymentInfo.pseLegalIdType || ''}
-                        onValueChange={(value) => handleFormChange('paymentInfo', 'pseLegalIdType', value)}
+                        onValueChange={(v) => handleFormChange('paymentInfo', 'pseLegalIdType', v)}
                       >
-                        <SelectTrigger id="pseLegalIdType">
-                          <SelectValue placeholder="Selecciona" />
-                        </SelectTrigger>
+                        <SelectTrigger id="pseLegalIdType"><SelectValue placeholder="Selecciona" /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="CC">CC - Cédula</SelectItem>
                           <SelectItem value="CE">CE - Extranjería</SelectItem>
@@ -435,14 +414,10 @@ export default function MembershipStepContent({
                   </div>
 
                   <FormField
-                    id="pseLegalId"
-                    label="Número de documento"
-                    type="text"
-                    required
+                    id="pseLegalId" label="Número de documento" type="text" required
                     value={formData.paymentInfo.pseLegalId || ''}
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                      const value = e.target.value.replace(/[^0-9]/g, '');
-                      handleFormChange('paymentInfo', 'pseLegalId', value);
+                      handleFormChange('paymentInfo', 'pseLegalId', e.target.value.replace(/[^0-9]/g, ''));
                     }}
                     placeholder="1099888777"
                   />
@@ -451,11 +426,9 @@ export default function MembershipStepContent({
                     <Label htmlFor="pseFinancialInstitution">Banco *</Label>
                     <Select
                       value={formData.paymentInfo.pseFinancialInstitution || ''}
-                      onValueChange={(value) => handleFormChange('paymentInfo', 'pseFinancialInstitution', value)}
+                      onValueChange={(v) => handleFormChange('paymentInfo', 'pseFinancialInstitution', v)}
                     >
-                      <SelectTrigger id="pseFinancialInstitution">
-                        <SelectValue placeholder="Selecciona tu banco" />
-                      </SelectTrigger>
+                      <SelectTrigger id="pseFinancialInstitution"><SelectValue placeholder="Selecciona tu banco" /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="1007">Bancolombia</SelectItem>
                         <SelectItem value="1013">BBVA</SelectItem>
@@ -477,26 +450,18 @@ export default function MembershipStepContent({
                     <h5 className="font-medium mb-4 text-sm">Información de contacto</h5>
                     <div className="space-y-4">
                       <FormField
-                        id="pseFullName"
-                        label="Nombre completo"
-                        type="text"
-                        required
+                        id="pseFullName" label="Nombre completo" type="text" required
                         value={formData.paymentInfo.fullName || ''}
                         onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                           handleFormChange('paymentInfo', 'fullName', e.target.value);
                         }}
                         placeholder="Juan Pérez"
                       />
-
                       <FormField
-                        id="psePhoneNumber"
-                        label="Teléfono"
-                        type="tel"
-                        required
+                        id="psePhoneNumber" label="Teléfono" type="tel" required
                         value={formData.paymentInfo.phoneNumber || ''}
                         onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                          const value = e.target.value.replace(/[^0-9]/g, '').slice(0, 10);
-                          handleFormChange('paymentInfo', 'phoneNumber', value);
+                          handleFormChange('paymentInfo', 'phoneNumber', e.target.value.replace(/[^0-9]/g, '').slice(0, 10));
                         }}
                         placeholder="3001234567"
                       />
@@ -515,6 +480,7 @@ export default function MembershipStepContent({
           )}
         </div>
       );
+    }
 
     default:
       return null;

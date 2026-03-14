@@ -1,67 +1,57 @@
-import { useState } from "react";
-import { toast } from "react-toastify";
+import { useState } from 'react';
+import { toast } from 'react-toastify';
+import type { ResultadoPago } from '@/app/presentation/pages/membresia/MembershipPayment';
 
-// Interface for personal info step
 interface PersonalInfo {
   email: string;
   phoneNumber?: string;
   fullName?: string;
 }
 
-// Interface for payment info step
 interface PaymentInfo {
   paymentMethod: 'nequi' | 'card' | 'pse' | '';
-  // Nequi fields
   nequiPhone?: string;
-  // Card fields
   cardType?: 'credit' | 'debit';
   cardNumber?: string;
   cardName?: string;
   expiryDate?: string;
   cvv?: string;
   installments?: number;
-  // PSE fields
   phoneNumber?: string;
   fullName?: string;
-  pseUserType?: '0' | '1' | ''; // 0: Natural person, 1: Business
-  pseLegalIdType?: 'CC' | 'CE' | 'NIT' | ''; // CC: Cédula, CE: Cédula de extranjería, NIT: NIT
-  pseLegalId?: string; // Document number
-  pseFinancialInstitution?: string; // Financial institution code
+  pseUserType?: '0' | '1' | '';
+  pseLegalIdType?: 'CC' | 'CE' | 'NIT' | '';
+  pseLegalId?: string;
+  pseFinancialInstitution?: string;
 }
 
-// Interface for the complete form data
 interface MembershipPaymentFormData {
   personalInfo: PersonalInfo;
   paymentInfo: PaymentInfo;
   [step: string]: any;
 }
 
-// Interface for step configuration
 interface Step {
   title: string;
   description?: string;
   [key: string]: any;
 }
 
-// Type for navigation function
 type NavigateFunction = (path: string) => void;
-
-// Type for purchase membership function
 type PurchaseMembershipFunction = (token: string, email: string, authToken: string) => Promise<void>;
 
-// Interface for hook parameters
 interface UseMembershipPaymentFormParams {
   initialFormData: MembershipPaymentFormData;
   steps: Step[];
   purchaseMembership: PurchaseMembershipFunction;
   navigate: NavigateFunction;
   token: string;
+  /** Callback que recibe el resultado del pago para mostrar el modal */
+  onPagoTerminado?: (resultado: ResultadoPago) => void;
 }
 
-// Type for form change handler
 type HandleFormChange = (step: string, field: string, value: any) => void;
 
-// Interface for hook return value
 interface UseMembershipPaymentFormReturn {
   activeStep: number;
   setActiveStep: (step: number) => void;
@@ -75,24 +65,30 @@ interface UseMembershipPaymentFormReturn {
   handleBack: () => void;
 }
 
-export function useMembershipPaymentForm({ 
-  initialFormData, 
-  steps, 
-  purchaseMembership: _purchaseMembership, 
-  navigate, 
-  token 
+// Mapea status de Wompi → EstadoTx del modal
+function wompiStatusToEstado(status: string): 'aprobada' | 'pendiente' | 'rechazada' {
+  const s = status?.toUpperCase();
+  if (s === 'APPROVED') return 'aprobada';
+  if (s === 'PENDING') return 'pendiente';
+  return 'rechazada';
+}
+
+export function useMembershipPaymentForm({
+  initialFormData,
+  steps,
+  purchaseMembership: _purchaseMembership,
+  navigate,
+  token,
+  onPagoTerminado,
 }: UseMembershipPaymentFormParams): UseMembershipPaymentFormReturn {
   const [activeStep, setActiveStep] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(false);
   const [formData, setFormData] = useState<MembershipPaymentFormData>(initialFormData);
 
-  const handleFormChange: HandleFormChange = (step: string, field: string, value: any) => {
+  const handleFormChange: HandleFormChange = (step, field, value) => {
     setFormData(prev => ({
       ...prev,
-      [step]: {
-        ...prev[step],
-        [field]: value
-      }
+      [step]: { ...prev[step], [field]: value },
     }));
   };
 
@@ -100,39 +96,27 @@ export function useMembershipPaymentForm({
     switch (step) {
       case 0: {
         const { email } = formData.personalInfo;
-        const emailRegex = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
-        return email.trim() !== "" && emailRegex.test(email);
+        return email.trim() !== '' && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email);
       }
       case 1:
         return true;
       case 2: {
-        const { paymentMethod, nequiPhone, cardType, cardNumber, cardName, expiryDate, cvv, installments, pseUserType, pseLegalIdType, pseLegalId, pseFinancialInstitution } = formData.paymentInfo;
+        const {
+          paymentMethod, nequiPhone, cardType, cardNumber, cardName,
+          expiryDate, cvv, installments, pseUserType, pseLegalIdType,
+          pseLegalId, pseFinancialInstitution,
+        } = formData.paymentInfo;
         if (!paymentMethod) return false;
-        
-        if (paymentMethod === 'nequi') {
-          // Validar teléfono colombiano: debe empezar con 3 y tener 10 dígitos
-          const colombiaPhoneRegex = /^3\d{9}$/;
-          return !!nequiPhone && colombiaPhoneRegex.test(nequiPhone);
-        }
-        
+        if (paymentMethod === 'nequi') return !!nequiPhone && /^3\d{9}$/.test(nequiPhone);
         if (paymentMethod === 'card') {
-          const hasBasics = !!cardNumber && !!cardName && !!expiryDate && !!cvv &&
-                 cardNumber.trim() !== "" && cardName.trim() !== "" &&
-                 expiryDate.trim() !== "" && cvv.trim() !== "";
+          const ok = !!cardNumber && !!cardName && !!expiryDate && !!cvv;
           if (!cardType) return false;
-          if (cardType === 'credit') {
-            const validInstallments = typeof installments === 'number' && installments > 0;
-            return hasBasics && validInstallments;
-          }
-          // debit: no cuotas requeridas
-          return hasBasics;
+          return cardType === 'credit' ? ok && !!installments && installments > 0 : ok;
         }
-        
         if (paymentMethod === 'pse') {
-          return !!pseUserType && !!pseLegalIdType && !!pseLegalId && !!pseFinancialInstitution &&
-                 pseLegalId.trim() !== "" && pseFinancialInstitution.trim() !== "";
+          return !!pseUserType && !!pseLegalIdType &&
+            !!pseLegalId?.trim() && !!pseFinancialInstitution?.trim();
         }
-        
         return false;
       }
       default:
@@ -144,59 +128,32 @@ export function useMembershipPaymentForm({
     switch (step) {
       case 0: {
         const { email } = formData.personalInfo;
-        if (!email.trim()) {
-          return "Por favor ingresa tu correo electrónico";
-        }
-        const emailRegex = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
-        if (!emailRegex.test(email)) {
-          return "Por favor ingresa un correo electrónico válido";
-        }
-        return "Por favor completa la información de usuario";
+        if (!email.trim()) return 'Por favor ingresa tu correo electrónico';
+        if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return 'Por favor ingresa un correo electrónico válido';
+        return 'Por favor completa la información de usuario';
       }
       case 2: {
-        const { paymentMethod, nequiPhone, installments, cardType, phoneNumber, fullName } = formData.paymentInfo;
-        if (!paymentMethod) {
-          return "Por favor selecciona un método de pago";
-        }
-        
+        const { paymentMethod, nequiPhone, cardType, installments, phoneNumber, fullName } = formData.paymentInfo;
+        if (!paymentMethod) return 'Por favor selecciona un método de pago';
         if (paymentMethod === 'nequi') {
-          if (!nequiPhone) {
-            return "Por favor ingresa tu número de teléfono Nequi";
-          }
-          const colombiaPhoneRegex = /^3\d{9}$/;
-          if (!colombiaPhoneRegex.test(nequiPhone)) {
-            return "Por favor ingresa un número de teléfono colombiano válido (debe empezar con 3 y tener 10 dígitos)";
-          }
+          if (!nequiPhone) return 'Por favor ingresa tu número de teléfono Nequi';
+          if (!/^3\d{9}$/.test(nequiPhone)) return 'Ingresa un número colombiano válido (empieza con 3, 10 dígitos)';
         }
-        
         if (paymentMethod === 'card') {
-          if (!cardType) {
-            return "Selecciona si la tarjeta es crédito o débito";
-          }
-          if (cardType === 'credit' && (!installments || installments <= 0)) {
-            return "Selecciona el número de cuotas";
-          }
-          return "Por favor completa todos los datos de la tarjeta";
+          if (!cardType) return 'Selecciona si la tarjeta es crédito o débito';
+          if (cardType === 'credit' && (!installments || installments <= 0)) return 'Selecciona el número de cuotas';
+          return 'Por favor completa todos los datos de la tarjeta';
         }
-        
         if (paymentMethod === 'pse') {
-          if (!phoneNumber) {
-            return "Por favor ingresa tu número de teléfono";
-          }
-          const colombiaPhoneRegex = /^3\d{9}$/;
-          if (!colombiaPhoneRegex.test(phoneNumber)) {
-            return "Por favor ingresa un número de teléfono colombiano válido (debe empezar con 3 y tener 10 dígitos)";
-          }
-          if (!fullName || !fullName.trim()) {
-            return "Por favor ingresa tu nombre completo";
-          }
-          return "Por favor completa todos los datos de PSE";
+          if (!phoneNumber) return 'Por favor ingresa tu número de teléfono';
+          if (!/^3\d{9}$/.test(phoneNumber)) return 'Ingresa un número colombiano válido (empieza con 3, 10 dígitos)';
+          if (!fullName?.trim()) return 'Por favor ingresa tu nombre completo';
+          return 'Por favor completa todos los datos de PSE';
         }
-        
-        return "Por favor completa la información de pago";
+        return 'Por favor completa la información de pago';
       }
       default:
-        return "Por favor completa todos los campos requeridos";
+        return 'Por favor completa todos los campos requeridos';
     }
   };
 
@@ -205,10 +162,8 @@ export function useMembershipPaymentForm({
       toast.error(getValidationErrorMessage(activeStep));
       return;
     }
-
-    // Verificar que existe el token de referido
-    if (!token || token.trim() === '') {
-      toast.error("No se encontró el token de referido. Por favor verifica el enlace de invitación.");
+    if (!token?.trim()) {
+      toast.error('No se encontró el token de referido. Verifica el enlace de invitación.');
       return;
     }
 
@@ -218,70 +173,62 @@ export function useMembershipPaymentForm({
         emailInvitado: formData.personalInfo.email,
       };
 
-      // Preparar datos según el método de pago
+      // Nequi
       if (formData.paymentInfo.paymentMethod === 'nequi') {
         paymentData.payment_flow = 'API';
         paymentData.payment_method_type = 'NEQUI';
         paymentData.payment_method = {
-          type: "NEQUI",
-          phone_number: formData.paymentInfo.nequiPhone
+          type: 'NEQUI',
+          phone_number: formData.paymentInfo.nequiPhone,
         };
+
+        // PSE
       } else if (formData.paymentInfo.paymentMethod === 'pse') {
         paymentData.payment_flow = 'CHECKOUT';
-        paymentData.payment_method_type ='PSE';
+        paymentData.payment_method_type = 'PSE';
         paymentData.payment_method = {
-          type: "PSE",
+          type: 'PSE',
           user_type: parseInt(formData.paymentInfo.pseUserType || '0'),
           user_legal_id_type: formData.paymentInfo.pseLegalIdType,
           user_legal_id: formData.paymentInfo.pseLegalId,
           financial_institution_code: formData.paymentInfo.pseFinancialInstitution,
-          payment_description: `Membresía Premium - Ref: ${token.substring(0, 16)}`
+          payment_description: `Membresía Premium - Ref: ${token.substring(0, 16)}`,
         };
         paymentData.customer_data = {
           phone_number: formData.paymentInfo.phoneNumber,
-          full_name: formData.paymentInfo.fullName
+          full_name: formData.paymentInfo.fullName,
         };
+
+        // Tarjeta
       } else if (formData.paymentInfo.paymentMethod === 'card') {
-        // Tokenizar la tarjeta con Wompi
         const wompiPublicKey = import.meta.env.VITE_WOMPI_PUBLIC_KEY;
-        
-        if (!wompiPublicKey) {
-          throw new Error("Clave pública de Wompi no configurada");
-        }
+        if (!wompiPublicKey) throw new Error('Clave pública de Wompi no configurada');
 
-        // Separar mes y año de la fecha de expiración (MM/AA)
         const [expMonth, expYear] = formData.paymentInfo.expiryDate?.split('/') || ['', ''];
-        
-        if (!expMonth || !expYear) {
-          throw new Error("Fecha de expiración inválida");
-        }
+        if (!expMonth || !expYear) throw new Error('Fecha de expiración inválida');
 
-        // Tokenizar tarjeta
         const tokenizeResponse = await fetch('https://production.wompi.co/v1/tokens/cards', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${wompiPublicKey}`
+            'Authorization': `Bearer ${wompiPublicKey}`,
           },
           body: JSON.stringify({
             number: formData.paymentInfo.cardNumber?.replace(/\s/g, ''),
             cvc: formData.paymentInfo.cvv,
             exp_month: expMonth,
             exp_year: expYear,
-            card_holder: formData.paymentInfo.cardName
-          })
+            card_holder: formData.paymentInfo.cardName,
+          }),
         });
 
         if (!tokenizeResponse.ok) {
-          const errorData = await tokenizeResponse.json().catch(() => ({ error: 'Error al tokenizar la tarjeta' }));
-          throw new Error(errorData.error?.reason || errorData.error || 'Error al procesar la tarjeta');
+          const errData = await tokenizeResponse.json().catch(() => ({}));
+          throw new Error(errData.error?.reason || errData.error || 'Error al procesar la tarjeta');
         }
 
         const tokenData = await tokenizeResponse.json();
-        
-        if (!tokenData.data?.id) {
-          throw new Error('No se pudo obtener el token de la tarjeta');
-        }
+        if (!tokenData.data?.id) throw new Error('No se pudo obtener el token de la tarjeta');
 
         const installmentsToSend = formData.paymentInfo.cardType === 'debit'
           ? 1
@@ -290,13 +237,13 @@ export function useMembershipPaymentForm({
         paymentData.payment_flow = 'API';
         paymentData.payment_method_type = 'CARD';
         paymentData.payment_method = {
-          type: "CARD",
+          type: 'CARD',
           installments: installmentsToSend,
-          token: tokenData.data.id
+          token: tokenData.data.id,
         };
       }
 
-      // Hacer petición al backend usando el token del referido
+      // Llamada al backend
       const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api';
       const response = await fetch(
         `${API_BASE_URL}/membresia/seguridad/crear/crearmembresia/${token}`,
@@ -304,32 +251,75 @@ export function useMembershipPaymentForm({
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`, // Usar token del referido, no del usuario autenticado
+            'Authorization': `Bearer ${token}`,
           },
-          body: JSON.stringify(paymentData)
+          body: JSON.stringify(paymentData),
         }
       );
 
       const data = await response.json();
       console.log('Respuesta del servidor:', data);
 
-      // Verificar si hay un error con pago pendiente
       if (!response.ok || data.success === false) {
-        const errorMsg = data.msg || data.message || `Error ${response.status}: ${response.statusText}`;
-        throw new Error(errorMsg);
+        throw new Error(data.msg || data.message || `Error ${response.status}`);
       }
 
-      // Si el pago es PSE, redirigir al portal de Wompi
-      if (formData.paymentInfo.paymentMethod === 'pse' && data?.wompiCheckoutUrl) {
-        toast.success("Redirigiendo al portal de pago PSE...");
-        window.location.href = data.wompiCheckoutUrl;
-      } else {
-        toast.success("¡Membresía creada exitosamente!");
-        navigate("/membresia/dashboard");
+      // PSE: redirigir al portal del banco (Wompi maneja el retorno)
+      // El botón "Regresar al comercio" de Wompi usa el redirect_url
+      // configurado en el backend → llega a /login con params
+      if (formData.paymentInfo.paymentMethod === 'pse') {
+        const checkoutUrl = data?.wompiCheckoutUrl ?? data?.data?.wompiCheckoutUrl;
+        if (checkoutUrl) {
+          toast.success('Redirigiendo al portal de pago PSE...');
+          window.location.href = checkoutUrl;
+          return;
+        }
       }
+
+      // Nequi / Tarjeta: leer estado final y abrir modal
+      const wompiStatus: string =
+        data?.transaccion?.status ??
+        data?.data?.transaccion?.status ??
+        data?.data?.status ??
+        data?.status ??
+        'PENDING';
+
+      const referencia: string =
+        data?.transaccion?.reference ??
+        data?.data?.reference ??
+        data?.referencia ??
+        '';
+
+      const montoRaw: number =
+        data?.transaccion?.amount_in_cents ??
+        data?.data?.amount_in_cents ??
+        data?.monto ??
+        0;
+
+      const moneda: string =
+        data?.transaccion?.currency ??
+        data?.data?.currency ??
+        'COP';
+
+      const estado = wompiStatusToEstado(wompiStatus);
+
+      // Abrir modal con el voucher — si no hay callback, fallback a navigate
+      if (onPagoTerminado) {
+        onPagoTerminado({
+          estado,
+          referencia,
+          monto: montoRaw > 0 ? montoRaw / 100 : undefined, // centavos → COP
+          moneda,
+          email: formData.personalInfo.email,
+        });
+      } else {
+        // Fallback por si el hook se usa sin el modal
+        navigate('/membresia/dashboard');
+      }
+
     } catch (error: any) {
-      console.error("Error en el pago:", error);
-      toast.error(error.message || "Error al procesar el pago. Intenta nuevamente.");
+      console.error('Error en el pago:', error);
+      toast.error(error.message || 'Error al procesar el pago. Intenta nuevamente.');
     } finally {
       setLoading(false);
     }
@@ -340,26 +330,20 @@ export function useMembershipPaymentForm({
       toast.error(getValidationErrorMessage(activeStep));
       return;
     }
-    // En el último paso no avanzar, solo mostrar botón de pago
     if (activeStep < steps.length - 1) {
-      setActiveStep(prevStep => prevStep + 1);
+      setActiveStep(prev => prev + 1);
     }
   };
 
   const handleBack = (): void => {
-    setActiveStep(prevStep => prevStep - 1);
+    setActiveStep(prev => prev - 1);
   };
 
   return {
-    activeStep,
-    setActiveStep,
-    loading,
-    setLoading,
-    formData,
-    handleFormChange,
-    validateStep,
-    handlePayment,
-    handleNext,
-    handleBack,
+    activeStep, setActiveStep,
+    loading, setLoading,
+    formData, handleFormChange,
+    validateStep, handlePayment,
+    handleNext, handleBack,
   };
 }
