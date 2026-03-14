@@ -1,7 +1,7 @@
 import { Routes, Route, useLocation, Navigate } from 'react-router-dom';
 import { useState, useEffect, ReactElement } from 'react';
 import { useAuth } from '@/app/providers/AuthProvider';
-import { getAuthorizedRoutes } from '@/app/services/routeService';
+import { getAuthorizedRoutes, getPrivateHomeRoute } from '@/app/services/routeService';
 import { useLoading } from '@/app/providers/LoadingProvider';
 
 import PublicLayout from '@/app/presentation/layouts/PublicLayout';
@@ -52,6 +52,8 @@ import ActivacionCuenta from '../presentation/pages/activar-cuenta/ActivaciónCu
 import RecuperarContrasenaToken from '../presentation/pages/recuperar-contrasena/RecuperarContrasenaToken';
 import UsuariosTenant from '../presentation/pages/admin/UsuariosTenant';
 import TenantCorporativo from '../presentation/pages/admin/TenantCorporativo';
+import RouteUserMenuSettings from '../presentation/components/admin/RouteUserMenuSettings';
+import ParametrizacionMenu from '../presentation/pages/admin/ParametrizacionMenu';
 // Types for route system
 interface RouteConfig {
     path: string;
@@ -119,7 +121,40 @@ const componentMap: ComponentMapType = {
     tenantCorporativo: TenantCorporativo,
     TenantCorportativo: TenantCorporativo,
     tenantCorportativo: TenantCorporativo,
+    RouteUserMenuSettings,
+    ParametrizacionMenu,
+    parametrizacionMenu: ParametrizacionMenu,
   };
+
+function AdminEntryRedirect(): ReactElement {
+    const [targetPath, setTargetPath] = useState<string | null>(null);
+
+    useEffect(() => {
+        let active = true;
+
+        const resolveTarget = async (): Promise<void> => {
+            try {
+                const nextPath = await getPrivateHomeRoute();
+                if (!active) return;
+                setTargetPath(nextPath?.trim() || '/');
+            } catch (_error) {
+                if (!active) return;
+                setTargetPath('/');
+            }
+        };
+
+        resolveTarget();
+        return () => {
+            active = false;
+        };
+    }, []);
+
+    if (!targetPath) {
+        return <div>Cargando redireccion...</div>;
+    }
+
+    return <Navigate to={targetPath} replace />;
+}
 
 export default function LayoutRoutes(): ReactElement {
     const [authorizedRoutes, setAuthorizedRoutes] = useState<AuthorizedRoutes | null>(null);
@@ -199,8 +234,9 @@ export default function LayoutRoutes(): ReactElement {
 
             {user && authorizedRoutes?.adminRoutes && authorizedRoutes.adminRoutes.length > 0 && (
                 <Route path="/admin" element={<AdminLayout />}>
+                    <Route index element={<AdminEntryRedirect />} />
                     {renderRoutes(authorizedRoutes.adminRoutes)}
-                    <Route path="*" element={<DashboardAdmin />} />
+                    <Route path="*" element={<AdminEntryRedirect />} />
                 </Route>
             )}
         </Routes>

@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Outlet, useNavigate } from 'react-router-dom'
+import { Outlet } from 'react-router-dom'
 import { useAuth } from '@/app/providers/AuthProvider'
 import AdminNavbar from '@/app/presentation/components/admin/AdminNavbar'
 import AdminSidebar from '@/app/presentation/components/admin/AdminSidebar'
@@ -7,13 +7,10 @@ import AdminSidebar from '@/app/presentation/components/admin/AdminSidebar'
 const drawerWidth = 260
 
 export default function AdminLayout() {
-    const navigate = useNavigate()
     const { user } = useAuth()
     const [mobileOpen, setMobileOpen] = useState(false)
-    const role = String(user?.role || user?.rol || '').toUpperCase()
 
-    if (!user || !['ADMIN', 'DESAROLLADOR', 'DIOS'].includes(role)) {
-        navigate('/')
+    if (!user) {
         return null
     }
 

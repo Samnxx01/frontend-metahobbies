@@ -120,10 +120,13 @@ const getHerenciaAdminPermitida = async (): Promise<{
 };
 
 export interface RouteCatalogItem {
+    iud: string;
     path: string;
     layout: string;
     component: string;
     name: string;
+    mostrarEnNavbarPublico?: boolean;
+    mostrarEnSidebar?: boolean;
     mostrarEnMenuUsuario?: boolean;
     menuUsuarioKey?: string | null;
     menuUsuarioLabel?: string | null;
@@ -217,10 +220,13 @@ export const getRouteCatalog = async (): Promise<RouteCatalogItem[]> => {
         return result.data
             .filter((r) => r.estadoRuta)
             .map((r) => ({
+                iud: String(r.iud || r._id || ''),
                 path: normalizeRoutePath(r.path),
                 layout: r.layout.replace("/", "").trim(),
                 component: r.component.replace(/\.(jsx|tsx|js|ts)$/i, ""),
                 name: r.name,
+                mostrarEnNavbarPublico: r.mostrarEnNavbarPublico === true,
+                mostrarEnSidebar: r.mostrarEnSidebar === true,
                 mostrarEnMenuUsuario: r.mostrarEnMenuUsuario === true,
                 menuUsuarioKey: String(r.menuUsuarioKey || '').trim() || null,
                 menuUsuarioLabel: String(r.menuUsuarioLabel || '').trim() || null,
@@ -295,14 +301,14 @@ export const getUserShortcutRoutes = async (): Promise<UserShortcutRoutes> => {
         });
 
         return {
-            admin: adminRoute ? toAppRoutePath(adminRoute) : '/admin/dashboard',
+            admin: adminRoute ? toAppRoutePath(adminRoute) : '/admin/gestor-rutas/administracion/dashboardadmin',
             perfil: perfilRoute ? toAppRoutePath(perfilRoute) : '/perfil',
             membresia: membresiaRoute ? toAppRoutePath(membresiaRoute) : '/membresia/dashboard',
         };
     } catch (error) {
         console.error('Error al resolver shortcuts de usuario:', error);
         return {
-            admin: '/admin/dashboard',
+            admin: '/admin/gestor-rutas/administracion/dashboardadmin',
             perfil: '/perfil',
             membresia: '/membresia/dashboard',
         };
@@ -611,8 +617,8 @@ export const getPrivateHomeRoute = async (): Promise<string> => {
         if (shortcuts.admin && shortcuts.admin.trim()) {
             return shortcuts.admin;
         }
-        return "/admin/dashboard";
+        return "/admin/gestor-rutas/administracion/dashboardadmin";
     } catch (_error) {
-        return "/admin/dashboard";
+        return "/admin/gestor-rutas/administracion/dashboardadmin";
     }
 };

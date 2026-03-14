@@ -5,7 +5,7 @@ import { useAuth } from '@/app/providers/AuthProvider'
 import { useTheme } from 'next-themes'
 import { useMembership } from '@/app/hooks/useMembership'
 import { apiFetch } from '@/app/services/api'
-import { getUserShortcutRoutes } from '@/app/services/routeService'
+import { getPrivateHomeRoute, getUserShortcutRoutes } from '@/app/services/routeService'
 
 // Shadcn UI components
 import { Button } from "@/components/ui/button"
@@ -26,6 +26,7 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
     const { hasActiveMembership } = useMembership()
     const [logoUrl, setLogoUrl] = useState<string>(DEFAULT_LOGO)
     const [logoError, setLogoError] = useState<boolean>(false)
+    const [adminHomePath, setAdminHomePath] = useState<string>('/admin')
     const [profilePath, setProfilePath] = useState<string>('/perfil')
     const [membershipPath, setMembershipPath] = useState<string>('/membresia/dashboard')
 
@@ -82,12 +83,17 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
 
         const cargarShortcuts = async (): Promise<void> => {
             try {
-                const shortcuts = await getUserShortcutRoutes()
+                const [shortcuts, privateHome] = await Promise.all([
+                    getUserShortcutRoutes(),
+                    getPrivateHomeRoute()
+                ])
                 if (!active) return
+                setAdminHomePath(privateHome || '/admin')
                 setProfilePath(shortcuts.perfil || '/perfil')
                 setMembershipPath(shortcuts.membresia || '/membresia/dashboard')
             } catch (_error) {
                 if (!active) return
+                setAdminHomePath('/admin')
                 setProfilePath('/perfil')
                 setMembershipPath('/membresia/dashboard')
             }
@@ -206,7 +212,7 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
                             src={logoError ? DEFAULT_LOGO : logoUrl}
                             alt="Mabs Logo"
                             className="h-7 md:h-8 cursor-pointer flex-shrink-0 hover:opacity-80 transition-opacity"
-                            onClick={() => navigate("/admin/dashboard")}
+                            onClick={() => navigate(adminHomePath)}
                             onError={() => {
                                 setLogoError(true)
                                 setLogoUrl(DEFAULT_LOGO)

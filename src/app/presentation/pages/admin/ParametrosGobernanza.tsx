@@ -659,6 +659,8 @@ const ParametrosGobernanza: React.FC = () => {
               const ridRaw = String(r?.rid || r?._id || '').trim();
               const rid = ridEncrypted || ridRaw;
               if (rid) rulesMap[rid] = r;
+              // Also index by ridRaw so lookups by raw _id work even when ridEncrypted differs
+              if (ridRaw && ridRaw !== rid) rulesMap[ridRaw] = r;
               const tenantRef =
                 (Array.isArray(r?.generacionGlovallNvlRoles) && r.generacionGlovallNvlRoles[0]) ||
                 (Array.isArray(r?.generacionTenatGlobales) && r.generacionTenatGlobales[0]) ||
@@ -721,6 +723,48 @@ const ParametrosGobernanza: React.FC = () => {
   const setFieldValue = (endpointId: string, key: string, value: string) => {
     setFormData((prev) => ({ ...prev, [endpointId]: { ...(prev[endpointId] || {}), [key]: value } }));
   };
+  useEffect(() => {
+    const actorEsSoloTenantGlobal =
+      !!String(tenantGlobalActor?.tenantGlobalId || '').trim() &&
+      !String(tenantGlobalActor?.tenantSuperAdminId || '').trim();
+    const unicaOpcionCorporativa = tenantGlobalSelects.coporativo?.length === 1
+      ? tenantGlobalSelects.coporativo[0]
+      : null;
+
+    if (!actorEsSoloTenantGlobal || !unicaOpcionCorporativa) return;
+
+    const endpointIds = [
+      'tenant-crear-global-usuario',
+      'tenant-crear-global-admin',
+      'tenant-actualizar-global',
+    ];
+
+    setFormData((prev) => {
+      let changed = false;
+      const next = { ...prev };
+
+      endpointIds.forEach((endpointId) => {
+        const current = next[endpointId] || {};
+        const selectedNvl = String(current.nvlGeneracionTenant || '').trim();
+        if (!selectedNvl) return;
+
+        const nvlLabel = (tenantGlobalSelects.nvlGeneracionTenant || []).find((opt) => opt.id === selectedNvl)?.label || '';
+        const nvlEsTenantGlobal = /tenant-global|nvl 1/i.test(String(nvlLabel));
+        const nvlEsTenantCorporativo = /tenant-(co?rporativo)|nvl 2/i.test(String(nvlLabel));
+        if (!nvlEsTenantGlobal && !nvlEsTenantCorporativo) return;
+
+        if (String(current.coporativo || '').trim() === unicaOpcionCorporativa.id) return;
+
+        next[endpointId] = {
+          ...current,
+          coporativo: unicaOpcionCorporativa.id,
+        };
+        changed = true;
+      });
+
+      return changed ? next : prev;
+    });
+  }, [tenantGlobalActor, tenantGlobalSelects.coporativo, tenantGlobalSelects.nvlGeneracionTenant]);
   const getCatalogSelection = (endpointId: string): CatalogSelection =>
     catalogSelection[endpointId] ?? { vistas: [], acciones: [] };
   const setCatalogSelectionFor = (endpointId: string, next: CatalogSelection) => {
@@ -738,9 +782,43 @@ const ParametrosGobernanza: React.FC = () => {
   };
   const actorEsTenantSuperAdmin = (): boolean =>
     Boolean(String(tenantGlobalActor?.tenantSuperAdminId || '').trim());
+  const actorEsTenantGlobalScope = (): boolean =>
+    Boolean(String(tenantGlobalActor?.tenantGlobalId || '').trim()) &&
+    !Boolean(String(tenantGlobalActor?.tenantSuperAdminId || '').trim());
   const getHeredaGlobalOptionsPermitidas = (): HeredaGlobalOption[] => {
     if (!actorEsTenantSuperAdmin()) return [];
     return heredaGlobalOptions;
+  };
+  const getTenantGlobalOptionsForPermUsuario = (): HeredaGlobalOption[] => {
+    const actorTg = String(tenantGlobalActor?.tenantGlobalId || '').trim();
+    if (!actorTg) return [];
+    const tg = tenantGlobales.find((t) => String(t?.id || '').trim() === actorTg);
+    return [{ id: actorTg, label: tg ? tg.label : `tenantGlobal | ${actorTg}` }];
+  };
+  const getHeredaOptionsPermitidasPorTenantGlobal = (tenantGlobalId: string): HeredaGlobalOption[] => {
+    const tg = String(tenantGlobalId || '').trim();
+    if (!tg) return [];
+    const ids = new Set<string>();
+    herenciasUsuario.forEach((h: any) => {
+      const tgH = String(h?.tenantGlobal?._id || h?.tenantGlobal || '').trim();
+      if (tgH === tg) {
+        const heredaId = String(h?.heredaGlobal?._id || h?.heredaGlobal || '').trim();
+        if (heredaId) ids.add(heredaId);
+      }
+    });
+    const byTg = heredaGlobalOptions.filter((opt) => ids.has(opt.id));
+    if (byTg.length) return byTg;
+    // Fallback: herencias con scope tenantGlobal según heredaGlobalScopeById
+    return heredaGlobalOptions.filter((opt) => heredaGlobalScopeById[opt.id] === 'tenantGlobal');
+  };
+  const getCorporativoByHerencia = (heredaId: string): string | null => {
+    const h = herenciasUsuario.find((h: any) =>
+      String(h?.heredaGlobal?._id || h?.heredaGlobal || '').trim() === heredaId
+    );
+    if (!h) return null;
+    const tc = String(h?.tenantCorporativo?._id || h?.tenantCorporativo || '').trim();
+    const tcNombre = String(h?.tenantCorporativo?.razon_social || h?.tenantCorporativo?.titulo || '').trim();
+    return tc ? (tcNombre ? `${tcNombre} | ${tc}` : tc) : null;
   };
   const getTenantSuperAdminOptionsForPermUsuario = (): HeredaGlobalOption[] => {
     const unique = new Map<string, HeredaGlobalOption>();
@@ -1202,9 +1280,14 @@ const ParametrosGobernanza: React.FC = () => {
           ? accionIds.map((id: string) => accionById.get(id) || { id, label: id, method: '' })
           : [];
 
-        if (vistasCatalogo.length && accionesCatalogo.length) {
+        if (vistasCatalogo.length) {
           return { vistasCatalogo, accionesCatalogo };
         }
+      }
+
+      // Last resort: if vistas state is populated, expose all vistas so the admin can select
+      if (vistas.length) {
+        return { vistasCatalogo: vistas, accionesCatalogo: acciones };
       }
 
       return { vistasCatalogo: [], accionesCatalogo: [] };
@@ -1597,6 +1680,19 @@ const ParametrosGobernanza: React.FC = () => {
     const currentTsa = getFieldValue(endpointId, 'tenantSuperAdminScope').trim();
     const currentRegla = getFieldValue(endpointId, 'reglaGlobalFallback').trim();
 
+    if (actorEsTenantGlobalScope()) {
+      const tgId = String(tenantGlobalActor?.tenantGlobalId || '').trim();
+      const currentTg = getFieldValue(endpointId, 'tenantGlobalScope').trim();
+      if (tgId && currentTg !== tgId) setFieldValue(endpointId, 'tenantGlobalScope', tgId);
+      const herenciasDisponibles = getHeredaOptionsPermitidasPorTenantGlobal(tgId);
+      if (herenciasDisponibles.length > 0 && !herenciasDisponibles.some((h) => h.id === currentHereda)) {
+        setFieldValue(endpointId, 'heredaGlobal', String(herenciasDisponibles[0]?.id || ''));
+      }
+      if (currentTsa) setFieldValue(endpointId, 'tenantSuperAdminScope', '');
+      if (currentRegla) setFieldValue(endpointId, 'reglaGlobalFallback', '');
+      return;
+    }
+
     if (!actorEsTenantSuperAdmin()) {
       if (currentHereda) setFieldValue(endpointId, 'heredaGlobal', '');
       if (currentTsa) setFieldValue(endpointId, 'tenantSuperAdminScope', '');
@@ -1796,31 +1892,40 @@ const ParametrosGobernanza: React.FC = () => {
       }
 
       if (endpoint.id === 'perm-usuario-tenant-global') {
-        if (!actorEsTenantSuperAdmin()) {
-          throw new Error('Solo tenantSuperAdmin (DIOS) puede ejecutar esta operacion');
-        }
-        const tenantSuperAdminScope = getFieldValue(endpoint.id, 'tenantSuperAdminScope').trim();
-        if (!tenantSuperAdminScope) {
-          throw new Error('Selecciona tenantSuperAdmin');
+        const esTenantGlobal = actorEsTenantGlobalScope();
+        const esSuperAdmin = actorEsTenantSuperAdmin();
+        if (!esSuperAdmin && !esTenantGlobal) {
+          throw new Error('Solo tenantSuperAdmin o tenantGlobal puede ejecutar esta operacion');
         }
         const selectedHeredaGlobal = String(body.heredaGlobal || '').trim();
         if (!selectedHeredaGlobal) throw new Error('Completa: Herencia global');
-        const herenciasDisponibles = getHeredaOptionsPermitidasPorTenantSuperAdmin(tenantSuperAdminScope);
-        const reglasDisponibles = getReglaDiosOptionsByTenantSuperAdmin(tenantSuperAdminScope);
 
-        if (herenciasDisponibles.length > 0) {
-          if (!herenciasDisponibles.some((opt) => opt.id === selectedHeredaGlobal)) {
-            throw new Error('La herencia seleccionada no pertenece al tenantSuperAdmin');
+        if (esTenantGlobal) {
+          const tgId = getFieldValue(endpoint.id, 'tenantGlobalScope').trim();
+          if (!tgId) throw new Error('Selecciona tenantGlobal');
+          const herenciasDisponibles = getHeredaOptionsPermitidasPorTenantGlobal(tgId);
+          if (herenciasDisponibles.length > 0 && !herenciasDisponibles.some((opt) => opt.id === selectedHeredaGlobal)) {
+            throw new Error('La herencia seleccionada no pertenece al tenantGlobal');
           }
         } else {
-          if (!reglasDisponibles.some((opt) => opt.id === selectedHeredaGlobal)) {
-            throw new Error('No hay herencias; debes seleccionar una regla DIOS parametrizada');
+          const tenantSuperAdminScope = getFieldValue(endpoint.id, 'tenantSuperAdminScope').trim();
+          if (!tenantSuperAdminScope) throw new Error('Selecciona tenantSuperAdmin');
+          const herenciasDisponibles = getHeredaOptionsPermitidasPorTenantSuperAdmin(tenantSuperAdminScope);
+          const reglasDisponibles = getReglaDiosOptionsByTenantSuperAdmin(tenantSuperAdminScope);
+          if (herenciasDisponibles.length > 0) {
+            if (!herenciasDisponibles.some((opt) => opt.id === selectedHeredaGlobal)) {
+              throw new Error('La herencia seleccionada no pertenece al tenantSuperAdmin');
+            }
+          } else {
+            if (!reglasDisponibles.some((opt) => opt.id === selectedHeredaGlobal)) {
+              throw new Error('No hay herencias; debes seleccionar una regla DIOS parametrizada');
+            }
           }
         }
 
         const { vistasCatalogo, accionesCatalogo } = getPermisosCatalog(endpoint.id);
-        if (!vistasCatalogo.length || !accionesCatalogo.length) {
-          throw new Error('La herencia no tiene datos y tampoco hay regla con acciones/vistas para fallback');
+        if (!vistasCatalogo.length) {
+          throw new Error('La herencia no tiene datos y tampoco hay regla con vistas para fallback');
         }
 
         const selected = getCatalogSelection(endpoint.id);
@@ -1865,7 +1970,16 @@ const ParametrosGobernanza: React.FC = () => {
         const selectedNvlId = String(body.nvlGeneracionTenant || '').trim();
         const selectedNvlLabel = (tenantGlobalSelects.nvlGeneracionTenant || [])
           .find((opt) => opt.id === selectedNvlId)?.label || '';
+        const nvlEsLibre = /libre|nvl 0/i.test(String(selectedNvlLabel));
+        const nvlPermiteCorporativo =
+          /tenant-global|nvl 1/i.test(String(selectedNvlLabel)) ||
+          /tenant-(co?rporativo)|nvl 2/i.test(String(selectedNvlLabel));
         const nvlEsTenantCorporativo = /tenant-(co?rporativo)|nvl 2/i.test(String(selectedNvlLabel));
+        const esSuperAdmin = Boolean(String(tenantGlobalActor?.tenantSuperAdminId || '').trim());
+        const esTenantGlobal = Boolean(String(tenantGlobalActor?.tenantGlobalId || '').trim()) && !esSuperAdmin;
+        if (esTenantGlobal && !nvlEsLibre && nvlPermiteCorporativo && !String(body.coporativo || '').trim()) {
+          throw new Error('Completa: Corporativo (empresa)');
+        }
         if (!nvlEsTenantCorporativo && 'tenantGlobalRef' in body) {
           delete body.tenantGlobalRef;
         }
@@ -2490,7 +2604,7 @@ const ParametrosGobernanza: React.FC = () => {
             )}
           </div>
         </div>
-        {!vistasCatalogo.length || !accionesCatalogo.length ? (
+        {!vistasCatalogo.length ? (
           <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
             Faltan datos para construir permisos.
             <Button className="ml-2 h-7 px-2 text-xs" type="button" variant="outline" onClick={hydrateData} disabled={loadingData}>
@@ -2628,7 +2742,7 @@ const ParametrosGobernanza: React.FC = () => {
             </Button>
           </div>
         </div>
-        {!vistasCatalogo.length || !accionesCatalogo.length ? (
+        {!vistasCatalogo.length ? (
           <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
             Primero elige una herencia y luego marca la vista a la que le quieres cambiar permisos.
             <Button className="ml-2 h-7 px-2 text-xs" type="button" variant="outline" onClick={hydrateData} disabled={loadingData}>
@@ -2946,6 +3060,70 @@ const ParametrosGobernanza: React.FC = () => {
         }
         if (endpoint.id === 'perm-usuario-tenant-global' && field.name === 'heredaGlobal') {
           const esSuperAdmin = actorEsTenantSuperAdmin();
+          const esTenantGlobal = actorEsTenantGlobalScope();
+
+          // ── Rama: TenantGlobal ──────────────────────────────────────────
+          if (esTenantGlobal) {
+            const tgOptions = getTenantGlobalOptionsForPermUsuario();
+            const tgSelected = getFieldValue(endpoint.id, 'tenantGlobalScope').trim()
+              || String(tgOptions[0]?.id || '');
+            const herenciasDisponibles = getHeredaOptionsPermitidasPorTenantGlobal(tgSelected);
+            const hayHerencias = herenciasDisponibles.length > 0;
+            return (
+              <div key={field.name}>
+                <Label>TenantGlobal *</Label>
+                <select
+                  className="mt-1 h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+                  value={tgSelected}
+                  onChange={(e) => {
+                    const nextTg = e.target.value;
+                    setFieldValue(endpoint.id, 'tenantGlobalScope', nextTg);
+                    setFieldValue(endpoint.id, 'heredaGlobal', '');
+                  }}
+                >
+                  <option value="">{tgOptions.length ? 'Selecciona tenantGlobal' : 'Sin tenantGlobal asignado'}</option>
+                  {tgOptions.map((opt) => <option key={opt.id} value={opt.id}>{opt.label}</option>)}
+                </select>
+
+                <Label className="mt-2 block">{field.label} {field.required ? '*' : ''}</Label>
+                <select
+                  className="mt-1 h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+                  value={getFieldValue(endpoint.id, field.name)}
+                  onChange={(e) => setFieldValue(endpoint.id, field.name, e.target.value)}
+                  disabled={!tgSelected}
+                >
+                  <option value="">
+                    {!tgSelected
+                      ? 'Selecciona tenantGlobal primero'
+                      : hayHerencias
+                      ? 'Selecciona herencia'
+                      : 'Sin herencias para este tenantGlobal'}
+                  </option>
+                  {herenciasDisponibles.map((h) => <option key={h.id} value={h.id}>{h.label}</option>)}
+                </select>
+
+                {(() => {
+                  const selectedHereda = getFieldValue(endpoint.id, field.name).trim();
+                  const corporativo = selectedHereda ? getCorporativoByHerencia(selectedHereda) : null;
+                  if (!corporativo) return null;
+                  return (
+                    <div className="mt-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                      <p className="text-xs font-medium text-slate-600">Corporativo asociado</p>
+                      <p className="text-sm text-slate-800">{corporativo}</p>
+                    </div>
+                  );
+                })()}
+
+                <p className="mt-1 text-xs text-slate-500">
+                  {hayHerencias
+                    ? 'Selecciona la herencia global a asignar.'
+                    : tgSelected ? 'Este tenantGlobal no tiene herencias globales disponibles.' : ''}
+                </p>
+              </div>
+            );
+          }
+
+          // ── Rama: TenantSuperAdmin ──────────────────────────────────────
           const tsaOptions = getTenantSuperAdminOptionsForPermUsuario();
           const tsaSelected = getFieldValue(endpoint.id, 'tenantSuperAdminScope').trim();
           const herenciasDisponibles = getHeredaOptionsPermitidasPorTenantSuperAdmin(tsaSelected);
@@ -2966,7 +3144,7 @@ const ParametrosGobernanza: React.FC = () => {
                 }}
                 disabled={!esSuperAdmin}
               >
-                <option value="">{esSuperAdmin ? 'Selecciona tenantSuperAdmin' : 'Solo tenantSuperAdmin puede asignar'}</option>
+                <option value="">{esSuperAdmin ? 'Selecciona tenantSuperAdmin' : 'Sin acceso'}</option>
                 {tsaOptions.map((opt) => <option key={opt.id} value={opt.id}>{opt.label}</option>)}
               </select>
 
@@ -2978,13 +3156,7 @@ const ParametrosGobernanza: React.FC = () => {
                 disabled={!esSuperAdmin || !hayHerencias}
               >
                 <option value="">
-                  {!esSuperAdmin
-                    ? 'Solo tenantSuperAdmin puede asignar'
-                    : !tsaSelected
-                    ? 'Selecciona tenantSuperAdmin primero'
-                    : hayHerencias
-                    ? 'Selecciona herencia'
-                    : 'Sin herencias para este tenantSuperAdmin'}
+                  {!esSuperAdmin ? 'Sin acceso' : !tsaSelected ? 'Selecciona tenantSuperAdmin primero' : hayHerencias ? 'Selecciona herencia' : 'Sin herencias para este tenantSuperAdmin'}
                 </option>
                 {herenciasDisponibles.map((h) => <option key={h.id} value={h.id}>{h.label}</option>)}
               </select>
@@ -3001,22 +3173,14 @@ const ParametrosGobernanza: React.FC = () => {
                 disabled={!esSuperAdmin || !tsaSelected || hayHerencias}
               >
                 <option value="">
-                  {!esSuperAdmin
-                    ? 'Solo tenantSuperAdmin puede asignar'
-                    : !tsaSelected
-                    ? 'Selecciona tenantSuperAdmin primero'
-                    : hayHerencias
-                    ? 'Bloqueada: existe herencia'
-                    : 'Selecciona regla DIOS parametrizada'}
+                  {!esSuperAdmin ? 'Sin acceso' : !tsaSelected ? 'Selecciona tenantSuperAdmin primero' : hayHerencias ? 'Bloqueada: existe herencia' : 'Selecciona regla DIOS parametrizada'}
                 </option>
                 {reglasDisponibles.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
               </select>
               <p className="mt-1 text-xs text-slate-500">
                 {esSuperAdmin
-                  ? (hayHerencias
-                    ? 'Existe herencia: se habilitan herencias y se bloquea regla.'
-                    : 'Sin herencia: se habilita regla parametrizada para fallback.')
-                  : 'Flujo bloqueado para tenantGlobal.'}
+                  ? (hayHerencias ? 'Existe herencia: se habilitan herencias y se bloquea regla.' : 'Sin herencia: se habilita regla parametrizada para fallback.')
+                  : 'Sin acceso de ejecución.'}
               </p>
             </div>
           );
@@ -3213,7 +3377,9 @@ const ParametrosGobernanza: React.FC = () => {
           ['tipo_tenant', 'ownerType', 'nvlGeneracionTenant', 'apisDominios', 'accionesUsu', 'rolesMabs', 'coporativo', 'tenantGlobalRef'].includes(field.name);
         if (usesTenantGlobalSelects) {
           const options = tenantGlobalSelects[field.name] || [];
-          const actorEsTenantGlobal = !!String(tenantGlobalActor.tenantGlobalId || '').trim();
+          const actorEsTenantGlobal =
+            !!String(tenantGlobalActor.tenantGlobalId || '').trim() &&
+            !String(tenantGlobalActor.tenantSuperAdminId || '').trim();
           const selectedNvl = getFieldValue(endpoint.id, 'nvlGeneracionTenant').trim();
           const nvlLabel = (tenantGlobalSelects.nvlGeneracionTenant || []).find((opt) => opt.id === selectedNvl)?.label || '';
           const nvlTexto = String(nvlLabel).toLowerCase();

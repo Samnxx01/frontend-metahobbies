@@ -5,7 +5,6 @@ import { toast } from 'react-toastify';
 // Importar Providers
 import { useAuth } from "@/app/providers/AuthProvider";
 import { useCart } from "@/app/providers/CartProvider";
-import { useMembership } from "@/app/providers/MembershipProvider";
 // Shadcn UI components
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetClose } from "@/components/ui/sheet";
@@ -19,7 +18,7 @@ import { Menu, ShoppingCart, User, X, Trash2, ShieldCheck, LogOut, LogIn, Chevro
 import ThemeToggle from "@/app/presentation/components/common/ThemeToggle";
 
 import { apiFetch } from "@/app/services/api";
-import { getPrivateHomeRoute, getPublicNavigationRoutes, getUserShortcutRoutes } from "@/app/services/routeService";
+import { getPublicNavigationRoutes, getUserShortcutRoutes } from "@/app/services/routeService";
 
 import type { NavbarProps } from '@/types/components';
 
@@ -49,36 +48,33 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
     const { cartItems, removeFromCart } = useCart();
     const totalItems = cartItems.reduce((sum, item) => sum + item.quantity, 0);
     const cartTotal = cartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-    const { hasActiveMembership } = useMembership();
     const [isScrolled, setIsScrolled] = useState<boolean>(false);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
 
     const [logoUrl, setLogoUrl] = useState<string>(DEFAULT_LOGO);
     const [logoError, setLogoError] = useState<boolean>(false);
     const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
-    const [privateHomePath, setPrivateHomePath] = useState<string>('/admin/dashboard');
+    const [privateHomePath, setPrivateHomePath] = useState<string>('/admin/gestor-rutas/administracion/dashboardadmin');
     const [profilePath, setProfilePath] = useState<string>('/perfil');
     const [membershipPath, setMembershipPath] = useState<string>('/membresia/dashboard');
+    const [showAdminMenu, setShowAdminMenu] = useState<boolean>(false);
+    const [showMembresiaMenu, setShowMembresiaMenu] = useState<boolean>(false);
     const menuItemsWithoutCart = menuItems.filter((item) => {
         const normalizedLabel = String(item.label || '').trim().toLowerCase();
         const normalizedPath = String(item.path || '').trim().toLowerCase();
         return normalizedLabel !== 'carrito' && normalizedPath !== '/carrito';
     });
 
-    const userRole = String(user?.role || user?.rol || '').toUpperCase();
-    const hasAdminScope = ['ADMIN', 'DIOS', 'DESAROLLADOR'].includes(userRole);
-
     useEffect(() => {
         const fetchHeaderData = async (): Promise<void> => {
             try {
-                const [logoRes, dynamicRoutes, privateHome, shortcutRoutes] = await Promise.all([
+                const [logoRes, dynamicRoutes, shortcutRoutes] = await Promise.all([
                     apiFetch('/api/config/parametrizacion/listar/logos/coporativo', {
                         method: 'GET',
                         useAuth: false,
                         logoutOn401: false
                     }),
                     getPublicNavigationRoutes(),
-                    hasAdminScope ? getPrivateHomeRoute() : Promise.resolve<string | null>(null),
                     user ? getUserShortcutRoutes() : Promise.resolve(null)
                 ]);
 
@@ -99,19 +95,21 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
                     path: route.path
                 })));
 
-                if (typeof privateHome === 'string' && privateHome.trim()) {
-                    setPrivateHomePath(privateHome);
-                }
-
                 if (shortcutRoutes && typeof shortcutRoutes === 'object') {
                     if (typeof shortcutRoutes.perfil === 'string' && shortcutRoutes.perfil.trim()) {
                         setProfilePath(shortcutRoutes.perfil);
                     }
+                    if (typeof shortcutRoutes.admin === 'string' && shortcutRoutes.admin.trim()) {
+                        setPrivateHomePath(shortcutRoutes.admin);
+                        setShowAdminMenu(true);
+                    } else {
+                        setShowAdminMenu(false);
+                    }
                     if (typeof shortcutRoutes.membresia === 'string' && shortcutRoutes.membresia.trim()) {
                         setMembershipPath(shortcutRoutes.membresia);
-                    }
-                    if (!hasAdminScope && typeof shortcutRoutes.admin === 'string' && shortcutRoutes.admin.trim()) {
-                        setPrivateHomePath(shortcutRoutes.admin);
+                        setShowMembresiaMenu(true);
+                    } else {
+                        setShowMembresiaMenu(false);
                     }
                 }
             } catch (err) {
@@ -123,7 +121,7 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
         };
 
         fetchHeaderData();
-    }, [hasAdminScope, user]);
+    }, [user]);
 
     useEffect(() => {
         const handleScroll = (): void => {
@@ -292,12 +290,12 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
                 <DropdownMenuItem onClick={() => navigate(profilePath)} className="cursor-pointer py-2.5">
                     <User className="mr-2 h-4 w-4" /> Mi Perfil
                 </DropdownMenuItem>
-                {hasAdminScope && (
+                {showAdminMenu && (
                     <DropdownMenuItem onClick={() => navigate(privateHomePath)} className="cursor-pointer py-2.5">
                         <ShieldCheck className="mr-2 h-4 w-4" /> Panel Admin
                     </DropdownMenuItem>
                 )}
-                {user && hasActiveMembership && (
+                {showMembresiaMenu && (
                     <DropdownMenuItem onClick={() => navigate(membershipPath)} className="cursor-pointer py-2.5">
                         <Crown className="mr-2 h-4 w-4" /> Mi Membresía
                     </DropdownMenuItem>
@@ -354,7 +352,7 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
                                 </SheetClose>
                             );
                         })}
-                        {hasAdminScope && (
+                        {showAdminMenu && (
                             <SheetClose asChild>
                                 <Link to={privateHomePath} className="flex items-center justify-between px-4 py-3 text-base font-medium rounded-xl transition-all duration-200 border border-transparent hover:bg-accent/50 hover:border-accent text-foreground">
                                     <span className="font-semibold flex items-center"><ShieldCheck className="mr-3 h-5 w-5" /> Panel Admin</span>
@@ -362,7 +360,7 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
                                 </Link>
                             </SheetClose>
                         )}
-                        {user && hasActiveMembership && (
+                        {showMembresiaMenu && (
                             <SheetClose asChild>
                                 <Link to={membershipPath} className="flex items-center justify-between px-4 py-3 text-base font-medium rounded-xl transition-all duration-200 border border-transparent hover:bg-accent/50 hover:border-accent text-foreground">
                                     <span className="font-semibold flex items-center"><Crown className="mr-3 h-5 w-5" /> Mi Membresía</span>
