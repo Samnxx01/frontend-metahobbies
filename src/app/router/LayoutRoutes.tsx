@@ -6,55 +6,74 @@ import { useLoading } from '@/app/providers/LoadingProvider';
 
 import PublicLayout from '@/app/presentation/layouts/PublicLayout';
 import AuthLayout from '@/app/presentation/layouts/AuthLayout';
-import Home from '@/app/presentation/pages/home/Home';
-import Productos from '@/app/presentation/pages/productos/Productos';
-import DetalleProducto from '@/app/presentation/pages/producto/DetalleProducto';
-import Carrito from '@/app/presentation/pages/carrito/Carrito';
-import Checkout from '@/app/presentation/pages/checkout/Checkout';
-import Perfil from '@/app/presentation/pages/perfil/Perfil';
 import AdminLayout from '@/app/presentation/layouts/AdminLayout';
-import DashboardAdmin from '@/app/presentation/pages/admin/Dashboard';
-import GestionUsuarios from '@/app/presentation/pages/admin/GestionUsuarios';
-import GestionReferidos from '@/app/presentation/pages/admin/GestionReferidos';
-import PedidosAdmin from '@/app/presentation/pages/admin/Pedidos';
-import ConfiguracionAdmin from '@/app/presentation/pages/admin/Configuracion';
-import Parametrizacion from '@/app/presentation/pages/admin/Parametrizacion';
-import ModalInicio from '@/app/presentation/pages/admin/ModalInicio';
-import GestionCategorias from '@/app/presentation/pages/admin/GestionCategorias';
-import GestionRutas from '@/app/presentation/pages/admin/GestionRutas';
-import Login from '@/app/presentation/pages/login/Login';
-import Registro from '@/app/presentation/pages/registro/Registro';
-import RecuperarContrasena from '@/app/presentation/pages/recuperar-contrasena/RecuperarContrasena';
-import CambiarContrasenaProvisional from '@/app/presentation/pages/cambiar-contrasena/CambiarContrasenaProvisional';
-import Contacto from '@/app/presentation/pages/contacto/Contacto';
 import { MembershipRoutes } from './MembershipRoutes';
-import GestionProductos from '../presentation/pages/admin/GestionProductos';
-import Posts from '@/app/presentation/pages/posts/Posts';
-import SobreNosotros from '@/app/presentation/pages/sobre-nosotros/SobreNosotros';
-import ModeloNegocio from '@/app/presentation/pages/modelo-negocio/ModeloNegocio';
-import ParametrizacionCorporativa from '@/app/presentation/pages/admin/ParametrizacionCorporativa';
-import RepresentanteEmpresarial from '@/app/presentation/pages/admin/RepresentanteEmpresarial';
-import SociedadesCorporativas from '@/app/presentation/pages/admin/SociedadesCorporativas';
-import DireccionCorporativa from '@/app/presentation/pages/admin/DireccionCorporativa';
-import DocumentosCorporativos from '@/app/presentation/pages/admin/DocumentosCorporativos';
-import LogosCorporativos from '@/app/presentation/pages/admin/LogosCorporativos';
-import SectorIndustriaEmpresa from '@/app/presentation/pages/admin/SectorIndustriaEmpresa';
-import EstadoUsuarios from '@/app/presentation/pages/admin/EstadoUsuarios';
-import PublicidadPanel from '@/app/presentation/pages/admin/PublicidadPanel';
-import PostsParametrizables from '@/app/presentation/pages/admin/PostsParametrizables';
-import PerfilCorporativo from '../presentation/pages/admin/PerfilCorporativo';
-import DesactivarRepresentante from '../presentation/pages/admin/DesactivarRepresentante';
-import ParametrosGobernanza from '@/app/presentation/pages/admin/ParametrosGobernanza';
-import ParametrizacionCatologTenant from '@/app/presentation/pages/admin/ParametrizacionCatologTenant';
-import ParametrizacionMembresia from '../presentation/pages/admin/ParametrizacionMembresia/ParametrizacionMembresia';
-import Comisiones from '../presentation/pages/admin/ParametrizacionMembresia/comisiones/Comisiones';
+
+// Imports directos para rutas especiales fuera del componentMap dinámico
+import CambiarContrasenaProvisional from '@/app/presentation/pages/cambiar-contrasena/CambiarContrasenaProvisional';
 import ActivacionCuenta from '../presentation/pages/activar-cuenta/ActivaciónCuenta';
-import RecuperarContrasenaToken from '../presentation/pages/recuperar-contrasena/RecuperarContrasenaToken';
-import UsuariosTenant from '../presentation/pages/admin/UsuariosTenant';
-import TenantCorporativo from '../presentation/pages/admin/TenantCorporativo';
-import RouteUserMenuSettings from '../presentation/components/admin/RouteUserMenuSettings';
-import ParametrizacionMenu from '../presentation/pages/admin/ParametrizacionMenu';
-// Types for route system
+import Perfil from '@/app/presentation/pages/perfil/Perfil';
+
+// ── Dynamic component map via Vite glob ───────────────────────────────────────
+// Escanea TODOS los .tsx de pages/ y components/admin/ automáticamente.
+// Al agregar un nuevo componente, se registra solo con el nombre del archivo.
+const _pageModules = import.meta.glob<{ default: React.ComponentType<any> }>(
+    [
+        '../presentation/pages/**/*.tsx',
+        '../presentation/components/admin/**/*.tsx',
+    ],
+    { eager: true }
+);
+
+type ComponentMapType = Record<string, React.ComponentType<any>>;
+
+const buildComponentMap = (): ComponentMapType => {
+    const map: ComponentMapType = {};
+
+    // 1. Registro automático por nombre de archivo
+    for (const [filePath, mod] of Object.entries(_pageModules)) {
+        const match = filePath.match(/\/([^/]+)\.tsx$/);
+        if (match?.[1] && mod.default) {
+            map[match[1]] = mod.default;
+        }
+    }
+
+    // 2. Aliases: nombres alternativos usados en la BD de rutas
+    //    Solo agregar cuando el nombre en BD difiere del nombre del archivo.
+    const aliases: Record<string, string> = {
+        // Typos históricos en BD
+        ParametrizacionCatalogTenant:  'ParametrizacionCatologTenant',
+        TenantCorportativo:            'TenantCorporativo',
+        tenantCorportativo:            'TenantCorporativo',
+        tenantCorporativo:             'TenantCorporativo',
+        parametrizacionMenu:           'ParametrizacionMenu',
+        RouteUserMenuSettings:         'ParametrizacionMenu',
+        envioCorreos:                  'EnvioCorreos',
+        // Alias semántico
+        ConfiguracionPerfil:           'Perfil',
+        // Dashboard: el archivo se llama Dashboard pero la BD puede enviar DashboardAdmin
+        DashboardAdmin:                'Dashboard',
+    };
+
+    for (const [alias, target] of Object.entries(aliases)) {
+        if (map[target] && !map[alias]) {
+            map[alias] = map[target];
+        }
+    }
+
+    // Compatibilidad dirigida: algunas rutas viejas en BD siguen apuntando
+    // a RouteUserMenuSettings aunque la pantalla real ahora es ParametrizacionMenu.
+    if (map.ParametrizacionMenu) {
+        map.RouteUserMenuSettings = map.ParametrizacionMenu;
+    }
+
+    return map;
+};
+
+const componentMap = buildComponentMap();
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
 interface RouteConfig {
     path: string;
     component: string;
@@ -67,64 +86,7 @@ interface AuthorizedRoutes {
     authRoutes?: RouteConfig[];
 }
 
-type ComponentMapType = {
-    [key: string]: React.ComponentType<any>;
-};
-
-const componentMap: ComponentMapType = {
-    Home,
-    Productos,
-    DetalleProducto,
-    Carrito,
-    Checkout,
-    Perfil,
-    Login,
-    Registro,
-    RecuperarContrasena,
-    DashboardAdmin,
-    GestionProductos,
-    GestionUsuarios,
-    GestionReferidos,
-    PedidosAdmin,
-    ConfiguracionAdmin,
-    Parametrizacion,
-    ModalInicio,
-    GestionCategorias,
-    GestionRutas,
-    Contacto,
-    Posts,
-    SobreNosotros,
-    ModeloNegocio,
-    ParametrizacionCorporativa,
-    RepresentanteEmpresarial,
-    SociedadesCorporativas,
-    DireccionCorporativa,
-    DocumentosCorporativos,
-    LogosCorporativos,
-    SectorIndustriaEmpresa,
-    EstadoUsuarios,
-    PublicidadPanel,
-    PostsParametrizables,
-    PerfilCorporativo,
-    DesactivarRepresentante,
-    ParametrosGobernanza,
-    ParametrizacionCatologTenant,
-    ParametrizacionCatalogTenant: ParametrizacionCatologTenant,
-    // Alias dinamico para rutas parametrizadas de perfil
-    ConfiguracionPerfil: Perfil,
-    ParametrizacionMembresia,
-    Comisiones,
-    ActivacionCuenta,
-    RecuperarContrasenaToken,
-    UsuariosTenant,
-    TenantCorporativo,
-    tenantCorporativo: TenantCorporativo,
-    TenantCorportativo: TenantCorporativo,
-    tenantCorportativo: TenantCorporativo,
-    RouteUserMenuSettings,
-    ParametrizacionMenu,
-    parametrizacionMenu: ParametrizacionMenu,
-  };
+// ── Admin redirect ─────────────────────────────────────────────────────────────
 
 function AdminEntryRedirect(): ReactElement {
     const [targetPath, setTargetPath] = useState<string | null>(null);
@@ -144,9 +106,7 @@ function AdminEntryRedirect(): ReactElement {
         };
 
         resolveTarget();
-        return () => {
-            active = false;
-        };
+        return () => { active = false; };
     }, []);
 
     if (!targetPath) {
@@ -156,6 +116,8 @@ function AdminEntryRedirect(): ReactElement {
     return <Navigate to={targetPath} replace />;
 }
 
+// ── Layout routes ──────────────────────────────────────────────────────────────
+
 export default function LayoutRoutes(): ReactElement {
     const [authorizedRoutes, setAuthorizedRoutes] = useState<AuthorizedRoutes | null>(null);
     const { user } = useAuth();
@@ -164,7 +126,7 @@ export default function LayoutRoutes(): ReactElement {
 
     useEffect(() => {
         showLoading();
-        const timer = setTimeout(() => hideLoading(), 500); // Simula tiempo de carga
+        const timer = setTimeout(() => hideLoading(), 500);
         return () => clearTimeout(timer);
     }, [location.pathname, showLoading, hideLoading]);
 
@@ -191,7 +153,7 @@ export default function LayoutRoutes(): ReactElement {
             const Component = componentMap[route.component];
 
             if (!Component) {
-                console.warn("Componente no encontrado:", route.component);
+                console.warn('Componente no encontrado:', route.component);
                 return (
                     <Route
                         key={route.path}
@@ -218,10 +180,7 @@ export default function LayoutRoutes(): ReactElement {
     return (
         <Routes>
             <Route element={<PublicLayout />}>
-                {/* Rutas dinámicas públicas */}
                 {authorizedRoutes.publicRoutes && renderRoutes(authorizedRoutes.publicRoutes)}
-
-                {/* Rutas especiales que no vienen del backend */}
                 <Route path="membresia/*" element={<MembershipRoutes />} />
                 <Route path="cambiar-contrasena-provisional" element={<CambiarContrasenaProvisional />} />
                 <Route path="activar-cuenta" element={<ActivacionCuenta />} />

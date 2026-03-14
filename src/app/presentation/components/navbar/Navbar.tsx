@@ -18,7 +18,7 @@ import { Menu, ShoppingCart, User, X, Trash2, ShieldCheck, LogOut, LogIn, Chevro
 import ThemeToggle from "@/app/presentation/components/common/ThemeToggle";
 
 import { apiFetch } from "@/app/services/api";
-import { getPublicNavigationRoutes, getUserShortcutRoutes } from "@/app/services/routeService";
+import { getPublicNavigationRoutes, getMenuUsuarioRoutes, MenuUsuarioItem } from "@/app/services/routeService";
 
 import type { NavbarProps } from '@/types/components';
 
@@ -54,11 +54,7 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
     const [logoUrl, setLogoUrl] = useState<string>(DEFAULT_LOGO);
     const [logoError, setLogoError] = useState<boolean>(false);
     const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
-    const [privateHomePath, setPrivateHomePath] = useState<string>('/admin/gestor-rutas/administracion/dashboardadmin');
-    const [profilePath, setProfilePath] = useState<string>('/perfil');
-    const [membershipPath, setMembershipPath] = useState<string>('/membresia/dashboard');
-    const [showAdminMenu, setShowAdminMenu] = useState<boolean>(false);
-    const [showMembresiaMenu, setShowMembresiaMenu] = useState<boolean>(false);
+    const [menuUsuarioItems, setMenuUsuarioItems] = useState<MenuUsuarioItem[]>([]);
     const menuItemsWithoutCart = menuItems.filter((item) => {
         const normalizedLabel = String(item.label || '').trim().toLowerCase();
         const normalizedPath = String(item.path || '').trim().toLowerCase();
@@ -68,14 +64,14 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
     useEffect(() => {
         const fetchHeaderData = async (): Promise<void> => {
             try {
-                const [logoRes, dynamicRoutes, shortcutRoutes] = await Promise.all([
+                const [logoRes, dynamicRoutes, usuarioItems] = await Promise.all([
                     apiFetch('/api/config/parametrizacion/listar/logos/coporativo', {
                         method: 'GET',
                         useAuth: false,
                         logoutOn401: false
                     }),
                     getPublicNavigationRoutes(),
-                    user ? getUserShortcutRoutes() : Promise.resolve(null)
+                    user ? getMenuUsuarioRoutes() : Promise.resolve([])
                 ]);
 
                 if (logoRes?.ok && logoRes?.logo) {
@@ -95,23 +91,7 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
                     path: route.path
                 })));
 
-                if (shortcutRoutes && typeof shortcutRoutes === 'object') {
-                    if (typeof shortcutRoutes.perfil === 'string' && shortcutRoutes.perfil.trim()) {
-                        setProfilePath(shortcutRoutes.perfil);
-                    }
-                    if (typeof shortcutRoutes.admin === 'string' && shortcutRoutes.admin.trim()) {
-                        setPrivateHomePath(shortcutRoutes.admin);
-                        setShowAdminMenu(true);
-                    } else {
-                        setShowAdminMenu(false);
-                    }
-                    if (typeof shortcutRoutes.membresia === 'string' && shortcutRoutes.membresia.trim()) {
-                        setMembershipPath(shortcutRoutes.membresia);
-                        setShowMembresiaMenu(true);
-                    } else {
-                        setShowMembresiaMenu(false);
-                    }
-                }
+                setMenuUsuarioItems(usuarioItems);
             } catch (err) {
                 console.error('Error en el flujo de header dinamico:', err);
                 setLogoError(true);
@@ -263,6 +243,16 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
         </DropdownMenu>
     );
 
+    const ICON_MAP: Record<string, React.ReactNode> = {
+        USER:         <User className="mr-2 h-4 w-4" />,
+        SHIELD_CHECK: <ShieldCheck className="mr-2 h-4 w-4" />,
+        CROWN:        <Crown className="mr-2 h-4 w-4" />,
+        LOG_OUT:      <LogOut className="mr-2 h-4 w-4" />,
+    };
+
+    const resolveIcon = (icon: string | null): React.ReactNode =>
+        (icon && ICON_MAP[icon.toUpperCase()]) ?? <ChevronRight className="mr-2 h-4 w-4" />;
+
     const renderProfileDropdown = (
         <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -287,19 +277,11 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
                     </div>
                 </div>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => navigate(profilePath)} className="cursor-pointer py-2.5">
-                    <User className="mr-2 h-4 w-4" /> Mi Perfil
-                </DropdownMenuItem>
-                {showAdminMenu && (
-                    <DropdownMenuItem onClick={() => navigate(privateHomePath)} className="cursor-pointer py-2.5">
-                        <ShieldCheck className="mr-2 h-4 w-4" /> Panel Admin
+                {menuUsuarioItems.map((item) => (
+                    <DropdownMenuItem key={item.key ?? item.path} onClick={() => navigate(item.path)} className="cursor-pointer py-2.5">
+                        {resolveIcon(item.icon)} {item.label}
                     </DropdownMenuItem>
-                )}
-                {showMembresiaMenu && (
-                    <DropdownMenuItem onClick={() => navigate(membershipPath)} className="cursor-pointer py-2.5">
-                        <Crown className="mr-2 h-4 w-4" /> Mi Membresía
-                    </DropdownMenuItem>
-                )}
+                ))}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleLogout} className="cursor-pointer text-destructive focus:text-destructive py-2.5">
                     <LogOut className="mr-2 h-4 w-4" /> Cerrar Sesión
@@ -352,22 +334,14 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
                                 </SheetClose>
                             );
                         })}
-                        {showAdminMenu && (
-                            <SheetClose asChild>
-                                <Link to={privateHomePath} className="flex items-center justify-between px-4 py-3 text-base font-medium rounded-xl transition-all duration-200 border border-transparent hover:bg-accent/50 hover:border-accent text-foreground">
-                                    <span className="font-semibold flex items-center"><ShieldCheck className="mr-3 h-5 w-5" /> Panel Admin</span>
+                        {menuUsuarioItems.map((item) => (
+                            <SheetClose asChild key={item.key ?? item.path}>
+                                <Link to={item.path} className="flex items-center justify-between px-4 py-3 text-base font-medium rounded-xl transition-all duration-200 border border-transparent hover:bg-accent/50 hover:border-accent text-foreground">
+                                    <span className="font-semibold flex items-center">{resolveIcon(item.icon)} {item.label}</span>
                                     <ChevronRight className="h-4 w-4 text-muted-foreground" />
                                 </Link>
                             </SheetClose>
-                        )}
-                        {showMembresiaMenu && (
-                            <SheetClose asChild>
-                                <Link to={membershipPath} className="flex items-center justify-between px-4 py-3 text-base font-medium rounded-xl transition-all duration-200 border border-transparent hover:bg-accent/50 hover:border-accent text-foreground">
-                                    <span className="font-semibold flex items-center"><Crown className="mr-3 h-5 w-5" /> Mi Membresía</span>
-                                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                                </Link>
-                            </SheetClose>
-                        )}
+                        ))}
                     </div>
                     <div className="flex flex-col gap-3 p-6 border-t border-border/30 bg-background/50 backdrop-blur-md">
                         <div className="flex items-center justify-between px-4 py-3 rounded-xl bg-accent/30">
@@ -382,11 +356,6 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
                         </SheetClose>
                         {user ? (
                             <>
-                                <SheetClose asChild>
-                                    <Button variant="outline" onClick={() => navigate(profilePath)} className="w-full justify-start font-semibold py-3 rounded-xl border-border/50 hover:border-primary/50">
-                                        <User className="mr-3 h-4 w-4" /> Mi Perfil
-                                    </Button>
-                                </SheetClose>
                                 <SheetClose asChild>
                                     <Button variant="destructive" onClick={handleLogout} className="w-full justify-start font-semibold py-3 rounded-xl">
                                         <LogOut className="mr-3 h-4 w-4" /> Cerrar Sesión

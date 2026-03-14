@@ -25,7 +25,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 // Lucide icons
 import { Loader2, AlertTriangle } from 'lucide-react';
 import { apiFetch } from '@/app/services/api';
-import { getPrivateHomeRoute } from '@/app/services/routeService';
+import { getAdminHomeRoute } from '@/app/services/routeService';
 
 // --- Interfaces ---
 interface LoginFormData {
@@ -139,11 +139,8 @@ export default function Login(): React.ReactElement {
                 toast.success('¡Acceso exitoso! Redirigiendo...');
 
                 setTimeout(async () => {
-                    const userRole = response.usuario?.rol;
-                    const targetPath = (userRole === 'ADMIN' || userRole === 'DESARROLLADOR')
-                        ? await getPrivateHomeRoute()
-                        : '/';
-                    navigate(targetPath);
+                    const adminPath = await getAdminHomeRoute();
+                    navigate(adminPath ?? '/');
                 }, 1000);
                 return;
             } else {

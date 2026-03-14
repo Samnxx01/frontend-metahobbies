@@ -48,6 +48,52 @@ export interface Route {
     | Array<string | { _id?: string; iud?: string; method?: string; etiquetas?: string }>;
 }
 
+export interface RouteMenuTag {
+  iud: string;
+  nombreTag: string;
+  codigo: string;
+  descripcion?: string | null;
+  menuTipo: 'USER_DROPDOWN' | string;
+  rutaId?: string;
+  routePath: string;
+  routeName: string;
+  label: string;
+  iconKey: string;
+  order: number;
+  estado: boolean;
+  tenantSuperAdminId?: string | null;
+  tenantGlobalId?: string | null;
+  tenantCorporativoId?: string | null;
+  ruta?: {
+    iud: string;
+    name: string;
+    path: string;
+    estadoRuta?: boolean;
+    component?: string;
+    layout?: string;
+  } | null;
+  createdAt?: string;
+  updatedAt?: string;
+  scope?: {
+    tenantSuperAdminId?: string | null;
+    tenantGlobalId?: string | null;
+    tenantCorporativoId?: string | null;
+  };
+}
+
+export interface RouteMenuTagsResponse {
+  success: boolean;
+  message?: string;
+  total?: number;
+  data: RouteMenuTag[];
+}
+
+export interface RouteMenuTagResponse {
+  success: boolean;
+  message?: string;
+  data: RouteMenuTag;
+}
+
 export interface CreateRouteDto {
   name: string;
   path: string;
@@ -108,6 +154,36 @@ export interface UpdateRouteDto {
   acciones?: string | string[];
   estadoRuta?: boolean;
   order?: number;
+}
+
+export interface CreateRouteMenuTagDto {
+  nombreTag: string;
+  codigo?: string;
+  descripcion?: string | null;
+  menuTipo?: 'USER_DROPDOWN' | string;
+  rutaId: string;
+  label: string;
+  iconKey?: string;
+  order?: number;
+  estado?: boolean;
+  tenantSuperAdminId?: string | null;
+  tenantGlobalId?: string | null;
+  tenantCorporativoId?: string | null;
+}
+
+export interface UpdateRouteMenuTagDto {
+  nombreTag?: string;
+  codigo?: string;
+  descripcion?: string | null;
+  menuTipo?: 'USER_DROPDOWN' | string;
+  rutaId?: string;
+  label?: string;
+  iconKey?: string;
+  order?: number;
+  estado?: boolean;
+  tenantSuperAdminId?: string | null;
+  tenantGlobalId?: string | null;
+  tenantCorporativoId?: string | null;
 }
 
 export interface RoutesResponse {
@@ -256,6 +332,56 @@ const normalizeAccionesRows = (payload: any): AccionOption[] => {
 export const getAllRoutes = async (): Promise<RoutesResponse> => {
   const response = await apiFetch(`${API_BASE_URL}/seguridad/rutas/listarRutas/admin`, {
     method: 'GET',
+  });
+  return response;
+};
+
+export const getRouteMenuTags = async (params?: {
+  menuTipo?: string;
+  soloActivos?: boolean;
+}): Promise<RouteMenuTagsResponse> => {
+  const search = new URLSearchParams();
+  if (params?.menuTipo) search.set('menuTipo', params.menuTipo);
+  if (params?.soloActivos === true) search.set('soloActivos', 'true');
+  const query = search.toString();
+
+  const response = await apiFetch(`${API_BASE_URL}/seguridad/rutas/menu-tags${query ? `?${query}` : ''}`, {
+    method: 'GET',
+  });
+  return response;
+};
+
+export const resolveCurrentRouteMenuTags = async (params?: {
+  menuTipo?: string;
+}): Promise<RouteMenuTagsResponse> => {
+  const search = new URLSearchParams();
+  if (params?.menuTipo) search.set('menuTipo', params.menuTipo);
+  const query = search.toString();
+  const response = await apiFetch(`${API_BASE_URL}/seguridad/rutas/menu-tags/resolver/actual${query ? `?${query}` : ''}`, {
+    method: 'GET',
+  });
+  return response;
+};
+
+export const createRouteMenuTag = async (payload: CreateRouteMenuTagDto): Promise<RouteMenuTagResponse> => {
+  const response = await apiFetch(`${API_BASE_URL}/seguridad/rutas/menu-tags`, {
+    method: 'POST',
+    body: payload,
+  });
+  return response;
+};
+
+export const updateRouteMenuTag = async (id: string, payload: UpdateRouteMenuTagDto): Promise<RouteMenuTagResponse> => {
+  const response = await apiFetch(`${API_BASE_URL}/seguridad/rutas/menu-tags/${id}`, {
+    method: 'PUT',
+    body: payload,
+  });
+  return response;
+};
+
+export const deleteRouteMenuTag = async (id: string): Promise<{ success: boolean; message?: string }> => {
+  const response = await apiFetch(`${API_BASE_URL}/seguridad/rutas/menu-tags/${id}`, {
+    method: 'DELETE',
   });
   return response;
 };

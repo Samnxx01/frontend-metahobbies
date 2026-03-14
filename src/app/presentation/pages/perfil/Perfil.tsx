@@ -8,6 +8,8 @@ import { uploadProfileImage, getProfileImageBlobUrl } from '../../../services/cl
 import { apiFetch } from '../../../services/api';
 import type { User, ClientProfile } from '../../../../types/common';
 import PerfilClienteForm from '../../components/perfil/PerfilClienteForm';
+import CuentaBancariaForm from '../../components/perfil/CuentaBancariaForm';
+import BancosCatalogoAdmin from '../../components/perfil/BancosCatalogoAdmin';
 
 // Shadcn UI components
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -26,7 +28,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 
 // Lucide icons
-import { Camera, MapPin, User as UserIcon, Edit, Save, X, Trash2, ArrowLeft, LogOut, AlertTriangle, Loader2, Building, Calendar } from 'lucide-react';
+import { Camera, MapPin, User as UserIcon, Edit, Save, X, Trash2, ArrowLeft, LogOut, AlertTriangle, Loader2, Building, Calendar, Landmark } from 'lucide-react';
 
 // --- INTERFACES ---
 
@@ -46,6 +48,13 @@ interface FieldDisplayProps {
     readOnly: boolean;
     inputRef?: React.RefObject<HTMLInputElement | null>;
     type?: string;
+}
+
+interface ProfileSection {
+    key: string;
+    label: string;
+    icon: React.ComponentType<{ className?: string }>;
+    isVisible: boolean;
 }
 
 // --- CONSTANTES ---
@@ -89,6 +98,13 @@ export default function Perfil(): React.ReactElement {
     const [profileImageBlobUrl, setProfileImageBlobUrl] = useState<string | null>(null);
     const [openConfirmDialog, setOpenConfirmDialog] = useState<boolean>(false);
     const [imageLoading, setImageLoading] = useState<boolean>(false);
+
+    const tenantSuperAdminScopeId = String(
+        user?.auth?.tenantScope?.tenantSuperAdminId ||
+        user?.tenantSuperAdminId ||
+        ''
+    ).trim();
+    const isTenantSuperAdmin = Boolean(tenantSuperAdminScopeId);
 
     // Redirección si el usuario no existe
     if (loading) {
@@ -309,6 +325,25 @@ export default function Perfil(): React.ReactElement {
         </div>
     );
 
+    const sections: ProfileSection[] = [
+        { key: 'personal', label: 'Información Personal', icon: UserIcon, isVisible: true },
+        { key: 'address', label: 'Direcciones de Envío', icon: MapPin, isVisible: true },
+        { key: 'photo', label: 'Foto de Perfil', icon: Camera, isVisible: true },
+        { key: 'membership', label: 'Membresía', icon: Building, isVisible: true },
+        { key: 'banking', label: 'Cuenta Bancaria', icon: Landmark, isVisible: true },
+        { key: 'bankCatalog', label: 'Bancos Wompi', icon: Landmark, isVisible: isTenantSuperAdmin },
+        { key: 'history', label: 'Historial de Pedidos', icon: Calendar, isVisible: true },
+    ];
+
+    const visibleSections = sections.filter((section) => section.isVisible);
+
+    useEffect(() => {
+        const exists = visibleSections.some((section) => section.key === activeNavItem);
+        if (!exists && visibleSections.length > 0) {
+            setActiveNavItem(visibleSections[0].key);
+        }
+    }, [activeNavItem, visibleSections]);
+
     return (
         <div className="min-h-screen bg-background flex flex-col items-center py-6 md:py-10 px-4">
             <div className="w-full max-w-5xl">
@@ -372,6 +407,17 @@ export default function Perfil(): React.ReactElement {
                             <Separator className="bg-border" />
                         </CardHeader>
                         <CardContent className="space-y-1 p-4">
+                            {visibleSections.map((section) => (
+                                <NavItem
+                                    key={section.key}
+                                    icon={section.icon}
+                                    label={section.label}
+                                    itemKey={section.key}
+                                    activeNavItem={activeNavItem}
+                                    setActiveNavItem={setActiveNavItem}
+                                />
+                            ))}
+                            <div className="hidden">
                             <NavItem
                                 icon={UserIcon}
                                 label="Información Personal"
@@ -400,6 +446,15 @@ export default function Perfil(): React.ReactElement {
                                 activeNavItem={activeNavItem}
                                 setActiveNavItem={setActiveNavItem}
                             />
+                            {false && (
+                                <>
+                            <NavItem
+                                icon={Landmark}
+                                label="Cuenta Bancaria"
+                                itemKey="banking"
+                                activeNavItem={activeNavItem}
+                                setActiveNavItem={setActiveNavItem}
+                            />
                             <NavItem
                                 icon={Calendar}
                                 label="Historial de Pedidos"
@@ -407,6 +462,9 @@ export default function Perfil(): React.ReactElement {
                                 activeNavItem={activeNavItem}
                                 setActiveNavItem={setActiveNavItem}
                             />
+                                </>
+                            )}
+                            </div>
                             <Button
                                 variant="destructive"
                                 className="w-full justify-start mt-4"
@@ -481,7 +539,13 @@ export default function Perfil(): React.ReactElement {
                         )}
 
                         {/* Otras secciones pendientes */}
-                        {activeNavItem !== 'personal' && activeNavItem !== 'address' && activeNavItem !== 'photo' && (
+                        {activeNavItem === 'banking' && (
+                            <CuentaBancariaForm token={localStorage.getItem('token') || undefined} />
+                        )}
+                        {activeNavItem === 'bankCatalog' && isTenantSuperAdmin && (
+                            <BancosCatalogoAdmin token={localStorage.getItem('token') || undefined} />
+                        )}
+                        {activeNavItem !== 'personal' && activeNavItem !== 'address' && activeNavItem !== 'photo' && activeNavItem !== 'banking' && activeNavItem !== 'bankCatalog' && (
                             <Card className="shadow-sm border-border bg-card p-6 text-center">
                                 <p className="text-base md:text-lg font-semibold text-muted-foreground">
                                     {localUser.nombre} - Contenido de {activeNavItem.charAt(0).toUpperCase() + activeNavItem.slice(1)}.

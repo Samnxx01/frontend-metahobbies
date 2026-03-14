@@ -125,12 +125,21 @@ export interface RouteCatalogItem {
     layout: string;
     component: string;
     name: string;
+    icon?: string | null;
     mostrarEnNavbarPublico?: boolean;
     mostrarEnSidebar?: boolean;
     mostrarEnMenuUsuario?: boolean;
     menuUsuarioKey?: string | null;
     menuUsuarioLabel?: string | null;
     menuUsuarioOrder?: number;
+}
+
+export interface MenuUsuarioItem {
+    key: string | null;
+    label: string;
+    path: string;
+    icon: string | null;
+    order: number;
 }
 
 export interface UserShortcutRoutes {
@@ -225,6 +234,7 @@ export const getRouteCatalog = async (): Promise<RouteCatalogItem[]> => {
                 layout: r.layout.replace("/", "").trim(),
                 component: r.component.replace(/\.(jsx|tsx|js|ts)$/i, ""),
                 name: r.name,
+                icon: r.icon ?? null,
                 mostrarEnNavbarPublico: r.mostrarEnNavbarPublico === true,
                 mostrarEnSidebar: r.mostrarEnSidebar === true,
                 mostrarEnMenuUsuario: r.mostrarEnMenuUsuario === true,
@@ -620,5 +630,52 @@ export const getPrivateHomeRoute = async (): Promise<string> => {
         return "/admin/gestor-rutas/administracion/dashboardadmin";
     } catch (_error) {
         return "/admin/gestor-rutas/administracion/dashboardadmin";
+    }
+};
+
+/**
+ * Retorna la ruta home del panel admin si el catálogo del usuario incluye
+ * al menos una ruta con layout admin; de lo contrario retorna null.
+ * No depende de roles hardcodeados: la decisión la toma el backend según el JWT.
+ */
+export const getAdminHomeRoute = async (): Promise<string | null> => {
+    try {
+        const catalog = await getRouteCatalog();
+        if (!catalog.length) return null;
+
+        const adminEntry =
+            catalog.find((r) => r.mostrarEnMenuUsuario && r.menuUsuarioKey === 'PANEL_ADMIN') ||
+            findCatalogRoute(catalog, {
+                paths: ['/admin/gestor-rutas/administracion/dashboardadmin', '/admin/dashboardadmin', '/admin/dashboard'],
+                components: ['DashboardAdmin'],
+                names: ['DashboardAdmin', 'Panel Admin', 'Dashboard'],
+            }) ||
+            catalog.find((r) => isAdminLayout(r.layout));
+
+        return adminEntry ? toAppRoutePath(adminEntry) : null;
+    } catch {
+        return null;
+    }
+};
+
+/**
+ * Retorna los ítems del menú de usuario configurados en "Parametrización de navegación",
+ * ordenados por menuUsuarioOrder. El Navbar los renderiza dinámicamente.
+ */
+export const getMenuUsuarioRoutes = async (): Promise<MenuUsuarioItem[]> => {
+    try {
+        const catalog = await getRouteCatalog();
+        return catalog
+            .filter((r) => r.mostrarEnMenuUsuario === true)
+            .sort((a, b) => (a.menuUsuarioOrder ?? 0) - (b.menuUsuarioOrder ?? 0))
+            .map((r) => ({
+                key: r.menuUsuarioKey ?? null,
+                label: r.menuUsuarioLabel || r.name,
+                path: toAppRoutePath(r),
+                icon: r.icon ?? null,
+                order: r.menuUsuarioOrder ?? 0,
+            }));
+    } catch {
+        return [];
     }
 };
