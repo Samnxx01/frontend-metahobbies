@@ -27,6 +27,7 @@ import {
   Landmark,
   LayoutDashboard,
   Loader2,
+  Network,
   Pencil,
   Plus,
   RefreshCw,
@@ -36,7 +37,9 @@ import {
   Trash2,
   User,
 } from 'lucide-react';
+import ParametrizacionGenyProcent from './ParametrizacionGenyProcent/ParametrizacionGenyProcent';
 import { getRouteCatalog, RouteCatalogItem } from '@/app/services/routeService';
+import { apiFetch } from '@/app/services/api';
 import { useAuth } from '@/app/providers/AuthProvider';
 import {
   createRouteMenuTag,
@@ -46,6 +49,11 @@ import {
   updateRoute,
   updateRouteMenuTag,
 } from '@/app/services/routesService';
+import {
+  getJerarquiaUsuarios,
+  TenantGlobalInfo,
+  TenantGlobalNode,
+} from '@/app/services/tenantUsuariosService';
 
 type MenuKey = 'PANEL_ADMIN' | 'MI_MEMBRESIA' | 'MI_PERFIL';
 
@@ -74,7 +82,11 @@ interface MenuTagFormState {
   iconKey: string;
   order: string;
   estado: boolean;
-  scopeMode: 'GENERAL' | 'GLOBAL_Y_SUPER' | 'GLOBAL_Y_CORPORATIVO' | 'SOLO_SUPER_ADMIN';
+  tagTenantSuperAdminId: string | null;
+  tagTenantGlobalIds: string[];
+  tagTenantCorporativoId: string | null;
+  canView: boolean;
+  canInherit: boolean;
 }
 
 const USER_MENU_SLOTS: { key: MenuKey; title: string; description: string; Icon: React.ElementType }[] = [
@@ -117,7 +129,11 @@ const EMPTY_TAG_FORM: MenuTagFormState = {
   iconKey: 'USER',
   order: '0',
   estado: true,
-  scopeMode: 'GENERAL',
+  tagTenantSuperAdminId: null,
+  tagTenantGlobalIds: [],
+  tagTenantCorporativoId: null,
+  canView: true,
+  canInherit: true,
 };
 
 const normalizeCode = (value: string): string =>
@@ -143,11 +159,90 @@ export default function ParametrizacionMenu() {
   const [menuTags, setMenuTags] = useState<RouteMenuTag[]>([]);
   const [tagForm, setTagForm] = useState<MenuTagFormState>(EMPTY_TAG_FORM);
 
+  // ── Multinivel: selector de TenantGlobal ──────────────────────────────────
+  const [tenantsGlobales, setTenantsGlobales] = useState<TenantGlobalInfo[]>([]);
+  const [jerarquiaGlobales, setJerarquiaGlobales] = useState<TenantGlobalNode[]>([]);
+  const [loadingTenants, setLoadingTenants] = useState(false);
+  const [selectedTenantGlobalId, setSelectedTenantGlobalId] = useState<string | null>(null);
+
+  // ── Permiso modoReferir por TenantGlobal ──────────────────────────────────
+  const [modoReferir, setModoReferir] = useState<'TODOS' | 'SELECCION' | 'INHABILITADO'>('TODOS');
+  const [loadingParametrizacion, setLoadingParametrizacion] = useState(false);
+  const [savingModoReferir, setSavingModoReferir] = useState(false);
+
   const tenantScope = user?.auth?.tenantScope || {};
   const actorScope = {
     tenantSuperAdminId: String(user?.tenantSuperAdminId || tenantScope?.tenantSuperAdminId || '').trim() || null,
     tenantGlobalId: String(user?.tenantGlobalId || tenantScope?.tenantGlobalId || '').trim() || null,
     tenantCorporativoId: String(user?.tenantCorporativoId || tenantScope?.tenantCorporativoId || '').trim() || null,
+  };
+
+  // Roles con acceso total — DIOS y DESAROLLADOR pueden no tener tenantSuperAdminId
+  // en el rol si son cuentas de sistema, pero igual tienen permisos de SuperAdmin
+  const userRol = (user?.rol ?? '').toUpperCase();
+  const esRolGlobal = ['DIOS', 'DESAROLLADOR'].includes(userRol);
+
+  // SA puro = tenantSuperAdminId presente SIN tenantGlobalId propio
+  // TG lleva ambos (el tenantSuperAdminId del SA que lo gestiona + su propio tenantGlobalId)
+  // DIOS/DESAROLLADOR: sin tenant ids pero son SA por nombre de rol
+  const esSuperAdmin = (!!(actorScope.tenantSuperAdminId && !actorScope.tenantGlobalId)) || esRolGlobal;
+  const mostrarSeccionMultinivel = !!(actorScope.tenantSuperAdminId || actorScope.tenantGlobalId) || esRolGlobal;
+
+  // Para TG: el tenant activo es directo. Para SA: el que elija en el selector.
+  const activeTenantGlobalId = actorScope.tenantGlobalId ?? selectedTenantGlobalId;
+  const activeTenantLabel = actorScope.tenantGlobalId
+    ? (tenantsGlobales.find(t => t.iud === actorScope.tenantGlobalId)?.razon_social
+        ?? tenantsGlobales.find(t => t.iud === actorScope.tenantGlobalId)?.titulo
+        ?? 'Mi TenantGlobal')
+    : (tenantsGlobales.find(t => t.iud === selectedTenantGlobalId)?.razon_social
+        ?? tenantsGlobales.find(t => t.iud === selectedTenantGlobalId)?.titulo
+        ?? null);
+
+  // Carga la jerarquía de tenants para cualquier admin que gestione tags
+  useEffect(() => {
+    if (actorScope.tenantCorporativoId) return; // corporativo ya tiene sus IDs fijos
+    setLoadingTenants(true);
+    getJerarquiaUsuarios()
+      .then(res => {
+        const nodos: TenantGlobalNode[] = res?.tenantsGlobales ?? [];
+        setJerarquiaGlobales(nodos);
+        const lista: TenantGlobalInfo[] = nodos
+          .map((tg) => tg.tenantGlobal)
+          .filter((tg): tg is TenantGlobalInfo => tg !== null);
+        setTenantsGlobales(lista);
+      })
+      .catch(() => {/* silencioso */})
+      .finally(() => setLoadingTenants(false));
+  }, []);
+
+  // Carga la parametrización vigente (modoReferir) cuando cambia el tenant activo
+  useEffect(() => {
+    if (!activeTenantGlobalId) { setModoReferir('TODOS'); return; }
+    setLoadingParametrizacion(true);
+    apiFetch(`/api/governance/parametrizacion/global/${activeTenantGlobalId}`, { method: 'GET' })
+      .then(res => setModoReferir(res?.parametrizacion?.modoReferir ?? 'TODOS'))
+      .catch(() => setModoReferir('TODOS'))
+      .finally(() => setLoadingParametrizacion(false));
+  }, [activeTenantGlobalId]);
+
+  const saveModoReferir = async (modo: 'TODOS' | 'SELECCION' | 'INHABILITADO') => {
+    if (!activeTenantGlobalId) return;
+    setSavingModoReferir(true);
+    try {
+      const res = await apiFetch(
+        `/api/governance/parametrizacion/global/${activeTenantGlobalId}`,
+        {
+          method: 'PUT',
+          body: { canCreateCorporativos: true, modoReferir: modo },
+        }
+      );
+      setModoReferir(res?.parametrizacion?.modoReferir ?? modo);
+      toast.success('Configuración de referidos actualizada.');
+    } catch (err: any) {
+      toast.error(err?.message || 'No se pudo guardar el modo de referidos.');
+    } finally {
+      setSavingModoReferir(false);
+    }
   };
 
   const routeOptions = useMemo(
@@ -162,12 +257,58 @@ export default function ParametrizacionMenu() {
     [routeCatalog]
   );
 
+  // ── Datos para los 3 selectores de tenant ────────────────────────────────
+  const allCorporativos = useMemo(() =>
+    jerarquiaGlobales.flatMap(nodo =>
+      (nodo.corporativos ?? []).map(c => ({
+        iud: c.tenantCorporativo.iud,
+        nombre: c.tenantCorporativo.razon_social ?? c.tenantCorporativo.titulo ?? c.tenantCorporativo.iud,
+        parentGlobalId: nodo.tenantGlobal?.iud ?? null,
+        parentGlobalNombre: nodo.tenantGlobal?.razon_social ?? nodo.tenantGlobal?.titulo ?? null,
+      }))
+    ),
+    [jerarquiaGlobales]
+  );
+
+  const superAdminOptions = actorScope.tenantSuperAdminId
+    ? [{ iud: actorScope.tenantSuperAdminId, nombre: 'Mi SuperAdmin' }]
+    : [];
+
+  const derivedScope = (() => {
+    const s = !!tagForm.tagTenantSuperAdminId;
+    const g = tagForm.tagTenantGlobalIds.length > 0;
+    const c = !!tagForm.tagTenantCorporativoId;
+    const multi = tagForm.tagTenantGlobalIds.length > 1;
+    if (!s && !g && !c) return { label: 'General', variant: 'secondary' as const, desc: 'Visible para todos los usuarios.' };
+    if (s && !g && !c) return { label: 'Solo SuperAdmin', variant: 'outline' as const, desc: 'Solo para el SuperAdmin asignado.' };
+    if (s && g && !c) return { label: 'Global + SuperAdmin', variant: 'outline' as const, desc: `Para ${multi ? 'varios Globals' : 'ese Global'} y SuperAdmin. No corporativos.` };
+    if (!s && g && c) return { label: 'Global + Corporativo', variant: 'outline' as const, desc: 'Para ese corporativo y su global.' };
+    if (!s && g && !c) return { label: multi ? 'Multi-Global' : 'Solo Global', variant: 'outline' as const, desc: multi ? `Aplica a ${tagForm.tagTenantGlobalIds.length} TenantGlobales.` : 'Solo para ese TenantGlobal.' };
+    return { label: 'Personalizado', variant: 'outline' as const, desc: 'Combinacion de tenants.' };
+  })();
+
+  const corporativosFiltrados = tagForm.tagTenantGlobalIds.length > 0
+    ? allCorporativos.filter(c => tagForm.tagTenantGlobalIds.includes(c.parentGlobalId ?? ''))
+    : allCorporativos;
+
+  const refreshMenuTags = async () => {
+    try {
+      const response = await apiFetch(
+        `${import.meta.env.VITE_API_BASE_URL ?? '/api'}/seguridad/rutas/menu-tags?menuTipo=USER_DROPDOWN&_t=${Date.now()}`,
+        { method: 'GET', cache: 'no-store' as RequestCache }
+      );
+      setMenuTags(Array.isArray(response?.data) ? response.data : []);
+    } catch (error) {
+      console.error('Error al refrescar tags:', error);
+    }
+  };
+
   const loadCatalog = async () => {
     setLoading(true);
     try {
       const [catalog, menuTagsResponse] = await Promise.all([
         getRouteCatalog(),
-        getRouteMenuTags({ menuTipo: 'USER_DROPDOWN' }),
+        getRouteMenuTags({ menuTipo: 'USER_DROPDOWN', soloActivos: false }),
       ]);
 
       setRouteCatalog(catalog);
@@ -208,6 +349,16 @@ export default function ParametrizacionMenu() {
   };
 
   const populateTagForm = (tag: RouteMenuTag) => {
+    const tSuperAdmin = tag.tenantSuperAdminId || tag.scope?.tenantSuperAdminId || null;
+    const tCorp = tag.tenantCorporativoId || tag.scope?.tenantCorporativoId || null;
+    // Prioridad: tenantGlobalIds array > scope.tenantGlobalIds > tenantGlobalId fallback
+    const rawGlobalIds: string[] = Array.isArray((tag as any).tenantGlobalIds) && (tag as any).tenantGlobalIds.length > 0
+      ? (tag as any).tenantGlobalIds
+      : Array.isArray(tag.scope?.tenantGlobalIds) && (tag.scope as any).tenantGlobalIds.length > 0
+        ? (tag.scope as any).tenantGlobalIds
+        : (tag.tenantGlobalId || tag.scope?.tenantGlobalId)
+          ? [tag.tenantGlobalId || tag.scope?.tenantGlobalId!]
+          : [];
     setTagForm({
       id: tag.iud,
       nombreTag: tag.nombreTag || '',
@@ -218,15 +369,11 @@ export default function ParametrizacionMenu() {
       iconKey: tag.iconKey || 'USER',
       order: String(tag.order ?? 0),
       estado: tag.estado !== false,
-      scopeMode: (() => {
-        const hasSuper = !!(tag.tenantSuperAdminId || tag.scope?.tenantSuperAdminId);
-        const hasGlobal = !!(tag.tenantGlobalId || tag.scope?.tenantGlobalId);
-        const hasCorp = !!(tag.tenantCorporativoId || tag.scope?.tenantCorporativoId);
-        if (hasSuper && !hasGlobal && !hasCorp) return 'SOLO_SUPER_ADMIN';
-        if (hasSuper && hasGlobal && !hasCorp) return 'GLOBAL_Y_SUPER';
-        if (hasGlobal && hasCorp) return 'GLOBAL_Y_CORPORATIVO';
-        return 'GENERAL';
-      })(),
+      tagTenantSuperAdminId: tSuperAdmin,
+      tagTenantGlobalIds: rawGlobalIds.filter(Boolean) as string[],
+      tagTenantCorporativoId: tCorp,
+      canView: tag.canView ?? true,
+      canInherit: tag.canInherit ?? true,
     });
   };
 
@@ -286,42 +433,16 @@ export default function ParametrizacionMenu() {
 
     setSavingTag(true);
     try {
-      // Validaciones mínimas por alcance
-      if (tagForm.scopeMode === 'SOLO_SUPER_ADMIN' && !actorScope.tenantSuperAdminId) {
-        toast.error('El usuario actual no tiene tenantSuperAdmin en su scope.');
-        setSavingTag(false);
-        return;
-      }
-      if (tagForm.scopeMode === 'GLOBAL_Y_CORPORATIVO' && !actorScope.tenantGlobalId) {
-        toast.error('El usuario actual no tiene tenantGlobal en su scope.');
-        setSavingTag(false);
-        return;
-      }
-      if (tagForm.scopeMode === 'GLOBAL_Y_CORPORATIVO' && !actorScope.tenantCorporativoId) {
-        toast.error('El usuario actual no tiene tenantCorporativo en su scope.');
-        setSavingTag(false);
-        return;
-      }
-      if (tagForm.scopeMode === 'GLOBAL_Y_SUPER' && !actorScope.tenantSuperAdminId && !actorScope.tenantGlobalId) {
-        toast.error('El usuario actual no tiene tenantSuperAdmin ni tenantGlobal en su scope.');
-        setSavingTag(false);
-        return;
-      }
+      const tenantSuperAdminId = tagForm.tagTenantSuperAdminId || null;
+      const tenantGlobalIds = tagForm.tagTenantGlobalIds.filter(Boolean);
+      const tenantCorporativoId = tagForm.tagTenantCorporativoId || null;
 
-      // Construir el scope con lo que el actor tenga disponible
-      const scopePayload = (() => {
-        switch (tagForm.scopeMode) {
-          case 'SOLO_SUPER_ADMIN':
-            return { tenantSuperAdminId: actorScope.tenantSuperAdminId, tenantGlobalId: null, tenantCorporativoId: null };
-          case 'GLOBAL_Y_SUPER':
-            // Usa lo que el actor tenga: puede ser solo superAdmin, solo global, o ambos
-            return { tenantSuperAdminId: actorScope.tenantSuperAdminId || null, tenantGlobalId: actorScope.tenantGlobalId || null, tenantCorporativoId: null };
-          case 'GLOBAL_Y_CORPORATIVO':
-            return { tenantSuperAdminId: null, tenantGlobalId: actorScope.tenantGlobalId, tenantCorporativoId: actorScope.tenantCorporativoId };
-          default: // GENERAL
-            return { tenantSuperAdminId: null, tenantGlobalId: null, tenantCorporativoId: null };
-        }
-      })();
+      // Validación: corporativo requiere al menos un global
+      if (tenantCorporativoId && tenantGlobalIds.length === 0) {
+        toast.error('Debes seleccionar al menos un TenantGlobal si asignas un Corporativo.');
+        setSavingTag(false);
+        return;
+      }
 
       const payload = {
         nombreTag: tagForm.nombreTag.trim(),
@@ -333,12 +454,20 @@ export default function ParametrizacionMenu() {
         iconKey: tagForm.iconKey,
         order: Number(tagForm.order || 0),
         estado: tagForm.estado,
-        ...scopePayload,
+        tenantSuperAdminId,
+        tenantGlobalIds,
+        tenantCorporativoId,
       };
 
       if (tagForm.id) {
         const res = await updateRouteMenuTag(tagForm.id, payload);
         if (res?.success === false) throw new Error(res?.message || 'Error al actualizar el tag.');
+        // Actualizar el tag directamente en el estado local con los datos devueltos
+        if (res?.data) {
+          setMenuTags((prev) =>
+            prev.map((t) => (t.iud === tagForm.id ? { ...t, ...res.data } : t))
+          );
+        }
         toast.success('Tag de menu actualizado.');
       } else {
         const res = await createRouteMenuTag(payload);
@@ -347,7 +476,7 @@ export default function ParametrizacionMenu() {
       }
 
       resetTagForm();
-      await loadCatalog();
+      await refreshMenuTags();
     } catch (error: any) {
       console.error(error);
       toast.error(error?.message || 'No se pudo guardar el tag de menu.');
@@ -362,7 +491,7 @@ export default function ParametrizacionMenu() {
       if ((res as any)?.success === false) throw new Error((res as any)?.message || 'Error al eliminar.');
       toast.success('Tag eliminado.');
       if (tagForm.id === tagId) resetTagForm();
-      await loadCatalog();
+      await refreshMenuTags();
     } catch (error: any) {
       console.error(error);
       toast.error(error?.message || 'No se pudo eliminar el tag.');
@@ -501,32 +630,120 @@ export default function ParametrizacionMenu() {
                 </div>
               </div>
 
-              <div className="grid md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Aplicacion por alcance</Label>
-                  <Select
-                    value={tagForm.scopeMode}
-                    onValueChange={(value) =>
-                      setTagForm((prev) => ({ ...prev, scopeMode: value as MenuTagFormState['scopeMode'] }))
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecciona alcance" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="GENERAL">General — todos los usuarios</SelectItem>
-                      <SelectItem value="GLOBAL_Y_SUPER">Global + SuperAdmin</SelectItem>
-                      <SelectItem value="GLOBAL_Y_CORPORATIVO">Global + Corporativo</SelectItem>
-                      <SelectItem value="SOLO_SUPER_ADMIN">Solo SuperAdmin</SelectItem>
-                    </SelectContent>
-                  </Select>
+              {/* 3 selectores de tenant — el scope se deriva automáticamente */}
+              <div className="space-y-3">
+                <Label>Aplicacion por alcance</Label>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {/* SuperAdmin */}
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">SuperAdmin</p>
+                    <Select
+                      value={tagForm.tagTenantSuperAdminId ?? '__none__'}
+                      onValueChange={(v) => setTagForm(prev => ({ ...prev, tagTenantSuperAdminId: v === '__none__' ? null : v }))}
+                      disabled={superAdminOptions.length === 0}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Sin asignar" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">— Sin asignar —</SelectItem>
+                        {superAdminOptions.map(opt => (
+                          <SelectItem key={opt.iud} value={opt.iud}>{opt.nombre}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Global — multi-selección con checkboxes */}
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">TenantGlobal</p>
+                    <div className="border rounded-md p-2 space-y-1 max-h-40 overflow-y-auto bg-background">
+                      {actorScope.tenantGlobalId ? (
+                        // TG propio: solo uno disponible
+                        <label className="flex items-center gap-2 cursor-pointer text-sm py-0.5">
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 rounded border-gray-300 accent-primary"
+                            checked={tagForm.tagTenantGlobalIds.includes(actorScope.tenantGlobalId)}
+                            onChange={(e) => {
+                              const checked = e.target.checked;
+                              const id = actorScope.tenantGlobalId!;
+                              setTagForm(prev => ({
+                                ...prev,
+                                tagTenantGlobalIds: checked
+                                  ? [...prev.tagTenantGlobalIds.filter(x => x !== id), id]
+                                  : prev.tagTenantGlobalIds.filter(x => x !== id),
+                                tagTenantCorporativoId: checked ? prev.tagTenantCorporativoId : null,
+                              }));
+                            }}
+                          />
+                          {tenantsGlobales.find(t => t.iud === actorScope.tenantGlobalId)?.razon_social
+                            ?? tenantsGlobales.find(t => t.iud === actorScope.tenantGlobalId)?.titulo
+                            ?? 'Mi TenantGlobal'}
+                        </label>
+                      ) : tenantsGlobales.length === 0 ? (
+                        <p className="text-xs text-muted-foreground px-1">Sin tenants disponibles</p>
+                      ) : (
+                        tenantsGlobales.map(tg => (
+                          <label key={tg.iud} className="flex items-center gap-2 cursor-pointer text-sm py-0.5">
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4 rounded border-gray-300 accent-primary"
+                              checked={tagForm.tagTenantGlobalIds.includes(tg.iud)}
+                              onChange={(e) => {
+                                const checked = e.target.checked;
+                                setTagForm(prev => {
+                                  const next = checked
+                                    ? [...prev.tagTenantGlobalIds.filter(x => x !== tg.iud), tg.iud]
+                                    : prev.tagTenantGlobalIds.filter(x => x !== tg.iud);
+                                  return {
+                                    ...prev,
+                                    tagTenantGlobalIds: next,
+                                    tagTenantCorporativoId: next.length === 0 ? null : prev.tagTenantCorporativoId,
+                                  };
+                                });
+                              }}
+                            />
+                            {tg.razon_social ?? tg.titulo ?? tg.iud}
+                          </label>
+                        ))
+                      )}
+                    </div>
+                    {tagForm.tagTenantGlobalIds.length > 0 && (
+                      <p className="text-xs text-muted-foreground">{tagForm.tagTenantGlobalIds.length} seleccionado(s)</p>
+                    )}
+                  </div>
+
+                  {/* Corporativo */}
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">TenantCorporativo</p>
+                    <Select
+                      value={tagForm.tagTenantCorporativoId ?? '__none__'}
+                      onValueChange={(v) => setTagForm(prev => ({ ...prev, tagTenantCorporativoId: v === '__none__' ? null : v }))}
+                      disabled={corporativosFiltrados.length === 0 && !actorScope.tenantCorporativoId}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Sin asignar" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">— Sin asignar —</SelectItem>
+                        {actorScope.tenantCorporativoId ? (
+                          <SelectItem value={actorScope.tenantCorporativoId}>Mi Corporativo</SelectItem>
+                        ) : corporativosFiltrados.map(c => (
+                          <SelectItem key={c.iud} value={c.iud}>
+                            {c.nombre}{tagForm.tagTenantGlobalIds.length === 0 && c.parentGlobalNombre ? ` (${c.parentGlobalNombre})` : ''}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
 
-                <div className="rounded-md border p-3 text-sm text-muted-foreground">
-                  {tagForm.scopeMode === 'GENERAL' && 'Visible para todos los usuarios (fallback global).'}
-                  {tagForm.scopeMode === 'GLOBAL_Y_SUPER' && 'Visible para tenantGlobal y tenantSuperAdmin. No corporativo.'}
-                  {tagForm.scopeMode === 'GLOBAL_Y_CORPORATIVO' && 'Visible para tenantGlobal y tenantCorporativo. No superAdmin.'}
-                  {tagForm.scopeMode === 'SOLO_SUPER_ADMIN' && 'Visible unicamente para el tenantSuperAdmin.'}
+                {/* Scope derivado automáticamente */}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">Alcance resultante:</span>
+                  <Badge variant={derivedScope.variant}>{derivedScope.label}</Badge>
+                  <span className="text-xs text-muted-foreground">{derivedScope.desc}</span>
                 </div>
               </div>
 
@@ -538,6 +755,30 @@ export default function ParametrizacionMenu() {
                   onChange={(e) => setTagForm((prev) => ({ ...prev, descripcion: e.target.value }))}
                   placeholder="Que hace este item dentro del menu"
                 />
+              </div>
+
+              <div className="space-y-3">
+                <Label>Permisos adicionales</Label>
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    id="canView"
+                    className="h-4 w-4 rounded border-gray-300 accent-primary"
+                    checked={tagForm.canView}
+                    onChange={(e) => setTagForm((prev) => ({ ...prev, canView: e.target.checked, canInherit: e.target.checked }))}
+                  />
+                  <Label htmlFor="canView" className="text-sm">Permitir vista</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    id="canInherit"
+                    className="h-4 w-4 rounded border-gray-300 accent-primary"
+                    checked={tagForm.canInherit}
+                    onChange={(e) => setTagForm((prev) => ({ ...prev, canView: e.target.checked, canInherit: e.target.checked }))}
+                  />
+                  <Label htmlFor="canInherit" className="text-sm">Permitir herencia</Label>
+                </div>
               </div>
 
               <div className="flex gap-3">
@@ -764,6 +1005,115 @@ export default function ParametrizacionMenu() {
               ))}
             </CardContent>
           </Card>
+        </section>
+      )}
+
+      {mostrarSeccionMultinivel && (
+        <section className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Network className="h-5 w-5 text-primary" />
+            <h2 className="text-lg font-semibold">Parametrizacion multinivel</h2>
+            {activeTenantLabel
+              ? <Badge variant="secondary">{activeTenantLabel}</Badge>
+              : <Badge variant="outline">Sin tenant seleccionado</Badge>
+            }
+          </div>
+          <p className="text-sm text-muted-foreground -mt-2">
+            Configura las generaciones y porcentajes de comision del sistema de referidos multinivel
+            para el TenantGlobal activo.
+          </p>
+
+          {/* Selector de TenantGlobal — solo visible para SuperAdmin */}
+          {esSuperAdmin && (
+            <div className="flex items-center gap-3">
+              <div className="w-72">
+                <Select
+                  value={selectedTenantGlobalId ?? ''}
+                  onValueChange={setSelectedTenantGlobalId}
+                  disabled={loadingTenants}
+                >
+                  <SelectTrigger>
+                    {loadingTenants
+                      ? <span className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Loader2 className="h-3 w-3 animate-spin" /> Cargando tenants...
+                        </span>
+                      : <SelectValue placeholder="Selecciona un TenantGlobal" />
+                    }
+                  </SelectTrigger>
+                  <SelectContent>
+                    {tenantsGlobales.map(tg => (
+                      <SelectItem key={tg.iud} value={tg.iud}>
+                        {tg.razon_social ?? tg.titulo ?? tg.iud}
+                        {tg.nit_ruc_rtn && (
+                          <span className="ml-1 text-xs text-muted-foreground">· {tg.nit_ruc_rtn}</span>
+                        )}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {selectedTenantGlobalId && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-xs text-muted-foreground"
+                  onClick={() => setSelectedTenantGlobalId(null)}
+                >
+                  Limpiar
+                </Button>
+              )}
+            </div>
+          )}
+
+          {/* Permiso de referidos + niveles — solo cuando hay tenant activo */}
+          {activeTenantGlobalId ? (
+            <div className="space-y-4">
+              {/* Tarjeta: modo de referidos */}
+              <Card>
+                <CardContent className="pt-5 pb-4 space-y-3">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="space-y-0.5">
+                      <p className="text-sm font-medium">Modo de referidos</p>
+                      <p className="text-xs text-muted-foreground">
+                        Define quién puede generar enlaces de referido en este TenantGlobal.
+                      </p>
+                    </div>
+                    {(loadingParametrizacion || savingModoReferir) && (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground shrink-0" />
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    {(['TODOS', 'SELECCION', 'INHABILITADO'] as const).map(modo => (
+                      <Button
+                        key={modo}
+                        size="sm"
+                        variant={modoReferir === modo ? 'default' : 'outline'}
+                        disabled={loadingParametrizacion || savingModoReferir}
+                        onClick={() => saveModoReferir(modo)}
+                        className="flex-1 text-xs"
+                      >
+                        {modo === 'TODOS' && 'Todos'}
+                        {modo === 'SELECCION' && 'Selección'}
+                        {modo === 'INHABILITADO' && 'Inhabilitado'}
+                      </Button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {modoReferir === 'TODOS' && 'Todos los usuarios del tenant pueden generar referidos.'}
+                    {modoReferir === 'SELECCION' && 'Solo los usuarios con permiso individual (canReferir) pueden referir.'}
+                    {modoReferir === 'INHABILITADO' && 'Ningún usuario puede generar referidos en este tenant.'}
+                  </p>
+                </CardContent>
+              </Card>
+
+              {/* Niveles de generación y porcentajes */}
+              <ParametrizacionGenyProcent scope={esSuperAdmin ? 'SUPER_ADMIN' : 'TENANT_GLOBAL'} />
+            </div>
+          ) : esSuperAdmin && (
+            <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground text-center">
+              Selecciona un TenantGlobal para gestionar sus niveles de generacion y porcentajes.
+            </div>
+          )}
         </section>
       )}
     </div>

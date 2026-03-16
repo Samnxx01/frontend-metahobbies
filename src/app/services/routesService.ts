@@ -61,8 +61,11 @@ export interface RouteMenuTag {
   iconKey: string;
   order: number;
   estado: boolean;
+  canView?: boolean;
+  canInherit?: boolean;
   tenantSuperAdminId?: string | null;
   tenantGlobalId?: string | null;
+  tenantGlobalIds?: string[];
   tenantCorporativoId?: string | null;
   ruta?: {
     iud: string;
@@ -77,6 +80,7 @@ export interface RouteMenuTag {
   scope?: {
     tenantSuperAdminId?: string | null;
     tenantGlobalId?: string | null;
+    tenantGlobalIds?: string[];
     tenantCorporativoId?: string | null;
   };
 }
@@ -167,7 +171,7 @@ export interface CreateRouteMenuTagDto {
   order?: number;
   estado?: boolean;
   tenantSuperAdminId?: string | null;
-  tenantGlobalId?: string | null;
+  tenantGlobalIds?: string[];
   tenantCorporativoId?: string | null;
 }
 
@@ -182,7 +186,7 @@ export interface UpdateRouteMenuTagDto {
   order?: number;
   estado?: boolean;
   tenantSuperAdminId?: string | null;
-  tenantGlobalId?: string | null;
+  tenantGlobalIds?: string[];
   tenantCorporativoId?: string | null;
 }
 

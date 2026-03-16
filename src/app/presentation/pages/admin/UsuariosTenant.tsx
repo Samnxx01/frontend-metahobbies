@@ -6,6 +6,7 @@ import { useTenantUsuarios } from '@/app/hooks/useTenantUsuarios';
 import { NodoCorpCard } from '@/app/presentation/components/admin/usuarios-tenant/NodoCorpCard';
 import { UsuarioGlobalModal } from '@/app/presentation/components/admin/usuarios-tenant/UsuarioGlobalModal';
 import { UsuarioCorporativoModal } from '@/app/presentation/components/admin/usuarios-tenant/UsuarioCorporativoModal';
+import { UsuarioSuperAdminModal } from '@/app/presentation/components/admin/usuarios-tenant/UsuarioSuperAdminModal';
 import type { CorpNode, TenantGlobalInfo } from '@/app/services/tenantUsuariosService';
 
 export default function UsuariosTenant(): React.ReactElement {
@@ -20,10 +21,22 @@ export default function UsuariosTenant(): React.ReactElement {
         isCreatingCorp,
         errorCrearCorp,
         crearUsuarioCorporativo,
+        isCreatingSuperAdmin,
+        errorCrearSuperAdmin,
+        crearUsuarioSuperAdmin,
+        isSincronizandoCanReferir,
+        errorSincronizarCanReferir,
+        sincronizarCanReferirUsuarios,
+        isSincronizandoGlobalCanReferir,
+        errorSincronizarGlobalCanReferir,
+        sincronizarGlobalCanReferirUsuarios,
     } = useTenantUsuarios();
 
     // Modal global
     const [modalGlobal, setModalGlobal] = useState(false);
+
+    // Modal SuperAdmin
+    const [modalSuperAdmin, setModalSuperAdmin] = useState(false);
 
     // Modal corporativo — guarda el nodo seleccionado
     const [nodoCorp, setNodoCorp] = useState<CorpNode | null>(null);
@@ -34,6 +47,18 @@ export default function UsuariosTenant(): React.ReactElement {
     const tenantsGlobalesInfo: TenantGlobalInfo[] = (jerarquia?.tenantsGlobales ?? [])
         .map(tg => tg.tenantGlobal)
         .filter((tg): tg is TenantGlobalInfo => tg !== null);
+
+    // Funciones de sincronización
+    const sincronizarGlobal = async (canReferir: boolean) => {
+        const tenantGlobalId = jerarquia?.tenantsGlobales[0]?.tenantGlobal?.iud;
+        if (!tenantGlobalId) throw new Error('No se pudo determinar el tenant global');
+        return sincronizarCanReferirUsuarios({ tenantGlobalId, canReferir });
+    };
+
+    const sincronizarCorporativo = async (canReferir: boolean) => {
+        if (!nodoCorp?.tenantCorporativo.iud) throw new Error('No se pudo determinar el tenant corporativo');
+        return sincronizarCanReferirUsuarios({ tenantCorporativoId: nodoCorp.tenantCorporativo.iud, canReferir });
+    };
 
     // ─── Loading ──────────────────────────────────────────────────────────────
     if (loadingJerarquia) {
@@ -75,6 +100,13 @@ export default function UsuariosTenant(): React.ReactElement {
                         <RefreshCw className="h-4 w-4 mr-2" />
                         Actualizar
                     </Button>
+                    {/* Agregar usuario SuperAdmin solo para SUPER_ADMIN */}
+                    {scope === 'SUPER_ADMIN' && (
+                        <Button size="sm" onClick={() => setModalSuperAdmin(true)}>
+                            <Shield className="h-4 w-4 mr-2" />
+                            Usuario SuperAdmin
+                        </Button>
+                    )}
                     {/* Agregar usuario global solo para SA y TG */}
                     {(scope === 'SUPER_ADMIN' || scope === 'TENANT_GLOBAL') && (
                         <Button size="sm" onClick={() => setModalGlobal(true)}>
@@ -178,6 +210,18 @@ export default function UsuariosTenant(): React.ReactElement {
             ))}
 
             {/* Modales */}
+            <UsuarioSuperAdminModal
+                open={modalSuperAdmin}
+                onClose={() => setModalSuperAdmin(false)}
+                onSubmit={crearUsuarioSuperAdmin}
+                isSubmitting={isCreatingSuperAdmin}
+                submitError={errorCrearSuperAdmin}
+                scope={scope as 'SUPER_ADMIN' | 'TENANT_GLOBAL' | 'CORPORATIVO'}
+                onSincronizarGlobalCanReferir={sincronizarGlobalCanReferirUsuarios}
+                isSincronizandoGlobal={isSincronizandoGlobalCanReferir}
+                sincronizarGlobalError={errorSincronizarGlobalCanReferir}
+            />
+
             <UsuarioGlobalModal
                 open={modalGlobal}
                 onClose={() => setModalGlobal(false)}
@@ -186,6 +230,9 @@ export default function UsuariosTenant(): React.ReactElement {
                 submitError={errorCrearGlobal}
                 tenantsGlobales={tenantsGlobalesInfo}
                 scope={scope as 'SUPER_ADMIN' | 'TENANT_GLOBAL' | 'CORPORATIVO'}
+                onSincronizarCanReferir={scope === 'TENANT_GLOBAL' ? sincronizarGlobal : undefined}
+                isSincronizando={isSincronizandoCanReferir}
+                sincronizarError={errorSincronizarCanReferir}
             />
 
             <UsuarioCorporativoModal
@@ -196,6 +243,9 @@ export default function UsuariosTenant(): React.ReactElement {
                 submitError={errorCrearCorp}
                 tenantCorporativo={nodoCorp?.tenantCorporativo ?? null}
                 scope={scope as 'SUPER_ADMIN' | 'TENANT_GLOBAL' | 'CORPORATIVO'}
+                onSincronizarCanReferir={nodoCorp ? sincronizarCorporativo : undefined}
+                isSincronizando={isSincronizandoCanReferir}
+                sincronizarError={errorSincronizarCanReferir}
             />
         </div>
     );

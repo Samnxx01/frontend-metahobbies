@@ -16,29 +16,27 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import { Info, Loader2, UserPlus, RefreshCw } from 'lucide-react';
+import { Info, Loader2, RefreshCw, Shield } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
-import type { CreateUsuarioGlobalData, TenantGlobalInfo } from '@/app/services/tenantUsuariosService';
+import type { CreateUsuarioSuperAdminData } from '@/app/services/tenantUsuariosService';
 import { RH_OPTIONS } from './catalogos';
 
-interface UsuarioGlobalModalProps {
+interface UsuarioSuperAdminModalProps {
     open: boolean;
     onClose: () => void;
-    onSubmit: (data: CreateUsuarioGlobalData) => Promise<any>;
+    onSubmit: (data: CreateUsuarioSuperAdminData) => Promise<any>;
     isSubmitting?: boolean;
     submitError?: Error | null;
-    /** Lista de tenants globales disponibles (solo para SUPER_ADMIN) */
-    tenantsGlobales?: TenantGlobalInfo[];
     /** Scope del usuario autenticado */
     scope: 'SUPER_ADMIN' | 'TENANT_GLOBAL' | 'CORPORATIVO';
-    /** Función para sincronizar canReferir */
-    onSincronizarCanReferir?: (canReferir: boolean) => Promise<any>;
-    isSincronizando?: boolean;
-    sincronizarError?: Error | null;
+    /** Función para sincronizar canReferir globalmente en todos los tenants */
+    onSincronizarGlobalCanReferir?: (canReferir: boolean) => Promise<any>;
+    isSincronizandoGlobal?: boolean;
+    sincronizarGlobalError?: Error | null;
 }
 
 interface FormState {
-    tenantGlobalId: string;
+    tenantSuperAdminId: string;
     correo: string;
     password: string;
     nombre: string;
@@ -52,7 +50,7 @@ interface FormState {
 }
 
 const EMPTY_FORM: FormState = {
-    tenantGlobalId: '',
+    tenantSuperAdminId: '',
     correo: '',
     password: '',
     nombre: '',
@@ -65,18 +63,17 @@ const EMPTY_FORM: FormState = {
     canReferir: true,
 };
 
-export const UsuarioGlobalModal = ({
+export const UsuarioSuperAdminModal = ({
     open,
     onClose,
     onSubmit,
     isSubmitting = false,
     submitError,
-    tenantsGlobales = [],
     scope,
-    onSincronizarCanReferir,
-    isSincronizando = false,
-    sincronizarError,
-}: UsuarioGlobalModalProps): React.ReactElement => {
+    onSincronizarGlobalCanReferir,
+    isSincronizandoGlobal = false,
+    sincronizarGlobalError,
+}: UsuarioSuperAdminModalProps): React.ReactElement => {
     const [form, setForm] = useState<FormState>(EMPTY_FORM);
 
     useEffect(() => {
@@ -93,7 +90,7 @@ export const UsuarioGlobalModal = ({
 
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
-        const payload: CreateUsuarioGlobalData = {
+        const payload: CreateUsuarioSuperAdminData = {
             correo: form.correo,
             password: form.password,
             nombre: form.nombre,
@@ -105,12 +102,21 @@ export const UsuarioGlobalModal = ({
             fecha_nacimiento: form.fecha_nacimiento,
             canReferir: form.canReferir,
         };
-        if (scope === 'SUPER_ADMIN' && form.tenantGlobalId) {
-            payload.tenantGlobalId = form.tenantGlobalId;
+        if (scope === 'SUPER_ADMIN' && form.tenantSuperAdminId) {
+            payload.tenantSuperAdminId = form.tenantSuperAdminId;
         }
         try {
             await onSubmit(payload);
             onClose();
+        } catch {
+            // error manejado en el hook
+        }
+    };
+
+    const handleSincronizarGlobalCanReferir = async (canReferir: boolean) => {
+        if (!onSincronizarGlobalCanReferir) return;
+        try {
+            await onSincronizarGlobalCanReferir(canReferir);
         } catch {
             // error manejado en el hook
         }
@@ -121,42 +127,35 @@ export const UsuarioGlobalModal = ({
             <DialogContent className="sm:max-w-lg p-6 max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
-                        <UserPlus className="h-5 w-5 text-primary" />
-                        Nuevo Usuario Global
+                        <Shield className="h-5 w-5 text-primary" />
+                        Nuevo Usuario SuperAdmin
                     </DialogTitle>
                 </DialogHeader>
 
                 <form onSubmit={handleSubmit}>
                     <div className="py-4 space-y-4">
 
-                        {/* Selector de Tenant Global — solo visible para SUPER_ADMIN */}
+                        {/* Selector de Tenant SuperAdmin — solo visible para SUPER_ADMIN */}
                         {scope === 'SUPER_ADMIN' && (
                             <div className="space-y-2">
-                                <Label>Tenant Global *</Label>
-                                <Select
-                                    value={form.tenantGlobalId}
-                                    onValueChange={handleSelect('tenantGlobalId')}
-                                    required
-                                >
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Selecciona un Tenant Global" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {tenantsGlobales.map(tg => (
-                                            <SelectItem key={tg.iud} value={tg.iud}>
-                                                {tg.razon_social ?? tg.titulo ?? tg.iud}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
+                                <Label>Tenant SuperAdmin</Label>
+                                <Input
+                                    name="tenantSuperAdminId"
+                                    placeholder="ID del Tenant SuperAdmin (opcional)"
+                                    value={form.tenantSuperAdminId}
+                                    onChange={handleChange}
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                    Si no se especifica, se usará el tenant del usuario autenticado.
+                                </p>
                             </div>
                         )}
 
                         {/* Correo */}
                         <div className="space-y-2">
-                            <Label htmlFor="ug-correo">Correo Electrónico *</Label>
+                            <Label htmlFor="sa-correo">Correo Electrónico *</Label>
                             <Input
-                                id="ug-correo"
+                                id="sa-correo"
                                 name="correo"
                                 type="email"
                                 placeholder="ejemplo@correo.com"
@@ -169,9 +168,9 @@ export const UsuarioGlobalModal = ({
 
                         {/* Contraseña */}
                         <div className="space-y-2">
-                            <Label htmlFor="ug-password">Contraseña *</Label>
+                            <Label htmlFor="sa-password">Contraseña *</Label>
                             <Input
-                                id="ug-password"
+                                id="sa-password"
                                 name="password"
                                 type="password"
                                 placeholder="Contraseña inicial"
@@ -184,9 +183,9 @@ export const UsuarioGlobalModal = ({
                         {/* Nombre y Apellido */}
                         <div className="grid grid-cols-2 gap-3">
                             <div className="space-y-2">
-                                <Label htmlFor="ug-nombre">Nombre *</Label>
+                                <Label htmlFor="sa-nombre">Nombre *</Label>
                                 <Input
-                                    id="ug-nombre"
+                                    id="sa-nombre"
                                     name="nombre"
                                     placeholder="Nombre"
                                     value={form.nombre}
@@ -195,9 +194,9 @@ export const UsuarioGlobalModal = ({
                                 />
                             </div>
                             <div className="space-y-2">
-                                <Label htmlFor="ug-apellido">Apellido *</Label>
+                                <Label htmlFor="sa-apellido">Apellido *</Label>
                                 <Input
-                                    id="ug-apellido"
+                                    id="sa-apellido"
                                     name="apellido"
                                     placeholder="Apellido"
                                     value={form.apellido}
@@ -210,9 +209,9 @@ export const UsuarioGlobalModal = ({
                         {/* CC y Teléfono */}
                         <div className="grid grid-cols-2 gap-3">
                             <div className="space-y-2">
-                                <Label htmlFor="ug-cc">C.C. / Documento *</Label>
+                                <Label htmlFor="sa-cc">C.C. / Documento *</Label>
                                 <Input
-                                    id="ug-cc"
+                                    id="sa-cc"
                                     name="cc"
                                     placeholder="Nro. documento"
                                     value={form.cc}
@@ -221,9 +220,9 @@ export const UsuarioGlobalModal = ({
                                 />
                             </div>
                             <div className="space-y-2">
-                                <Label htmlFor="ug-telefono">Teléfono *</Label>
+                                <Label htmlFor="sa-telefono">Teléfono *</Label>
                                 <Input
-                                    id="ug-telefono"
+                                    id="sa-telefono"
                                     name="telefono"
                                     placeholder="Teléfono"
                                     value={form.telefono}
@@ -235,9 +234,9 @@ export const UsuarioGlobalModal = ({
 
                         {/* Dirección */}
                         <div className="space-y-2">
-                            <Label htmlFor="ug-direccion">Dirección *</Label>
+                            <Label htmlFor="sa-direccion">Dirección *</Label>
                             <Input
-                                id="ug-direccion"
+                                id="sa-direccion"
                                 name="direccion"
                                 placeholder="Dirección"
                                 value={form.direccion}
@@ -262,9 +261,9 @@ export const UsuarioGlobalModal = ({
                                 </Select>
                             </div>
                             <div className="space-y-2">
-                                <Label htmlFor="ug-fecha">Fecha de Nacimiento *</Label>
+                                <Label htmlFor="sa-fecha">Fecha de Nacimiento *</Label>
                                 <Input
-                                    id="ug-fecha"
+                                    id="sa-fecha"
                                     name="fecha_nacimiento"
                                     type="date"
                                     value={form.fecha_nacimiento}
@@ -290,61 +289,34 @@ export const UsuarioGlobalModal = ({
                             />
                         </div>
 
-                        {/* Botones de sincronización */}
-                        {onSincronizarCanReferir && (
-                            <div className="space-y-2">
-                                <Label className="text-sm font-medium">Sincronizar referidos</Label>
-                                <p className="text-xs text-muted-foreground">
-                                    Ajusta el estado de "puede referir" para todos los usuarios existentes en este tenant.
-                                </p>
-                                <div className="flex gap-2">
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => onSincronizarCanReferir(true)}
-                                        disabled={isSincronizando}
-                                        className="flex-1"
-                                    >
-                                        {isSincronizando ? (
-                                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                        ) : (
-                                            <RefreshCw className="h-4 w-4 mr-2" />
-                                        )}
-                                        Habilitar todos
-                                    </Button>
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => onSincronizarCanReferir(false)}
-                                        disabled={isSincronizando}
-                                        className="flex-1"
-                                    >
-                                        {isSincronizando ? (
-                                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                        ) : (
-                                            <RefreshCw className="h-4 w-4 mr-2" />
-                                        )}
-                                        Deshabilitar todos
-                                    </Button>
-                                </div>
-                                {sincronizarError && (
-                                    <p className="text-xs text-destructive">
-                                        Error al sincronizar: {sincronizarError.message}
-                                    </p>
-                                )}
-                            </div>
-                        )}
-
                         {submitError && (
                             <p className="text-sm text-destructive">
                                 Error: {submitError.message}
                             </p>
                         )}
+
+                        {sincronizarGlobalError && (
+                            <p className="text-sm text-destructive">
+                                Error de sincronización global: {sincronizarGlobalError.message}
+                            </p>
+                        )}
                     </div>
 
                     <DialogFooter className="pt-4 flex justify-end gap-3">
+                        {onSincronizarGlobalCanReferir && (
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => handleSincronizarGlobalCanReferir(form.canReferir)}
+                                disabled={isSincronizandoGlobal || isSubmitting}
+                            >
+                                {isSincronizandoGlobal ? (
+                                    <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Sincronizando...</>
+                                ) : (
+                                    <><RefreshCw className="h-4 w-4 mr-2" /> Sincronizar</>
+                                )}
+                            </Button>
+                        )}
                         <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>
                             Cancelar
                         </Button>

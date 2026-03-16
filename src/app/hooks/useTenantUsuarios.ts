@@ -3,11 +3,16 @@ import {
     getJerarquiaUsuarios,
     createUsuarioGlobal,
     createUsuarioCorporativo,
+    createUsuarioSuperAdmin,
+    sincronizarCanReferir,
+    sincronizarCanReferirTodos,
 } from '../services/tenantUsuariosService';
 import type {
     JerarquiaResponse,
     CreateUsuarioGlobalData,
     CreateUsuarioCorporativoData,
+    CreateUsuarioSuperAdminData,
+    SincronizarCanReferirData,
 } from '../services/tenantUsuariosService';
 
 export const useTenantUsuarios = () => {
@@ -23,6 +28,18 @@ export const useTenantUsuarios = () => {
     // --- Estados de CREAR usuario corporativo ---
     const [isCreatingCorp, setIsCreatingCorp] = useState(false);
     const [errorCrearCorp, setErrorCrearCorp] = useState<Error | null>(null);
+
+    // --- Estados de CREAR usuario SuperAdmin ---
+    const [isCreatingSuperAdmin, setIsCreatingSuperAdmin] = useState(false);
+    const [errorCrearSuperAdmin, setErrorCrearSuperAdmin] = useState<Error | null>(null);
+
+    // --- Estados de SINCRONIZAR canReferir ---
+    const [isSincronizandoCanReferir, setIsSincronizandoCanReferir] = useState(false);
+    const [errorSincronizarCanReferir, setErrorSincronizarCanReferir] = useState<Error | null>(null);
+
+    // --- Estados de SINCRONIZAR canReferir GLOBAL ---
+    const [isSincronizandoGlobalCanReferir, setIsSincronizandoGlobalCanReferir] = useState(false);
+    const [errorSincronizarGlobalCanReferir, setErrorSincronizarGlobalCanReferir] = useState<Error | null>(null);
 
     // --- LÓGICA DE CARGA DE JERARQUÍA ---
     const fetchJerarquia = useCallback(async () => {
@@ -74,6 +91,54 @@ export const useTenantUsuarios = () => {
         }
     };
 
+    // --- LÓGICA DE CREAR USUARIO SUPERADMIN ---
+    const crearUsuarioSuperAdmin = async (data: CreateUsuarioSuperAdminData) => {
+        try {
+            setIsCreatingSuperAdmin(true);
+            setErrorCrearSuperAdmin(null);
+            const result = await createUsuarioSuperAdmin(data);
+            await fetchJerarquia();
+            return result;
+        } catch (err) {
+            setErrorCrearSuperAdmin(err as Error);
+            throw err;
+        } finally {
+            setIsCreatingSuperAdmin(false);
+        }
+    };
+
+    // --- LÓGICA DE SINCRONIZAR canReferir ---
+    const sincronizarCanReferirUsuarios = async (data: SincronizarCanReferirData) => {
+        try {
+            setIsSincronizandoCanReferir(true);
+            setErrorSincronizarCanReferir(null);
+            const result = await sincronizarCanReferir(data);
+            await fetchJerarquia();
+            return result;
+        } catch (err) {
+            setErrorSincronizarCanReferir(err as Error);
+            throw err;
+        } finally {
+            setIsSincronizandoCanReferir(false);
+        }
+    };
+
+    // --- LÓGICA DE SINCRONIZAR canReferir GLOBAL (todos los tenants) ---
+    const sincronizarGlobalCanReferirUsuarios = async (canReferir: boolean) => {
+        try {
+            setIsSincronizandoGlobalCanReferir(true);
+            setErrorSincronizarGlobalCanReferir(null);
+            const result = await sincronizarCanReferirTodos(canReferir);
+            await fetchJerarquia();
+            return result;
+        } catch (err) {
+            setErrorSincronizarGlobalCanReferir(err as Error);
+            throw err;
+        } finally {
+            setIsSincronizandoGlobalCanReferir(false);
+        }
+    };
+
     return {
         jerarquia,
         loadingJerarquia,
@@ -87,5 +152,17 @@ export const useTenantUsuarios = () => {
         isCreatingCorp,
         errorCrearCorp,
         crearUsuarioCorporativo,
+
+        isCreatingSuperAdmin,
+        errorCrearSuperAdmin,
+        crearUsuarioSuperAdmin,
+
+        isSincronizandoCanReferir,
+        errorSincronizarCanReferir,
+        sincronizarCanReferirUsuarios,
+
+        isSincronizandoGlobalCanReferir,
+        errorSincronizarGlobalCanReferir,
+        sincronizarGlobalCanReferirUsuarios,
     };
 };

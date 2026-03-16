@@ -1,5 +1,5 @@
 import { Routes, Route, useLocation, Navigate } from 'react-router-dom';
-import { useState, useEffect, ReactElement } from 'react';
+import { useState, useEffect, ReactElement, lazy, Suspense } from 'react';
 import { useAuth } from '@/app/providers/AuthProvider';
 import { getAuthorizedRoutes, getPrivateHomeRoute } from '@/app/services/routeService';
 import { useLoading } from '@/app/providers/LoadingProvider';
@@ -22,19 +22,19 @@ const _pageModules = import.meta.glob<{ default: React.ComponentType<any> }>(
         '../presentation/pages/**/*.tsx',
         '../presentation/components/admin/**/*.tsx',
     ],
-    { eager: true }
+    { eager: false } // Cambiado a false para lazy loading
 );
 
-type ComponentMapType = Record<string, React.ComponentType<any>>;
+type ComponentMapType = Record<string, React.LazyExoticComponent<any>>;
 
 const buildComponentMap = (): ComponentMapType => {
     const map: ComponentMapType = {};
 
-    // 1. Registro automático por nombre de archivo
+    // 1. Registro automático por nombre de archivo con lazy loading
     for (const [filePath, mod] of Object.entries(_pageModules)) {
         const match = filePath.match(/\/([^/]+)\.tsx$/);
-        if (match?.[1] && mod.default) {
-            map[match[1]] = mod.default;
+        if (match?.[1]) {
+            map[match[1]] = lazy(() => mod().then(m => ({ default: m.default })));
         }
     }
 
@@ -150,9 +150,9 @@ export default function LayoutRoutes(): ReactElement {
 
     const renderRoutes = (routes: RouteConfig[]): ReactElement[] => {
         return routes.map(route => {
-            const Component = componentMap[route.component];
+            const LazyComponent = componentMap[route.component];
 
-            if (!Component) {
+            if (!LazyComponent) {
                 console.warn('Componente no encontrado:', route.component);
                 return (
                     <Route
@@ -171,7 +171,11 @@ export default function LayoutRoutes(): ReactElement {
                 <Route
                     key={route.path}
                     path={route.path}
-                    element={<Component />}
+                    element={
+                        <Suspense fallback={<div>Cargando...</div>}>
+                            <LazyComponent />
+                        </Suspense>
+                    }
                 />
             );
         }).filter(Boolean) as ReactElement[];

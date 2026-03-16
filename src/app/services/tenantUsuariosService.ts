@@ -63,10 +63,11 @@ export interface CreateUsuarioGlobalData {
     direccion: string;
     rh: string;
     fecha_nacimiento: string;
+    canReferir?: boolean;
 }
 
-export interface CreateUsuarioCorporativoData {
-    tenantCorporativoId?: string;
+export interface CreateUsuarioSuperAdminData {
+    tenantSuperAdminId?: string;
     correo: string;
     password: string;
     nombre: string;
@@ -76,10 +77,14 @@ export interface CreateUsuarioCorporativoData {
     direccion: string;
     rh: string;
     fecha_nacimiento: string;
-    cargo?: string;
-    tieneEstudios: boolean;
-    estudios?: string;
-    tipoContrato: string;
+    canReferir?: boolean;
+}
+
+export interface SincronizarCanReferirData {
+    tenantId?: string;
+    tenantGlobalId?: string;
+    tenantCorporativoId?: string;
+    canReferir: boolean;
 }
 
 // ─── Service functions ────────────────────────────────────────────────────────
@@ -99,5 +104,26 @@ export const createUsuarioCorporativo = async (data: CreateUsuarioCorporativoDat
     return apiFetch('/api/registro/usuario/corporativo', {
         method: 'POST',
         body: data,
+    });
+};
+
+export const createUsuarioSuperAdmin = async (data: CreateUsuarioSuperAdminData): Promise<any> => {
+    return apiFetch('/api/registro/usuario/superadmin', {
+        method: 'POST',
+        body: data,
+    });
+};
+
+export const sincronizarCanReferir = async (data: SincronizarCanReferirData): Promise<any> => {
+    return apiFetch('/api/registro/sincronizar/canReferir', {
+        method: 'POST',
+        body: data,
+    });
+};
+
+export const sincronizarCanReferirTodos = async (canReferir: boolean): Promise<any> => {
+    return apiFetch('/api/registro/sincronizar/canReferir', {
+        method: 'PUT',
+        body: { canReferir },
     });
 };
