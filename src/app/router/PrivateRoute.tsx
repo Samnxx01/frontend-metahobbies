@@ -12,7 +12,7 @@ export const PrivateRoute = ({ children, requireAdmin = true }: PrivateRouteProp
   const location = useLocation();
 
   if (!isAuthenticated) {
-    return <Navigate to="/login" replace state={{ from: location }} />;
+    return <Navigate to="/public/render/view/login" replace state={{ from: location }} />;
   }
   
   // Solo verificar rol de admin si requireAdmin es true

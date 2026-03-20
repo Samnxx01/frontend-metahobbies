@@ -37,12 +37,12 @@ export default function RouteUserMenuSettings({
       {enabled && (
         <>
           <div className="space-y-2">
-            <Label htmlFor="menuUsuarioKey">Clave del menu</Label>
+            <Label htmlFor="tiquetaNavb">Clave del menu</Label>
             <Select
               value={String(menuKey || '')}
               onValueChange={onMenuKeyChange}
             >
-              <SelectTrigger id="menuUsuarioKey">
+              <SelectTrigger id="tiquetaNavb">
                 <SelectValue placeholder="Selecciona un item" />
               </SelectTrigger>
               <SelectContent>

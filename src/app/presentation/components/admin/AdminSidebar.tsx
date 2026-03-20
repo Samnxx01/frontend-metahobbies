@@ -149,7 +149,6 @@ export default function AdminSidebar({ mobileOpen, setMobileOpen }: AdminSidebar
         const hasChildren = Array.isArray(node.children) && node.children.length > 0;
         const isExpanded = !!expandedNodes[node.id];
         const isActive = normalizeRoutePath(location.pathname) === normalizeRoutePath(node.path);
-
         const linkClasses = `
             flex items-center justify-between p-3 mb-1 rounded-md cursor-pointer transition-all duration-200
             ${isActive

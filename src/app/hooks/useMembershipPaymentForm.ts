@@ -288,6 +288,7 @@ export function useMembershipPaymentForm({
         data?.transaccion?.reference ??
         data?.data?.reference ??
         data?.referencia ??
+        data?.reference ??
         '';
 
       const montoRaw: number =
@@ -314,7 +315,7 @@ export function useMembershipPaymentForm({
         });
       } else {
         // Fallback por si el hook se usa sin el modal
-        navigate('/membresia/dashboard');
+        navigate('/admin/gestor-rutas/administracion/dashboardadmin');
       }
 
     } catch (error: any) {

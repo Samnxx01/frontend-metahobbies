@@ -113,7 +113,7 @@ export default function Registro(): React.ReactElement {
             toast.success('¡Registro exitoso! Redirigiendo a Login...');
 
             setTimeout(() => {
-                navigate('/login');
+                navigate('/public/render/view/login');
             }, 1000);
             return;
 
@@ -284,7 +284,7 @@ export default function Registro(): React.ReactElement {
                             <p className="text-sm text-center text-muted-foreground pt-2">
                                 ¿Ya tienes una cuenta?{' '}
                                 <Link 
-                                    to="/login" 
+                                    to="/public/render/view/login" 
                                     className="text-primary font-semibold hover:underline transition-colors"
                                 >
                                     Inicia sesión aquí

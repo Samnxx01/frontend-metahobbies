@@ -57,7 +57,7 @@ export const apiFetch = async (
         if (response.status === 401 && useAuth && logoutOn401) {
             localStorage.removeItem('user');
             localStorage.removeItem('token');
-            window.location.href = '/login';
+            window.location.href = '/public/render/view/login';
             throw new Error('Sesion expirada. Por favor inicia sesion nuevamente.');
         }
 

@@ -55,22 +55,52 @@ export type TipoCorreo =
   | 'activacion-membresia'
   | 'verificacion-cuenta'
   | 'recuperar-contrasena'
-  | 'cambio-contrasena';
+  | 'cambio-contrasena'
+  | 'referido-vencimiento';
 
 export const TIPOS_CORREO: { value: TipoCorreo; label: string }[] = [
   { value: 'activacion-membresia',  label: 'Activación de membresía' },
   { value: 'verificacion-cuenta',   label: 'Verificación de cuenta' },
   { value: 'recuperar-contrasena',  label: 'Recuperar contraseña' },
   { value: 'cambio-contrasena',     label: 'Cambio de contraseña' },
+  { value: 'referido-vencimiento',  label: 'Vencimiento referido' },
 ];
+
+export type ContenidoCorreo = Record<string, string>;
+
+export interface CampoContenido {
+  key: string;
+  label: string;
+  placeholder: string;
+  type?: 'text' | 'number';
+}
+
+export const CAMPOS_CONTENIDO: Record<TipoCorreo, CampoContenido[]> = {
+  'activacion-membresia': [
+    { key: 'contrasenaTemporal', label: 'Contraseña temporal (ejemplo)', placeholder: 'Ab3$xR7m' },
+  ],
+  'verificacion-cuenta': [
+    { key: 'contrasenaTemporal', label: 'Contraseña temporal (ejemplo)', placeholder: 'Ab3$xR7m' },
+  ],
+  'recuperar-contrasena': [],
+  'cambio-contrasena': [
+    { key: 'fechaExpiracion', label: 'Tiempo de expiración del enlace', placeholder: '15 minutos' },
+  ],
+  'referido-vencimiento': [
+    { key: 'nombrePadre',     label: 'Nombre del remitente (ejemplo)',   placeholder: 'Carlos Pérez' },
+    { key: 'codigoReferido',  label: 'Código de referido (ejemplo)',     placeholder: 'MABS-XXXXX' },
+    { key: 'horasRestantes',  label: 'Horas restantes (ejemplo)',        placeholder: '12', type: 'number' },
+  ],
+};
 
 export const previewEmail = async (
   tipo: TipoCorreo,
-  colores: Partial<PaletaColores>
+  colores: Partial<PaletaColores>,
+  contenido: ContenidoCorreo = {}
 ): Promise<string> => {
   const response: Response = await apiFetch('/api/email-paleta/preview', {
     method: 'POST',
-    body: { tipo, colores },
+    body: { tipo, colores, contenido },
     responseType: 'raw',
   });
   return response.text();

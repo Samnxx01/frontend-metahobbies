@@ -112,7 +112,7 @@ export default function Perfil(): React.ReactElement {
     }
 
     if (!user) {
-        navigate('/login');
+        navigate('/public/render/view/login');
         return <></>;
     }
 
@@ -245,7 +245,7 @@ export default function Perfil(): React.ReactElement {
         try {
             await logout();
             toast.success('Sesión cerrada exitosamente.');
-            setTimeout(() => navigate('/login'), 500);
+            setTimeout(() => navigate('/public/render/view/login'), 500);
         } catch (error) {
             toast.error((error as Error).message || 'Error al cerrar sesión.');
         }

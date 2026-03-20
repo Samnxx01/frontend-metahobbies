@@ -1,4 +1,4 @@
-import { Routes, Route, useLocation, Navigate } from 'react-router-dom';
+import { Routes, Route, useLocation, Navigate, Outlet } from 'react-router-dom';
 import { useState, useEffect, ReactElement, lazy, Suspense } from 'react';
 import { useAuth } from '@/app/providers/AuthProvider';
 import { getAuthorizedRoutes, getPrivateHomeRoute } from '@/app/services/routeService';
@@ -13,6 +13,8 @@ import { MembershipRoutes } from './MembershipRoutes';
 import CambiarContrasenaProvisional from '@/app/presentation/pages/cambiar-contrasena/CambiarContrasenaProvisional';
 import ActivacionCuenta from '../presentation/pages/activar-cuenta/ActivaciónCuenta';
 import Perfil from '@/app/presentation/pages/perfil/Perfil';
+import RecuperarContrasena from '@/app/presentation/pages/recuperar-contrasena/RecuperarContrasena';
+import RecuperarContrasenaToken from '@/app/presentation/pages/recuperar-contrasena/RecuperarContrasenaToken';
 
 // ── Dynamic component map via Vite glob ───────────────────────────────────────
 // Escanea TODOS los .tsx de pages/ y components/admin/ automáticamente.
@@ -53,6 +55,9 @@ const buildComponentMap = (): ComponentMapType => {
         ConfiguracionPerfil:           'Perfil',
         // Dashboard: el archivo se llama Dashboard pero la BD puede enviar DashboardAdmin
         DashboardAdmin:                'Dashboard',
+        // Suite/Módulo "Usuarios" y "Administracion" usan GestionUsuarios como componente base
+        Usuarios:                      'GestionUsuarios',
+        Administracion:                'GestionUsuarios',
     };
 
     for (const [alias, target] of Object.entries(aliases)) {
@@ -84,6 +89,15 @@ interface AuthorizedRoutes {
     publicRoutes?: RouteConfig[];
     adminRoutes?: RouteConfig[];
     authRoutes?: RouteConfig[];
+    hybridRoutes?: RouteConfig[];
+}
+
+// ── Hybrid layout ──────────────────────────────────────────────────────────────
+// Rutas accesibles sin importar el estado de autenticación.
+// Usa AdminLayout cuando hay sesión activa, PublicLayout en caso contrario.
+function HybridLayout(): ReactElement {
+    const { user } = useAuth();
+    return user ? <AdminLayout /> : <PublicLayout />;
 }
 
 // ── Admin redirect ─────────────────────────────────────────────────────────────
@@ -148,35 +162,41 @@ export default function LayoutRoutes(): ReactElement {
         return <div>Cargando rutas...</div>;
     }
 
-    const renderRoutes = (routes: RouteConfig[]): ReactElement[] => {
+    const renderRoutes = (routes: RouteConfig[], parentPath = ''): ReactElement[] => {
         return routes.map(route => {
             const LazyComponent = componentMap[route.component];
+            const hasChildren = Array.isArray(route.children) && route.children.length > 0;
 
-            if (!LazyComponent) {
-                console.warn('Componente no encontrado:', route.component);
+            // Ruta relativa al padre: quitar el prefijo del padre si viene con path completo
+            const relativePath = parentPath && route.path.startsWith(parentPath)
+                ? route.path.slice(parentPath.length).replace(/^\//, '')
+                : route.path;
+
+            const leafElement = LazyComponent
+                ? <Suspense fallback={<div>Cargando...</div>}><LazyComponent /></Suspense>
+                : (() => {
+                    console.warn('Componente no encontrado:', route.component);
+                    return (
+                        <div className="p-6 text-sm text-muted-foreground">
+                            Componente no registrado: {route.component}
+                        </div>
+                    );
+                })();
+
+            if (!hasChildren) {
                 return (
-                    <Route
-                        key={route.path}
-                        path={route.path}
-                        element={
-                            <div className="p-6 text-sm text-muted-foreground">
-                                Componente no registrado: {route.component}
-                            </div>
-                        }
-                    />
+                    <Route key={route.path} path={relativePath} element={leafElement} />
                 );
             }
 
+            // Ruta padre: usa <Outlet /> como contenedor para que los hijos
+            // no se apilen sobre el componente padre. El componente del padre
+            // se monta como index route, respetando la sincronización con componentMap.
             return (
-                <Route
-                    key={route.path}
-                    path={route.path}
-                    element={
-                        <Suspense fallback={<div>Cargando...</div>}>
-                            <LazyComponent />
-                        </Suspense>
-                    }
-                />
+                <Route key={route.path} path={relativePath} element={<Outlet />}>
+                    <Route index element={leafElement} />
+                    {renderRoutes(route.children!, route.path)}
+                </Route>
             );
         }).filter(Boolean) as ReactElement[];
     };
@@ -188,12 +208,20 @@ export default function LayoutRoutes(): ReactElement {
                 <Route path="membresia/*" element={<MembershipRoutes />} />
                 <Route path="cambiar-contrasena-provisional" element={<CambiarContrasenaProvisional />} />
                 <Route path="activar-cuenta" element={<ActivacionCuenta />} />
+                <Route path="recuperar-contrasena" element={<RecuperarContrasena />} />
+                <Route path="recuperar/:token" element={<RecuperarContrasenaToken />} />
                 {user && <Route path="perfil" element={<Perfil />} />}
             </Route>
 
             <Route element={<AuthLayout />}>
                 {authorizedRoutes.authRoutes && renderRoutes(authorizedRoutes.authRoutes)}
             </Route>
+
+            {authorizedRoutes.hybridRoutes && authorizedRoutes.hybridRoutes.length > 0 && (
+                <Route element={<HybridLayout />}>
+                    {renderRoutes(authorizedRoutes.hybridRoutes)}
+                </Route>
+            )}
 
             {user && authorizedRoutes?.adminRoutes && authorizedRoutes.adminRoutes.length > 0 && (
                 <Route path="/admin" element={<AdminLayout />}>

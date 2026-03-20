@@ -291,7 +291,7 @@ export const UsuarioGlobalModal = ({
                         </div>
 
                         {/* Botones de sincronización */}
-                        {onSincronizarCanReferir && (
+                        {scope === 'SUPER_ADMIN' && onSincronizarCanReferir && (
                             <div className="space-y-2">
                                 <Label className="text-sm font-medium">Sincronizar referidos</Label>
                                 <p className="text-xs text-muted-foreground">

@@ -26,6 +26,7 @@ import {
   Home,
   Landmark,
   LayoutDashboard,
+  Lock,
   Loader2,
   Network,
   Pencil,
@@ -36,6 +37,7 @@ import {
   ShieldCheck,
   Trash2,
   User,
+  X,
 } from 'lucide-react';
 import ParametrizacionGenyProcent from './ParametrizacionGenyProcent/ParametrizacionGenyProcent';
 import { getRouteCatalog, RouteCatalogItem } from '@/app/services/routeService';
@@ -87,6 +89,7 @@ interface MenuTagFormState {
   tagTenantCorporativoId: string | null;
   canView: boolean;
   canInherit: boolean;
+  permitirSinTenant: boolean;
 }
 
 const USER_MENU_SLOTS: { key: MenuKey; title: string; description: string; Icon: React.ElementType }[] = [
@@ -134,6 +137,7 @@ const EMPTY_TAG_FORM: MenuTagFormState = {
   tagTenantCorporativoId: null,
   canView: true,
   canInherit: true,
+  permitirSinTenant: false,
 };
 
 const normalizeCode = (value: string): string =>
@@ -157,6 +161,7 @@ export default function ParametrizacionMenu() {
   const [navbarItems, setNavbarItems] = useState<NavbarItemState[]>([]);
   const [routeCatalog, setRouteCatalog] = useState<RouteCatalogItem[]>([]);
   const [menuTags, setMenuTags] = useState<RouteMenuTag[]>([]);
+  const [savingAcciones, setSavingAcciones] = useState<Record<string, boolean>>({});
   const [tagForm, setTagForm] = useState<MenuTagFormState>(EMPTY_TAG_FORM);
 
   // ── Multinivel: selector de TenantGlobal ──────────────────────────────────
@@ -274,6 +279,24 @@ export default function ParametrizacionMenu() {
     ? [{ iud: actorScope.tenantSuperAdminId, nombre: 'Mi SuperAdmin' }]
     : [];
 
+  // Rutas agrupadas por contexto de renderización
+  const rutasNavbarPublico = useMemo(
+    () => routeCatalog.filter((r) => r.mostrarEnNavbarPublico === true),
+    [routeCatalog]
+  );
+  const rutasSidebar = useMemo(
+    () => routeCatalog.filter((r) => r.mostrarEnSidebar === true && r.mostrarEnNavbarPublico !== true),
+    [routeCatalog]
+  );
+  const rutasConConfig = useMemo(
+    () => routeCatalog.filter((r) =>
+      (r.accionesPublicas && r.accionesPublicas.length > 0) ||
+      (r.accionesPrivadas && r.accionesPrivadas.length > 0) ||
+      r.formulariosConfig?.habilitado === true
+    ),
+    [routeCatalog]
+  );
+
   const derivedScope = (() => {
     const s = !!tagForm.tagTenantSuperAdminId;
     const g = tagForm.tagTenantGlobalIds.length > 0;
@@ -316,7 +339,7 @@ export default function ParametrizacionMenu() {
 
       const nextSlots = { ...slots };
       for (const slot of USER_MENU_SLOTS) {
-        const route = catalog.find((r) => r.menuUsuarioKey === slot.key) ?? null;
+        const route = catalog.find((r) => r.tiquetaNavb === slot.key) ?? null;
         nextSlots[slot.key] = {
           route,
           enabled: route?.mostrarEnMenuUsuario === true,
@@ -374,6 +397,7 @@ export default function ParametrizacionMenu() {
       tagTenantCorporativoId: tCorp,
       canView: tag.canView ?? true,
       canInherit: tag.canInherit ?? true,
+      permitirSinTenant: tag.permitirSinTenant === true,
     });
   };
 
@@ -385,7 +409,7 @@ export default function ParametrizacionMenu() {
     try {
       await updateRoute(slot.route.iud, {
         mostrarEnMenuUsuario: slot.enabled,
-        menuUsuarioKey: slot.enabled ? key : null,
+        tiquetaNavb: slot.enabled ? key : null,
         menuUsuarioLabel: slot.enabled ? slot.label.trim() || null : null,
         menuUsuarioOrder: slot.enabled ? slot.order : 0,
       } as any);
@@ -414,6 +438,47 @@ export default function ParametrizacionMenu() {
       setNavbarItems((prev) =>
         prev.map((it, i) => (i === index ? { ...it, enabled, saving: false } : it))
       );
+    }
+  };
+
+  const removeAccion = async (
+    routeIud: string,
+    field: 'accionesPublicas' | 'accionesPrivadas',
+    method: string
+  ) => {
+    const route = routeCatalog.find((r) => r.iud === routeIud);
+    if (!route) return;
+    const current: string[] = Array.isArray((route as any)[field]) ? [...(route as any)[field]] : [];
+    const next = current.filter((m) => m !== method);
+    setSavingAcciones((prev) => ({ ...prev, [`${routeIud}_${field}`]: true }));
+    try {
+      await updateRoute(routeIud, { [field]: next } as any);
+      setRouteCatalog((prev) =>
+        prev.map((r) => r.iud === routeIud ? { ...r, [field]: next } : r)
+      );
+    } catch (error) {
+      console.error(error);
+      toast.error('No se pudo eliminar la accion.');
+    } finally {
+      setSavingAcciones((prev) => ({ ...prev, [`${routeIud}_${field}`]: false }));
+    }
+  };
+
+  const clearAcciones = async (
+    routeIud: string,
+    field: 'accionesPublicas' | 'accionesPrivadas'
+  ) => {
+    setSavingAcciones((prev) => ({ ...prev, [`${routeIud}_${field}`]: true }));
+    try {
+      await updateRoute(routeIud, { [field]: [] } as any);
+      setRouteCatalog((prev) =>
+        prev.map((r) => r.iud === routeIud ? { ...r, [field]: [] } : r)
+      );
+    } catch (error) {
+      console.error(error);
+      toast.error('No se pudo limpiar las acciones.');
+    } finally {
+      setSavingAcciones((prev) => ({ ...prev, [`${routeIud}_${field}`]: false }));
     }
   };
 
@@ -457,6 +522,7 @@ export default function ParametrizacionMenu() {
         tenantSuperAdminId,
         tenantGlobalIds,
         tenantCorporativoId,
+        permitirSinTenant: tagForm.permitirSinTenant,
       };
 
       if (tagForm.id) {
@@ -779,6 +845,23 @@ export default function ParametrizacionMenu() {
                   />
                   <Label htmlFor="canInherit" className="text-sm">Permitir herencia</Label>
                 </div>
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    id="permitirSinTenant"
+                    className="h-4 w-4 rounded border-gray-300 accent-primary"
+                    checked={tagForm.permitirSinTenant}
+                    onChange={(e) => setTagForm((prev) => ({ ...prev, permitirSinTenant: e.target.checked }))}
+                  />
+                  <Label htmlFor="permitirSinTenant" className="text-sm">
+                    Permitir acceso sin tenant
+                  </Label>
+                </div>
+                {tagForm.permitirSinTenant && (
+                  <p className="text-xs text-muted-foreground pl-6">
+                    Este tag será visible para usuarios que aún no tienen ningún tenant asignado.
+                  </p>
+                )}
               </div>
 
               <div className="flex gap-3">
@@ -857,6 +940,11 @@ export default function ParametrizacionMenu() {
                         if (hasGlobal) return <Badge variant="outline">Solo Global</Badge>;
                         return null;
                       })()}
+                      {tag.permitirSinTenant && (
+                        <Badge variant="secondary" className="bg-amber-100 text-amber-800 border-amber-300">
+                          Sin tenant
+                        </Badge>
+                      )}
                     </div>
                     {tag.descripcion && (
                       <p className="text-muted-foreground">{tag.descripcion}</p>

@@ -19,6 +19,7 @@ import {
 import { Info, Loader2, RefreshCw, Shield } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import type { CreateUsuarioSuperAdminData } from '@/app/services/tenantUsuariosService';
+import { getTenantsSuperAdmin } from '@/app/services/tenantUsuariosService';
 import { RH_OPTIONS } from './catalogos';
 
 interface UsuarioSuperAdminModalProps {
@@ -75,10 +76,18 @@ export const UsuarioSuperAdminModal = ({
     sincronizarGlobalError,
 }: UsuarioSuperAdminModalProps): React.ReactElement => {
     const [form, setForm] = useState<FormState>(EMPTY_FORM);
+    const [tenantsSA, setTenantsSA] = useState<any[]>([]);
+    const [loadingTenants, setLoadingTenants] = useState(false);
 
     useEffect(() => {
-        if (!open) setForm(EMPTY_FORM);
-    }, [open]);
+        if (!open) { setForm(EMPTY_FORM); return; }
+        if (scope !== 'SUPER_ADMIN') return;
+        setLoadingTenants(true);
+        getTenantsSuperAdmin()
+            .then(res => setTenantsSA(res.tenants ?? []))
+            .catch(() => setTenantsSA([]))
+            .finally(() => setLoadingTenants(false));
+    }, [open, scope]);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         setForm(prev => ({ ...prev, [e.target.name]: e.target.value }));
@@ -139,12 +148,24 @@ export const UsuarioSuperAdminModal = ({
                         {scope === 'SUPER_ADMIN' && (
                             <div className="space-y-2">
                                 <Label>Tenant SuperAdmin</Label>
-                                <Input
-                                    name="tenantSuperAdminId"
-                                    placeholder="ID del Tenant SuperAdmin (opcional)"
+                                <Select
                                     value={form.tenantSuperAdminId}
-                                    onChange={handleChange}
-                                />
+                                    onValueChange={handleSelect('tenantSuperAdminId')}
+                                    disabled={loadingTenants}
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue placeholder={loadingTenants ? 'Cargando...' : 'Seleccionar tenant (opcional)'} />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {tenantsSA.map((t: any) => {
+                                            const id = String(t?.iud || t?._id || '');
+                                            const nombre = t?.coporativo?.razon_social || t?.coporativo?.titulo || id;
+                                            const nvl = t?.nvlGeneracionTenant?.nvl;
+                                            const label = nvl ? `${nombre} — ${nvl}` : nombre;
+                                            return <SelectItem key={id} value={id}>{label}</SelectItem>;
+                                        })}
+                                    </SelectContent>
+                                </Select>
                                 <p className="text-xs text-muted-foreground">
                                     Si no se especifica, se usará el tenant del usuario autenticado.
                                 </p>

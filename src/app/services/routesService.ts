@@ -15,7 +15,7 @@ export interface Route {
   mostrarEnNavbarPublico?: boolean;
   mostrarEnSidebar?: boolean;
   mostrarEnMenuUsuario?: boolean;
-  menuUsuarioKey?: 'PANEL_ADMIN' | 'MI_PERFIL' | 'MI_MEMBRESIA' | string | null;
+  tiquetaNavb?: string | null;
   menuUsuarioLabel?: string | null;
   menuUsuarioOrder?: number;
   tipoNodo?: string | null;
@@ -46,6 +46,8 @@ export interface Route {
     | string
     | { _id?: string; iud?: string; method?: string; etiquetas?: string }
     | Array<string | { _id?: string; iud?: string; method?: string; etiquetas?: string }>;
+  accionesPublicas?: string[];
+  accionesPrivadas?: string[];
 }
 
 export interface RouteMenuTag {
@@ -63,6 +65,7 @@ export interface RouteMenuTag {
   estado: boolean;
   canView?: boolean;
   canInherit?: boolean;
+  permitirSinTenant?: boolean;
   tenantSuperAdminId?: string | null;
   tenantGlobalId?: string | null;
   tenantGlobalIds?: string[];
@@ -109,7 +112,7 @@ export interface CreateRouteDto {
   mostrarEnNavbarPublico?: boolean;
   mostrarEnSidebar?: boolean;
   mostrarEnMenuUsuario?: boolean;
-  menuUsuarioKey?: 'PANEL_ADMIN' | 'MI_PERFIL' | 'MI_MEMBRESIA' | string | null;
+  tiquetaNavb?: string | null;
   menuUsuarioLabel?: string | null;
   menuUsuarioOrder?: number;
   tipoNodo?: string;
@@ -139,7 +142,7 @@ export interface UpdateRouteDto {
   mostrarEnNavbarPublico?: boolean;
   mostrarEnSidebar?: boolean;
   mostrarEnMenuUsuario?: boolean;
-  menuUsuarioKey?: 'PANEL_ADMIN' | 'MI_PERFIL' | 'MI_MEMBRESIA' | string | null;
+  tiquetaNavb?: string | null;
   menuUsuarioLabel?: string | null;
   menuUsuarioOrder?: number;
   tipoNodo?: string;
@@ -263,6 +266,7 @@ export interface TipoNodoRuta {
   descripcion?: string;
   estado: boolean;
   order: number;
+  codigoCatalogoId?: string;
 }
 
 export interface TiposNodoResponse {
@@ -270,6 +274,30 @@ export interface TiposNodoResponse {
   message: string;
   total?: number;
   data: TipoNodoRuta[];
+}
+
+export interface TiposNodoOpcionesResponse {
+  success: boolean;
+  message: string;
+  total?: number;
+  order: number;
+  scopeConfiguracion?: string;
+  usarSelect: boolean;
+  usarDefault: boolean;
+  data: TipoNodoRuta[];
+}
+
+export interface AplicarCodigoTipoNodoResponse {
+  success: boolean;
+  message: string;
+  created: boolean;
+  reused: boolean;
+  data: {
+    iud: string;
+    codigo: string;
+    scopeConfiguracion?: string;
+    tenantCorporativoId?: string | null;
+  };
 }
 
 export interface TipoNodoResponse {
@@ -442,6 +470,50 @@ export const getTiposNodoRuta = async (): Promise<TiposNodoResponse> => {
   return response;
 };
 
+export const getTiposNodoRutaOpciones = async (order: number): Promise<TiposNodoOpcionesResponse> => {
+  const response = await apiFetch(`${API_BASE_URL}/seguridad/rutas/tipos-nodo/opciones?order=${order}`, {
+    method: 'GET',
+  });
+  return response;
+};
+
+export const applyTipoNodoCodigo = async (payload: { codigo: string; tenantCorporativoId?: string | null; perfilCorporativoId?: string | null }): Promise<AplicarCodigoTipoNodoResponse> => {
+  const response = await apiFetch(`${API_BASE_URL}/seguridad/rutas/tipos-nodo/codigos/aplicar`, {
+    method: 'POST',
+    body: payload,
+  });
+  return response;
+};
+
+export interface PerfilCorporativoItem {
+  _id: string;
+  iud?: string;
+  razon_social?: string;
+  titulo?: string;
+  nit_ruc_rtn?: string;
+  estado?: boolean;
+}
+
+export const getPerfilesCorporativosParaCodigo = async (): Promise<{ success: boolean; data: PerfilCorporativoItem[] }> => {
+  return await apiFetch(`${API_BASE_URL}/seguridad/rutas/tipos-nodo/codigos/perfiles-corporativos`, {
+    method: 'GET',
+  });
+};
+
+export interface CodigoNodoItem {
+  iud: string;
+  codigo: string;
+  scopeConfiguracion?: string;
+  tenantCorporativoId?: string | null;
+  perfilCorporativoId?: string | null;
+}
+
+export const getTiposNodoCodigos = async (): Promise<{ success: boolean; total: number; data: CodigoNodoItem[] }> => {
+  return await apiFetch(`${API_BASE_URL}/seguridad/rutas/tipos-nodo/codigos`, {
+    method: 'GET',
+  });
+};
+
 export const getAccessTypes = async (): Promise<AccessTypesResponse> => {
   const response = await apiFetch(`${API_BASE_URL}/seguridad/rutas/listarTiposRutas/admin`, {
     method: 'GET',
@@ -504,6 +576,7 @@ export const deactivateAccessType = async (id: string): Promise<{ success?: bool
 
 export const createTipoNodoRuta = async (payload: {
   codigo: string;
+  codigoCatalogoId?: string;
   nombre: string;
   descripcion?: string;
   order?: number;
@@ -518,6 +591,7 @@ export const createTipoNodoRuta = async (payload: {
 
 export const updateTipoNodoRuta = async (id: string, payload: {
   codigo?: string;
+  codigoCatalogoId?: string | null;
   nombre?: string;
   descripcion?: string;
   order?: number;

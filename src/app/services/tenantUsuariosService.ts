@@ -89,6 +89,10 @@ export interface SincronizarCanReferirData {
 
 // ─── Service functions ────────────────────────────────────────────────────────
 
+export const getTenantsSuperAdmin = async (): Promise<{ tenants: any[] }> => {
+    return apiFetch('/api/registro/tenants/superadmin', { method: 'GET' });
+};
+
 export const getJerarquiaUsuarios = async (): Promise<JerarquiaResponse> => {
     return apiFetch('/api/registro/jerarquia/usuarios', { method: 'GET' });
 };

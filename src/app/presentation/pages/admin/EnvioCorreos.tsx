@@ -11,6 +11,8 @@ import {
   PaletaColores,
   TIPOS_CORREO,
   TipoCorreo,
+  ContenidoCorreo,
+  CAMPOS_CONTENIDO,
   activarPaleta,
   actualizarPaleta,
   crearPaleta,
@@ -124,7 +126,9 @@ export default function EnvioCorreos() {
   const [tipoPreview, setTipoPreview]       = useState<TipoCorreo>('activacion-membresia');
   const [previewHtml, setPreviewHtml]       = useState<string>('');
   const [loadingPreview, setLoadingPreview] = useState(false);
+  const [contenido, setContenido]           = useState<ContenidoCorreo>({});
   const [highlightedKey, setHighlightedKey] = useState<keyof PaletaColores | null>(null);
+  const [refreshKey, setRefreshKey]         = useState(0); // Para forzar re-renderizado
 
   const debounceRef       = useRef<ReturnType<typeof setTimeout> | null>(null);
   const highlightTimer    = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -135,7 +139,13 @@ export default function EnvioCorreos() {
     setLoading(true);
     try {
       const res = await listarPaletas();
-      setPaletas(res.paletas ?? []);
+      // Forzar creación de nuevos objetos para asegurar re-renderizado
+      const nuevasPaletas = (res.paletas ?? []).map(paleta => ({
+        ...paleta,
+        colores: { ...paleta.colores }
+      }));
+      setPaletas(nuevasPaletas);
+      setRefreshKey(prev => prev + 1); // Forzar re-renderizado
     } catch (err: any) {
       toast.error(err.message ?? 'Error al cargar paletas');
     } finally {
@@ -166,12 +176,12 @@ export default function EnvioCorreos() {
   }, []);
 
   // ── Preview con debounce ──────────────────────────────────────────────
-  const actualizarPreview = useCallback((colores: PaletaColores, tipo: TipoCorreo) => {
+  const actualizarPreview = useCallback((colores: PaletaColores, tipo: TipoCorreo, cnt: ContenidoCorreo) => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(async () => {
       setLoadingPreview(true);
       try {
-        const html = await previewEmail(tipo, colores);
+        const html = await previewEmail(tipo, colores, cnt);
         setPreviewHtml(html);
       } catch { /* silencioso */ }
       finally { setLoadingPreview(false); }
@@ -179,8 +189,13 @@ export default function EnvioCorreos() {
   }, []);
 
   useEffect(() => {
-    actualizarPreview(form.colores, tipoPreview);
-  }, [form.colores, tipoPreview, actualizarPreview]);
+    actualizarPreview(form.colores, tipoPreview, contenido);
+  }, [form.colores, tipoPreview, contenido, actualizarPreview]);
+
+  // Reset contenido al cambiar tipo de correo
+  useEffect(() => {
+    setContenido({});
+  }, [tipoPreview]);
 
   // ── Manejadores de color ──────────────────────────────────────────────
   const handleColorPicker = (key: keyof PaletaColores, value: string) => {
@@ -464,6 +479,25 @@ export default function EnvioCorreos() {
             ))}
           </div>
 
+          {/* Edición de contenido por template */}
+          {CAMPOS_CONTENIDO[tipoPreview].length > 0 && (
+            <div className="rounded-xl border bg-muted/20 p-3 space-y-2">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Contenido del correo</p>
+              {CAMPOS_CONTENIDO[tipoPreview].map(campo => (
+                <div key={campo.key} className="flex items-center gap-2">
+                  <Label className="text-xs w-40 shrink-0">{campo.label}</Label>
+                  <Input
+                    type={campo.type ?? 'text'}
+                    value={contenido[campo.key] ?? ''}
+                    onChange={e => setContenido(prev => ({ ...prev, [campo.key]: e.target.value }))}
+                    placeholder={campo.placeholder}
+                    className="h-7 text-xs"
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* Iframe interactivo */}
           <div className="rounded-xl border overflow-hidden shadow-md bg-white">
             {previewHtml ? (
@@ -514,10 +548,10 @@ export default function EnvioCorreos() {
         {!loading && paletas.length === 0 && (
           <p className="text-sm text-muted-foreground">No hay paletas creadas aún.</p>
         )}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div key={refreshKey} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {paletas.map(paleta => (
             <Card
-              key={paleta._id}
+              key={`${paleta._id}-${paleta.fechaActualizacion || paleta.fechaCreacion}`}
               className={`transition-shadow ${paleta.activa ? 'ring-2 ring-primary shadow-md' : 'hover:shadow-sm'}`}
             >
               <CardContent className="pt-4 space-y-3">

@@ -143,7 +143,7 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
         });
         if (result.isConfirmed) {
             logout();
-            navigate('/login');
+            navigate('/public/render/view/login');
             toast.success('Sesión cerrada correctamente');
         }
     };

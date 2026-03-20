@@ -140,7 +140,7 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
 
     const handleLogout = (): void => {
         logout()
-        navigate('/login')
+        navigate('/public/render/view/login')
     }
 
     const handleMenuToggle = (): void => {

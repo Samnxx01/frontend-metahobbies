@@ -20,7 +20,7 @@ interface RouteResponse {
         mostrarEnSidebar?: boolean;
         mostrarEnNavbarPublico?: boolean;
         mostrarEnMenuUsuario?: boolean;
-        menuUsuarioKey?: string | null;
+        tiquetaNavb?: string | null;
         menuUsuarioLabel?: string | null;
         menuUsuarioOrder?: number;
         accessType: { _id: string; accessType: string; layout?: string } | Array<{ _id: string; accessType: string; layout?: string }>;
@@ -63,10 +63,17 @@ interface HerenciaUsuarioResponse {
     }>;
 }
 
+export interface AdminRouteConfig {
+    path: string;
+    component: string;
+    children?: AdminRouteConfig[];
+}
+
 interface AuthorizedRoutes {
     publicRoutes?: Array<{ path: string; component: string }>;
-    adminRoutes?: Array<{ path: string; component: string }>;
+    adminRoutes?: AdminRouteConfig[];
     authRoutes?: Array<{ path: string; component: string }>;
+    hybridRoutes?: Array<{ path: string; component: string }>;
 }
 
 const normalizeLayout = (layout: string): string =>
@@ -129,9 +136,14 @@ export interface RouteCatalogItem {
     mostrarEnNavbarPublico?: boolean;
     mostrarEnSidebar?: boolean;
     mostrarEnMenuUsuario?: boolean;
-    menuUsuarioKey?: string | null;
+    tiquetaNavb?: string | null;
     menuUsuarioLabel?: string | null;
     menuUsuarioOrder?: number;
+    formulariosConfig?: {
+        habilitado: boolean;
+        modoAsignacion: 'TENANT' | 'USUARIO' | 'NINGUNO';
+        soloDios?: boolean;
+    };
 }
 
 export interface MenuUsuarioItem {
@@ -238,7 +250,7 @@ export const getRouteCatalog = async (): Promise<RouteCatalogItem[]> => {
                 mostrarEnNavbarPublico: r.mostrarEnNavbarPublico === true,
                 mostrarEnSidebar: r.mostrarEnSidebar === true,
                 mostrarEnMenuUsuario: r.mostrarEnMenuUsuario === true,
-                menuUsuarioKey: String(r.menuUsuarioKey || '').trim() || null,
+                tiquetaNavb: String(r.tiquetaNavb || '').trim() || null,
                 menuUsuarioLabel: String(r.menuUsuarioLabel || '').trim() || null,
                 menuUsuarioOrder: Number(r.menuUsuarioOrder ?? 0),
             }));
@@ -288,9 +300,9 @@ export const getUserShortcutRoutes = async (): Promise<UserShortcutRoutes> => {
     try {
         const catalog = await getRouteCatalog();
 
-        const adminByMenu = catalog.find((route) => route.mostrarEnMenuUsuario && route.menuUsuarioKey === 'PANEL_ADMIN');
-        const perfilByMenu = catalog.find((route) => route.mostrarEnMenuUsuario && route.menuUsuarioKey === 'MI_PERFIL');
-        const membresiaByMenu = catalog.find((route) => route.mostrarEnMenuUsuario && route.menuUsuarioKey === 'MI_MEMBRESIA');
+        const adminByMenu = catalog.find((route) => route.mostrarEnMenuUsuario && route.tiquetaNavb === 'PANEL_ADMIN');
+        const perfilByMenu = catalog.find((route) => route.mostrarEnMenuUsuario && route.tiquetaNavb === 'MI_PERFIL');
+        const membresiaByMenu = catalog.find((route) => route.mostrarEnMenuUsuario && route.tiquetaNavb === 'MI_MEMBRESIA');
 
         const adminRoute = adminByMenu || findCatalogRoute(catalog, {
             paths: ['/admin/gestor-rutas/administracion/dashboardadmin', '/admin/dashboardadmin', '/admin/dashboard'],
@@ -349,13 +361,38 @@ export const getAuthorizedRoutes = async (): Promise<AuthorizedRoutes> => {
             return { publicRoutes: [], adminRoutes: [], authRoutes: [] };
         }
 
-        // Normaliza nombres de componentes
+        // Normaliza nombres de componentes (strip extensiones y puntos trailing de la BD)
         const normalizeComponent = (name: string) =>
-            name.replace(/\.(jsx|tsx|js|ts)$/i, "");
+            name.replace(/\.(jsx|tsx|js|ts)$/i, "").replace(/\.+$/, "").trim();
+
+        // Helpers para detectar rutas híbridas (múltiples accessType que cruzan contextos)
+        const getAccessTypeEntries = (r: typeof result.data[number]) => {
+            if (!r.accessType) return [];
+            return Array.isArray(r.accessType) ? r.accessType : [r.accessType];
+        };
+        const hasPublicEntry = (r: typeof result.data[number]) =>
+            getAccessTypeEntries(r).some(t => String(t.accessType || '').toUpperCase().includes('PUBLIC'));
+        const hasPrivateEntry = (r: typeof result.data[number]) =>
+            getAccessTypeEntries(r).some(t => {
+                const v = String(t.accessType || '').toUpperCase();
+                return v.includes('PRIVATE') || v.includes('AUTH') || v.includes('ADMIN');
+            });
+        const isHybrid = (r: typeof result.data[number]) =>
+            r.estadoRuta && getAccessTypeEntries(r).length > 1 && hasPublicEntry(r) && hasPrivateEntry(r);
+
+        // HYBRID: accesible tanto sin sesión (PublicLayout) como con sesión (AdminLayout)
+        const hybridRoutes = result.data
+            .filter(isHybrid)
+            .map(r => ({
+                path: toRelativeRoutePath(r.path),
+                component: normalizeComponent(r.component),
+            }));
+
+        const hybridPaths = new Set(hybridRoutes.map(r => r.path));
 
         // PUBLIC
         const publicRoutes = result.data
-            .filter(r => r.estadoRuta && normalizeLayout(r.layout) === "publiclayout")
+            .filter(r => r.estadoRuta && normalizeLayout(r.layout) === "publiclayout" && !isHybrid(r))
             .map(r => ({
                 path: toRelativeRoutePath(r.path),
                 component: normalizeComponent(r.component),
@@ -363,7 +400,7 @@ export const getAuthorizedRoutes = async (): Promise<AuthorizedRoutes> => {
 
         // AUTH
         const authRoutes = result.data
-            .filter(r => r.estadoRuta && normalizeLayout(r.layout) === "authlayout")
+            .filter(r => r.estadoRuta && normalizeLayout(r.layout) === "authlayout" && !hybridPaths.has(toRelativeRoutePath(r.path)))
             .map(r => ({
                 path: toRelativeRoutePath(r.path),
                 component: normalizeComponent(r.component),
@@ -371,20 +408,18 @@ export const getAuthorizedRoutes = async (): Promise<AuthorizedRoutes> => {
 
         // ADMIN: priorizar el arbol autorizado backend para evitar desalineacion
         // entre sidebar y rutas registradas en React Router.
-        let adminRoutes: Array<{ path: string; component: string }> = [];
+        let adminRoutes: AdminRouteConfig[] = [];
         if (hasToken) {
-            const { tree, actorTipo } = await getAdminSidebarTreeWithContext();
-            const flattenTree = (nodes: AdminNavTreeItem[]): AdminNavTreeItem[] =>
-                nodes.flatMap((node) => [node, ...flattenTree(node.children || [])]);
+            const { tree } = await getAdminSidebarTreeWithContext();
 
-            const flattened = flattenTree(tree);
-            if (flattened.length > 0) {
-                const dynamicRoutes = flattened.map((node) => ({
-                    path: toRelativeRoutePath(node.path.replace(/^\/admin\//i, '')),
-                    component: normalizeComponent(node.component),
-                }));
-                // SUPERADMIN: si ya hay herencia (rutas dinamicas), usar solo BD.
-                adminRoutes = dynamicRoutes;
+            const mapNode = (node: AdminNavTreeItem): AdminRouteConfig => ({
+                path: toRelativeRoutePath(node.path.replace(/^\/admin\/?/i, '')),
+                component: normalizeComponent(node.component),
+                ...(node.children?.length ? { children: node.children.map(mapNode) } : {}),
+            });
+
+            if (tree.length > 0) {
+                adminRoutes = tree.map(mapNode);
             } else {
                 const adminSource = result.data.filter((r) => r.estadoRuta && isAdminLayout(r.layout));
                 const hasHerenciaAdmin = herencia.idsPermitidos.size > 0 || herencia.pathsPermitidos.size > 0;
@@ -397,13 +432,13 @@ export const getAuthorizedRoutes = async (): Promise<AuthorizedRoutes> => {
                     : adminSource;
 
                 adminRoutes = adminFiltrado.map((r) => ({
-                    path: toRelativeRoutePath(String(r.path || '').replace(/^\/admin\//i, '')),
+                    path: toRelativeRoutePath(String(r.path || '').replace(/^\/admin\/?/i, '')),
                     component: normalizeComponent(r.component),
                 }));
             }
         }
 
-        return { publicRoutes, authRoutes, adminRoutes };
+        return { publicRoutes, authRoutes, adminRoutes, hybridRoutes };
 
     } catch (error) {
         console.error("Error al obtener rutas autorizadas:", error);
@@ -644,7 +679,7 @@ export const getAdminHomeRoute = async (): Promise<string | null> => {
         if (!catalog.length) return null;
 
         const adminEntry =
-            catalog.find((r) => r.mostrarEnMenuUsuario && r.menuUsuarioKey === 'PANEL_ADMIN') ||
+            catalog.find((r) => r.mostrarEnMenuUsuario && r.tiquetaNavb === 'PANEL_ADMIN') ||
             findCatalogRoute(catalog, {
                 paths: ['/admin/gestor-rutas/administracion/dashboardadmin', '/admin/dashboardadmin', '/admin/dashboard'],
                 components: ['DashboardAdmin'],
@@ -659,21 +694,27 @@ export const getAdminHomeRoute = async (): Promise<string | null> => {
 };
 
 /**
- * Retorna los ítems del menú de usuario configurados en "Parametrización de navegación",
- * ordenados por menuUsuarioOrder. El Navbar los renderiza dinámicamente.
+ * Retorna los ítems del menú de usuario desde el endpoint de menu-tags,
+ * que aplica la lógica de alcance (SuperAdmin, TenantGlobal, TenantCorporativo, General).
  */
 export const getMenuUsuarioRoutes = async (): Promise<MenuUsuarioItem[]> => {
     try {
-        const catalog = await getRouteCatalog();
-        return catalog
-            .filter((r) => r.mostrarEnMenuUsuario === true)
-            .sort((a, b) => (a.menuUsuarioOrder ?? 0) - (b.menuUsuarioOrder ?? 0))
-            .map((r) => ({
-                key: r.menuUsuarioKey ?? null,
-                label: r.menuUsuarioLabel || r.name,
-                path: toAppRoutePath(r),
-                icon: r.icon ?? null,
-                order: r.menuUsuarioOrder ?? 0,
+        const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "/api";
+        const result = await apiFetch(
+            `${API_BASE_URL}/seguridad/rutas/menu-tags/resolver/actual?menuTipo=USER_DROPDOWN`,
+            { method: 'GET', useAuth: true, logoutOn401: false }
+        );
+
+        if (!result?.success || !Array.isArray(result?.data)) return [];
+
+        return result.data
+            .filter((t: any) => t?.estado !== false)
+            .map((t: any) => ({
+                key:   String(t.codigo || t.iud || ''),
+                label: String(t.label  || t.nombreTag || ''),
+                path:  String(t.routePath || t.ruta?.path || '/'),
+                icon:  t.iconKey ?? null,
+                order: Number(t.order ?? 0),
             }));
     } catch {
         return [];
