@@ -222,6 +222,7 @@ function GestionReferidos(): React.ReactElement {
             const response = await apiFetch(`${API_BASE_URL}/referido/listarSaldoRefere`, {
                 method: 'GET'
             });
+            console.log('Respuesta de referidos: ', response)
             setData(response);
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : 'Error al cargar datos de referidos';
