@@ -8,7 +8,7 @@ import { getPrivateHomeRoute, getUserShortcutRoutes } from '@/app/services/route
 import { resolveCurrentRouteMenuTags, RouteMenuTag } from '@/app/services/routesService'
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Crown, Home, Landmark, LayoutDashboard, LogOut, Menu, Moon, Settings, Sun, User as UserIcon } from 'lucide-react'
 import type { AdminNavbarProps } from '@/types/components'
 
@@ -83,7 +83,7 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
         return () => {
             active = false
         }
-    }, [user?._id, user?.correo, user?.rol])
+    }, [user?.iud, user?._id, user?.correo, user?.rol])
 
     useEffect(() => {
         let active = true
@@ -111,19 +111,21 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
         return () => {
             active = false
         }
-    }, [user?._id])
+    }, [user?.iud, user?._id])
 
     useEffect(() => {
         let active = true
 
         const cargarMenuDinamico = async (): Promise<void> => {
+            console.log('[MenuDinamico] Iniciando llamada...')
             try {
                 const response = await resolveCurrentRouteMenuTags({ menuTipo: 'USER_DROPDOWN' })
+                console.log('[MenuDinamico] Respuesta:', response)
                 if (!active) return
                 setDynamicMenuTags(Array.isArray(response?.data) ? response.data.filter((item) => item.estado !== false) : [])
             } catch (error) {
+                console.error('[MenuDinamico] Error:', error)
                 if (!active) return
-                console.error('Error cargando menu dinamico del avatar:', error)
                 setDynamicMenuTags([])
             }
         }
@@ -132,7 +134,7 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
         return () => {
             active = false
         }
-    }, [user?._id])
+    }, [user?.iud, user?._id])
 
     const toggleTheme = (): void => {
         setTheme(theme === 'dark' ? 'light' : 'dark')
@@ -140,7 +142,7 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
 
     const handleLogout = (): void => {
         logout()
-        navigate('/login')
+        navigate('/public/render/view/login')
     }
 
     const handleMenuToggle = (): void => {
@@ -175,6 +177,8 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
         visible: true,
     }))
 
+    const visibleMenuItems = menuItems.filter((item) => item.visible && item.path)
+
     const renderProfileDropdown = (
         <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -186,37 +190,63 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
                     </Avatar>
                 </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-56 backdrop-blur-lg border-none shadow-xl" align="end">
-                <div className="flex items-center gap-2 p-3">
-                    <Avatar className="h-9 w-9">
-                        <AvatarFallback className="bg-primary text-primary-foreground text-sm">
+            <DropdownMenuContent className="w-72 p-0 overflow-hidden rounded-2xl border border-border/40 shadow-2xl backdrop-blur-xl bg-background/95" align="end" sideOffset={8}>
+
+                {/* Header usuario */}
+                <div className="flex items-center gap-3 px-4 py-3 bg-primary/5 border-b border-border/30">
+                    <Avatar className="h-10 w-10 shrink-0">
+                        <AvatarFallback className="bg-primary text-primary-foreground text-sm font-bold">
                             {getUserInitials()}
                         </AvatarFallback>
                     </Avatar>
-                    <div className="flex flex-col space-y-0.5">
-                        <p className="text-sm font-medium leading-none">{getUserName()}</p>
-                        <p className="text-xs leading-none text-muted-foreground">{getUserEmail()}</p>
+                    <div className="min-w-0">
+                        <p className="text-sm font-semibold text-foreground truncate">{getUserName()}</p>
+                        <p className="text-[11px] text-muted-foreground truncate">{getUserEmail()}</p>
                     </div>
                 </div>
-                <DropdownMenuSeparator />
-                {menuItems.filter((item) => item.visible && item.path).length > 0 ? (
-                    <>
-                        {menuItems.filter((item) => item.visible && item.path).map((item) => {
-                            const Icon = item.Icon
-                            return (
-                                <DropdownMenuItem key={item.key} onClick={() => navigate(item.path)} className="cursor-pointer py-2.5">
-                                    <Icon className="mr-2 h-4 w-4" />
-                                    {item.label}
-                                </DropdownMenuItem>
-                            )
-                        })}
-                        <DropdownMenuSeparator />
-                    </>
-                ) : null}
-                <DropdownMenuItem onClick={handleLogout} className="cursor-pointer text-destructive focus:text-destructive py-2.5">
-                    <LogOut className="mr-2 h-4 w-4" />
-                    Cerrar Sesion
-                </DropdownMenuItem>
+
+                {/* Grid de accesos rápidos */}
+                {visibleMenuItems.length > 0 && (
+                    <div className="p-3">
+                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest mb-2 px-1">
+                            Accesos rápidos
+                        </p>
+                        <div className="grid grid-cols-3 gap-2">
+                            {visibleMenuItems.map((item) => {
+                                const Icon = item.Icon
+                                return (
+                                    <button
+                                        key={item.key}
+                                        onClick={() => navigate(item.path)}
+                                        className="flex flex-col items-center gap-1.5 p-2.5 rounded-xl hover:bg-primary/8 hover:text-primary transition-all duration-150 group cursor-pointer"
+                                    >
+                                        <div className="w-9 h-9 rounded-xl bg-muted/60 group-hover:bg-primary/10 flex items-center justify-center transition-colors">
+                                            <Icon className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
+                                        </div>
+                                        <span className="text-[10px] font-medium text-muted-foreground group-hover:text-primary text-center leading-tight transition-colors line-clamp-2">
+                                            {item.label}
+                                        </span>
+                                    </button>
+                                )
+                            })}
+                        </div>
+                    </div>
+                )}
+
+                {/* Logout */}
+                <div className={`px-3 pb-3 ${visibleMenuItems.length > 0 ? 'pt-0' : 'pt-3'}`}>
+                    {visibleMenuItems.length > 0 && <div className="border-t border-border/30 mb-3" />}
+                    <button
+                        onClick={handleLogout}
+                        className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-destructive hover:bg-destructive/8 transition-all duration-150 cursor-pointer"
+                    >
+                        <div className="w-8 h-8 rounded-lg bg-destructive/10 flex items-center justify-center shrink-0">
+                            <LogOut className="w-3.5 h-3.5 text-destructive" />
+                        </div>
+                        <span className="text-sm font-medium">Cerrar Sesión</span>
+                    </button>
+                </div>
+
             </DropdownMenuContent>
         </DropdownMenu>
     )

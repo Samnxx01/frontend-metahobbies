@@ -18,7 +18,8 @@ import { Menu, ShoppingCart, User, X, Trash2, ShieldCheck, LogOut, LogIn, Chevro
 import ThemeToggle from "@/app/presentation/components/common/ThemeToggle";
 
 import { apiFetch } from "@/app/services/api";
-import { getPublicNavigationRoutes, getMenuUsuarioRoutes, MenuUsuarioItem } from "@/app/services/routeService";
+import { getPublicNavigationRoutes, MenuUsuarioItem } from "@/app/services/routeService";
+import { resolveCurrentRouteMenuTags } from "@/app/services/routesService";
 
 import type { NavbarProps } from '@/types/components';
 
@@ -71,7 +72,15 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
                         logoutOn401: false
                     }),
                     getPublicNavigationRoutes(),
-                    user ? getMenuUsuarioRoutes() : Promise.resolve([])
+                    user ? resolveCurrentRouteMenuTags({ menuTipo: 'USER_DROPDOWN' }).then(res =>
+                        (res?.data || []).filter(t => t.estado !== false).map(t => ({
+                            key: t.iud,
+                            label: t.label,
+                            path: t.ruta?.path || t.routePath,
+                            icon: t.iconKey || null,
+                            order: t.order || 0,
+                        }))
+                    ) : Promise.resolve([])
                 ]);
 
                 if (logoRes?.ok && logoRes?.logo) {
@@ -143,7 +152,7 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
         });
         if (result.isConfirmed) {
             logout();
-            navigate('/login');
+            navigate('/public/render/view/login');
             toast.success('Sesión cerrada correctamente');
         }
     };
