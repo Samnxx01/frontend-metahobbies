@@ -358,9 +358,7 @@ export const resolveCurrentRouteMenuTags = async (params?: {
   if (params?.menuTipo) search.set('menuTipo', params.menuTipo);
   const query = search.toString();
   const url = `${API_BASE_URL}/seguridad/rutas/menu-tags/resolver/actual${query ? `?${query}` : ''}`;
-  console.log('[resolveCurrentRouteMenuTags] URL:', url);
   const response = await apiFetch(url, { method: 'GET' });
-  console.log('[resolveCurrentRouteMenuTags] Respuesta raw:', response);
   return response;
 };
 

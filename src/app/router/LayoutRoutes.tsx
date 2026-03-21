@@ -13,6 +13,8 @@ import { MembershipRoutes } from './MembershipRoutes';
 import CambiarContrasenaProvisional from '@/app/presentation/pages/cambiar-contrasena/CambiarContrasenaProvisional';
 import ActivacionCuenta from '../presentation/pages/activar-cuenta/ActivaciónCuenta';
 import Perfil from '@/app/presentation/pages/perfil/Perfil';
+import Dashboard from '@/app/presentation/pages/admin/Dashboard';
+import MembershipDashboard from '@/app/presentation/pages/membresia/MembershipDashboard';
 
 // —— Dynamic component map via Vite glob —————————————————————
 // Escanea TODOS los .tsx de pages/ y components/admin/ automáticamente.
@@ -195,6 +197,10 @@ export default function LayoutRoutes(): ReactElement {
                 <Route path="/admin" element={<AdminLayout />}>
                     <Route index element={<AdminEntryRedirect />} />
                     {renderRoutes(authorizedRoutes.adminRoutes)}
+                    {/* Rutas fijas accesibles desde menu-tags aunque no estén en el sidebar */}
+                    <Route path="parametros/perfil/visualizacion" element={<Perfil />} />
+                    <Route path="gestor-rutas/administracion/dashboardadmin" element={<Dashboard />} />
+                    <Route path="membresia/dashboard-referidos/creaciontoken" element={<MembershipDashboard />} />
                     <Route path="*" element={<AdminEntryRedirect />} />
                 </Route>
             )}

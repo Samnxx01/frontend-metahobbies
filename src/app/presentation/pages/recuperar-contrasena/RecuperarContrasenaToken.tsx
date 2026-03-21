@@ -85,7 +85,7 @@ export default function RecuperarContrasenaToken() {
                             Tu contraseña fue cambiada correctamente. Ya puedes iniciar sesión.
                         </p>
                     </div>
-                    <Button onClick={() => navigate('/login')} className="gap-2 text-sm">
+                    <Button onClick={() => navigate('/public/render/view/login')} className="gap-2 text-sm">
                         Ir al inicio de sesión
                     </Button>
                 </div>
@@ -260,7 +260,7 @@ export default function RecuperarContrasenaToken() {
 
                 <div className="text-center">
                     <Link
-                        to="/login"
+                        to="/public/render/view/login"
                         className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
                     >
                         <ArrowLeft className="w-3.5 h-3.5" />

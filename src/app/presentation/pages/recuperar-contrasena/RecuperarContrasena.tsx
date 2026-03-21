@@ -72,7 +72,7 @@ export default function RecuperarContrasena() {
                         </button>
                     </p>
                     <Link
-                        to="/login"
+                        to="/public/render/view/login"
                         className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
                     >
                         <ArrowLeft className="w-3.5 h-3.5" />
@@ -152,7 +152,7 @@ export default function RecuperarContrasena() {
                 {/* Footer */}
                 <div className="text-center">
                     <Link
-                        to="/login"
+                        to="/public/render/view/login"
                         className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
                     >
                         <ArrowLeft className="w-3.5 h-3.5" />

@@ -111,7 +111,7 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
         return () => {
             active = false
         }
-    }, [user?.iud, user?._id])
+    }, [user?.iud, user?._id, user?.correo])
 
     useEffect(() => {
         let active = true
@@ -134,7 +134,7 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
         return () => {
             active = false
         }
-    }, [user?.iud, user?._id])
+    }, [user?.iud, user?._id, user?.correo])
 
     const toggleTheme = (): void => {
         setTheme(theme === 'dark' ? 'light' : 'dark')

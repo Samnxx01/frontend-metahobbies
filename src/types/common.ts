@@ -82,7 +82,8 @@ export interface CartSummary {
 
 // User interface
 export interface User {
- _id: UserId;
+  _id: UserId;
+  iud?: UserId;
   nombre: string;
   apellido: string;
   correo: string;

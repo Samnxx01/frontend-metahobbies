@@ -127,7 +127,7 @@ export default function Carrito(): React.ReactElement {
         confirmButtonText: 'Ir a Login',
         cancelButtonText: 'Cancelar',
       });
-      if (result.isConfirmed) navigate('/login', { state: { returnUrl: '/checkout' } });
+      if (result.isConfirmed) navigate('/public/render/view/login', { state: { returnUrl: '/checkout' } });
       return;
     }
     navigate('/checkout');
