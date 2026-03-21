@@ -182,7 +182,12 @@ export default function MembershipPayment(): React.ReactElement {
                 setLoadingPrice(true);
                 const json = await apiFetch(
                     '/api/membresia/seguridad/crear/parametrizacion/membresia',
-                    { method: 'GET' }
+                    {
+                        method: 'GET',
+                        useAuth: false,
+                        logoutOn401: false,
+                        headers: { referidos: token ?? '' },
+                    }
                 );
 
                 // Filtrar solo las que tienen esPrecioDefault: true
