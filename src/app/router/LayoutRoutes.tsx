@@ -14,7 +14,7 @@ import CambiarContrasenaProvisional from '@/app/presentation/pages/cambiar-contr
 import ActivacionCuenta from '../presentation/pages/activar-cuenta/ActivaciónCuenta';
 import Perfil from '@/app/presentation/pages/perfil/Perfil';
 
-// ── Dynamic component map via Vite glob ───────────────────────────────────────
+// —— Dynamic component map via Vite glob —————————————————————
 // Escanea TODOS los .tsx de pages/ y components/admin/ automáticamente.
 // Al agregar un nuevo componente, se registra solo con el nombre del archivo.
 const _pageModules = import.meta.glob<{ default: React.ComponentType<any> }>(
@@ -72,7 +72,7 @@ const buildComponentMap = (): ComponentMapType => {
 
 const componentMap = buildComponentMap();
 
-// ── Types ─────────────────────────────────────────────────────────────────────
+// —— Types ———————————————————————————————————————————————————————————————————————
 
 interface RouteConfig {
     path: string;
@@ -86,7 +86,7 @@ interface AuthorizedRoutes {
     authRoutes?: RouteConfig[];
 }
 
-// ── Admin redirect ─────────────────────────────────────────────────────────────
+// —— Admin redirect ———————————————————————————————————————————————————————————————
 
 function AdminEntryRedirect(): ReactElement {
     const [targetPath, setTargetPath] = useState<string | null>(null);
@@ -116,7 +116,7 @@ function AdminEntryRedirect(): ReactElement {
     return <Navigate to={targetPath} replace />;
 }
 
-// ── Layout routes ──────────────────────────────────────────────────────────────
+// —— Layout routes ————————————————————————————————————————————————————————————————
 
 export default function LayoutRoutes(): ReactElement {
     const [authorizedRoutes, setAuthorizedRoutes] = useState<AuthorizedRoutes | null>(null);
@@ -198,6 +198,12 @@ export default function LayoutRoutes(): ReactElement {
                     <Route path="*" element={<AdminEntryRedirect />} />
                 </Route>
             )}
+
+            {/* Alias legacy: /login → ruta real del login */}
+            <Route path="/login" element={<Navigate to="/public/render/view/login" replace />} />
+
+            {/* Catch-all: cualquier URL no reconocida → home */}
+            <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
     );
 }
