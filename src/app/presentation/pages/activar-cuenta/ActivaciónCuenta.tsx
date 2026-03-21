@@ -37,7 +37,7 @@ export default function ActivacionCuenta() {
                         </p>
                     </div>
                     <div className={`space-y-3 transition-all duration-500 delay-150 ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
-                        <Button onClick={() => navigate('/login')} className="w-full gap-2 h-11 text-sm font-semibold">
+                        <Button onClick={() => navigate('/public/render/view/login')} className="w-full gap-2 h-11 text-sm font-semibold">
                             Ir al inicio de sesión
                             <ArrowRight className="w-4 h-4" />
                         </Button>
@@ -101,7 +101,7 @@ export default function ActivacionCuenta() {
                 </div>
 
                 <div className={`space-y-3 transition-all duration-500 delay-300 ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
-                    <Button onClick={() => navigate('/login')} className="w-full gap-2 h-11 text-sm font-semibold">
+                    <Button onClick={() => navigate('/public/render/view/login')} className="w-full gap-2 h-11 text-sm font-semibold">
                         Ir a Mabs
                         <ArrowRight className="w-4 h-4" />
                     </Button>
