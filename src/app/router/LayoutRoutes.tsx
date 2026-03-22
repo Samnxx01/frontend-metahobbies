@@ -204,12 +204,6 @@ export default function LayoutRoutes(): ReactElement {
                     <Route path="*" element={<AdminEntryRedirect />} />
                 </Route>
             )}
-
-            {/* Alias legacy: /login → ruta real del login */}
-            <Route path="/login" element={<Navigate to="/public/render/view/login" replace />} />
-
-            {/* Catch-all: cualquier URL no reconocida → home */}
-            <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
     );
 }
