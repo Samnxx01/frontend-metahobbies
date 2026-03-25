@@ -12,7 +12,6 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { Crown, Home, Landmark, LayoutDashboard, LogOut, Menu, Moon, Settings, Sun, User as UserIcon } from 'lucide-react'
 import type { AdminNavbarProps } from '@/types/components'
 
-const DEFAULT_LOGO = "/assets/logo.png"
 const ADMIN_PROFILE_VIEW_PATH = '/admin/parametros/perfil/visualizacion'
 
 const MENU_ICON_MAP: Record<string, React.ElementType> = {
@@ -30,8 +29,8 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
     const { user, logout } = useAuth()
     const { theme, setTheme } = useTheme()
     const { hasActiveMembership } = useMembership()
-    const [logoUrl, setLogoUrl] = useState<string>(DEFAULT_LOGO)
-    const [logoError, setLogoError] = useState<boolean>(false)
+    const [logoUrl, setLogoUrl] = useState<string | null>(null)
+    const [logoLoading, setLogoLoading] = useState<boolean>(true)
     const [adminHomePath, setAdminHomePath] = useState<string>('/admin')
     const [profilePath, setProfilePath] = useState<string>(ADMIN_PROFILE_VIEW_PATH)
     const [membershipPath, setMembershipPath] = useState<string>('/membresia/dashboard')
@@ -41,6 +40,7 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
         let active = true
 
         const cargarLogoAdmin = async (): Promise<void> => {
+            setLogoLoading(true)
             try {
                 const resContextual = await apiFetch('/api/config/parametrizacion/listar/logos/coporativo/admin', {
                     method: 'GET',
@@ -50,9 +50,13 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
 
                 if (!active) return
 
+                if (resContextual?.ok && resContextual?.logo?.dataUrl) {
+                    setLogoUrl(resContextual.logo.dataUrl)
+                    return
+                }
+
                 if (resContextual?.ok && resContextual?.logo?.base64 && resContextual?.logo?.mimetype) {
                     setLogoUrl(`data:${resContextual.logo.mimetype};base64,${resContextual.logo.base64}`)
-                    setLogoError(false)
                     return
                 }
 
@@ -64,18 +68,22 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
 
                 if (!active) return
 
-                if (resPublico?.ok && resPublico?.logo?.base64 && resPublico?.logo?.mimetype) {
-                    setLogoUrl(`data:${resPublico.logo.mimetype};base64,${resPublico.logo.base64}`)
-                    setLogoError(false)
+                if (resPublico?.ok && resPublico?.logo?.dataUrl) {
+                    setLogoUrl(resPublico.logo.dataUrl)
                     return
                 }
 
-                setLogoUrl(DEFAULT_LOGO)
-                setLogoError(false)
+                if (resPublico?.ok && resPublico?.logo?.base64 && resPublico?.logo?.mimetype) {
+                    setLogoUrl(`data:${resPublico.logo.mimetype};base64,${resPublico.logo.base64}`)
+                    return
+                }
+
+                setLogoUrl(null)
             } catch (_error) {
                 if (!active) return
-                setLogoUrl(DEFAULT_LOGO)
-                setLogoError(true)
+                setLogoUrl(null)
+            } finally {
+                if (active) setLogoLoading(false)
             }
         }
 
@@ -230,17 +238,24 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
                         <span className="sr-only">Toggle sidebar</span>
                     </Button>
 
-                    <div className="dark:bg-white dark:rounded-lg dark:p-1.5 dark:shadow-sm">
-                        <img
-                            src={logoError ? DEFAULT_LOGO : logoUrl}
-                            alt="Mabs Logo"
-                            className="h-7 md:h-8 cursor-pointer flex-shrink-0 hover:opacity-80 transition-opacity"
-                            onClick={() => navigate(adminHomePath)}
-                            onError={() => {
-                                setLogoError(true)
-                                setLogoUrl(DEFAULT_LOGO)
-                            }}
-                        />
+                    <div
+                        className="cursor-pointer flex-shrink-0 hover:opacity-80 transition-opacity dark:bg-white dark:rounded-lg dark:p-1.5 dark:shadow-sm"
+                        onClick={() => navigate(adminHomePath)}
+                    >
+                        {logoLoading ? (
+                            <div className="h-7 md:h-8 w-20 rounded bg-muted animate-pulse" />
+                        ) : logoUrl ? (
+                            <img
+                                src={logoUrl}
+                                alt="Logo"
+                                className="h-7 md:h-8"
+                                onError={() => setLogoUrl(null)}
+                            />
+                        ) : (
+                            <span className="text-xs text-muted-foreground italic px-1">
+                                Sin logo guardado
+                            </span>
+                        )}
                     </div>
                 </div>
 

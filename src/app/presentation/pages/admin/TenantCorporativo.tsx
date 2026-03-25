@@ -8,10 +8,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { HelpCircle, Play, Settings2 } from 'lucide-react';
+import { HelpCircle, Loader2, Play, RefreshCw, Settings2 } from 'lucide-react';
 
 type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE';
-type EndpointSection = 'corporativo' | 'permisos' | 'catalogos';
+type EndpointSection = 'corporativo' | 'permisos' | 'catalogos' | 'cargos';
 type EndpointActor = 'tenantSuperAdmin' | 'tenantGlobal' | 'ambos';
 type FieldType = 'text' | 'id' | 'json' | 'textarea';
 
@@ -58,57 +58,6 @@ const ACTOR_STYLE: Record<EndpointActor, string> = {
 const ENDPOINTS: EndpointSpec[] = [
   // ── SECCIÓN: corporativo ──────────────────────────────────────
   {
-    id: 'tenant-crear-corporativo-global',
-    section: 'corporativo',
-    actor: 'tenantGlobal',
-    method: 'POST',
-    path: '/api/config/global/creacion/usu/tenant/corporativo',
-    title: 'Crear tenant corporativo (global)',
-    description: 'Crea tenant corporativo desde flujo de tenant global.',
-    fields: [
-      { name: 'nvlGeneracionCoporativoTenant', label: 'Nivel generacion corporativo', type: 'id', required: true },
-      { name: 'tipo_tenant', label: 'Tipo tenant', type: 'id', required: true },
-      { name: 'ownerType', label: 'Owner type', type: 'id', required: true },
-      { name: 'apisDominios', label: 'Apis dominios', type: 'id', required: true },
-      { name: 'accionesUsu', label: 'Accion usuario', type: 'id', required: true },
-      { name: 'rolesMabs', label: 'Rol mabs', type: 'id', required: true },
-    ],
-  },
-  {
-    id: 'perm-crear-coporativo',
-    section: 'corporativo',
-    actor: 'tenantGlobal',
-    method: 'POST',
-    path: '/api/config/permisos/creacion/usu/tenant/coporativo',
-    title: 'Crear tenant corporativo',
-    description: 'Flujo tenantGlobal (ADMIN).',
-    fields: [
-      { name: 'nvlGeneracionCoporativoTenant', label: 'Nivel generacion corporativo', type: 'id', required: true },
-      { name: 'tipo_tenant', label: 'Tipo tenant', type: 'id', required: true },
-      { name: 'ownerType', label: 'Owner type', type: 'id', required: true },
-      { name: 'apisDominios', label: 'Apis dominios', type: 'id', required: true },
-      { name: 'accionesUsu', label: 'Accion usuario', type: 'id', required: true },
-      { name: 'rolesMabs', label: 'Rol mabs', type: 'id', required: true },
-    ],
-  },
-  {
-    id: 'perm-crear-corporativo-alias',
-    section: 'corporativo',
-    actor: 'tenantGlobal',
-    method: 'POST',
-    path: '/api/config/permisos/creacion/usu/tenant/corporativo',
-    title: 'Crear tenant corporativo (alias)',
-    description: 'Alias canonico del endpoint corporativo.',
-    fields: [
-      { name: 'nvlGeneracionCoporativoTenant', label: 'Nivel generacion corporativo', type: 'id', required: true },
-      { name: 'tipo_tenant', label: 'Tipo tenant', type: 'id', required: true },
-      { name: 'ownerType', label: 'Owner type', type: 'id', required: true },
-      { name: 'apisDominios', label: 'Apis dominios', type: 'id', required: true },
-      { name: 'accionesUsu', label: 'Accion usuario', type: 'id', required: true },
-      { name: 'rolesMabs', label: 'Rol mabs', type: 'id', required: true },
-    ],
-  },
-  {
     id: 'perm-actualizar-corporativo',
     section: 'corporativo',
     actor: 'tenantGlobal',
@@ -152,12 +101,12 @@ const ENDPOINTS: EndpointSpec[] = [
     actor: 'tenantGlobal',
     method: 'POST',
     path: '/api/config/permisos/corporativo/crear/tenant',
-    title: 'Crear tenant corporativo (modulo corporativo)',
-    description: 'Crea tenant corporativo desde modulo corporativo.',
+    title: 'Crear tenant corporativo',
+    description: 'Crea la estructura del tenant corporativo. Si eres tenantGlobal, el perfil empresa se auto-selecciona. Si eres tenantCorporativo, la jerarquía padre se resuelve automáticamente desde el JWT.',
     fields: [
-      { name: 'coporativo', label: 'Corporativo (ID o valor)', type: 'text' },
-      { name: 'nvlGeneracionCoporativoTenant', label: 'Nivel generacion corporativo', type: 'id', required: true },
-      { name: 'tenantGlobalId', label: 'Tenant global destino', type: 'id' },
+      { name: 'coporativo', label: 'Perfil empresa (corporativo)', type: 'id', required: true },
+      { name: 'tipoComprador', label: 'Tipo comprador corporativo', type: 'id', required: true },
+      { name: 'rolId', label: 'Rol corporativo por defecto', type: 'id' },
     ],
   },
   // ── SECCIÓN: permisos ──────────────────────────────────────
@@ -168,12 +117,11 @@ const ENDPOINTS: EndpointSpec[] = [
     method: 'POST',
     path: '/api/config/permisos/corporativo/crear/herencia/permisos/tenant',
     title: 'Crear herencia permisos corporativos',
-    description: 'Asigna herencia de vistas y acciones a tenant corporativo.',
+    description: 'Asigna herencia de vistas y acciones a tenant corporativo. El tenantGlobal se resuelve automáticamente del JWT.',
     fields: [
       { name: 'usuarioId', label: 'Usuario destino', type: 'id' },
-      { name: 'rolId', label: 'Rol ID', type: 'id', required: true },
-      { name: 'tenantCorporativoId', label: 'Tenant corporativo ID', type: 'id', required: true },
-      { name: 'tenantGlobal', label: 'Tenant global ID', type: 'id' },
+      { name: 'rolId', label: 'Rol corporativo', type: 'id', required: true },
+      { name: 'tenantCorporativoId', label: 'Tenant corporativo', type: 'id', required: true },
       { name: 'acciones', label: 'Acciones (array JSON)', type: 'json', required: true, placeholder: '["id_accion_1","id_accion_2"]' },
       { name: 'vistas', label: 'Vistas (array JSON)', type: 'json', placeholder: '["id_vista_1","id_vista_2"]' },
     ],
@@ -185,12 +133,11 @@ const ENDPOINTS: EndpointSpec[] = [
     method: 'POST',
     path: '/api/config/permisos/corporativo/crear/tenant/nvl/corporativo',
     title: 'Crear nivel corporativo',
-    description: 'Crea nivel corporativo con acciones permitidas.',
+    description: 'Crea nivel jerárquico corporativo. El tenantGlobal se resuelve automáticamente del JWT.',
     fields: [
       { name: 'nombre', label: 'Nombre del nivel', type: 'text', required: true },
       { name: 'accionesPermitidas', label: 'Acciones permitidas (array JSON)', type: 'json', required: true, placeholder: '["crear","editar","ver"]' },
       { name: 'heredarPermisos', label: 'Heredar permisos (true/false)', type: 'json', placeholder: 'true' },
-      { name: 'tenantGlobalId', label: 'Tenant global ID', type: 'id' },
     ],
   },
   // ── SECCIÓN: catalogos ──────────────────────────────────────
@@ -217,15 +164,56 @@ const ENDPOINTS: EndpointSpec[] = [
     description: 'Crea rol corporativo para tenant.',
     fields: [{ name: 'rol', label: 'Rol', type: 'text', required: true }],
   },
+  // ── SECCIÓN: cargos ──────────────────────────────────────────
   {
-    id: 'cat-nivel-corp-crear',
-    section: 'catalogos',
+    id: 'cargo-crear',
+    section: 'cargos',
     actor: 'tenantGlobal',
     method: 'POST',
-    path: '/api/config/tenant/tipo/acceso/corporativo/jerarquia/roles',
-    title: 'Crear nivel corporativo (catalogo)',
-    description: 'Crea registro en generacionCoporativolNvlRoles.',
-    fields: [{ name: 'generation_tenant', label: 'Generacion tenant', type: 'text', required: true }],
+    path: '/api/config/permisos/corporativo/guardar/cargo',
+    title: 'Crear cargo corporativo',
+    description: 'Crea un cargo y lo asocia a un rol corporativo existente.',
+    fields: [
+      { name: 'nombre', label: 'Nombre del cargo', type: 'text', required: true },
+      { name: 'rolId', label: 'Rol ID', type: 'id', required: true },
+      { name: 'descripcion', label: 'Descripción', type: 'text' },
+    ],
+  },
+  {
+    id: 'cargo-listar',
+    section: 'cargos',
+    actor: 'tenantGlobal',
+    method: 'GET',
+    path: '/api/config/permisos/corporativo/listar/cargo',
+    title: 'Listar cargos corporativos',
+    description: 'Lista todos los cargos activos del tenant global.',
+    fields: [],
+  },
+  {
+    id: 'cargo-modificar',
+    section: 'cargos',
+    actor: 'tenantGlobal',
+    method: 'PUT',
+    path: '/api/config/permisos/corporativo/modificar/cargo/:id',
+    title: 'Modificar cargo',
+    description: 'Actualiza nombre y/o descripción de un cargo.',
+    fields: [
+      { name: 'id', label: 'Cargo ID', type: 'id', required: true, pathParam: true },
+      { name: 'nombre', label: 'Nombre del cargo', type: 'text' },
+      { name: 'descripcion', label: 'Descripción', type: 'text' },
+    ],
+  },
+  {
+    id: 'cargo-desactivar',
+    section: 'cargos',
+    actor: 'tenantGlobal',
+    method: 'DELETE',
+    path: '/api/config/permisos/corporativo/desactivar/cargo/:id',
+    title: 'Desactivar cargo',
+    description: 'Soft-delete de un cargo corporativo.',
+    fields: [
+      { name: 'id', label: 'Cargo ID', type: 'id', required: true, pathParam: true },
+    ],
   },
 ];
 
@@ -233,6 +221,7 @@ const SECTION_LABEL: Record<EndpointSection, string> = {
   corporativo: 'Gestion Tenant Corporativo',
   permisos: 'Permisos Corporativos',
   catalogos: 'Catalogos Corporativos',
+  cargos: 'Cargos Corporativos',
 };
 
 const parseMaybeJson = (rawValue: string): unknown => {
@@ -247,7 +236,7 @@ const parseMaybeJson = (rawValue: string): unknown => {
 const mapSelectOptions = (rows: any[] | undefined, fallbackKeys: string[]): GenericSelectOption[] =>
   (Array.isArray(rows) ? rows : [])
     .map((row: any) => {
-      const id = String(row?.id || row?._id || '').trim();
+      const id = String(row?.id || row?.iud || row?._id || '').trim();
       if (!id) return null;
       const label =
         fallbackKeys
@@ -266,6 +255,44 @@ const TenantCorporativo: React.FC = () => {
   const [search, setSearch] = useState('');
   const [selectOptions, setSelectOptions] = useState<Record<string, GenericSelectOption[]>>({});
   const [loadingSelects, setLoadingSelects] = useState(false);
+  const [catalogItems, setCatalogItems] = useState<{ iud: string; tipo_comprador: string; sigla: string; esDefault: boolean }[]>([]);
+  const [catalogItemsLoaded, setCatalogItemsLoaded] = useState(false);
+  const [catalogSeedRunning, setCatalogSeedRunning] = useState(false);
+
+  const loadCatalogItems = async () => {
+    try {
+      const res = await apiFetch('/api/config/permisos/corporativo/listar/catalogo/tenant/corporativo', { method: 'GET' });
+      setCatalogItems(Array.isArray(res?.data) ? res.data : []);
+    } catch {
+      // ignore
+    } finally {
+      setCatalogItemsLoaded(true);
+    }
+  };
+
+  const handleCatalogSeedDefaults = async () => {
+    setCatalogSeedRunning(true);
+    try {
+      const res = await apiFetch('/api/config/permisos/corporativo/inicializar/catalogo', { method: 'POST' });
+      if (res?.sembrados?.length) {
+        toast.success(`${res.sembrados.length} catálogo(s) por defecto creados`);
+      } else {
+        toast.info(res?.msg || 'Los catálogos por defecto ya existen');
+      }
+      await loadCatalogItems();
+    } catch (err: any) {
+      toast.error(err?.message || 'Error al inicializar');
+    } finally {
+      setCatalogSeedRunning(false);
+    }
+  };
+
+  useEffect(() => {
+    if (endpointModal?.id === 'perm-corporativo-guardar-catalogo') {
+      setCatalogItemsLoaded(false);
+      void loadCatalogItems();
+    }
+  }, [endpointModal?.id]);
 
   const endpointsFiltered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -280,6 +307,7 @@ const TenantCorporativo: React.FC = () => {
       corporativo: endpointsFiltered.filter((e) => e.section === 'corporativo'),
       permisos: endpointsFiltered.filter((e) => e.section === 'permisos'),
       catalogos: endpointsFiltered.filter((e) => e.section === 'catalogos'),
+      cargos: endpointsFiltered.filter((e) => e.section === 'cargos'),
     }),
     [endpointsFiltered]
   );
@@ -288,10 +316,16 @@ const TenantCorporativo: React.FC = () => {
     const hydrateSelects = async () => {
       try {
         setLoadingSelects(true);
-        const [globalSelectsRes, nivelesCorpRes] = await Promise.allSettled([
-          apiFetch('/api/config/global/creacion/usu/tenant/global/selects', { method: 'GET' }),
-          apiFetch('/api/config/permisos/corporativo/listar/nvl/global', { method: 'GET' }),
-        ]);
+        const [globalSelectsRes, nvlGlobalRes, nvlCorpRes, rolesCorpRes, catalogoCorpRes, perfilCorpRes, tenantsCorpRes] =
+          await Promise.allSettled([
+            apiFetch('/api/config/global/creacion/usu/tenant/global/selects', { method: 'GET' }),
+            apiFetch('/api/config/permisos/corporativo/listar/nvl/global', { method: 'GET' }),
+            apiFetch('/api/config/permisos/corporativo/listar/nvl/corporativo', { method: 'GET' }),
+            apiFetch('/api/config/permisos/corporativo/listar/roles/tenant/corporativo', { method: 'GET' }),
+            apiFetch('/api/config/permisos/corporativo/listar/catalogo/tenant/corporativo', { method: 'GET' }),
+            apiFetch('/api/configuracion/listar/coporativo/perfil/publico', { method: 'GET' }),
+            apiFetch('/api/config/permisos/corporativo/listar/tenant', { method: 'GET' }),
+          ]);
 
         const nextOptions: Record<string, GenericSelectOption[]> = {};
 
@@ -300,24 +334,101 @@ const TenantCorporativo: React.FC = () => {
           nextOptions.tipo_tenant = mapSelectOptions(data.tiposTenant, ['label', 'tipo_acceso_apis']);
           nextOptions.ownerType = mapSelectOptions(data.ownerTypes, ['label', 'tipo_comprador']);
           nextOptions.apisDominios = mapSelectOptions(
-            Array.isArray(data.dominiosScope) && data.dominiosScope.length > 0 ? data.dominiosScope : [],
+            Array.isArray(data.dominiosScope) ? data.dominiosScope : [],
             ['label', 'dominio']
           );
           nextOptions.accionesUsu = mapSelectOptions(data.acciones, ['label', 'method']);
           nextOptions.rolesMabs = mapSelectOptions(
-            Array.isArray(data.rolesMabs) ? data.rolesMabs : Array.isArray(data.roles) ? data.roles : [],
+            Array.isArray(data.rolesMabs)
+              ? data.rolesMabs.filter((row: any) => !row.tenantCorporativo)
+              : [],
             ['label', 'rol']
           );
+        } else {
+          console.warn('[TenantCorp] global/selects falló:', (globalSelectsRes as any).reason);
         }
 
-        if (nivelesCorpRes.status === 'fulfilled') {
-          const payload = nivelesCorpRes.value as any;
-          const niveles =
-            payload?.niveles ||
-            payload?.data?.niveles ||
-            payload?.data ||
-            [];
-          nextOptions.nvlGeneracionCoporativoTenant = mapSelectOptions(niveles, ['label', 'nombre', 'nvlGeneracion']);
+        // Combinar nvl global (tenantCorporativo: null) + nvl corporativo para mostrar todos
+        {
+          const fromGlobal: any[] = nvlGlobalRes.status === 'fulfilled'
+            ? ((nvlGlobalRes.value as any)?.data ?? [])
+            : [];
+          const fromCorp: any[] = nvlCorpRes.status === 'fulfilled'
+            ? ((nvlCorpRes.value as any)?.data ?? [])
+            : [];
+          if (nvlGlobalRes.status === 'rejected') console.warn('[TenantCorp] nvl/global falló:', (nvlGlobalRes as any).reason);
+          if (nvlCorpRes.status === 'rejected') console.warn('[TenantCorp] nvl/corporativo falló:', (nvlCorpRes as any).reason);
+          const seen = new Set<string>();
+          const allNvl = [...fromGlobal, ...fromCorp].filter((r: any) => {
+            const id = String(r?._id || r?.iud || '');
+            if (!id || seen.has(id)) return false;
+            seen.add(id);
+            return true;
+          });
+          nextOptions.nvlGeneracionCoporativoTenant = mapSelectOptions(allNvl, ['nombre', 'label']);
+        }
+
+        // Roles corporativos del tenantGlobal
+        if (rolesCorpRes.status === 'fulfilled') {
+          const rows: any[] = (rolesCorpRes.value as any)?.data ?? [];
+          nextOptions.rolId = mapSelectOptions(rows, ['rol', 'label']);
+        } else {
+          console.warn('[TenantCorp] roles/corporativo falló:', (rolesCorpRes as any).reason);
+        }
+
+        // Catálogo tipo comprador corporativo
+        if (catalogoCorpRes.status === 'fulfilled') {
+          const rows: any[] = (catalogoCorpRes.value as any)?.data ?? [];
+          const mapped = (Array.isArray(rows) ? rows : [])
+            .map((r: any) => ({
+              id: String(r?.iud || r?._id || ''),
+              label: `${String(r?.tipo_comprador || '')} (${String(r?.sigla || '')})`,
+            }))
+            .filter((r: any) => r.id);
+          nextOptions.catalogoTipoComprador = mapped;
+          // alias para el campo tipoComprador en el form de crear tenant
+          nextOptions.tipoComprador = mapped;
+        }
+
+        // Perfil corporativo — endpoint retorna { ok, perfil: {...} } (objeto singular)
+        // o { ok, total, perfiles: [...] } dependiendo del controller registrado
+        if (perfilCorpRes.status === 'fulfilled') {
+          const payload = perfilCorpRes.value as any;
+          let rows: any[];
+          if (Array.isArray(payload?.perfiles)) {
+            rows = payload.perfiles;
+          } else if (Array.isArray(payload?.data)) {
+            rows = payload.data;
+          } else if (payload?.perfil && typeof payload.perfil === 'object') {
+            rows = [payload.perfil];
+          } else if (Array.isArray(payload)) {
+            rows = payload;
+          } else {
+            rows = [];
+          }
+          nextOptions.coporativo = mapSelectOptions(rows, ['razon_social', 'titulo', 'label']);
+        } else {
+          console.warn('[TenantCorp] perfil/publico falló:', (perfilCorpRes as any).reason);
+        }
+
+        // Tenant corporativos existentes (para herencia)
+        if (tenantsCorpRes.status === 'fulfilled') {
+          const payload = tenantsCorpRes.value as any;
+          const rows: any[] = Array.isArray(payload?.data) ? payload.data : [];
+          nextOptions.tenantCorporativoId = rows
+            .map((r: any) => {
+              const id = String(r?._id || r?.iud || '').trim();
+              if (!id) return null;
+              const corp = r?.coporativo;
+              const nvl = r?.nvlGeneracionCoporativoTenant;
+              const corpLabel = String(corp?.razon_social || corp?.titulo || '').trim();
+              const nvlLabel = String(nvl?.nombre || '').trim();
+              const label = corpLabel
+                ? nvlLabel ? `${corpLabel} — ${nvlLabel}` : corpLabel
+                : id;
+              return { id, label };
+            })
+            .filter(Boolean) as GenericSelectOption[];
         }
 
         setSelectOptions(nextOptions);
@@ -469,94 +580,162 @@ const TenantCorporativo: React.FC = () => {
               </DialogHeader>
 
               <div className="space-y-4">
+                {endpointModal.id === 'perm-corporativo-guardar-catalogo' && (
+                  <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 space-y-3 text-xs">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-emerald-800 font-medium">
+                        CLIENTE y EMPLEADO se crean automáticamente al guardar si aún no existen.
+                      </p>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={catalogSeedRunning}
+                        onClick={() => void handleCatalogSeedDefaults()}
+                        className="shrink-0 text-xs"
+                      >
+                        {catalogSeedRunning
+                          ? <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                          : <RefreshCw className="mr-1 h-3 w-3" />}
+                        Inicializar defaults
+                      </Button>
+                    </div>
+                    {catalogItemsLoaded && catalogItems.length > 0 && (
+                      <div className="space-y-1">
+                        <div className="flex flex-wrap gap-2">
+                          {catalogItems.filter((c) => c.esDefault).map((c) => (
+                            <span key={c.iud} className="inline-flex items-center gap-1 rounded bg-slate-100 px-2 py-0.5 text-slate-600 font-mono">
+                              🔒 {c.tipo_comprador} <span className="text-slate-400">({c.sigla})</span>
+                            </span>
+                          ))}
+                          {catalogItems.filter((c) => !c.esDefault).map((c) => (
+                            <span key={c.iud} className="inline-flex items-center gap-1 rounded bg-white border border-slate-200 px-2 py-0.5 text-slate-700 font-mono">
+                              {c.tipo_comprador} <span className="text-slate-400">({c.sigla})</span>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {catalogItemsLoaded && catalogItems.length === 0 && (
+                      <p className="text-slate-500 italic">Sin catálogos registrados aún. Usa "Inicializar defaults" para crear CLIENTE y EMPLEADO.</p>
+                    )}
+                  </div>
+                )}
                 <div className="grid gap-3">
                   {endpointModal.fields.length === 0 && (
                     <p className="text-sm text-slate-500">Este endpoint no requiere body adicional.</p>
                   )}
-                  {endpointModal.fields.map((field) => (
-                    <div key={field.name} className="space-y-1">
-                      <Label>
-                        {field.label}
-                        {field.required ? ' *' : ''}
-                        {field.pathParam ? ' (path)' : ''}
-                        {field.header ? ' (header)' : ''}
-                      </Label>
-                      {field.type === 'textarea' || field.type === 'json' ? (
-                        <Textarea
-                          value={getField(endpointModal.id, field.name)}
-                          placeholder={field.placeholder || `Ingresa ${field.label}`}
-                          onChange={(e) => setField(endpointModal.id, field.name, e.target.value)}
-                        />
-                      ) : field.name === 'accionesUsu' && getOptionsForField(field.name).length > 0 ? (
-                        <div className="rounded-lg border border-slate-300 bg-white p-2">
-                          <div className="mb-2 flex flex-wrap gap-2">
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              onClick={() => setField(endpointModal.id, field.name, getOptionsForField(field.name).map((option) => option.id).join(','))}
-                            >
-                              Seleccionar todas
-                            </Button>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              onClick={() => setField(endpointModal.id, field.name, '')}
-                            >
-                              Limpiar
-                            </Button>
-                            <span className="ml-auto rounded bg-slate-100 px-2 py-1 text-xs text-slate-700">
-                              Seleccionadas: {getField(endpointModal.id, field.name).split(',').map((item) => item.trim()).filter(Boolean).length}
-                            </span>
+                  {endpointModal.fields.map((field) => {
+                    const opts = getOptionsForField(field.name);
+                    const isMulti = field.name === 'accionesUsu';
+                    const isCatalogSelect = field.type === 'id';
+                    const isTextArea = field.type === 'textarea' || field.type === 'json';
+                    const isPlainText = field.type === 'text' || (field.type === 'id' && field.pathParam);
+
+                    return (
+                      <div key={field.name} className="space-y-1">
+                        <Label>
+                          {field.label}
+                          {field.required ? ' *' : ''}
+                          {field.pathParam ? ' (path)' : ''}
+                          {field.header ? ' (header)' : ''}
+                        </Label>
+
+                        {isTextArea ? (
+                          <Textarea
+                            value={getField(endpointModal.id, field.name)}
+                            placeholder={field.placeholder || `Ingresa ${field.label}`}
+                            onChange={(e) => setField(endpointModal.id, field.name, e.target.value)}
+                          />
+                        ) : isPlainText ? (
+                          <Input
+                            value={getField(endpointModal.id, field.name)}
+                            placeholder={field.placeholder || `Ingresa ${field.label}`}
+                            onChange={(e) => setField(endpointModal.id, field.name, e.target.value)}
+                          />
+                        ) : isMulti ? (
+                          <div className="rounded-lg border border-slate-300 bg-white p-2">
+                            <div className="mb-2 flex flex-wrap gap-2">
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                disabled={opts.length === 0}
+                                onClick={() => setField(endpointModal.id, field.name, opts.map((o) => o.id).join(','))}
+                              >
+                                Seleccionar todas
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setField(endpointModal.id, field.name, '')}
+                              >
+                                Limpiar
+                              </Button>
+                              <span className="ml-auto rounded bg-slate-100 px-2 py-1 text-xs text-slate-700">
+                                Seleccionadas: {getField(endpointModal.id, field.name).split(',').map((i) => i.trim()).filter(Boolean).length}
+                              </span>
+                            </div>
+                            <div className="max-h-40 overflow-auto rounded-md border border-slate-200 bg-slate-50 p-2">
+                              {loadingSelects ? (
+                                <p className="px-2 py-1 text-xs text-slate-400">Cargando acciones...</p>
+                              ) : opts.length === 0 ? (
+                                <p className="px-2 py-1 text-xs text-slate-400">Sin acciones disponibles en el sistema</p>
+                              ) : (
+                                opts.map((option) => {
+                                  const selected = new Set(
+                                    getField(endpointModal.id, field.name).split(',').map((i) => i.trim()).filter(Boolean)
+                                  );
+                                  return (
+                                    <label key={option.id} className="mb-1 flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm hover:bg-white">
+                                      <input
+                                        type="checkbox"
+                                        checked={selected.has(option.id)}
+                                        onChange={(e) => {
+                                          const next = new Set(selected);
+                                          if (e.target.checked) next.add(option.id);
+                                          else next.delete(option.id);
+                                          setField(endpointModal.id, field.name, Array.from(next).join(','));
+                                        }}
+                                      />
+                                      <span>{option.label}</span>
+                                    </label>
+                                  );
+                                })
+                              )}
+                            </div>
                           </div>
-                          <div className="max-h-40 overflow-auto rounded-md border border-slate-200 bg-slate-50 p-2">
-                            {getOptionsForField(field.name).map((option) => {
-                              const selected = new Set(
-                                getField(endpointModal.id, field.name).split(',').map((item) => item.trim()).filter(Boolean)
-                              );
-                              return (
-                                <label key={option.id} className="mb-1 flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm hover:bg-white">
-                                  <input
-                                    type="checkbox"
-                                    checked={selected.has(option.id)}
-                                    onChange={(e) => {
-                                      const next = new Set(selected);
-                                      if (e.target.checked) next.add(option.id);
-                                      else next.delete(option.id);
-                                      setField(endpointModal.id, field.name, Array.from(next).join(','));
-                                    }}
-                                  />
-                                  <span>{option.label}</span>
-                                </label>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      ) : field.type === 'id' && getOptionsForField(field.name).length > 0 ? (
-                        <select
-                          className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
-                          value={getField(endpointModal.id, field.name)}
-                          onChange={(e) => setField(endpointModal.id, field.name, e.target.value)}
-                        >
-                          <option value="">
-                            {loadingSelects ? 'Cargando opciones...' : `Selecciona ${field.label.toLowerCase()}`}
-                          </option>
-                          {getOptionsForField(field.name).map((option) => (
-                            <option key={option.id} value={option.id}>
-                              {option.label}
+                        ) : isCatalogSelect ? (
+                          <select
+                            className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+                            value={getField(endpointModal.id, field.name)}
+                            disabled={loadingSelects}
+                            onChange={(e) => setField(endpointModal.id, field.name, e.target.value)}
+                          >
+                            <option value="">
+                              {loadingSelects
+                                ? 'Cargando...'
+                                : opts.length === 0
+                                ? `Sin ${field.label.toLowerCase()} — crea el catálogo primero`
+                                : `Selecciona ${field.label.toLowerCase()}`}
                             </option>
-                          ))}
-                        </select>
-                      ) : (
-                        <Input
-                          value={getField(endpointModal.id, field.name)}
-                          placeholder={field.placeholder || `Ingresa ${field.label}`}
-                          onChange={(e) => setField(endpointModal.id, field.name, e.target.value)}
-                        />
-                      )}
-                    </div>
-                  ))}
+                            {opts.map((option) => (
+                              <option key={option.id} value={option.id}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <Input
+                            value={getField(endpointModal.id, field.name)}
+                            placeholder={field.placeholder || `Ingresa ${field.label}`}
+                            onChange={(e) => setField(endpointModal.id, field.name, e.target.value)}
+                          />
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
 
                 <div className="flex gap-2">

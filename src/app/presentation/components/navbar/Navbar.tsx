@@ -22,8 +22,6 @@ import { getPublicNavigationRoutes, getMenuUsuarioRoutes, MenuUsuarioItem } from
 
 import type { NavbarProps } from '@/types/components';
 
-const DEFAULT_LOGO = "/assets/logo.png";
-
 interface MenuItem {
     label: string;
     path: string;
@@ -51,7 +49,7 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
     const [isScrolled, setIsScrolled] = useState<boolean>(false);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
 
-    const [logoUrl, setLogoUrl] = useState<string>(DEFAULT_LOGO);
+    const [logoUrl, setLogoUrl] = useState<string | null>(null);
     const [logoError, setLogoError] = useState<boolean>(false);
     const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
     const [menuUsuarioItems, setMenuUsuarioItems] = useState<MenuUsuarioItem[]>([]);
@@ -80,10 +78,10 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
                         setLogoUrl(`data:${mimetype};base64,${base64}`);
                         setLogoError(false);
                     } else {
-                        setLogoUrl(DEFAULT_LOGO);
+                        setLogoUrl(null);
                     }
                 } else {
-                    setLogoUrl(DEFAULT_LOGO);
+                    setLogoUrl(null);
                 }
 
                 setMenuItems(dynamicRoutes.map((route: any) => ({
@@ -95,7 +93,7 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
             } catch (err) {
                 console.error('Error en el flujo de header dinamico:', err);
                 setLogoError(true);
-                setLogoUrl(DEFAULT_LOGO);
+                setLogoUrl(null);
                 setMenuItems([]);
             }
         };
@@ -175,10 +173,10 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
     };
 
     const handleLogoError = (): void => {
-        if (!logoError && logoUrl !== DEFAULT_LOGO) {
+        if (!logoError && logoUrl) {
             console.warn('⚠️ Error al renderizar imagen del logo, usando fallback');
             setLogoError(true);
-            setLogoUrl(DEFAULT_LOGO);
+            setLogoUrl(null);
         }
     };
 
@@ -383,13 +381,22 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
                     <div className="flex items-center h-full">
                         <div className="dark:bg-white dark:rounded-lg dark:p-1.5 dark:shadow-sm">
                             {/* LOGO RENDERIZADO AQUÍ */}
-                            <img
-                                src={logoError ? DEFAULT_LOGO : logoUrl}
-                                alt="Logo"
-                                className="h-7 md:h-8 max-w-[120px] object-contain cursor-pointer flex-shrink-0 hover:opacity-80 transition-opacity"
-                                onClick={() => navigate("/")}
-                                onError={handleLogoError}
-                            />
+                            {logoUrl && !logoError ? (
+                                <img
+                                    src={logoUrl}
+                                    alt="Logo"
+                                    className="h-7 md:h-8 max-w-[120px] object-contain cursor-pointer flex-shrink-0 hover:opacity-80 transition-opacity"
+                                    onClick={() => navigate("/")}
+                                    onError={handleLogoError}
+                                />
+                            ) : (
+                                <span
+                                    className="text-xs text-muted-foreground italic px-1 cursor-pointer"
+                                    onClick={() => navigate("/")}
+                                >
+                                    Sin logo
+                                </span>
+                            )}
                         </div>
 
                         <div className="hidden md:flex items-center gap-1 h-full ml-6">

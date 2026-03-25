@@ -2,6 +2,7 @@ import { Routes, Route, useLocation, Navigate, Outlet } from 'react-router-dom';
 import { useState, useEffect, ReactElement, lazy, Suspense } from 'react';
 import { useAuth } from '@/app/providers/AuthProvider';
 import { getAuthorizedRoutes, getPrivateHomeRoute } from '@/app/services/routeService';
+import { resolveCurrentRouteMenuTags } from '@/app/services/routesService';
 import { useLoading } from '@/app/providers/LoadingProvider';
 
 import PublicLayout from '@/app/presentation/layouts/PublicLayout';
@@ -15,6 +16,7 @@ import ActivacionCuenta from '../presentation/pages/activar-cuenta/ActivaciónCu
 import Perfil from '@/app/presentation/pages/perfil/Perfil';
 import RecuperarContrasena from '@/app/presentation/pages/recuperar-contrasena/RecuperarContrasena';
 import RecuperarContrasenaToken from '@/app/presentation/pages/recuperar-contrasena/RecuperarContrasenaToken';
+import NotFound from '@/app/presentation/pages/not-found/NotFound';
 
 // ── Dynamic component map via Vite glob ───────────────────────────────────────
 // Escanea TODOS los .tsx de pages/ y components/admin/ automáticamente.
@@ -132,8 +134,15 @@ function AdminEntryRedirect(): ReactElement {
 
 // ── Layout routes ──────────────────────────────────────────────────────────────
 
+interface RouteLoadError {
+    status?: number;
+    message: string;
+}
+
 export default function LayoutRoutes(): ReactElement {
     const [authorizedRoutes, setAuthorizedRoutes] = useState<AuthorizedRoutes | null>(null);
+    const [menuTagRoutes, setMenuTagRoutes] = useState<RouteConfig[]>([]);
+    const [routeLoadError, setRouteLoadError] = useState<RouteLoadError | null>(null);
     const { user } = useAuth();
     const { showLoading, hideLoading } = useLoading();
     const location = useLocation();
@@ -145,12 +154,36 @@ export default function LayoutRoutes(): ReactElement {
     }, [location.pathname, showLoading, hideLoading]);
 
     useEffect(() => {
+        setRouteLoadError(null);
+        setAuthorizedRoutes(null);
+
         const loadRoutes = async (): Promise<void> => {
             try {
-                const routes = await getAuthorizedRoutes();
+                const [routes, tagsRes] = await Promise.all([
+                    getAuthorizedRoutes(),
+                    user ? resolveCurrentRouteMenuTags({ menuTipo: 'USER_DROPDOWN' }) : Promise.resolve({ data: [] }),
+                ]);
                 setAuthorizedRoutes(routes as AuthorizedRoutes);
-            } catch (error) {
+
+                // Extraer rutas únicas de los menu tags que tengan componente definido
+                const tagRoutes: RouteConfig[] = (tagsRes?.data ?? [])
+                    .filter(tag => tag.ruta?.component && (tag.routePath || tag.ruta?.path))
+                    .map(tag => ({
+                        path: (tag.routePath || tag.ruta?.path || '')
+                            .replace(/^\/admin\//, '')
+                            .replace(/^\//, ''),
+                        component: tag.ruta!.component!,
+                    }))
+                    .filter(r => r.path);
+
+                setMenuTagRoutes(tagRoutes);
+            } catch (error: any) {
                 console.error('Error cargando rutas:', error);
+                const status = error?.status ?? error?.response?.status ?? null;
+                setRouteLoadError({
+                    status,
+                    message: error?.message || 'Error al validar la autenticación',
+                });
                 setAuthorizedRoutes({ publicRoutes: [], adminRoutes: [], authRoutes: [] });
             }
         };
@@ -158,8 +191,53 @@ export default function LayoutRoutes(): ReactElement {
         loadRoutes();
     }, [user]);
 
+    if (routeLoadError) {
+        const is403 = routeLoadError.status === 403;
+        const is401 = routeLoadError.status === 401;
+        return (
+            <div className="fixed inset-0 flex flex-col items-center justify-center bg-background gap-4 px-6 text-center">
+                <div className={`rounded-full p-4 ${is403 || is401 ? 'bg-destructive/10' : 'bg-muted'}`}>
+                    <svg className={`h-10 w-10 ${is403 || is401 ? 'text-destructive' : 'text-muted-foreground'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+                    </svg>
+                </div>
+                <div className="space-y-1">
+                    <p className="text-base font-semibold text-foreground">
+                        {is403 ? 'Sin permisos de acceso' : is401 ? 'Sesión no válida' : 'Error al cargar la sesión'}
+                    </p>
+                    <p className="text-sm text-muted-foreground max-w-sm">
+                        {is403
+                            ? 'Tu cuenta no tiene permisos para acceder a este módulo. Contacta al administrador.'
+                            : is401
+                            ? 'Tu sesión expiró o no es válida. Vuelve a iniciar sesión.'
+                            : routeLoadError.message}
+                    </p>
+                    {routeLoadError.status && (
+                        <p className="text-xs text-muted-foreground/60 mt-1">Código: {routeLoadError.status}</p>
+                    )}
+                </div>
+                <button
+                    onClick={() => window.location.reload()}
+                    className="mt-2 text-sm text-primary underline underline-offset-4 hover:opacity-80 transition-opacity"
+                >
+                    Reintentar
+                </button>
+            </div>
+        );
+    }
+
     if (!authorizedRoutes) {
-        return <div>Cargando rutas...</div>;
+        return (
+            <div className="fixed inset-0 flex flex-col items-center justify-center bg-background gap-4">
+                <div className="relative w-16 h-16 flex items-center justify-center">
+                    <div className="absolute inset-0 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
+                </div>
+                <div className="text-center space-y-1">
+                    <p className="text-sm font-medium text-foreground">Validando tu autenticación</p>
+                    <p className="text-xs text-muted-foreground">Verificando permisos y contexto de sesión...</p>
+                </div>
+            </div>
+        );
     }
 
     const renderRoutes = (routes: RouteConfig[], parentPath = ''): ReactElement[] => {
@@ -174,14 +252,11 @@ export default function LayoutRoutes(): ReactElement {
 
             const leafElement = LazyComponent
                 ? <Suspense fallback={<div>Cargando...</div>}><LazyComponent /></Suspense>
-                : (() => {
-                    console.warn('Componente no encontrado:', route.component);
-                    return (
-                        <div className="p-6 text-sm text-muted-foreground">
-                            Componente no registrado: {route.component}
-                        </div>
-                    );
-                })();
+                : (
+                    <div className="p-6 text-sm text-muted-foreground">
+                        Componente no registrado: {route.component}
+                    </div>
+                );
 
             if (!hasChildren) {
                 return (
@@ -227,9 +302,12 @@ export default function LayoutRoutes(): ReactElement {
                 <Route path="/admin" element={<AdminLayout />}>
                     <Route index element={<AdminEntryRedirect />} />
                     {renderRoutes(authorizedRoutes.adminRoutes)}
+                    {renderRoutes(menuTagRoutes)}
                     <Route path="*" element={<AdminEntryRedirect />} />
                 </Route>
             )}
+
+            <Route path="*" element={<NotFound />} />
         </Routes>
     );
 }

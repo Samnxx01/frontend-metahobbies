@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { RefreshCw, UserPlus, Shield, Building2, Users, Globe, Plus, Loader2, Trash2, Edit } from 'lucide-react';
+import { RefreshCw, UserPlus, Shield, Building2, Globe, Plus, Loader2, Trash2, Edit } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -10,10 +10,11 @@ import { apiFetch } from '@/app/services/api';
 import { toast } from 'react-toastify';
 import { useTenantUsuarios } from '@/app/hooks/useTenantUsuarios';
 import { NodoCorpCard } from '@/app/presentation/components/admin/usuarios-tenant/NodoCorpCard';
+import { NodoTenantGlobalCard } from '@/app/presentation/components/admin/usuarios-tenant/NodoTenantGlobalCard';
 import { UsuarioGlobalModal } from '@/app/presentation/components/admin/usuarios-tenant/UsuarioGlobalModal';
 import { UsuarioCorporativoModal } from '@/app/presentation/components/admin/usuarios-tenant/UsuarioCorporativoModal';
 import { UsuarioSuperAdminModal } from '@/app/presentation/components/admin/usuarios-tenant/UsuarioSuperAdminModal';
-import type { CorpNode, TenantGlobalInfo } from '@/app/services/tenantUsuariosService';
+import type { CorpNode, TenantGlobalInfo, TenantUsuario } from '@/app/services/tenantUsuariosService';
 
 export default function UsuariosTenant(): React.ReactElement {
     const {
@@ -347,84 +348,17 @@ export default function UsuariosTenant(): React.ReactElement {
                 </section>
             )}
 
-            {/* Árbol de Tenant Globales */}
+            {/* Árbol de Tenant Globales — renderizado recursivo */}
             {(jerarquia?.tenantsGlobales ?? []).map((tgNode, idx) => (
-                <section key={tgNode.tenantGlobal?.iud ?? idx} className="space-y-3">
-                    {/* Cabecera del TenantGlobal */}
-                    {tgNode.tenantGlobal && (
-                        <div className="flex items-center gap-3 flex-wrap">
-                            <h2 className="text-base font-semibold flex items-center gap-2">
-                                <Building2 className="h-4 w-4 text-primary" />
-                                {tgNode.tenantGlobal.razon_social ?? tgNode.tenantGlobal.titulo ?? 'Tenant Global'}
-                            </h2>
-                            {tgNode.tenantGlobal.nit_ruc_rtn && (
-                                <span className="text-xs text-muted-foreground">
-                                    NIT: {tgNode.tenantGlobal.nit_ruc_rtn}
-                                </span>
-                            )}
-                            <Badge
-                                variant={tgNode.tenantGlobal.estado === true || tgNode.tenantGlobal.estado === 'activo' ? 'default' : 'secondary'}
-                                className="text-xs"
-                            >
-                                {tgNode.tenantGlobal.estado === true || tgNode.tenantGlobal.estado === 'activo' ? 'Activo' : 'Inactivo'}
-                            </Badge>
-                            {scope === 'SUPER_ADMIN' && (
-                                <Button variant="ghost" size="icon" className="h-7 w-7 ml-1" onClick={() => void openEditTG(tgNode.tenantGlobal)}>
-                                    <Edit className="h-3.5 w-3.5" />
-                                </Button>
-                            )}
-                        </div>
-                    )}
-
-                    {/* Usuarios del TenantGlobal */}
-                    {tgNode.usuarios.length > 0 && (
-                        <div className="border rounded-lg overflow-hidden">
-                            <div className="px-3 py-2 bg-muted/30 text-xs font-semibold flex items-center gap-1.5">
-                                <Users className="h-3.5 w-3.5" />
-                                Usuarios del Tenant Global ({tgNode.usuarios.length})
-                            </div>
-                            <div className="divide-y">
-                                {tgNode.usuarios.map(u => (
-                                    <div key={u.iud} className="flex items-center justify-between px-4 py-2.5 text-sm">
-                                        <div className="flex items-center gap-2">
-                                            <div className={`h-2 w-2 rounded-full ${
-                                                u.estado === true || u.estado === 'activo' ? 'bg-green-500' : 'bg-gray-400'
-                                            }`} />
-                                            <span className="text-muted-foreground">{u.correo}</span>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            {u.rol && <Badge variant="outline" className="text-xs">{u.rol}</Badge>}
-                                            {scope === 'SUPER_ADMIN' && (
-                                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => void openEditUser(u, tgNode.tenantGlobal)}>
-                                                    <Edit className="h-3.5 w-3.5" />
-                                                </Button>
-                                            )}
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Árbol de corporativos */}
-                    {tgNode.corporativos.length > 0 && (
-                        <div className="space-y-2">
-                            {tgNode.corporativos.map(corp => (
-                                <NodoCorpCard
-                                    key={corp.tenantCorporativo.iud}
-                                    nodo={corp}
-                                    nivel={0}
-                                    scope={scope as 'SUPER_ADMIN' | 'TENANT_GLOBAL' | 'CORPORATIVO'}
-                                    onAddUsuario={nodo => setNodoCorp(nodo)}
-                                />
-                            ))}
-                        </div>
-                    )}
-
-                    {tgNode.usuarios.length === 0 && tgNode.corporativos.length === 0 && (
-                        <p className="text-sm text-muted-foreground">Sin registros en este tenant.</p>
-                    )}
-                </section>
+                <NodoTenantGlobalCard
+                    key={tgNode.tenantGlobal?.iud ?? idx}
+                    nodo={tgNode}
+                    nivel={0}
+                    scope={scope as 'SUPER_ADMIN' | 'TENANT_GLOBAL' | 'CORPORATIVO'}
+                    onAddUsuario={nodo => setNodoCorp(nodo)}
+                    onEditUsuario={(u: TenantUsuario, tg: any) => void openEditUser(u, tg)}
+                    onEditTG={(tg: any) => void openEditTG(tg)}
+                />
             ))}
 
             {/* Modales */}

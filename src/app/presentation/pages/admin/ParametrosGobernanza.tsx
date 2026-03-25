@@ -577,6 +577,37 @@ const ParametrosGobernanza: React.FC = () => {
   const [usuariosDestinoSel, setUsuariosDestinoSel] = useState<Record<string, string[]>>({});
   const [usuariosDisponibles, setUsuariosDisponibles] = useState<Record<string, { id: string; label: string }[]>>({});
   const [loadingUsuarios, setLoadingUsuarios] = useState<Record<string, boolean>>({});
+  const [catalogSeedRunning, setCatalogSeedRunning] = useState(false);
+  const [catalogItems, setCatalogItems] = useState<{ iud: string; tipo_comprador: string; sigla: string; esDefault: boolean }[]>([]);
+  const [catalogItemsLoaded, setCatalogItemsLoaded] = useState(false);
+
+  const loadCatalogItems = async () => {
+    try {
+      const res = await apiFetch('/api/config/permisos/corporativo/listar/catalogo/tenant/corporativo', { method: 'GET' });
+      setCatalogItems(Array.isArray(res?.data) ? res.data : []);
+    } catch {
+      // ignore
+    } finally {
+      setCatalogItemsLoaded(true);
+    }
+  };
+
+  const handleCatalogSeedDefaults = async () => {
+    setCatalogSeedRunning(true);
+    try {
+      const res = await apiFetch('/api/config/permisos/corporativo/inicializar/catalogo', { method: 'POST' });
+      if (res?.sembrados?.length) {
+        toast.success(`${res.sembrados.length} catálogo(s) por defecto creados`);
+      } else {
+        toast.info(res?.msg || 'Los catálogos por defecto ya existen');
+      }
+      await loadCatalogItems();
+    } catch (err: any) {
+      toast.error(err?.message || 'Error al inicializar');
+    } finally {
+      setCatalogSeedRunning(false);
+    }
+  };
 
   const primaryTenantForm = useMemo(() => ENDPOINTS.find((e) => e.primary), []);
   const endpointsBySection = useMemo(() => {
@@ -989,6 +1020,13 @@ const ParametrosGobernanza: React.FC = () => {
   };
 
   useEffect(() => { hydrateData(); }, []);
+
+  useEffect(() => {
+    if (endpointModal?.id === 'corp-crear-catalogo') {
+      setCatalogItemsLoaded(false);
+      void loadCatalogItems();
+    }
+  }, [endpointModal?.id]);
 
   const getFieldValue = (endpointId: string, key: string): string => formData[endpointId]?.[key] ?? '';
   const setFieldValue = (endpointId: string, key: string, value: string) => {
@@ -3662,6 +3700,48 @@ const ParametrosGobernanza: React.FC = () => {
           </div>
         );
       })() : null}
+      {endpoint.id === 'corp-crear-catalogo' ? (
+        <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 space-y-3 text-xs">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-emerald-800 font-medium">
+              CLIENTE y EMPLEADO se crean automáticamente al guardar si aún no existen.
+            </p>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={catalogSeedRunning}
+              onClick={() => void handleCatalogSeedDefaults()}
+              className="shrink-0 text-xs"
+            >
+              {catalogSeedRunning ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <RefreshCw className="mr-1 h-3 w-3" />}
+              Inicializar defaults
+            </Button>
+          </div>
+          {catalogItemsLoaded && catalogItems.length > 0 && (
+            <div className="space-y-1">
+              {catalogItems.filter((c) => c.esDefault).length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {catalogItems.filter((c) => c.esDefault).map((c) => (
+                    <span key={c.iud} className="inline-flex items-center gap-1 rounded bg-slate-100 px-2 py-0.5 text-slate-600 font-mono">
+                      🔒 {c.tipo_comprador} <span className="text-slate-400">({c.sigla})</span>
+                    </span>
+                  ))}
+                </div>
+              )}
+              {catalogItems.filter((c) => !c.esDefault).length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {catalogItems.filter((c) => !c.esDefault).map((c) => (
+                    <span key={c.iud} className="inline-flex items-center gap-1 rounded bg-white border border-slate-200 px-2 py-0.5 text-slate-700 font-mono">
+                      {c.tipo_comprador} <span className="text-slate-400">({c.sigla})</span>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      ) : null}
       {endpoint.fields.map((field) => {
         if (
           (endpoint.id === 'perm-admin-tenant-global-desactivar' || endpoint.id === 'perm-admin-tenant-global-eliminar') &&

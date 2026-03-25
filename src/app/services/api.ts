@@ -79,7 +79,16 @@ export const apiFetch = async (
         const data: any = await response.json();
 
         if (!response.ok) {
-            throw new Error(data.msg || data.message || 'Error desconocido de la API');
+            const backendMsg =
+                data?.msg ||
+                data?.message ||
+                data?.error ||
+                data?.detalle ||
+                (Array.isArray(data?.errors)
+                    ? data.errors.map((e: any) => e?.msg || e?.message || String(e)).join(' | ')
+                    : null) ||
+                (typeof data === 'object' ? JSON.stringify(data) : String(data));
+            throw new Error(`[${response.status}] ${backendMsg}`);
         }
 
         return data;

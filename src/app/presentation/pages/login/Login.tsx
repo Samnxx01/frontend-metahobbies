@@ -48,7 +48,6 @@ interface LoginError {
 }
 
 // --- Constantes y Esquemas ---
-const LOGO_URL = '/assets/logo.png';
 const EMPTY_FIELDS_MESSAGE = 'Por favor, completa todos los campos requeridos para acceder.';
 const CREDENTIAL_ERROR_MESSAGE = 'Credenciales inválidas. Verifica tu correo y contraseña.';
 const CRITICAL_ERROR_TITLE = 'Error de Conexión';
@@ -69,7 +68,7 @@ export default function Login(): React.ReactElement {
     // Estado para el Dialog (Errores críticos de API)
     const [dialogOpen, setDialogOpen] = useState<boolean>(false);
     const [dialogMessage, setDialogMessage] = useState<string>('');
-    const [logoUrl, setLogoUrl] = useState<string>(LOGO_URL);
+    const [logoUrl, setLogoUrl] = useState<string | null>(null);
 
     // 1. Inicializar useForm
     const form = useForm<LoginFormData>({
@@ -97,7 +96,7 @@ export default function Login(): React.ReactElement {
                 }
             } catch (error) {
                 console.warn('No se pudo cargar el logo publico para login:', error);
-                setLogoUrl(LOGO_URL);
+                setLogoUrl(null);
             }
         };
 
@@ -209,12 +208,18 @@ export default function Login(): React.ReactElement {
 
                     {/* Logo y Títulos */}
                     <div className="mb-4 p-4 rounded-full bg-primary/10 dark:bg-primary/20">
-                        <img 
-                            src={logoUrl} 
-                            alt="Mabs Logo" 
-                            className="h-16 w-auto filter dark:brightness-110" 
-                            onError={() => setLogoUrl(LOGO_URL)}
-                        />
+                        {logoUrl ? (
+                            <img
+                                src={logoUrl}
+                                alt="Logo"
+                                className="h-16 w-auto filter dark:brightness-110"
+                                onError={() => setLogoUrl(null)}
+                            />
+                        ) : (
+                            <span className="inline-flex h-16 items-center text-sm text-muted-foreground italic">
+                                Sin logo
+                            </span>
+                        )}
                     </div>
                     <h1 className="text-2xl font-semibold mb-1 text-center text-foreground">
                         Bienvenido/a de vuelta

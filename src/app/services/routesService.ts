@@ -514,6 +514,50 @@ export const getTiposNodoCodigos = async (): Promise<{ success: boolean; total: 
   });
 };
 
+export interface CatalogoCodigoItem {
+  iud: string;
+  codigo: string;
+  tipoNodoRutaId: string | null;
+  scopeConfiguracion: string;
+  estado: boolean;
+}
+
+export const getCatalogoCodigos = async (tipoNodoRutaId?: string): Promise<{ success: boolean; total: number; data: CatalogoCodigoItem[] }> => {
+  const query = tipoNodoRutaId ? `?tipoNodoRutaId=${tipoNodoRutaId}` : '';
+  return await apiFetch(`${API_BASE_URL}/seguridad/rutas/catalogo-codigo${query}`, {
+    method: 'GET',
+  });
+};
+
+export const createCatalogoCodigo = async (payload: { codigo: string; tipoNodoRutaId?: string | null }): Promise<{ success: boolean; created: boolean; reused: boolean; data: CatalogoCodigoItem }> => {
+  return await apiFetch(`${API_BASE_URL}/seguridad/rutas/catalogo-codigo`, {
+    method: 'POST',
+    body: payload,
+  });
+};
+
+export const deleteCatalogoCodigo = async (id: string): Promise<{ success: boolean; accion: string }> => {
+  return await apiFetch(`${API_BASE_URL}/seguridad/rutas/catalogo-codigo/${id}`, {
+    method: 'DELETE',
+  });
+};
+
+export interface MigracionTipoNodoResult {
+  success: boolean;
+  message: string;
+  sinTipoNodo: number;
+  yaCorrectas: number;
+  actualizadas: number;
+  sinCandidato: Array<{ path: string; tipoNodo: string }>;
+  detalle: Array<{ path: string; tipoNodo: string; anteriorId: string | null; nuevoId: string; order: number }>;
+}
+
+export const migrarTipoNodoRutas = async (): Promise<MigracionTipoNodoResult> => {
+  return await apiFetch(`${API_BASE_URL}/seguridad/rutas/tipos-nodo/migrar`, {
+    method: 'POST',
+  });
+};
+
 export const getAccessTypes = async (): Promise<AccessTypesResponse> => {
   const response = await apiFetch(`${API_BASE_URL}/seguridad/rutas/listarTiposRutas/admin`, {
     method: 'GET',

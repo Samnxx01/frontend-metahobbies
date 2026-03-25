@@ -31,6 +31,18 @@ export interface TenantGlobalInfo {
     titulo: string | null;
     nvlGeneracion: number | null;
     estado: boolean | string;
+    // Jerarquía (sub-TenantGlobals)
+    parent: string | null;
+    profundidad: number;
+}
+
+export interface SuperAdminInfo {
+    iud: string;
+    nombre: string | null;
+    estado: boolean | string;
+    // Jerarquía (sub-SuperAdmins)
+    parent: string | null;
+    profundidad: number;
 }
 
 export interface CorpNode {
@@ -44,12 +56,26 @@ export interface TenantGlobalNode {
     tenantGlobal: TenantGlobalInfo | null;
     usuarios: TenantUsuario[];
     corporativos: CorpNode[];
+    // Sub-TenantGlobals (jerarquía recursiva)
+    subTenantGlobales: TenantGlobalNode[];
+}
+
+export interface SuperAdminNode {
+    superAdmin: SuperAdminInfo;
+    usuarios: TenantUsuario[];
+    // Sub-SuperAdmins (jerarquía recursiva)
+    subSuperAdmins: SuperAdminNode[];
+    // TenantGlobals que pertenecen a este SuperAdmin
+    tenantsGlobales: TenantGlobalNode[];
 }
 
 export interface JerarquiaResponse {
     scope: 'SUPER_ADMIN' | 'TENANT_GLOBAL' | 'CORPORATIVO';
+    // Lista plana de usuarios sin tenant (compatibilidad)
     superAdmins: TenantUsuario[];
     tenantsGlobales: TenantGlobalNode[];
+    // Árbol jerárquico (nuevo — cuando el backend lo soporte)
+    superAdminTree?: SuperAdminNode[];
 }
 
 export interface CreateUsuarioGlobalData {

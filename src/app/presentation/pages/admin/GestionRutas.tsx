@@ -8,9 +8,9 @@ import {
   toggleRouteStatus,
   getTiposNodoRuta,
   getTiposNodoRutaOpciones,
-  applyTipoNodoCodigo,
   getPerfilesCorporativosParaCodigo,
-  getTiposNodoCodigos,
+  getCatalogoCodigos,
+  createCatalogoCodigo,
   getAccessTypes,
   getAccionesCatalogo,
   createAccessType,
@@ -19,6 +19,9 @@ import {
   createTipoNodoRuta,
   updateTipoNodoRuta,
   deleteTipoNodoRuta,
+  deleteCatalogoCodigo,
+  migrarTipoNodoRutas,
+  type MigracionTipoNodoResult,
   previewRoute,
   type Route,
   type CreateRouteDto,
@@ -26,7 +29,7 @@ import {
   type AccessTypeOption,
   type AccionOption,
   type PerfilCorporativoItem,
-  type CodigoNodoItem,
+  type CatalogoCodigoItem,
 } from '@/app/services/routesService';
 import { swalFire } from '@/lib/sweetalert';
 import { normalizeRoutePath } from '@/app/services/routePathNormalizer';
@@ -46,6 +49,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import {
   Table,
   TableBody,
@@ -87,6 +100,7 @@ interface SubFormFormState {
   padreId: string;
   tipoNodoId: string;
   component: string;
+  path: string;
   accessType: string[];
   acciones: string[];
 }
@@ -118,6 +132,11 @@ export default function GestionRutas(): React.ReactElement {
   const [formularioPadreId, setFormularioPadreId] = useState<string>('');
   const [isSubFormModalOpen, setIsSubFormModalOpen] = useState<boolean>(false);
   const [subFormSubmitting, setSubFormSubmitting] = useState<boolean>(false);
+  const [nodeTypeToDelete, setNodeTypeToDelete] = useState<string>('');
+  const [catalogoCodigoToDelete, setCatalogoCodigoToDelete] = useState<string>('');
+  const [deletingCatalogoCodigo, setDeletingCatalogoCodigo] = useState<boolean>(false);
+  const [migratingNodeTypes, setMigratingNodeTypes] = useState<boolean>(false);
+  const [migracionResult, setMigracionResult] = useState<MigracionTipoNodoResult | null>(null);
 
   // Modal edición de usuarios
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
@@ -132,6 +151,7 @@ export default function GestionRutas(): React.ReactElement {
     padreId: '',
     tipoNodoId: '',
     component: '',
+    path: '',
     accessType: [],
     acciones: [],
   });
@@ -150,7 +170,8 @@ export default function GestionRutas(): React.ReactElement {
   const [perfilesCorporativos, setPerfilesCorporativos] = useState<PerfilCorporativoItem[]>([]);
   const [loadingPerfilesCorporativos, setLoadingPerfilesCorporativos] = useState<boolean>(false);
   const [selectedPerfilCorporativoId, setSelectedPerfilCorporativoId] = useState<string>('');
-  const [codigosExistentes, setCodigosExistentes] = useState<CodigoNodoItem[]>([]);
+  const [catalogoCodigoOptions, setCatalogoCodigoOptions] = useState<CatalogoCodigoItem[]>([]);
+const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(false);
   const [accessTypeForm, setAccessTypeForm] = useState<AccessTypeFormState>({
     accessType: '',
     layout: '',
@@ -293,26 +314,6 @@ export default function GestionRutas(): React.ReactElement {
       .replace(/\s+/g, ' ')
       .replace(/[^A-Z0-9 -]/g, '');
 
-  const actorJwtScope = useMemo(() => {
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) return { tenantSuperAdminId: '', tenantGlobalId: '', tenantCorporativoId: '' };
-      const parts = token.split('.');
-      if (parts.length < 2) return { tenantSuperAdminId: '', tenantGlobalId: '', tenantCorporativoId: '' };
-      const p = JSON.parse(window.atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
-      const scope = p?.tenantScope ?? p;
-      return {
-        tenantSuperAdminId: String(scope?.tenantSuperAdminId || '').trim(),
-        tenantGlobalId: String(scope?.tenantGlobalId || '').trim(),
-        tenantCorporativoId: String(scope?.tenantCorporativoId || '').trim(),
-      };
-    } catch {
-      return { tenantSuperAdminId: '', tenantGlobalId: '', tenantCorporativoId: '' };
-    }
-  }, []);
-
-  const actorTenantCorporativoId = actorJwtScope.tenantCorporativoId;
-
   const nextNodeTypeOrder = useMemo(
     () => nodeTypes.reduce((max, item) => Math.max(max, Number(item?.order ?? 0)), 0) + 1,
     [nodeTypes]
@@ -328,6 +329,19 @@ export default function GestionRutas(): React.ReactElement {
     () => subFormCodeOptions.filter((t) => t.estado !== false && Number(t.order ?? 0) === 4),
     [subFormCodeOptions]
   );
+  const nodeTypeRowsByFilteredCode = useMemo(
+    () => [...nodeTypes].sort((a, b) => Number(a?.order ?? 0) - Number(b?.order ?? 0)),
+    [nodeTypes]
+  );
+  const getNodeTypeHierarchyByCode = (item: TipoNodoRuta): string => {
+    const currentOrder = Number(item?.order ?? 0);
+    return nodeTypeRowsByFilteredCode
+      .filter((row) => Number(row?.order ?? 0) <= currentOrder)
+      .sort((a, b) => Number(a?.order ?? 0) - Number(b?.order ?? 0))
+      .map((row) => String(row?.nombre || row?.codigo || '').trim())
+      .filter(Boolean)
+      .join(' > ');
+  };
   const joinPath = (basePath: string, segment: string): string => {
     const base = normalizePath(basePath || '/');
     const seg = String(segment || '').replace(/^\/+/, '');
@@ -364,15 +378,48 @@ export default function GestionRutas(): React.ReactElement {
     if (byId) return Number(byId.order ?? 0);
     return getTypeOrderByCode(String(route?.tipoNodo || ''));
   };
+  const isFormularioRoute = (route: Route): boolean => {
+    const ownOrder = getRouteTypeOrder(route);
+    if (ownOrder === formularioOrder) return true;
+
+    const ownTypeText = String(route?.tipoNodo || '').trim().toUpperCase();
+    if (ownTypeText === 'FORMULARIO') return true;
+
+    const parentId = resolveParentId(route);
+    if (!parentId) return false;
+
+    const parentRoute = routes.find((item) => resolveRouteId(item) === String(parentId));
+    return !!parentRoute && getRouteTypeOrder(parentRoute) === Number(moduloType?.order ?? 2);
+  };
   const subFormParentOptions = useMemo(
-    () => routes.filter((r) => getRouteTypeOrder(r) === formularioOrder),
-    [routes, formularioOrder]
+    () =>
+      routes.filter((route) => {
+        if (route?.estadoRuta === false) return false;
+        return isFormularioRoute(route);
+      }),
+    [routes, formularioOrder, moduloType]
   );
 
   const getRouteNameById = (id: string | null | undefined): string => {
     if (!id) return '-';
     const found = routes.find((route) => resolveRouteId(route) === String(id));
     return found?.name || '-';
+  };
+
+  const getRouteHierarchyLabel = (route: Route): string => {
+    const hierarchyNames: string[] = [];
+    let current: Route | undefined = route;
+    let safety = 0;
+
+    while (current && safety < 10) {
+      hierarchyNames.unshift(String(current.name || '').trim() || 'Sin nombre');
+      const parentId = resolveParentId(current);
+      if (!parentId) break;
+      current = routes.find((item) => resolveRouteId(item) === String(parentId));
+      safety += 1;
+    }
+
+    return hierarchyNames.join(' > ');
   };
 
   const resolveInheritedRouteId = (route: Route): string | null => {
@@ -915,7 +962,7 @@ export default function GestionRutas(): React.ReactElement {
       const payload: CreateRouteDto = {
         ...formData,
         path: normalizePath(formData.path || ''),
-        component: resolvedComponent,
+        component: resolvedComponent ?? '',
         layout: resolvedLayout,
         tipoNodo: String(selectedTypeDoc.codigo || ''),
         tipoNodoId: resolveNodeTypeId(selectedTypeDoc),
@@ -1071,7 +1118,7 @@ export default function GestionRutas(): React.ReactElement {
         }
         await createTipoNodoRuta({
           codigo: codigoNormalizado,
-          codigoCatalogoId: nodeTypeForm.codigoCatalogoId || undefined,
+          codigoCatalogoId: nodeTypeCodeTouched ? nodeTypeForm.codigoCatalogoId || undefined : undefined,
           nombre: nodeTypeForm.nombre.trim(),
           descripcion: nodeTypeForm.descripcion.trim(),
           order: nextNodeTypeOrder,
@@ -1091,26 +1138,55 @@ export default function GestionRutas(): React.ReactElement {
     }
   };
 
-  const handleDeactivateNodeType = async (id: string): Promise<void> => {
-    const result = await swalFire({
-      title: 'Deactivate node type?',
-      text: 'This will mark the node type as inactive',
-      icon: 'warning',
-      showCancelButton: true,
-      confirmButtonText: 'Deactivate',
-      cancelButtonText: 'Cancel',
-    });
+  const handleDeactivateNodeType = (id: string): void => {
+    setNodeTypeToDelete(id);
+  };
 
-    if (!result.isConfirmed) return;
-
+  const confirmDeleteNodeType = async (): Promise<void> => {
+    const id = nodeTypeToDelete;
+    setNodeTypeToDelete('');
     try {
-      await deleteTipoNodoRuta(id);
-      toast.success('Node type deactivated');
+      const res = await deleteTipoNodoRuta(id);
+      const msg = (res as any)?.accion === 'eliminado'
+        ? 'Tipo de nodo eliminado correctamente.'
+        : 'Tipo de nodo desactivado correctamente.';
+      toast.success(msg);
       await loadNodeTypes();
       await loadSubFormCodeOptions();
     } catch (error: any) {
-      console.error('Error deactivating node type:', error);
-      toast.error(error?.message || 'Error deactivating node type');
+      console.error('Error gestionando tipo de nodo:', error);
+      toast.error(error?.message || 'Error al gestionar tipo de nodo');
+    }
+  };
+
+  const confirmDeleteCatalogoCodigo = async (): Promise<void> => {
+    const id = catalogoCodigoToDelete;
+    setCatalogoCodigoToDelete('');
+    setDeletingCatalogoCodigo(true);
+    try {
+      const res = await deleteCatalogoCodigo(id);
+      const msg = res?.accion === 'eliminado'
+        ? 'Codigo eliminado del catalogo.'
+        : 'Codigo desactivado del catalogo.';
+      toast.success(msg);
+      setNodeTypeForm((prev) => ({ ...prev, codigoCatalogoId: '', codigo: '' }));
+      setNodeTypeCodeTouched(false);
+    } catch (error: any) {
+      toast.error(error?.message || 'Error al gestionar codigo del catalogo');
+    } finally {
+      setDeletingCatalogoCodigo(false);
+    }
+  };
+
+  const handleMigrarTipoNodoRutas = async (): Promise<void> => {
+    setMigratingNodeTypes(true);
+    try {
+      const res = await migrarTipoNodoRutas();
+      setMigracionResult(res);
+    } catch (error: any) {
+      toast.error(error?.message || 'Error al ejecutar migración');
+    } finally {
+      setMigratingNodeTypes(false);
     }
   };
 
@@ -1185,7 +1261,7 @@ export default function GestionRutas(): React.ReactElement {
   // ── SubFormulario modal (independiente) ──────────────────────────────────────
 
   const resetSubFormData = (): void => {
-    setSubFormData({ name: '', padreId: '', tipoNodoId: '', component: '', accessType: [], acciones: [] });
+    setSubFormData({ name: '', padreId: '', tipoNodoId: '', component: '', path: '', accessType: [], acciones: [] });
   };
 
   const openNodeTypeCodeModal = (): void => {
@@ -1196,24 +1272,41 @@ export default function GestionRutas(): React.ReactElement {
         : null
     );
     setSelectedPerfilCorporativoId('');
-    setCodigosExistentes([]);
+    setCatalogoCodigoOptions([]);
     setIsNodeTypeCodeModalOpen(true);
 
-    // Cargar perfiles y códigos existentes en paralelo
+    // Cargar perfiles y catálogo de codigos del padre
     setLoadingPerfilesCorporativos(true);
+    setLoadingCatalogoCodigo(true);
+    const currentSaved = nodeTypeForm.codigoCatalogoId && nodeTypeForm.codigo
+      ? { iud: nodeTypeForm.codigoCatalogoId, codigo: nodeTypeForm.codigo }
+      : null;
+
     Promise.all([
       getPerfilesCorporativosParaCodigo().catch(() => ({ data: [] as PerfilCorporativoItem[] })),
-      getTiposNodoCodigos().catch(() => ({ data: [] as CodigoNodoItem[] })),
-    ]).then(([perfilesRes, codigosRes]) => {
+      getCatalogoCodigos().catch((err: any) => {
+        toast.error(err?.message || 'Error al cargar codigos del catalogo');
+        return { data: [] as CatalogoCodigoItem[] };
+      }),
+    ]).then(([perfilesRes, catalogoRes]) => {
       setPerfilesCorporativos(perfilesRes?.data ?? []);
-      const codigos = codigosRes?.data ?? [];
-      setCodigosExistentes(codigos);
-      // Si hay exactamente uno, cargarlo por defecto
-      if (codigos.length === 1) {
-        setSavedNodeTypeCode({ iud: codigos[0].iud, codigo: codigos[0].codigo });
-        setNodeTypeCodeDraft(codigos[0].codigo);
+      const catalogo = catalogoRes?.data ?? [];
+      setCatalogoCodigoOptions(catalogo);
+      const savedSigueDisponible = currentSaved
+        ? catalogo.some((item) => item.iud === currentSaved.iud)
+        : false;
+      if (currentSaved && !savedSigueDisponible) {
+        setSavedNodeTypeCode(null);
+        setNodeTypeCodeDraft('');
       }
-    }).finally(() => setLoadingPerfilesCorporativos(false));
+      if (!currentSaved && catalogo.length > 0) {
+        setSavedNodeTypeCode({ iud: catalogo[0].iud, codigo: catalogo[0].codigo });
+        setNodeTypeCodeDraft(catalogo[0].codigo);
+      }
+    }).finally(() => {
+      setLoadingPerfilesCorporativos(false);
+      setLoadingCatalogoCodigo(false);
+    });
   };
 
   const saveNodeTypeCode = async (): Promise<void> => {
@@ -1225,17 +1318,18 @@ export default function GestionRutas(): React.ReactElement {
 
     try {
       setSavingNodeTypeCode(true);
-      const response = await applyTipoNodoCodigo({
+      const response = await createCatalogoCodigo({
         codigo,
-        perfilCorporativoId: selectedPerfilCorporativoId || null,
+        tipoNodoRutaId: editingNodeTypeId || undefined,
       });
-
-      setSavedNodeTypeCode({
-        iud: response.data.iud,
-        codigo: response.data.codigo,
+      const nuevo: CatalogoCodigoItem = response.data;
+      setSavedNodeTypeCode({ iud: nuevo.iud, codigo: nuevo.codigo });
+      setNodeTypeCodeDraft(nuevo.codigo);
+      setCatalogoCodigoOptions((prev) => {
+        const existe = prev.find((c) => c.iud === nuevo.iud);
+        return existe ? prev : [...prev, nuevo].sort((a, b) => a.codigo.localeCompare(b.codigo, 'es'));
       });
-      setNodeTypeCodeDraft(response.data.codigo);
-      toast.success(response.created ? 'Codigo parametrizado correctamente' : 'Codigo reutilizado para este scope');
+      toast.success(response.created ? 'Codigo creado en el catalogo' : 'Codigo reutilizado del catalogo');
     } catch (error: any) {
       console.error('Error saving node type code:', error);
       toast.error(error?.message || 'Error parametrizando codigo');
@@ -1269,7 +1363,10 @@ export default function GestionRutas(): React.ReactElement {
   const openSubFormModal = (): void => {
     const onlyParent = subFormParentOptions.length === 1 ? resolveRouteId(subFormParentOptions[0]) : '';
     const defaultTipoNodoId = orderFourNodeTypes.length === 1 ? resolveNodeTypeId(orderFourNodeTypes[0]) : '';
-    setSubFormData({ name: '', padreId: onlyParent, tipoNodoId: defaultTipoNodoId, component: '', accessType: [], acciones: [] });
+    const prefixPath = onlyParent
+      ? normalizePath(routes.find((r) => resolveRouteId(r) === onlyParent)?.path || '') + '/'
+      : '';
+    setSubFormData({ name: '', padreId: onlyParent, tipoNodoId: defaultTipoNodoId, component: '', path: prefixPath, accessType: [], acciones: [] });
     setIsSubFormModalOpen(true);
   };
 
@@ -1278,35 +1375,26 @@ export default function GestionRutas(): React.ReactElement {
     resetSubFormData();
   };
 
-  const buildSubFormPath = (name: string, padreId: string): string => {
-    const formularioPadre = routes.find((r) => resolveRouteId(r) === padreId);
-    if (!formularioPadre) return '';
-    return joinPath(normalizePath(formularioPadre.path || '/'), slugify(name));
-  };
-
   const handleSubmitSubForm = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault();
-    if (orderFourNodeTypes.length === 0) {
-      toast.error('Crea primero un tipo de nodo de orden 4 desde Param. Tipos');
-      return;
-    }
+
     const selectedSubFormType = orderFourNodeTypes.length === 1
       ? orderFourNodeTypes[0]
       : getTypeById(subFormData.tipoNodoId);
-    if (!selectedSubFormType) {
+    if (orderFourNodeTypes.length > 0 && !selectedSubFormType) {
       toast.error('Selecciona el tipo de nodo a consumir para el subformulario');
       return;
     }
     if (!subFormData.name.trim()) { toast.error('El nombre es obligatorio'); return; }
     if (!subFormData.padreId) { toast.error('Selecciona el formulario padre'); return; }
-    if (!subFormData.component.trim()) { toast.error('El componente es obligatorio'); return; }
     if (!subFormData.acciones.length) { toast.error('Selecciona al menos una acción HTTP para el subformulario'); return; }
+    if (!subFormData.component.trim()) { toast.error('El componente es obligatorio'); return; }
+    if (!subFormData.path.trim()) { toast.error('La ruta es obligatoria'); return; }
 
     const formularioPadre = routes.find((r) => resolveRouteId(r) === subFormData.padreId);
     if (!formularioPadre) { toast.error('Formulario padre no encontrado'); return; }
 
-    const path = buildSubFormPath(subFormData.name, subFormData.padreId);
-    if (!path) { toast.error('No se pudo calcular la ruta'); return; }
+    const path = normalizePath(subFormData.path);
 
     try {
       setSubFormSubmitting(true);
@@ -1315,8 +1403,8 @@ export default function GestionRutas(): React.ReactElement {
         path,
         component: subFormData.component.trim(),
         layout: formularioPadre.layout || 'AdminLayout',
-        tipoNodo: String(selectedSubFormType.codigo || ''),
-        tipoNodoId: resolveNodeTypeId(selectedSubFormType),
+        tipoNodo: selectedSubFormType ? String(selectedSubFormType.codigo || '') : '',
+        tipoNodoId: selectedSubFormType ? resolveNodeTypeId(selectedSubFormType) : undefined,
         padreId: subFormData.padreId,
         heredaDeRuta: null,
         mostrarEnSidebar: true,
@@ -1393,7 +1481,7 @@ export default function GestionRutas(): React.ReactElement {
               <Plus className="h-4 w-4 mr-2" />
               Nuevo Formulario
             </Button>
-            <Button variant="outline" onClick={openSubFormModal}>
+            <Button variant="outline" onClick={() => openRouteModal(undefined, resolveNodeTypeId(subFormularioType) || '')}>
               <Plus className="h-4 w-4 mr-2" />
               Nuevo SubFormulario
             </Button>
@@ -1564,7 +1652,7 @@ export default function GestionRutas(): React.ReactElement {
             <DialogHeader>
               <DialogTitle>{editingRoute ? 'Editar Ruta' : getCreateDialogTitle()}</DialogTitle>
               <DialogDescription>
-                Parametriza nodos jerarquicos (suite, modulo, formulario)
+                Parametriza nodos jerarquicos (suite, modulo, formulario y subformulario)
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4 md:grid-cols-2">
@@ -1629,7 +1717,7 @@ export default function GestionRutas(): React.ReactElement {
                     <SelectContent>
                       {suiteOptions.map((suite) => (
                         <SelectItem key={resolveRouteId(suite)} value={resolveRouteId(suite)}>
-                          {suite.name}
+                          {getRouteHierarchyLabel(suite)}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -1672,12 +1760,12 @@ export default function GestionRutas(): React.ReactElement {
                       {isFormularioType
                         ? moduloOptionsBySuite.map((parent) => (
                           <SelectItem key={resolveRouteId(parent)} value={resolveRouteId(parent)}>
-                            {parent.name}
+                            {getRouteHierarchyLabel(parent)}
                           </SelectItem>
                         ))
                         : getParentOptions(String(formData.tipoNodoId || '')).map((parent) => (
                           <SelectItem key={resolveRouteId(parent)} value={resolveRouteId(parent)}>
-                            {parent.name}
+                            {getRouteHierarchyLabel(parent)}
                           </SelectItem>
                         ))}
                     </SelectContent>
@@ -1957,7 +2045,7 @@ export default function GestionRutas(): React.ReactElement {
           </DialogHeader>
 
           <form onSubmit={(e) => void handleSubmitAccessType(e)} className="grid gap-3 py-2">
-            <div className="space-y-2">
+              <div className="space-y-2">
               <Label>Tipo de acceso</Label>
               <Input
                 value={accessTypeForm.accessType}
@@ -2065,12 +2153,15 @@ export default function GestionRutas(): React.ReactElement {
                 {subFormParentOptions.length > 1 ? (
                   <Select
                     value={subFormData.padreId || undefined}
-                    onValueChange={(value) =>
+                    onValueChange={(value) => {
+                      const padre = routes.find((r) => resolveRouteId(r) === value);
+                      const prefix = padre?.path ? normalizePath(padre.path) + '/' : '';
                       setSubFormData((prev) => ({
                         ...prev,
                         padreId: value,
-                      }))
-                    }
+                        path: prefix,
+                      }));
+                    }}
                   >
                     <SelectTrigger id="sf-padreId">
                       <SelectValue placeholder="Selecciona el formulario padre" />
@@ -2078,8 +2169,7 @@ export default function GestionRutas(): React.ReactElement {
                     <SelectContent>
                       {subFormParentOptions.map((r) => (
                         <SelectItem key={resolveRouteId(r)} value={resolveRouteId(r)}>
-                          {r.name}
-                          <span className="text-muted-foreground text-xs ml-2">{r.path}</span>
+                          {getRouteHierarchyLabel(r)}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -2087,7 +2177,7 @@ export default function GestionRutas(): React.ReactElement {
                 ) : subFormParentOptions.length === 1 ? (
                   <Input
                     id="sf-padreId"
-                    value={`${subFormParentOptions[0].name} | ${subFormParentOptions[0].path}`}
+                    value={getRouteHierarchyLabel(subFormParentOptions[0])}
                     readOnly
                     className="bg-muted"
                   />
@@ -2097,41 +2187,41 @@ export default function GestionRutas(): React.ReactElement {
                 )}
               </div>
 
-              <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="sf-tipoNodoId">Codigo parametrizado *</Label>
-                {orderFourNodeTypes.length > 1 ? (
-                  <Select
-                    value={subFormData.tipoNodoId || undefined}
-                    onValueChange={(value) =>
-                      setSubFormData((prev) => ({
-                        ...prev,
-                        tipoNodoId: value,
-                      }))
-                    }
-                  >
-                    <SelectTrigger id="sf-tipoNodoId">
-                      <SelectValue placeholder="Selecciona el codigo parametrizado" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {orderFourNodeTypes.map((item) => (
-                        <SelectItem key={resolveNodeTypeId(item)} value={resolveNodeTypeId(item)}>
-                          {item.codigo}
-                          <span className="text-muted-foreground text-xs ml-2">{item.nombre}</span>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                ) : orderFourNodeTypes.length === 1 ? (
-                  <Input
-                    id="sf-tipoNodoId"
-                    value={`${orderFourNodeTypes[0].codigo} | ${orderFourNodeTypes[0].nombre}`}
-                    readOnly
-                    className="bg-muted"
-                  />
-                ) : (
-                  <p className="text-xs text-muted-foreground">No hay codigos parametrizados para orden 4.</p>
-                )}
-              </div>
+              {orderFourNodeTypes.length > 0 && (
+                <div className="space-y-2 md:col-span-2">
+                  <Label htmlFor="sf-tipoNodoId">Codigo parametrizado *</Label>
+                  {orderFourNodeTypes.length > 1 ? (
+                    <Select
+                      value={subFormData.tipoNodoId || undefined}
+                      onValueChange={(value) =>
+                        setSubFormData((prev) => ({
+                          ...prev,
+                          tipoNodoId: value,
+                        }))
+                      }
+                    >
+                      <SelectTrigger id="sf-tipoNodoId">
+                        <SelectValue placeholder="Selecciona el codigo parametrizado" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {orderFourNodeTypes.map((item) => (
+                          <SelectItem key={resolveNodeTypeId(item)} value={resolveNodeTypeId(item)}>
+                            {item.codigo}
+                            <span className="text-muted-foreground text-xs ml-2">{item.nombre}</span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Input
+                      id="sf-tipoNodoId"
+                      value={`${orderFourNodeTypes[0].codigo} | ${orderFourNodeTypes[0].nombre}`}
+                      readOnly
+                      className="bg-muted"
+                    />
+                  )}
+                </div>
+              )}
 
               {/* Nombre */}
               <div className="space-y-2">
@@ -2142,18 +2232,6 @@ export default function GestionRutas(): React.ReactElement {
                   onChange={(e) => setSubFormData((prev) => ({ ...prev, name: e.target.value }))}
                   placeholder="Ej: Detalle Comisiones"
                   required
-                />
-              </div>
-
-              {/* Ruta (solo lectura, calculada) */}
-              <div className="space-y-2">
-                <Label htmlFor="sf-path">Ruta (auto)</Label>
-                <Input
-                  id="sf-path"
-                  value={subFormData.padreId ? buildSubFormPath(subFormData.name, subFormData.padreId) : ''}
-                  readOnly
-                  placeholder="Se calcula automáticamente"
-                  className="bg-muted"
                 />
               </div>
 
@@ -2171,6 +2249,22 @@ export default function GestionRutas(): React.ReactElement {
                   Debe coincidir exactamente con el nombre del archivo .tsx en pages/.
                 </p>
               </div>
+
+              {/* Ruta editable con prefijo suite/módulo pre-cargado */}
+              <div className="space-y-2">
+                <Label htmlFor="sf-path">Ruta *</Label>
+                <Input
+                  id="sf-path"
+                  value={subFormData.path}
+                  onChange={(e) => setSubFormData((prev) => ({ ...prev, path: e.target.value }))}
+                  placeholder="Selecciona el formulario padre para cargar el prefijo"
+                  required
+                />
+                <p className="text-xs text-muted-foreground">
+                  El prefijo se carga del formulario padre. Completa el segmento final (ej: <code>/detalle</code>).
+                </p>
+              </div>
+
 
               {/* Tipo de acceso */}
               <div className="space-y-2 md:col-span-2">
@@ -2304,7 +2398,7 @@ export default function GestionRutas(): React.ReactElement {
                 />
               </div>
             </div>
-            <div className="space-y-2">
+              <div className="space-y-2">
               <Label>{editingNodeTypeId ? 'Orden' : 'Orden siguiente'}</Label>
               <Input
                 type="number"
@@ -2336,22 +2430,35 @@ export default function GestionRutas(): React.ReactElement {
               </Button>
             </div>
           </form>
+          <div className="flex justify-end mb-1">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={migratingNodeTypes}
+              onClick={handleMigrarTipoNodoRutas}
+            >
+              {migratingNodeTypes ? 'Migrando...' : 'Migrar jerarquía'}
+            </Button>
+          </div>
           <div className="rounded-md border max-h-[260px] overflow-auto">
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Codigo</TableHead>
                   <TableHead>Nombre</TableHead>
+                  <TableHead>Jerarquia</TableHead>
                   <TableHead>Orden</TableHead>
                   <TableHead>Estado</TableHead>
                   <TableHead className="text-right">Accion</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {nodeTypes.map((item) => (
+                {nodeTypeRowsByFilteredCode.map((item) => (
                   <TableRow key={resolveNodeTypeId(item)}>
                     <TableCell>{item.codigo}</TableCell>
                     <TableCell>{item.nombre}</TableCell>
+                    <TableCell>{getNodeTypeHierarchyByCode(item) || '-'}</TableCell>
                     <TableCell>{item.order}</TableCell>
                     <TableCell>
                       <Badge variant={item.estado ? 'outline' : 'secondary'}>
@@ -2370,16 +2477,74 @@ export default function GestionRutas(): React.ReactElement {
                         variant="ghost"
                         size="icon"
                         disabled={!item.estado}
-                        onClick={() => void handleDeactivateNodeType(resolveNodeTypeId(item))}
+                        onClick={() => handleDeactivateNodeType(resolveNodeTypeId(item))}
                       >
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
                     </TableCell>
                   </TableRow>
                 ))}
+                {nodeTypeRowsByFilteredCode.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={6} className="py-6 text-center text-sm text-muted-foreground">
+                      No encontramos jerarquia para el codigo filtrado.
+                    </TableCell>
+                  </TableRow>
+                )}
               </TableBody>
             </Table>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog resultado migración tipos de nodo */}
+      <Dialog open={!!migracionResult} onOpenChange={(open) => { if (!open) setMigracionResult(null); }}>
+        <DialogContent className="sm:max-w-[520px]">
+          <DialogHeader>
+            <DialogTitle>Resultado de migración</DialogTitle>
+            <DialogDescription>{migracionResult?.message}</DialogDescription>
+          </DialogHeader>
+          {migracionResult && (
+            <div className="space-y-3 py-2 text-sm">
+              <div className="grid grid-cols-2 gap-2">
+                <div className="rounded-md bg-muted p-3 text-center">
+                  <p className="text-2xl font-bold text-green-600">{migracionResult.actualizadas}</p>
+                  <p className="text-xs text-muted-foreground">Actualizadas</p>
+                </div>
+                <div className="rounded-md bg-muted p-3 text-center">
+                  <p className="text-2xl font-bold">{migracionResult.yaCorrectas}</p>
+                  <p className="text-xs text-muted-foreground">Ya correctas</p>
+                </div>
+                <div className="rounded-md bg-muted p-3 text-center">
+                  <p className="text-2xl font-bold text-muted-foreground">{migracionResult.sinTipoNodo}</p>
+                  <p className="text-xs text-muted-foreground">Sin tipo nodo</p>
+                </div>
+                <div className="rounded-md bg-muted p-3 text-center">
+                  <p className="text-2xl font-bold text-destructive">{migracionResult.sinCandidato.length}</p>
+                  <p className="text-xs text-muted-foreground">Sin candidato</p>
+                </div>
+              </div>
+              {migracionResult.sinCandidato.length > 0 && (
+                <div className="rounded-md border border-destructive/40 p-3 space-y-1">
+                  <p className="font-medium text-destructive text-xs">Rutas sin TipoNodoRuta coincidente:</p>
+                  {migracionResult.sinCandidato.map((r, i) => (
+                    <p key={i} className="text-xs text-muted-foreground">• {r.path} <span className="text-foreground">({r.tipoNodo})</span></p>
+                  ))}
+                </div>
+              )}
+              {migracionResult.detalle.length > 0 && (
+                <div className="rounded-md border p-3 max-h-[160px] overflow-auto space-y-1">
+                  <p className="font-medium text-xs mb-1">Rutas actualizadas:</p>
+                  {migracionResult.detalle.map((r, i) => (
+                    <p key={i} className="text-xs text-muted-foreground">• {r.path} → <span className="text-foreground">order {r.order}</span></p>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setMigracionResult(null)}>Cerrar</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -2392,58 +2557,53 @@ export default function GestionRutas(): React.ReactElement {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-2">
-            {codigosExistentes.length > 1 && (
-              <div className="space-y-2">
-                <Label>Codigos existentes</Label>
+            <div className="space-y-2">
+              <Label htmlFor="node-type-code-catalog">Codigo</Label>
+              {loadingCatalogoCodigo ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Cargando catalogo...
+                </div>
+              ) : (
                 <Select
-                  value={savedNodeTypeCode?.iud || '__none__'}
+                  value={savedNodeTypeCode?.iud ?? (nodeTypeCodeDraft && !savedNodeTypeCode ? '__new__' : '__none__')}
                   onValueChange={(v) => {
-                    if (v === '__none__') {
+                    if (v === '__new__' || v === '__none__') {
                       setSavedNodeTypeCode(null);
                       setNodeTypeCodeDraft('');
                       return;
                     }
-                    const found = codigosExistentes.find((c) => c.iud === v);
+                    const found = catalogoCodigoOptions.find((c) => c.iud === v);
                     if (found) {
                       setSavedNodeTypeCode({ iud: found.iud, codigo: found.codigo });
                       setNodeTypeCodeDraft(found.codigo);
                     }
                   }}
                 >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleccionar codigo existente..." />
+                  <SelectTrigger id="node-type-code-catalog">
+                    <SelectValue placeholder="Selecciona un codigo del catalogo" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="__none__">— Nuevo codigo —</SelectItem>
-                    {codigosExistentes.map((c) => (
+                    <SelectItem value="__none__">— Seleccionar codigo —</SelectItem>
+                    {catalogoCodigoOptions.map((c) => (
                       <SelectItem key={c.iud} value={c.iud}>
                         {c.codigo}
                       </SelectItem>
                     ))}
+                    <SelectItem value="__new__">+ Nuevo codigo</SelectItem>
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-muted-foreground">
-                  Selecciona uno existente o escribe uno nuevo abajo.
-                </p>
-              </div>
-            )}
-            <div className="space-y-2">
-              <Label htmlFor="node-type-code-draft">Codigo</Label>
-              <Input
-                id="node-type-code-draft"
-                value={nodeTypeCodeDraft}
-                onChange={(e) => {
-                  setNodeTypeCodeDraft(e.target.value);
-                  // Si el usuario escribe manualmente, desvincula el savedNodeTypeCode
-                  if (savedNodeTypeCode && e.target.value !== savedNodeTypeCode.codigo) {
-                    setSavedNodeTypeCode(null);
-                  }
-                }}
-                placeholder="SUBFORMULARIO"
-              />
+              )}
+              {!savedNodeTypeCode && (
+                <Input
+                  value={nodeTypeCodeDraft}
+                  onChange={(e) => setNodeTypeCodeDraft(e.target.value)}
+                  placeholder="SUBFORMULARIO"
+                />
+              )}
             </div>
-            <div className="space-y-2">
-              <Label>Perfil corporativo</Label>
+              <div className="space-y-2">
+                <Label>Perfil corporativo</Label>
               {loadingPerfilesCorporativos ? (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -2481,25 +2641,42 @@ export default function GestionRutas(): React.ReactElement {
               Se normaliza en mayusculas y luego se consume por defecto cuando exista un unico registro del nivel.
             </p>
           </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setIsNodeTypeCodeModalOpen(false)}>
-              Cancelar
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => void saveNodeTypeCode()}
-              disabled={savingNodeTypeCode || !normalizeNodeTypeCode(nodeTypeCodeDraft)}
-            >
-              {savingNodeTypeCode ? 'Guardando...' : 'Guardar codigo'}
-            </Button>
-            <Button
-              type="button"
-              onClick={applyNodeTypeCode}
-              disabled={!normalizeNodeTypeCode(nodeTypeCodeDraft)}
-            >
-              Aplicar codigo
-            </Button>
+          <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-between">
+            {savedNodeTypeCode ? (
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                disabled={deletingCatalogoCodigo}
+                onClick={() => setCatalogoCodigoToDelete(savedNodeTypeCode.iud)}
+              >
+                {deletingCatalogoCodigo ? 'Procesando...' : 'Eliminar del catálogo'}
+              </Button>
+            ) : (
+              <span />
+            )}
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" onClick={() => setIsNodeTypeCodeModalOpen(false)}>
+                Cancelar
+              </Button>
+              {!savedNodeTypeCode && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void saveNodeTypeCode()}
+                  disabled={savingNodeTypeCode || !normalizeNodeTypeCode(nodeTypeCodeDraft)}
+                >
+                  {savingNodeTypeCode ? 'Guardando...' : 'Guardar codigo'}
+                </Button>
+              )}
+              <Button
+                type="button"
+                onClick={applyNodeTypeCode}
+                disabled={!savedNodeTypeCode}
+              >
+                Aplicar codigo
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -2622,6 +2799,39 @@ export default function GestionRutas(): React.ReactElement {
           )}
         </DialogContent>
       </Dialog>
+      <AlertDialog open={!!catalogoCodigoToDelete} onOpenChange={(open) => { if (!open) setCatalogoCodigoToDelete(''); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Gestionar codigo del catálogo?</AlertDialogTitle>
+            <AlertDialogDescription>
+              El SuperAdmin eliminará el registro permanentemente. El TenantGlobal lo desactivará. Esta acción afecta el scope del tenant actual.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={() => void confirmDeleteCatalogoCodigo()}>
+              Confirmar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog open={!!nodeTypeToDelete} onOpenChange={(open) => { if (!open) setNodeTypeToDelete(''); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Gestionar tipo de nodo?</AlertDialogTitle>
+            <AlertDialogDescription>
+              El SuperAdmin eliminará el registro permanentemente. El TenantGlobal lo desactivará.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={() => void confirmDeleteNodeType()}>
+              Confirmar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
+

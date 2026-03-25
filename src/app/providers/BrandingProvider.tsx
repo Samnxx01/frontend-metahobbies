@@ -113,7 +113,7 @@ const applyRouteOverrides = (branding: BrandingConfig, pathname: string): Brandi
 // falla silenciosamente y la paleta del localStorage (si existe) sigue activa.
 const cargarYAplicarPaletaActiva = async (): Promise<void> => {
   try {
-    const res = await apiFetch('/api/email-paleta', { method: 'GET' });
+    const res = await apiFetch('/api/email-paleta', { method: 'GET', logoutOn401: false });
     const paletas: Array<{ activa: boolean; colores: ColoresPaleta }> = res?.paletas ?? [];
     const activa = paletas.find(p => p.activa === true);
     if (activa?.colores) {
