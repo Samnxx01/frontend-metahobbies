@@ -20,39 +20,40 @@ import {
   listarPaletas,
   previewEmail,
 } from '@/app/services/emailPaletaService';
+import { aplicarPaletaEnApp } from '@/app/utils/ColorUtils';
 
-// ── Metadatos de cada color ────────────────────────────────────────────────
+// Metadatos de cada color
 const COLOR_META: Record<keyof PaletaColores, { label: string; zones: string[] }> = {
-  COLOR_PRIMARY:   { label: 'Color principal',  zones: ['Botón CTA', 'Título', 'Logo', 'Texto de marca', 'Links'] },
-  COLOR_ACCENT:    { label: 'Color acento',      zones: ['Borde del card', 'Borde ícono', 'Números de paso'] },
-  COLOR_LIGHT:     { label: 'Fondo ícono',       zones: ['Círculo del ícono principal'] },
-  COLOR_BG:        { label: 'Fondo exterior',    zones: ['Fondo del correo', 'Divisores'] },
-  COLOR_CHAMPAGNE: { label: 'Fondo bloques',     zones: ['Header', 'Footer', 'Bloque contraseña', 'Pasos'] },
-  COLOR_SUNSET:    { label: 'Acento cálido',     zones: ['Franja superior', 'Borde bloque contraseña'] },
+  COLOR_PRIMARY: { label: 'Color principal', zones: ['Botón CTA', 'Título', 'Logo', 'Texto de marca', 'Links'] },
+  COLOR_ACCENT: { label: 'Color acento', zones: ['Borde del card', 'Borde ícono', 'Números de paso'] },
+  COLOR_LIGHT: { label: 'Fondo ícono', zones: ['Círculo del ícono principal'] },
+  COLOR_BG: { label: 'Fondo exterior', zones: ['Fondo del correo', 'Divisores'] },
+  COLOR_CHAMPAGNE: { label: 'Fondo bloques', zones: ['Header', 'Footer', 'Bloque contraseña', 'Pasos'] },
+  COLOR_SUNSET: { label: 'Acento cálido', zones: ['Franja superior', 'Borde bloque contraseña'] },
 };
 
-// ── Clases CSS del email → variable de color ──────────────────────────────
+// Clases CSS del email → variable de color
 const CLASS_ZONES: [string, keyof PaletaColores][] = [
-  ['logo-mark',       'COLOR_PRIMARY'],
-  ['brand',           'COLOR_PRIMARY'],
-  ['header-accent',   'COLOR_PRIMARY'],
-  ['header',          'COLOR_CHAMPAGNE'],
-  ['badge-check',     'COLOR_LIGHT'],
-  ['icon-wrap',       'COLOR_LIGHT'],
-  ['hero-title',      'COLOR_PRIMARY'],
-  ['title',           'COLOR_PRIMARY'],
-  ['subtitle',        'COLOR_PRIMARY'],
-  ['password-block',  'COLOR_CHAMPAGNE'],
-  ['steps',           'COLOR_CHAMPAGNE'],
-  ['btn',             'COLOR_PRIMARY'],
-  ['step-num',        'COLOR_ACCENT'],
-  ['footer',          'COLOR_CHAMPAGNE'],
-  ['wrapper',         'COLOR_BG'],
-  ['link-fallback',   'COLOR_CHAMPAGNE'],
-  ['alert',           'COLOR_CHAMPAGNE'],
+  ['logo-mark', 'COLOR_PRIMARY'],
+  ['brand', 'COLOR_PRIMARY'],
+  ['header-accent', 'COLOR_PRIMARY'],
+  ['header', 'COLOR_CHAMPAGNE'],
+  ['badge-check', 'COLOR_LIGHT'],
+  ['icon-wrap', 'COLOR_LIGHT'],
+  ['hero-title', 'COLOR_PRIMARY'],
+  ['title', 'COLOR_PRIMARY'],
+  ['subtitle', 'COLOR_PRIMARY'],
+  ['password-block', 'COLOR_CHAMPAGNE'],
+  ['steps', 'COLOR_CHAMPAGNE'],
+  ['btn', 'COLOR_PRIMARY'],
+  ['step-num', 'COLOR_ACCENT'],
+  ['footer', 'COLOR_CHAMPAGNE'],
+  ['wrapper', 'COLOR_BG'],
+  ['link-fallback', 'COLOR_CHAMPAGNE'],
+  ['alert', 'COLOR_CHAMPAGNE'],
 ];
 
-// ── Inyecta data-color-zone + script de interactividad en el HTML ─────────
+// Inyecta data-color-zone + script de interactividad en el HTML
 function injectInteractivity(html: string): string {
   try {
     const parser = new DOMParser();
@@ -117,35 +118,34 @@ function isValidHex(v: string) { return /^#[0-9A-Fa-f]{6}$/.test(v); }
 const EMPTY_FORM = { nombre: '', colores: { ...DEFAULT_COLORS } };
 
 export default function EnvioCorreos() {
-  const [paletas, setPaletas]               = useState<EmailPaleta[]>([]);
-  const [loading, setLoading]               = useState(false);
-  const [saving, setSaving]                 = useState(false);
-  const [editingId, setEditingId]           = useState<string | null>(null);
-  const [form, setForm]                     = useState<{ nombre: string; colores: PaletaColores }>(EMPTY_FORM);
-  const [hexDraft, setHexDraft]             = useState<Partial<Record<keyof PaletaColores, string>>>({});
-  const [tipoPreview, setTipoPreview]       = useState<TipoCorreo>('activacion-membresia');
-  const [previewHtml, setPreviewHtml]       = useState<string>('');
+  const [paletas, setPaletas] = useState<EmailPaleta[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState<{ nombre: string; colores: PaletaColores }>(EMPTY_FORM);
+  const [hexDraft, setHexDraft] = useState<Partial<Record<keyof PaletaColores, string>>>({});
+  const [tipoPreview, setTipoPreview] = useState<TipoCorreo>('activacion-membresia');
+  const [previewHtml, setPreviewHtml] = useState<string>('');
   const [loadingPreview, setLoadingPreview] = useState(false);
-  const [contenido, setContenido]           = useState<ContenidoCorreo>({});
+  const [contenido, setContenido] = useState<ContenidoCorreo>({});
   const [highlightedKey, setHighlightedKey] = useState<keyof PaletaColores | null>(null);
-  const [refreshKey, setRefreshKey]         = useState(0); // Para forzar re-renderizado
+  const [refreshKey, setRefreshKey] = useState(0);
 
-  const debounceRef       = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const highlightTimer    = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const colorRowRefs      = useRef<Partial<Record<keyof PaletaColores, HTMLDivElement | null>>>({});
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const highlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const colorRowRefs = useRef<Partial<Record<keyof PaletaColores, HTMLDivElement | null>>>({});
 
-  // ── Cargar lista ──────────────────────────────────────────────────────
+  // Cargar lista
   const cargar = useCallback(async () => {
     setLoading(true);
     try {
       const res = await listarPaletas();
-      // Forzar creación de nuevos objetos para asegurar re-renderizado
       const nuevasPaletas = (res.paletas ?? []).map(paleta => ({
         ...paleta,
-        colores: { ...paleta.colores }
+        colores: { ...paleta.colores },
       }));
       setPaletas(nuevasPaletas);
-      setRefreshKey(prev => prev + 1); // Forzar re-renderizado
+      setRefreshKey(prev => prev + 1);
     } catch (err: any) {
       toast.error(err.message ?? 'Error al cargar paletas');
     } finally {
@@ -155,7 +155,7 @@ export default function EnvioCorreos() {
 
   useEffect(() => { cargar(); }, [cargar]);
 
-  // ── Escuchar postMessage del iframe ───────────────────────────────────
+  // Escuchar postMessage del iframe
   useEffect(() => {
     const handler = (event: MessageEvent) => {
       if (event.data?.type !== 'MABS_COLOR_ZONE') return;
@@ -166,7 +166,6 @@ export default function EnvioCorreos() {
       if (highlightTimer.current) clearTimeout(highlightTimer.current);
       highlightTimer.current = setTimeout(() => setHighlightedKey(null), 2500);
 
-      // Scroll al picker correspondiente
       setTimeout(() => {
         colorRowRefs.current[key]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }, 50);
@@ -175,7 +174,7 @@ export default function EnvioCorreos() {
     return () => window.removeEventListener('message', handler);
   }, []);
 
-  // ── Preview con debounce ──────────────────────────────────────────────
+  // Preview con debounce
   const actualizarPreview = useCallback((colores: PaletaColores, tipo: TipoCorreo, cnt: ContenidoCorreo) => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(async () => {
@@ -192,12 +191,9 @@ export default function EnvioCorreos() {
     actualizarPreview(form.colores, tipoPreview, contenido);
   }, [form.colores, tipoPreview, contenido, actualizarPreview]);
 
-  // Reset contenido al cambiar tipo de correo
-  useEffect(() => {
-    setContenido({});
-  }, [tipoPreview]);
+  useEffect(() => { setContenido({}); }, [tipoPreview]);
 
-  // ── Manejadores de color ──────────────────────────────────────────────
+  // Manejadores de color
   const handleColorPicker = (key: keyof PaletaColores, value: string) => {
     setForm(prev => ({ ...prev, colores: { ...prev.colores, [key]: value } }));
     setHexDraft(prev => ({ ...prev, [key]: value }));
@@ -229,13 +225,10 @@ export default function EnvioCorreos() {
     setHexDraft({});
   };
 
-  const draftOrReal = (key: keyof PaletaColores) =>
-    hexDraft[key] !== undefined ? hexDraft[key]! : form.colores[key];
+  const draftOrReal = (key: keyof PaletaColores) => hexDraft[key] !== undefined ? hexDraft[key]! : form.colores[key];
+  const isModified = (key: keyof PaletaColores) => form.colores[key].toLowerCase() !== DEFAULT_COLORS[key].toLowerCase();
 
-  const isModified = (key: keyof PaletaColores) =>
-    form.colores[key].toLowerCase() !== DEFAULT_COLORS[key].toLowerCase();
-
-  // ── Manejadores de lista ──────────────────────────────────────────────
+  // Manejadores de lista
   const handleEdit = (paleta: EmailPaleta) => {
     setEditingId(paleta._id);
     const colores = { ...DEFAULT_COLORS, ...paleta.colores };
@@ -271,10 +264,16 @@ export default function EnvioCorreos() {
     }
   };
 
-  const handleActivar = async (id: string) => {
+  // Activar paleta — aplica colores en la app inmediatamente
+  const handleActivar = async (paleta: EmailPaleta) => {
     try {
-      await activarPaleta(id);
-      toast.success('Paleta activada');
+      await activarPaleta(paleta._id);
+
+      // Aplicar los colores en la app React al instante,
+      // sin necesidad de recargar la página
+      aplicarPaletaEnApp(paleta.colores);
+
+      toast.success(`Paleta "${paleta.nombre}" activada — colores aplicados`);
       await cargar();
     } catch (err: any) {
       toast.error(err.message ?? 'Error al activar');
@@ -292,15 +291,13 @@ export default function EnvioCorreos() {
       toast.error(err.message ?? 'Error al eliminar');
     }
   };
-
-  // ── Render ────────────────────────────────────────────────────────────
   return (
     <div className="max-w-7xl mx-auto p-4 md:p-6 space-y-8">
 
-      {/* ══ FORMULARIO + PREVIEW ══════════════════════════════════════════ */}
+      {/* FORMULARIO + PREVIEW */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
 
-        {/* ── Columna izquierda: Formulario ── */}
+        {/* Columna izquierda: Formulario */}
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -338,24 +335,23 @@ export default function EnvioCorreos() {
                 </p>
                 <div className="space-y-2">
                   {(Object.keys(DEFAULT_COLORS) as (keyof PaletaColores)[]).map(key => {
-                    const meta       = COLOR_META[key];
-                    const val        = form.colores[key];
-                    const draft      = draftOrReal(key);
-                    const mod        = isModified(key);
-                    const valid      = isValidHex(draft);
+                    const meta = COLOR_META[key];
+                    const val = form.colores[key];
+                    const draft = draftOrReal(key);
+                    const mod = isModified(key);
+                    const valid = isValidHex(draft);
                     const isHighlight = highlightedKey === key;
 
                     return (
                       <div
                         key={key}
                         ref={el => { colorRowRefs.current[key] = el; }}
-                        className={`flex items-center gap-3 p-3 rounded-lg border transition-all duration-300 ${
-                          isHighlight
-                            ? 'border-primary ring-2 ring-primary/40 bg-primary/8 scale-[1.01]'
-                            : mod
-                              ? 'border-primary/30 bg-primary/5'
-                              : 'bg-muted/20 border-border'
-                        }`}
+                        className={`flex items-center gap-3 p-3 rounded-lg border transition-all duration-300 ${isHighlight
+                          ? 'border-primary ring-2 ring-primary/40 bg-primary/8 scale-[1.01]'
+                          : mod
+                            ? 'border-primary/30 bg-primary/5'
+                            : 'bg-muted/20 border-border'
+                          }`}
                       >
                         {/* Swatch + picker nativo */}
                         <div className="relative shrink-0 group">
@@ -384,7 +380,6 @@ export default function EnvioCorreos() {
                               <span className="text-[10px] text-primary">modificado</span>
                             )}
                           </div>
-                          {/* Tags de zonas */}
                           <div className="flex flex-wrap gap-1">
                             {meta.zones.map(z => (
                               <span key={z} className="inline-block px-1.5 py-0.5 rounded text-[10px] bg-muted text-muted-foreground">
@@ -392,7 +387,6 @@ export default function EnvioCorreos() {
                               </span>
                             ))}
                           </div>
-                          {/* Input hex */}
                           <div className="flex items-center gap-2">
                             <input
                               type="text"
@@ -401,11 +395,10 @@ export default function EnvioCorreos() {
                               onBlur={() => handleHexBlur(key)}
                               maxLength={7}
                               spellCheck={false}
-                              className={`w-24 h-6 px-2 rounded border font-mono text-xs outline-none focus:ring-1 transition-colors ${
-                                valid
-                                  ? 'border-border focus:ring-primary/40'
-                                  : 'border-destructive bg-destructive/10'
-                              }`}
+                              className={`w-24 h-6 px-2 rounded border font-mono text-xs outline-none focus:ring-1 transition-colors ${valid
+                                ? 'border-border focus:ring-primary/40'
+                                : 'border-destructive bg-destructive/10'
+                                }`}
                               placeholder="#RRGGBB"
                             />
                             {!valid && (
@@ -423,8 +416,8 @@ export default function EnvioCorreos() {
                             title={`Restablecer a ${DEFAULT_COLORS[key]}`}
                           >
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
-                              <path d="M3 3v5h5"/>
+                              <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                              <path d="M3 3v5h5" />
                             </svg>
                           </button>
                         )}
@@ -449,7 +442,7 @@ export default function EnvioCorreos() {
           </CardContent>
         </Card>
 
-        {/* ── Columna derecha: Preview interactivo ── */}
+        {/* Columna derecha: Preview interactivo */}
         <div className="space-y-3 xl:sticky xl:top-6">
           <div className="flex items-center justify-between flex-wrap gap-2">
             <div>
@@ -468,11 +461,10 @@ export default function EnvioCorreos() {
                 key={t.value}
                 type="button"
                 onClick={() => setTipoPreview(t.value)}
-                className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
-                  tipoPreview === t.value
-                    ? 'bg-primary text-primary-foreground border-primary'
-                    : 'bg-background border-border hover:bg-muted'
-                }`}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${tipoPreview === t.value
+                  ? 'bg-primary text-primary-foreground border-primary'
+                  : 'bg-background border-border hover:bg-muted'
+                  }`}
               >
                 {t.label}
               </button>
@@ -528,9 +520,8 @@ export default function EnvioCorreos() {
                     highlightTimer.current = setTimeout(() => setHighlightedKey(null), 2500);
                     colorRowRefs.current[key]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
                   }}
-                  className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg border text-left transition-colors ${
-                    highlightedKey === key ? 'border-primary bg-primary/10' : 'hover:bg-muted/50 border-border'
-                  }`}
+                  className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg border text-left transition-colors ${highlightedKey === key ? 'border-primary bg-primary/10' : 'hover:bg-muted/50 border-border'
+                    }`}
                 >
                   <div className="w-4 h-4 rounded-full shrink-0 border border-black/10" style={{ background: form.colores[key] }} />
                   <span className="text-[10px] font-mono truncate text-muted-foreground">{key.replace('COLOR_', '')}</span>
@@ -541,7 +532,7 @@ export default function EnvioCorreos() {
         </div>
       </div>
 
-      {/* ══ LISTA DE PALETAS GUARDADAS ═══════════════════════════════════ */}
+      {/* LISTA DE PALETAS GUARDADAS */}
       <div>
         <h2 className="text-base font-semibold mb-4">Paletas guardadas</h2>
         {loading && <p className="text-sm text-muted-foreground">Cargando…</p>}
@@ -576,9 +567,9 @@ export default function EnvioCorreos() {
                   className="h-1.5 rounded-full"
                   style={{
                     background: `linear-gradient(90deg,
-                      ${paleta.colores?.COLOR_PRIMARY   ?? DEFAULT_COLORS.COLOR_PRIMARY}   0%,
-                      ${paleta.colores?.COLOR_ACCENT     ?? DEFAULT_COLORS.COLOR_ACCENT}    50%,
-                      ${paleta.colores?.COLOR_SUNSET     ?? DEFAULT_COLORS.COLOR_SUNSET}    100%)`
+                      ${paleta.colores?.COLOR_PRIMARY ?? DEFAULT_COLORS.COLOR_PRIMARY}   0%,
+                      ${paleta.colores?.COLOR_ACCENT ?? DEFAULT_COLORS.COLOR_ACCENT}    50%,
+                      ${paleta.colores?.COLOR_SUNSET ?? DEFAULT_COLORS.COLOR_SUNSET}    100%)`
                   }}
                 />
 
@@ -590,7 +581,7 @@ export default function EnvioCorreos() {
 
                 <div className="flex gap-2 flex-wrap pt-1">
                   {!paleta.activa && (
-                    <Button size="sm" className="text-xs h-7" onClick={() => handleActivar(paleta._id)}>
+                    <Button size="sm" className="text-xs h-7" onClick={() => handleActivar(paleta)}>
                       Activar
                     </Button>
                   )}
