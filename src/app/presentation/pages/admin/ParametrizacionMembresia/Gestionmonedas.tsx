@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { toast } from 'react-toastify';
 import { apiFetch } from '@/app/services/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -30,6 +31,8 @@ export default function GestionMonedas() {
 
     const mostrarMensaje = (tipo: MensajeTipo, texto: string) => {
         setMensaje({ tipo, texto });
+        if (tipo === 'success') toast.success(texto);
+        else toast.error(texto);
         setTimeout(() => setMensaje(null), 4500);
     };
 
@@ -48,7 +51,7 @@ export default function GestionMonedas() {
     const crearMonedas = async () => {
         setLoadingCrear(true);
         try {
-            const data = await apiFetch('/api/seguridad/crear/moneda', { method: 'POST' });
+            const data = await apiFetch('/api/monedas/seguridad/crear/moneda', { method: 'POST' });
             const detalle = Array.isArray(data?.detalle)
                 ? data.detalle.map((d: any) => `${d.moneda}: ${d.estado}`).join('  ·  ')
                 : '';
@@ -64,7 +67,7 @@ export default function GestionMonedas() {
     const toggleEstado = async (id: string, estadoActual: boolean) => {
         setLoadingToggle(id);
         try {
-            await apiFetch(`/api/seguridad/actualizar/${id}`, {
+            await apiFetch(`/api/monedas/seguridad/actualizar/${id}`, {
                 method: 'PUT',
                 body: { estadoMoneda: !estadoActual },
             });

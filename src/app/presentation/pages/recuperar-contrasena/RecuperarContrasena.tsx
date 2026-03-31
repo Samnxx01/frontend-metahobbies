@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { apiFetch } from '@/app/services/api';
+import { getGovernedLoginPath } from '@/app/services/governedNavigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
@@ -72,7 +73,7 @@ export default function RecuperarContrasena() {
                         </button>
                     </p>
                     <Link
-                        to="/public/render/view/login"
+                        to={getGovernedLoginPath()}
                         className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
                     >
                         <ArrowLeft className="w-3.5 h-3.5" />
@@ -152,7 +153,7 @@ export default function RecuperarContrasena() {
                 {/* Footer */}
                 <div className="text-center">
                     <Link
-                        to="/public/render/view/login"
+                        to={getGovernedLoginPath()}
                         className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
                     >
                         <ArrowLeft className="w-3.5 h-3.5" />

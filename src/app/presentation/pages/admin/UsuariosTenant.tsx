@@ -14,6 +14,7 @@ import { NodoTenantGlobalCard } from '@/app/presentation/components/admin/usuari
 import { UsuarioGlobalModal } from '@/app/presentation/components/admin/usuarios-tenant/UsuarioGlobalModal';
 import { UsuarioCorporativoModal } from '@/app/presentation/components/admin/usuarios-tenant/UsuarioCorporativoModal';
 import { UsuarioSuperAdminModal } from '@/app/presentation/components/admin/usuarios-tenant/UsuarioSuperAdminModal';
+import ParametrizacionRedirects from './ParametrizacionRedirects';
 import type { CorpNode, TenantGlobalInfo, TenantUsuario } from '@/app/services/tenantUsuariosService';
 
 export default function UsuariosTenant(): React.ReactElement {
@@ -316,6 +317,10 @@ export default function UsuariosTenant(): React.ReactElement {
                     )}
                 </div>
             </div>
+
+            {scope === 'SUPER_ADMIN' && (
+                <ParametrizacionRedirects compact embeddedInUsuariosTenant />
+            )}
 
             {/* SuperAdmins — solo visible para SUPER_ADMIN */}
             {scope === 'SUPER_ADMIN' && (jerarquia?.superAdmins.length ?? 0) > 0 && (

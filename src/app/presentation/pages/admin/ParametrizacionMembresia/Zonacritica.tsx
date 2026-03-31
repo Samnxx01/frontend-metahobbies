@@ -32,6 +32,9 @@ interface Moneda {
 type MensajeTipo = 'success' | 'error';
 interface Mensaje { tipo: MensajeTipo; texto: string }
 
+const normalizarPrecioDesdeCentavos = (valor: number | string | null | undefined) =>
+    Number(valor || 0) / 100;
+
 export default function ZonaCritica() {
     // Precios de membresía
     const [precios, setPrecios] = useState<ParametrizacionPrecio[]>([]);

@@ -11,6 +11,7 @@ import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { getGovernedLoginPath } from '@/app/services/governedNavigation';
 
 import { Trash2, Minus, Plus, ArrowLeft, Info, Tag, X, RefreshCw, AlertTriangle } from 'lucide-react';
 import type { CartItem } from '../../../../types/common';
@@ -127,7 +128,7 @@ export default function Carrito(): React.ReactElement {
         confirmButtonText: 'Ir a Login',
         cancelButtonText: 'Cancelar',
       });
-      if (result.isConfirmed) navigate('/public/render/view/login', { state: { returnUrl: '/checkout' } });
+      if (result.isConfirmed) navigate(getGovernedLoginPath(), { state: { returnUrl: '/checkout' } });
       return;
     }
     navigate('/checkout');

@@ -1,3 +1,5 @@
+import { getGovernedLogoutPath } from '@/app/services/governedNavigation';
+
 export type ResponseType = 'raw' | string;
 export type ApiHeaders = Record<string, string>;
 
@@ -57,7 +59,7 @@ export const apiFetch = async (
         if (response.status === 401 && useAuth && logoutOn401) {
             localStorage.removeItem('user');
             localStorage.removeItem('token');
-            window.location.href = '/public/render/view/login';
+            window.location.href = getGovernedLogoutPath();
             throw new Error('Sesion expirada. Por favor inicia sesion nuevamente.');
         }
 

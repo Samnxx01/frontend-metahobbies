@@ -36,6 +36,8 @@ export interface Route {
   updatedAt: string;
   permitidoPorHerencia?: boolean;
   cumpleJerarquiaHerencia?: boolean;
+  puedeEditar?: boolean;
+  puedeCambiarEstado?: boolean;
   puedeGestionarBaja?: boolean;
   accionBajaPermitida?: 'ELIMINAR' | 'DESACTIVAR' | 'NINGUNA' | string;
   accessType?:
@@ -104,7 +106,7 @@ export interface RouteMenuTagResponse {
 export interface CreateRouteDto {
   name: string;
   path: string;
-  component: string;
+  component?: string;
   layout: string;
   icon?: string;
   allowedRoles?: string[];
@@ -197,6 +199,8 @@ export interface RoutesResponse {
   success: boolean;
   message: string;
   total: number;
+  actorTipo?: string;
+  sourceCollection?: string | null;
   data: Route[];
 }
 
@@ -656,9 +660,13 @@ export const deleteTipoNodoRuta = async (id: string): Promise<{ success: boolean
 };
 
 // Eliminar una ruta
-export const deleteRoute = async (id: string): Promise<{ success: boolean; message: string }> => {
+export const deleteRoute = async (
+  id: string,
+  payload?: { accion?: 'ELIMINAR' | 'DESACTIVAR' }
+): Promise<{ success: boolean; message: string }> => {
   const response = await apiFetch(`${API_BASE_URL}/seguridad/rutas/inactivo/sistema/${id}`, {
     method: 'DELETE',
+    body: payload,
   });
   return response;
 };

@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import { getGovernedPublicHomePath } from '@/app/services/governedNavigation';
 
 export default function NotFound(): React.ReactElement {
     const navigate = useNavigate();
@@ -13,7 +14,7 @@ export default function NotFound(): React.ReactElement {
                     La ruta que intentas acceder no existe o fue movida.
                 </p>
             </div>
-            <Button onClick={() => navigate('/', { replace: true })}>
+            <Button onClick={() => navigate(getGovernedPublicHomePath(), { replace: true })}>
                 Ir al inicio
             </Button>
         </div>

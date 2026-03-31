@@ -4,6 +4,7 @@ import { useAuth } from '@/app/providers/AuthProvider';
 import { getAuthorizedRoutes, getPrivateHomeRoute } from '@/app/services/routeService';
 import { resolveCurrentRouteMenuTags } from '@/app/services/routesService';
 import { useLoading } from '@/app/providers/LoadingProvider';
+import { getGovernedPostLoginPath, getGovernedPublicHomePath } from '@/app/services/governedNavigation';
 
 import PublicLayout from '@/app/presentation/layouts/PublicLayout';
 import AuthLayout from '@/app/presentation/layouts/AuthLayout';
@@ -17,6 +18,8 @@ import Perfil from '@/app/presentation/pages/perfil/Perfil';
 import RecuperarContrasena from '@/app/presentation/pages/recuperar-contrasena/RecuperarContrasena';
 import RecuperarContrasenaToken from '@/app/presentation/pages/recuperar-contrasena/RecuperarContrasenaToken';
 import NotFound from '@/app/presentation/pages/not-found/NotFound';
+import Home from '@/app/presentation/pages/home/Home';
+import Login from '@/app/presentation/pages/login/Login';
 
 // ── Dynamic component map via Vite glob ───────────────────────────────────────
 // Escanea TODOS los .tsx de pages/ y components/admin/ automáticamente.
@@ -102,6 +105,12 @@ function HybridLayout(): ReactElement {
     return user ? <AdminLayout /> : <PublicLayout />;
 }
 
+// ── Root redirect ──────────────────────────────────────────────────────────────
+
+function RootRedirect({ user }: { user: any }): ReactElement {
+    return <Navigate to={user ? getGovernedPostLoginPath() : getGovernedPublicHomePath()} replace />;
+}
+
 // ── Admin redirect ─────────────────────────────────────────────────────────────
 
 function AdminEntryRedirect(): ReactElement {
@@ -114,10 +123,10 @@ function AdminEntryRedirect(): ReactElement {
             try {
                 const nextPath = await getPrivateHomeRoute();
                 if (!active) return;
-                setTargetPath(nextPath?.trim() || '/');
+                setTargetPath(nextPath?.trim() || getGovernedPostLoginPath());
             } catch (_error) {
                 if (!active) return;
-                setTargetPath('/');
+                setTargetPath(getGovernedPostLoginPath());
             }
         };
 
@@ -188,7 +197,16 @@ export default function LayoutRoutes(): ReactElement {
             }
         };
 
-        loadRoutes();
+        const handleRoutesUpdated = (): void => {
+            void loadRoutes();
+        };
+
+        void loadRoutes();
+        window.addEventListener('admin-routes-updated', handleRoutesUpdated);
+
+        return () => {
+            window.removeEventListener('admin-routes-updated', handleRoutesUpdated);
+        };
     }, [user]);
 
     if (routeLoadError) {
@@ -278,7 +296,11 @@ export default function LayoutRoutes(): ReactElement {
 
     return (
         <Routes>
+            <Route path="/" element={<RootRedirect user={user} />} />
+
             <Route element={<PublicLayout />}>
+                <Route path="public/render" element={<Navigate to={getGovernedPublicHomePath()} replace />} />
+                <Route path="public/render/home" element={<Home />} />
                 {authorizedRoutes.publicRoutes && renderRoutes(authorizedRoutes.publicRoutes)}
                 <Route path="membresia/*" element={<MembershipRoutes />} />
                 <Route path="cambiar-contrasena-provisional" element={<CambiarContrasenaProvisional />} />
@@ -289,6 +311,8 @@ export default function LayoutRoutes(): ReactElement {
             </Route>
 
             <Route element={<AuthLayout />}>
+                <Route path="public/render/login" element={<Login />} />
+                <Route path="public/render/view/login" element={<Login />} />
                 {authorizedRoutes.authRoutes && renderRoutes(authorizedRoutes.authRoutes)}
             </Route>
 
@@ -307,7 +331,7 @@ export default function LayoutRoutes(): ReactElement {
                 </Route>
             )}
 
-            <Route path="*" element={<NotFound />} />
+            <Route path="*" element={<Navigate to={getGovernedPublicHomePath()} replace />} />
         </Routes>
     );
 }

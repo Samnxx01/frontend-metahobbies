@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { getGovernedLoginPath } from '@/app/services/governedNavigation';
 
 // Lucide icons
 import { Loader2, AlertTriangle, UserPlus } from 'lucide-react';
@@ -113,7 +114,7 @@ export default function Registro(): React.ReactElement {
             toast.success('¡Registro exitoso! Redirigiendo a Login...');
 
             setTimeout(() => {
-                navigate('/public/render/view/login');
+                navigate(getGovernedLoginPath());
             }, 1000);
             return;
 
@@ -284,7 +285,7 @@ export default function Registro(): React.ReactElement {
                             <p className="text-sm text-center text-muted-foreground pt-2">
                                 ¿Ya tienes una cuenta?{' '}
                                 <Link 
-                                    to="/public/render/view/login" 
+                                    to={getGovernedLoginPath()} 
                                     className="text-primary font-semibold hover:underline transition-colors"
                                 >
                                     Inicia sesión aquí

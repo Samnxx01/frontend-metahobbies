@@ -26,6 +26,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import { Loader2, AlertTriangle } from 'lucide-react';
 import { apiFetch } from '@/app/services/api';
 import { getAdminHomeRoute } from '@/app/services/routeService';
+import { getGovernedPostLoginPath } from '@/app/services/governedNavigation';
 
 // --- Interfaces ---
 interface LoginFormData {
@@ -139,7 +140,7 @@ export default function Login(): React.ReactElement {
 
                 setTimeout(async () => {
                     const adminPath = await getAdminHomeRoute();
-                    navigate(adminPath ?? '/');
+                    navigate(adminPath ?? getGovernedPostLoginPath());
                 }, 1000);
                 return;
             } else {

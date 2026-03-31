@@ -42,9 +42,53 @@ interface MenuItem {
 
 interface MenuTreeItem extends MenuItem {
     id: string;
+    component: string;
     tipoNodo: string;
     children: MenuTreeItem[];
 }
+
+const pageModules = import.meta.glob(
+    [
+        '../../pages/**/*.tsx',
+        '../../components/admin/**/*.tsx',
+    ],
+    { eager: false }
+);
+
+const buildRegisteredComponentNames = (): Set<string> => {
+    const names = new Set<string>();
+
+    Object.keys(pageModules).forEach((filePath) => {
+        const match = filePath.match(/\/([^/]+)\.tsx$/);
+        if (match?.[1]) {
+            names.add(match[1]);
+        }
+    });
+
+    const aliases: Record<string, string> = {
+        ParametrizacionCatalogTenant: 'ParametrizacionCatologTenant',
+        TenantCorportativo: 'TenantCorporativo',
+        tenantCorportativo: 'TenantCorporativo',
+        tenantCorporativo: 'TenantCorporativo',
+        parametrizacionMenu: 'ParametrizacionMenu',
+        RouteUserMenuSettings: 'ParametrizacionMenu',
+        envioCorreos: 'EnvioCorreos',
+        ConfiguracionPerfil: 'Perfil',
+        DashboardAdmin: 'Dashboard',
+        Usuarios: 'GestionUsuarios',
+        Administracion: 'GestionUsuarios',
+    };
+
+    Object.entries(aliases).forEach(([alias, target]) => {
+        if (names.has(target)) {
+            names.add(alias);
+        }
+    });
+
+    return names;
+};
+
+const registeredComponentNames = buildRegisteredComponentNames();
 
 export default function AdminSidebar({ mobileOpen, setMobileOpen }: AdminSidebarProps): React.ReactElement {
     const navigate = useNavigate();
@@ -53,6 +97,31 @@ export default function AdminSidebar({ mobileOpen, setMobileOpen }: AdminSidebar
     const [dynamicTree, setDynamicTree] = useState<MenuTreeItem[]>([]);
     const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({});
 
+    const mapMenuNode = (node: AdminNavTreeItem): MenuTreeItem => ({
+        id: node.id,
+        label: node.label,
+        path: node.path,
+        component: node.component,
+        icon: iconByPath(node.path),
+        tipoNodo: node.tipoNodo,
+        children: (node.children || []).map(mapMenuNode)
+    });
+
+    const buildExpandedState = (nodes: MenuTreeItem[]): Record<string, boolean> => {
+        const expanded: Record<string, boolean> = {};
+
+        const visit = (items: MenuTreeItem[]): void => {
+            items.forEach((item) => {
+                if (item.children.length > 0) {
+                    expanded[item.id] = true;
+                    visit(item.children);
+                }
+            });
+        };
+
+        visit(nodes);
+        return expanded;
+    };
 
     const iconByPath = (path: string): React.ReactNode => {
         const normalized = normalizeRoutePath(path).toLowerCase();
@@ -82,47 +151,18 @@ export default function AdminSidebar({ mobileOpen, setMobileOpen }: AdminSidebar
                     const fallbackTree = await getAdminSidebarFallbackTree(actorTipo);
                     if (!active) return;
                     if (fallbackTree.length > 0) {
-                        const mappedFallbackTree: MenuTreeItem[] = fallbackTree.map(function mapFallbackNode(node): MenuTreeItem {
-                            return {
-                                id: node.id,
-                                label: node.label,
-                                path: node.path,
-                                icon: iconByPath(node.path),
-                                tipoNodo: node.tipoNodo,
-                                children: (node.children || []).map(mapFallbackNode)
-                            };
-                        });
+                        const mappedFallbackTree: MenuTreeItem[] = fallbackTree.map(mapMenuNode);
                         setDynamicTree(mappedFallbackTree);
+                        setExpandedNodes(buildExpandedState(mappedFallbackTree));
                     } else {
                         setDynamicTree([]);
+                        setExpandedNodes({});
                     }
-                    setExpandedNodes({});
                     return;
                 }
-                const mappedTree: MenuTreeItem[] = routes.map((route) => ({
-                    id: route.id,
-                    label: route.label,
-                    path: route.path,
-                    icon: iconByPath(route.path),
-                    tipoNodo: route.tipoNodo,
-                    children: (route.children || []).map(function mapChildren(child: AdminNavTreeItem): MenuTreeItem {
-                        return {
-                            id: child.id,
-                            label: child.label,
-                            path: child.path,
-                            icon: iconByPath(child.path),
-                            tipoNodo: child.tipoNodo,
-                            children: (child.children || []).map(mapChildren)
-                        };
-                    })
-                }));
-                // SUPERADMIN con herencia activa: mostrar solo rutas de BD.
+                const mappedTree: MenuTreeItem[] = routes.map(mapMenuNode);
                 setDynamicTree(mappedTree);
-                const initialExpanded: Record<string, boolean> = {};
-                mappedTree.forEach((node) => {
-                    if (node.children.length > 0) initialExpanded[node.id] = true;
-                });
-                setExpandedNodes(initialExpanded);
+                setExpandedNodes(buildExpandedState(mappedTree));
             } catch (error) {
                 console.error('Error cargando menu admin dinamico:', error);
             }
@@ -145,10 +185,17 @@ export default function AdminSidebar({ mobileOpen, setMobileOpen }: AdminSidebar
         setExpandedNodes((prev) => ({ ...prev, [id]: !prev[id] }));
     };
 
+    const expandNode = (id: string): void => {
+        setExpandedNodes((prev) => ({ ...prev, [id]: true }));
+    };
+
     const TreeNode = ({ node, level = 0 }: { node: MenuTreeItem; level?: number }): React.ReactElement => {
         const hasChildren = Array.isArray(node.children) && node.children.length > 0;
         const isExpanded = !!expandedNodes[node.id];
         const isActive = normalizeRoutePath(location.pathname) === normalizeRoutePath(node.path);
+        const nodeType = String(node.tipoNodo || '').trim().toUpperCase();
+        const componentName = String(node.component || '').trim();
+        const hasRegisteredComponent = componentName ? registeredComponentNames.has(componentName) : false;
         const linkClasses = `
             flex items-center justify-between p-3 mb-1 rounded-md cursor-pointer transition-all duration-200
             ${isActive
@@ -157,32 +204,63 @@ export default function AdminSidebar({ mobileOpen, setMobileOpen }: AdminSidebar
             }
         `;
 
-        const handleClick = (): void => {
+        const handleNavigate = (): void => {
             if (hasChildren) {
-                toggleNode(node.id);
-                return;
+                expandNode(node.id);
             }
-            if (node.path) {
+            if (node.path && hasRegisteredComponent) {
                 navigate(node.path);
                 if (setMobileOpen) setMobileOpen(false);
             }
         };
 
+        const isNavigable = !!String(node.path || '').trim() && hasRegisteredComponent;
+
         return (
             <div style={{ paddingLeft: `${level * 10}px` }}>
-                <div className={linkClasses} onClick={handleClick}>
-                    <div className="flex items-center space-x-3">
-                        <span className={`flex-shrink-0 w-5 h-5 ${isActive ? PRIMARY_COLOR_CLASS : 'text-muted-foreground'}`}>
-                            {node.icon}
-                        </span>
-                        <span className="text-sm">{node.label}</span>
+                {isNavigable ? (
+                    <a
+                        href={node.path}
+                        className={linkClasses}
+                        onClick={(e) => {
+                            e.preventDefault();
+                            handleNavigate();
+                        }}
+                    >
+                        <div className="flex items-center space-x-3">
+                            <span className={`flex-shrink-0 w-5 h-5 ${isActive ? PRIMARY_COLOR_CLASS : 'text-muted-foreground'}`}>
+                                {node.icon}
+                            </span>
+                            <span className="text-sm">{node.label}</span>
+                        </div>
+                        {hasChildren && (
+                            <span
+                                className="text-muted-foreground"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    toggleNode(node.id);
+                                }}
+                            >
+                                {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                            </span>
+                        )}
+                    </a>
+                ) : (
+                    <div className={linkClasses} onClick={() => { if (hasChildren) toggleNode(node.id); }}>
+                        <div className="flex items-center space-x-3">
+                            <span className={`flex-shrink-0 w-5 h-5 ${isActive ? PRIMARY_COLOR_CLASS : 'text-muted-foreground'}`}>
+                                {node.icon}
+                            </span>
+                            <span className="text-sm">{node.label}</span>
+                        </div>
+                        {hasChildren && (
+                            <span className="text-muted-foreground">
+                                {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                            </span>
+                        )}
                     </div>
-                    {hasChildren && (
-                        <span className="text-muted-foreground">
-                            {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                        </span>
-                    )}
-                </div>
+                )}
                 {hasChildren && isExpanded && (
                     <div>
                         {node.children.map((child) => (

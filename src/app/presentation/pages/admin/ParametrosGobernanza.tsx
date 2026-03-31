@@ -53,9 +53,156 @@ type HeredaGlobalOption = { id: string; label: string };
 type CatalogSelection = { vistas: string[]; acciones: string[] };
 type NodoRuta = { _id: string; name: string; path: string; tipoNodo?: string; tipoNodoId?: { codigo: string; nombre: string; order: number }; acciones?: Accion[]; children?: NodoRuta[] };
 type TenantCorporativoOption = { id: string; label: string; tenantGlobalId: string };
-type GenericSelectOption = { id: string; label: string; rol?: string };
+type GenericSelectOption = { id: string; label: string; rol?: string; meta?: Record<string, string | number | undefined> };
 type HeredaScope = 'tenantSuperAdmin' | 'tenantGlobal' | 'unknown';
 const TENANT_SUPERADMIN_SCOPE_PREFIX = '__tsa_scope__:';
+type VistaLoc = { suiteId: string; suiteName: string; moduloId: string; moduloName: string };
+type VistaItem = { id: string; label: string; path: string };
+
+const getTipoNodoLabel = (node: any): string =>
+  String(node?.tipoNodoId?.codigo || node?.tipoNodo || '').trim().toUpperCase();
+
+const esNodoFormularioLike = (node: any): boolean => {
+  const tipo = getTipoNodoLabel(node);
+  return tipo === 'FORMULARIO' || tipo === 'SUBFORMULARIO';
+};
+
+const collectFormularioLikeNodes = (nodes: any[] = []): any[] => {
+  const collected: any[] = [];
+  const walk = (items: any[] = []) => {
+    items.forEach((item) => {
+      if (!item) return;
+      if (esNodoFormularioLike(item)) {
+        collected.push(item);
+      }
+      if (Array.isArray(item.children) && item.children.length > 0) {
+        walk(item.children);
+      }
+    });
+  };
+  walk(nodes);
+  return collected;
+};
+
+const getModuloNodes = (suite: any): any[] =>
+  (suite?.children || []).filter((n: any) => !esNodoFormularioLike(n));
+
+// Recorre TODOS los descendientes del nodo (sin filtrar por tipoNodo)
+const collectAllNodes = (nodes: any[] = []): any[] => {
+  const collected: any[] = [];
+  const walk = (items: any[] = []) => {
+    items.forEach((item) => {
+      if (!item) return;
+      collected.push(item);
+      if (Array.isArray(item.children) && item.children.length > 0) {
+        walk(item.children);
+      }
+    });
+  };
+  walk(nodes);
+  return collected;
+};
+
+const getEntityId = (value: any): string =>
+  String(value?._id || value?.iud || value?.id || value || '').trim();
+
+const getEntityLabel = (value: any): string =>
+  String(
+    value?.label ||
+    value?.nombre ||
+    value?.name ||
+    value?.razon_social ||
+    value?.titulo ||
+    value?.correo ||
+    ''
+  ).trim();
+
+const buildVistaLocationMap = (
+  rutasJerarquia: NodoRuta[] = []
+): { byId: Map<string, VistaLoc>; byPath: Map<string, VistaLoc> } => {
+  const byId = new Map<string, VistaLoc>();
+  const byPath = new Map<string, VistaLoc>();
+
+  const reg = (id: string, path: string, loc: VistaLoc) => {
+    if (id) byId.set(id, loc);
+    if (path) byPath.set(path, loc);
+  };
+
+  rutasJerarquia.forEach((suite) => {
+    const suiteId = getEntityId(suite);
+    const suiteName = String(suite?.name || '').trim();
+    const suitePath = String((suite as any)?.path || '').trim();
+
+    // La suite misma puede ser una vista heredada (p. ej. "Inicio" en raíz)
+    reg(suiteId, suitePath, { suiteId, suiteName, moduloId: '', moduloName: '' });
+
+    (suite.children || []).forEach((child: any) => {
+      const childId = getEntityId(child);
+      const childName = String(child?.name || '').trim();
+      const childPath = String(child?.path || '').trim();
+
+      if (esNodoFormularioLike(child) || !child.children?.length) {
+        reg(childId, childPath, { suiteId, suiteName, moduloId: '', moduloName: '' });
+        return;
+      }
+
+      // Módulo con hijos → mapear cada descendiente y el módulo mismo
+      collectAllNodes(child.children || []).forEach((node: any) => {
+        const nodeId = getEntityId(node);
+        const nodePath = String(node?.path || '').trim();
+        reg(nodeId, nodePath, { suiteId, suiteName, moduloId: childId, moduloName: childName });
+      });
+      reg(childId, childPath, { suiteId, suiteName, moduloId: childId, moduloName: childName });
+    });
+  });
+
+  return { byId, byPath };
+};
+
+const buildGroupedVistas = (
+  vistasDetalle: VistaItem[],
+  byId: Map<string, VistaLoc>,
+  byPath?: Map<string, VistaLoc>
+) => {
+  type ModuloGroup = { moduloName: string; vistas: VistaItem[] };
+  type SuiteGroup = { suiteName: string; modulos: Map<string, ModuloGroup> };
+  const suiteGroups = new Map<string, SuiteGroup>();
+  const sinSuite: VistaItem[] = [];
+
+  vistasDetalle.forEach((vista) => {
+    const loc =
+      byId.get(vista.id) ||
+      (byPath && vista.path ? byPath.get(vista.path) : undefined);
+    if (!loc) {
+      sinSuite.push(vista);
+      return;
+    }
+    if (!suiteGroups.has(loc.suiteId)) {
+      suiteGroups.set(loc.suiteId, { suiteName: loc.suiteName, modulos: new Map() });
+    }
+    const sg = suiteGroups.get(loc.suiteId)!;
+    const mKey = loc.moduloId || '__direct__';
+    if (!sg.modulos.has(mKey)) {
+      sg.modulos.set(mKey, { moduloName: loc.moduloName || 'Directo', vistas: [] });
+    }
+    sg.modulos.get(mKey)!.vistas.push(vista);
+  });
+
+  return { suiteGroups, sinSuite };
+};
+
+const buildSuiteSummaryLabel = (suiteGroups: Map<string, { suiteName: string }>, sinSuiteCount = 0): string => {
+  const suiteNames = Array.from(suiteGroups.values())
+    .map((suite) => String(suite.suiteName || '').trim())
+    .filter(Boolean);
+  if (!suiteNames.length) {
+    return sinSuiteCount > 0 ? `Sin suite (${sinSuiteCount})` : 'Sin suites';
+  }
+  const top = suiteNames.slice(0, 2).join(', ');
+  const restantes = suiteNames.length - 2;
+  const suiteText = restantes > 0 ? `${top} (+${restantes})` : top;
+  return sinSuiteCount > 0 ? `${suiteText} | Sin suite:${sinSuiteCount}` : suiteText;
+};
 
 const METHOD_STYLE: Record<HttpMethod, string> = {
   GET: 'bg-blue-100 text-blue-700 border-blue-200',
@@ -206,7 +353,7 @@ const ENDPOINTS: EndpointSpec[] = [
     section: 'permisos',
     actor: 'tenantSuperAdmin',
     method: 'POST',
-    path: '/api/config/permisos/creacion/admin/tenant/global',
+    path: '/api/config/permisos/creacion/admin/superadmin/global',
     title: 'Asignar permisos heredados',
     description: 'Flujo para tenantSuperAdmin (DIOS).',
     fields: [
@@ -820,7 +967,7 @@ const ParametrosGobernanza: React.FC = () => {
         const rows = pickArray(rutasRes.value, ['data', 'rutas', 'items']);
         vistasResolved = rows
           .filter((r: any) => r?.estadoRuta !== false)
-          .map((r: any) => ({ id: String(r?._id || r?.id || ''), label: String(r?.name || r?.path || r?._id || ''), path: String(r?.path || '') }))
+          .map((r: any) => ({ id: String(r?._id || r?.id || ''), label: String(r?.label || r?.name || r?.path || r?._id || ''), path: String(r?.path || '') }))
           .filter((v: Vista) => v.id);
       }
 
@@ -857,7 +1004,7 @@ const ParametrosGobernanza: React.FC = () => {
             if (!id || map.has(id)) return;
             map.set(id, {
               id,
-              label: String(v?.name || v?.path || id),
+              label: String(v?.label || v?.name || v?.path || id),
               path: String(v?.path || ''),
             });
           });
@@ -874,7 +1021,7 @@ const ParametrosGobernanza: React.FC = () => {
           const rowsFallback = pickArray(fallbackRutas, ['data', 'items', 'rutas']);
           const mapped = rowsFallback
             .filter((r: any) => r?.estadoRuta !== false)
-            .map((r: any) => ({ id: String(r?._id || r?.iud || r?.id || ''), label: String(r?.name || r?.path || r?._id || ''), path: String(r?.path || '') }))
+            .map((r: any) => ({ id: String(r?._id || r?.iud || r?.id || ''), label: String(r?.label || r?.name || r?.path || r?._id || ''), path: String(r?.path || '') }))
             .filter((v: Vista) => v.id);
           if (mapped.length) vistasResolved = mapped;
         } catch (_error) {
@@ -1106,9 +1253,14 @@ const ParametrosGobernanza: React.FC = () => {
     if (!tg) return [];
 
     if (actorEsTenantSuperAdmin()) {
-      // 1. Buscar herenciaGlobal directa del tenant seleccionado:
-      //    registros con tenantGlobal === tg y vistas/acciones propias (sin campo heredaGlobal).
-      const herenciaDirecta = herenciasUsuario.filter((h: any) => {
+      // 1. Buscar herenciaGlobal directa del tenant seleccionado.
+      //    Combina herenciasUsuario + herenciasExistentesPorTG[tg] (cargadas dinámicamente al seleccionar TG).
+      const herenciasDelTG: any[] = [
+        ...herenciasUsuario,
+        ...(herenciasExistentesPorTG[tg] || []),
+      ];
+
+      const herenciaDirecta = herenciasDelTG.filter((h: any) => {
         const hTg = String(h?.tenantGlobal?._id || h?.tenantGlobal || '').trim();
         const tieneVistas = Array.isArray(h?.vistas) && h.vistas.length > 0;
         const tieneAcciones = Array.isArray(h?.acciones) && h.acciones.length > 0;
@@ -1118,7 +1270,6 @@ const ParametrosGobernanza: React.FC = () => {
 
       if (herenciaDirecta.length > 0) {
         // El tenant ya tiene herencia parametrizada — mostrar esa (y solo esa)
-        // El label usa el nombre del tenantGlobal destino, no el rol del asignador
         const tgInfo = tenantGlobales.find((t) => String(t?.id || '').trim() === tg);
         const tgNombre = tgInfo ? String(tgInfo.label).split('|')[0].trim() : tg.slice(-6);
         const seen = new Set<string>();
@@ -1134,15 +1285,36 @@ const ParametrosGobernanza: React.FC = () => {
         return opts;
       }
 
-      // 2. El tenant NO tiene herencia directa → mostrar reglas disponibles como fallback
+      // 2. El tenant NO tiene herencia → mostrar reglas parametrizadas sobre su rol.
+      //    Coincidencia primaria: rolesMabs.rol del TG. Secundaria: _id del TG en generacionGlovallNvlRoles.
+      const tgInfo = tenantGlobales.find((t) => String(t?.id || '').trim() === tg);
+      const tgRolNombre = tgInfo ? String(tgInfo.label).split('|')[0].trim().toUpperCase() : '';
+
       const reglasParaTg: HeredaGlobalOption[] = [];
+      const seenReglas = new Set<string>();
       Object.entries(ruleCatalog).forEach(([reglaId, rule]: [string, any]) => {
-        const tgsRegla = (Array.isArray(rule?.generacionGlovallNvlRoles) ? rule.generacionGlovallNvlRoles : [])
-          .map((x: any) => String(x?._id || x || '').trim());
-        if (tgsRegla.includes(tg)) {
+        const nvlRoles = Array.isArray(rule?.generacionGlovallNvlRoles) ? rule.generacionGlovallNvlRoles : [];
+        const coincide = nvlRoles.some((x: any) => {
+          const xId = String(x?._id || x || '').trim();
+          const xRol = String(x?.rolesMabs?.rol || (Array.isArray(x?.rolesMabs) ? x.rolesMabs[0]?.rol : '') || '').trim().toUpperCase();
+          // Coincide si el ID del TG coincide, O si el rol del TG coincide
+          return xId === tg || (tgRolNombre && xRol === tgRolNombre);
+        });
+        if (coincide && !seenReglas.has(reglaId)) {
+          seenReglas.add(reglaId);
           const vCount = Array.isArray(rule?.recurso) ? rule.recurso.length : 0;
           const aCount = Array.isArray(rule?.accionesUsu) ? rule.accionesUsu.length : 0;
-          reglasParaTg.push({ id: reglaId, label: `Regla parametrizada | Vistas:${vCount} | Acciones:${aCount}` });
+          // El modelo reglas no tiene campo nombre — se deriva del rolesMabs.rol del primer tenantGlobal asignado
+          const tenantRef = Array.isArray(rule?.generacionGlovallNvlRoles) ? rule.generacionGlovallNvlRoles[0] : null;
+          const rolNombre = String(
+            tenantRef?.rolesMabs?.rol ||
+            (Array.isArray(tenantRef?.rolesMabs) ? tenantRef.rolesMabs[0]?.rol : '') ||
+            rule?.nombre || rule?.name || rule?.titulo || ''
+          ).trim();
+          const label = rolNombre
+            ? `${rolNombre} | Vistas:${vCount} | Acciones:${aCount}`
+            : `Regla | Vistas:${vCount} | Acciones:${aCount}`;
+          reglasParaTg.push({ id: reglaId, label });
         }
       });
       if (reglasParaTg.length > 0) return reglasParaTg;
@@ -1474,46 +1646,74 @@ const ParametrosGobernanza: React.FC = () => {
 
       const qs = new URLSearchParams();
       if (tg) qs.set('tenantGlobal', tg);
+      if (tg) qs.set('incluirSuperAdmin', 'false');
       qs.set('soloActivos', 'true');
       const res: any = await apiFetch(
         `/api/config/permisos/creacion/admin/tenant/global?${qs.toString()}`,
         { method: 'GET' }
       );
-      const rows = pickArray(res, ['data', 'items', 'herencias']);
+      const rows = pickArray(res, ['data', 'items', 'herencias']).filter((row: any) => {
+        if (!tg) return true;
+        const rowTg = getEntityId(row?.tenantGlobal);
+        return rowTg === tg;
+      });
       const byId: Record<string, any> = {};
       const actorTgScope = String(tenantGlobalActor?.tenantGlobalId || '').trim();
       const esTgScope = !isTsaScope && !!actorTgScope;
+      const { byId: vistaLocationMap, byPath: vistaByPath } = buildVistaLocationMap(rutasJerarquia);
       const options = rows
         .map((row: any) => {
-          const id = String(row?._id || row?.iud || '').trim();
+          const id = getEntityId(row);
           if (!id) return null;
           byId[id] = row;
           const vCount = Array.isArray(row?.vistas) ? row.vistas.length : 0;
           const aCount = Array.isArray(row?.acciones) ? row.acciones.length : 0;
-          const tc = String(row?.tenantCorporativo?._id || row?.tenantCorporativo || '').trim();
-          const tcSuffix = tc ? ` | TC:${tc.slice(-6)}` : '';
+          // Omitir herencias sin vistas parametrizadas
+          if (vCount === 0) return null;
+          const tc = getEntityId(row?.tenantCorporativo);
+          const tcLabel = getEntityLabel(row?.tenantCorporativo);
+          const tgId = getEntityId(row?.tenantGlobal);
+          const tgFromState = tenantGlobales.find((t) => String(t.id || '').trim() === tgId);
+          const tgLabelBase = tgFromState
+            ? String(tgFromState.label || '').trim().split('|')[0].trim()
+            : getEntityLabel(row?.tenantGlobal);
+          const tgDisplay = tgLabelBase || tgId.slice(-8) || id.slice(-8);
+          const vistasDetalle: VistaItem[] = (Array.isArray(row?.vistas) ? row.vistas : [])
+            .map((vista: any) => ({
+              id: getEntityId(vista),
+              label: String(vista?.name || vista?.path || getEntityId(vista)).trim(),
+              path: String(vista?.path || '').trim(),
+            }))
+            .filter((vista: VistaItem) => vista.id);
+          const { suiteGroups, sinSuite } = buildGroupedVistas(vistasDetalle, vistaLocationMap, vistaByPath);
+          const suiteSummary = buildSuiteSummaryLabel(suiteGroups, sinSuite.length);
+          const tcDisplay = tcLabel || (tc ? tc.slice(-6) : '');
           if (esTgScope) {
-            // Para scope TG: mostrar nombre del tenantGlobal + conteos
-            const tgId = String(row?.tenantGlobal?._id || row?.tenantGlobal || '').trim();
-            const tgFromState = tenantGlobales.find((t) => String(t.id || '').trim() === tgId);
-            const tgName = tgFromState
-              ? String(tgFromState.label || '').trim().split('|')[0].trim()
-              : String(row?.tenantGlobal?.label || row?.tenantGlobal?.nombre || row?.tenantGlobal?.name || '').trim();
-            const tgDisplay = tgName || tgId.slice(-8) || id.slice(-8);
-            return { id, label: `${tgDisplay}${tcSuffix} | Vistas:${vCount} | Acciones:${aCount}` };
+            return {
+              id,
+              label: `${tgDisplay}${tcDisplay ? ` | TC:${tcDisplay}` : ''} | Suites:${suiteSummary} | V:${vCount} A:${aCount}`,
+              meta: {
+                suiteSummary,
+                tenantGlobalLabel: tgDisplay,
+                tenantCorporativoLabel: tcDisplay,
+              },
+            };
           }
-          // Para scope SA: mostrar fuente + datos completos
           const fuente = String(row?.fuenteHerencia || 'tenantGlobal').trim();
           const rol = String(row?.rolId?.rol || row?.rolId?._id || row?.rolId || 'SIN_ROL').trim();
           const usuario = String(row?.usuarioId?.nombre || row?.usuarioId?.name || row?.usuarioId?._id || '-').trim();
-          const rutasPreview = (Array.isArray(row?.vistas) ? row.vistas : [])
-            .slice(0, 2)
-            .map((v: any) => String(v?.name || v?.path || v?._id || '').trim())
-            .filter(Boolean)
-            .join(', ');
-          const rutasTxt = rutasPreview ? ` | Rutas:${rutasPreview}` : '';
-          const fuenteTxt = fuente === 'tenantSuperAdmin' ? '[SUPERADMIN]' : '[TENANT]';
-          return { id, label: `${fuenteTxt} ${id}${tcSuffix} | Rol:${rol} | Usu:${usuario} | V:${vCount} A:${aCount}${rutasTxt}` };
+          const fuenteTxt = fuente === 'tenantSuperAdmin' ? '[SUPERADMIN]' : fuente === 'regla' ? '[REGLA PARAM]' : '[TENANT]';
+          return {
+            id,
+            label: `${fuenteTxt} ${tgDisplay}${tcDisplay ? ` | TC:${tcDisplay}` : ''} | Suites:${suiteSummary} | Rol:${rol} | V:${vCount} A:${aCount}`,
+            meta: {
+              suiteSummary,
+              tenantGlobalLabel: tgDisplay,
+              tenantCorporativoLabel: tcDisplay,
+              fuenteHerencia: fuenteTxt,
+              usuario,
+            },
+          };
         })
         .filter(Boolean) as GenericSelectOption[];
 
@@ -1565,13 +1765,13 @@ const ParametrosGobernanza: React.FC = () => {
     const row = byId[selectedHerenciaId];
     if (!row) return null;
 
-    const vistasDetalle = (Array.isArray(row?.vistas) ? row.vistas : [])
+    const vistasDetalle: VistaItem[] = (Array.isArray(row?.vistas) ? row.vistas : [])
       .map((vista: any) => ({
-        id: String(vista?._id || vista || '').trim(),
-        label: String(vista?.name || vista?.path || vista?._id || vista || '').trim(),
+        id: getEntityId(vista),
+        label: String(vista?.name || vista?.path || getEntityId(vista)).trim(),
         path: String(vista?.path || '').trim(),
       }))
-      .filter((vista: { id: string; label: string; path: string }) => vista.id);
+      .filter((v: VistaItem) => v.id);
 
     const accionesDetalle = (Array.isArray(row?.acciones) ? row.acciones : [])
       .map((accion: any) => ({
@@ -1579,78 +1779,132 @@ const ParametrosGobernanza: React.FC = () => {
         label: String(accion?.etiquetas || accion?.method || accion?._id || accion || '').trim(),
         method: String(accion?.method || '').trim(),
       }))
-      .filter((accion: { id: string; label: string; method: string }) => accion.id);
+      .filter((a: { id: string }) => a.id);
+
     const puedeSeleccionarVista = endpointId === 'perm-admin-tenant-global-desactivar';
     const vistaObjetivoId = getFieldValue(endpointId, 'vistaObjetivoId').trim();
+
+    // ── Agrupar vistas por suite → módulo (con fallback por path) ──
+    const { byId: _locById, byPath: _locByPath } = buildVistaLocationMap(rutasJerarquia);
+    const { suiteGroups, sinSuite } = buildGroupedVistas(vistasDetalle, _locById, _locByPath);
+
+    const suiteSummary = buildSuiteSummaryLabel(suiteGroups as Map<string, { suiteName: string }>, sinSuite.length);
+    const tgId = getEntityId(row?.tenantGlobal);
+    const tgFromState = tenantGlobales.find((tenant) => String(tenant.id || '').trim() === tgId);
+    const tgLabel = (tgFromState
+      ? String(tgFromState.label || '').trim().split('|')[0].trim()
+      : getEntityLabel(row?.tenantGlobal)) || tgId || '-';
+    const tcId = getEntityId(row?.tenantCorporativo);
+    const tcLabel = getEntityLabel(row?.tenantCorporativo) || tcId || '-';
+    const fuenteHerencia = String(row?.fuenteHerencia || row?.fuente || 'tenantGlobal').trim();
+    const rolHerencia = String(row?.rolId?.rol || row?.rolId?.name || row?.rolId || '-').trim();
+    const usuarioHerencia = String(
+      row?.usuarioId?.nombre || row?.usuarioId?.name || row?.usuarioId?.correo || row?.usuarioId?._id || '-'
+    ).trim();
+
+    const renderVistaItem = (vista: VistaItem) => (
+      <label
+        key={vista.id}
+        className={`flex items-start gap-2 rounded border px-2 py-1.5 text-xs ${puedeSeleccionarVista ? 'cursor-pointer' : ''} ${puedeSeleccionarVista && vistaObjetivoId === vista.id ? 'border-rose-300 bg-rose-100' : 'border-slate-100 bg-slate-50'}`}
+      >
+        {puedeSeleccionarVista && (
+          <input
+            type="radio"
+            className="mt-0.5 shrink-0"
+            name={`${endpointId}-vista-objetivo`}
+            checked={vistaObjetivoId === vista.id}
+            onChange={() => setFieldValue(endpointId, 'vistaObjetivoId', vista.id)}
+            onClick={() => { if (vistaObjetivoId === vista.id) setFieldValue(endpointId, 'vistaObjetivoId', ''); }}
+          />
+        )}
+        <div>
+          <p className="font-medium text-slate-800">{vista.label}</p>
+          {vista.path && <p className="text-slate-400">{vista.path}</p>}
+        </div>
+      </label>
+    );
 
     return (
       <div className="md:col-span-2 rounded-lg border border-rose-100 bg-rose-50/50 p-3">
         <div className="mb-3 flex flex-wrap gap-2">
           <Badge variant="outline">Vistas: {vistasDetalle.length}</Badge>
           <Badge variant="outline">Acciones: {accionesDetalle.length}</Badge>
+          <Badge variant="outline">Suites: {Array.from(suiteGroups.values()).length || 0}</Badge>
+        </div>
+        <div className="mb-3 grid gap-2 rounded-md border border-slate-200 bg-white p-3 text-xs text-slate-600 md:grid-cols-2">
+          <div className="flex flex-wrap gap-2">
+            <Badge variant="secondary">TG: {tgLabel}</Badge>
+            {tcId ? <Badge variant="secondary">TC: {tcLabel}</Badge> : null}
+            <Badge variant="secondary">Fuente: {fuenteHerencia}</Badge>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Badge variant="outline">Rol: {rolHerencia}</Badge>
+            <Badge variant="outline">Usuario: {usuarioHerencia}</Badge>
+          </div>
+          <div className="md:col-span-2">
+            <span className="font-medium text-slate-700">Jerarquia:</span> {suiteSummary}
+          </div>
         </div>
         <div className="grid gap-3 md:grid-cols-2">
+          {/* ── Panel Vistas agrupadas por Suite → Módulo ── */}
           <div className="rounded-md border border-slate-200 bg-white p-3">
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Vistas parametrizadas</p>
-            {vistasDetalle.length ? (
-              <div className="max-h-48 space-y-2 overflow-auto pr-1">
-                {vistasDetalle.map((vista: { id: string; label: string; path: string }) => (
-                  <label
-                    key={vista.id}
-                    className={`block rounded border px-2 py-1.5 ${puedeSeleccionarVista && vistaObjetivoId === vista.id ? 'border-rose-300 bg-rose-100' : 'border-slate-100 bg-slate-50'} ${puedeSeleccionarVista ? 'cursor-pointer' : ''}`}
-                  >
-                    {puedeSeleccionarVista ? (
-                      <div className="mb-1 flex items-center gap-2">
-                        <input
-                          type="radio"
-                          name={`${endpointId}-vista-objetivo`}
-                          checked={vistaObjetivoId === vista.id}
-                          onChange={() => setFieldValue(endpointId, 'vistaObjetivoId', vista.id)}
-                          onClick={() => {
-                            if (vistaObjetivoId === vista.id) {
-                              setFieldValue(endpointId, 'vistaObjetivoId', '');
-                            }
-                          }}
-                        />
-                        <span className="text-xs font-medium text-rose-700">Seleccionar para quitar solo esta vista</span>
-                      </div>
-                    ) : null}
-                    <p className="text-sm font-medium text-slate-800">{vista.label}</p>
-                    {vista.path ? <p className="text-xs text-slate-400">{vista.path}</p> : null}
-                  </label>
-                ))}
-              </div>
-            ) : (
+            {vistasDetalle.length === 0 ? (
               <p className="text-xs text-slate-500">Sin vistas parametrizadas.</p>
+            ) : (
+              <div className="max-h-64 overflow-auto space-y-3 pr-1">
+                {/* Vistas agrupadas por suite */}
+                {Array.from(suiteGroups.entries()).map(([suiteId, sg]) => (
+                  <div key={suiteId}>
+                    <p className="mb-1 rounded bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-700">{sg.suiteName}</p>
+                    {Array.from(sg.modulos.entries()).map(([mKey, mg]) => (
+                      <div key={mKey} className="ml-2 mb-1">
+                        {mg.moduloName && mKey !== '__direct__' && (
+                          <p className="mb-0.5 text-xs font-semibold text-slate-500 pl-1">{mg.moduloName}</p>
+                        )}
+                        <div className="ml-2 space-y-1">
+                          {mg.vistas.map(renderVistaItem)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+                {/* Vistas sin suite */}
+                {sinSuite.length > 0 && (
+                  <div>
+                    <p className="mb-1 rounded bg-amber-50 px-2 py-0.5 text-xs font-bold text-amber-700">Sin suite asignada</p>
+                    <div className="ml-2 space-y-1">
+                      {sinSuite.map(renderVistaItem)}
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
-            {puedeSeleccionarVista ? (
+            {puedeSeleccionarVista && (
               <div className="mt-2 space-y-1">
                 {vistaObjetivoId ? (
                   <div className="flex items-center justify-between gap-2 rounded bg-amber-50 border border-amber-200 px-2 py-1">
-                    <p className="text-xs text-amber-700 font-medium">Modo: quitar solo esa vista (DELETE)</p>
-                    <button
-                      type="button"
-                      className="text-xs text-amber-700 underline shrink-0"
-                      onClick={() => setFieldValue(endpointId, 'vistaObjetivoId', '')}
-                    >
+                    <p className="text-xs text-amber-700 font-medium">Modo: quitar solo esa vista</p>
+                    <button type="button" className="text-xs text-amber-700 underline shrink-0" onClick={() => setFieldValue(endpointId, 'vistaObjetivoId', '')}>
                       Desactivar herencia completa
                     </button>
                   </div>
                 ) : (
                   <p className="text-xs text-rose-600 font-medium">Modo: desactivar herencia completa (DELETE)</p>
                 )}
-                <p className="text-xs text-slate-400">Haz clic en el radio seleccionado para deseleccionarlo.</p>
+                <p className="text-xs text-slate-400">Clic en el radio seleccionado para deseleccionar.</p>
               </div>
-            ) : null}
+            )}
           </div>
+          {/* ── Panel Acciones ── */}
           <div className="rounded-md border border-slate-200 bg-white p-3">
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Acciones parametrizadas</p>
             {accionesDetalle.length ? (
-              <div className="max-h-48 space-y-2 overflow-auto pr-1">
+              <div className="max-h-64 space-y-1 overflow-auto pr-1">
                 {accionesDetalle.map((accion: { id: string; label: string; method: string }) => (
                   <div key={accion.id} className="rounded border border-slate-100 bg-slate-50 px-2 py-1.5">
                     <p className="text-sm font-medium text-slate-800">{accion.label}</p>
-                    {accion.method ? <p className="text-xs text-slate-500">{accion.method}</p> : null}
+                    {accion.method && <p className="text-xs text-slate-500">{accion.method}</p>}
                   </div>
                 ))}
               </div>
@@ -1750,13 +2004,22 @@ const ParametrosGobernanza: React.FC = () => {
         const vistaById = new Map(vistas.map((v) => [v.id, v]));
         const accionById = new Map(acciones.map((a) => [a.id, a]));
 
-        const vistasCatalogo = recursoIds.map((id: string) => vistaById.get(id) || { id, label: id, path: '' });
+        // Solo incluir vistas que existan en el estado activo (estadoRuta: true en backend)
+        // Los IDs que no tienen match en vistaById son rutas inactivas u huérfanas → el backend las rechaza
+        const vistasCatalogo = recursoIds
+          .map((id: string) => vistaById.get(id))
+          .filter(Boolean) as Vista[];
         const accionesCatalogo = accionIds.length
           ? accionIds.map((id: string) => accionById.get(id) || { id, label: id, method: '' })
           : [];
 
         if (vistasCatalogo.length) {
           return { vistasCatalogo, accionesCatalogo };
+        }
+
+        // La regla tiene vistas pero todas están inactivas → informar sin catálogo
+        if (recursoIds.length > 0) {
+          return { vistasCatalogo: [], accionesCatalogo: [] };
         }
       }
 
@@ -2393,11 +2656,12 @@ const ParametrosGobernanza: React.FC = () => {
           const suiteNodo = rutasJerarquia.find((s) => s._id === suiteId);
           if (suiteNodo) {
             const vistasSet = new Set<string>(body.vistasSeleccionadas as string[]);
-            body.vistasPorModulo = (suiteNodo.children || [])
-              .filter((m) => String(m.tipoNodo || '').toUpperCase() !== 'FORMULARIO')
+            body.vistasPorModulo = getModuloNodes(suiteNodo)
               .map((modulo) => ({
                 moduloId: modulo._id,
-                vistas: (modulo.children || []).map((f) => String(f._id)).filter((fid) => vistasSet.has(fid)),
+                vistas: collectFormularioLikeNodes(modulo.children || [])
+                  .map((f) => String(f._id))
+                  .filter((fid) => vistasSet.has(fid)),
               }))
               .filter((m) => m.vistas.length > 0);
           }
@@ -3203,6 +3467,8 @@ const ParametrosGobernanza: React.FC = () => {
   const renderHerenciaSelectionBuilder = (endpoint: EndpointSpec) => {
     const selected = getCatalogSelection(endpoint.id);
     const { vistasCatalogo, accionesCatalogo } = getPermisosCatalog(endpoint.id);
+    const heredaSelVal = getFieldValue(endpoint.id, 'heredaGlobal').trim();
+    const esReglaSeleccionada = !!heredaSelVal && !!ruleCatalog[heredaSelVal];
     return (
       <div className="rounded-xl border border-emerald-100 bg-white/80 p-3">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -3213,43 +3479,11 @@ const ParametrosGobernanza: React.FC = () => {
               size="sm"
               variant="outline"
               onClick={() => {
-                const suiteId = suiteSelByEndpoint[endpoint.id] || '';
-                const suiteNodo = suiteId ? rutasJerarquia.find((s) => s._id === suiteId) : null;
-                const esSA = actorEsTenantSuperAdmin();
-                const allowedIds = new Set(vistasCatalogo.map((v) => v.id));
-                // IDs que tienen nodo real en el árbol Suite → Módulo → Formulario
-                const formularioIdsEnArbol = new Set<string>();
-                rutasJerarquia.forEach((suite) => {
-                  (suite.children || [])
-                    .filter((n) => String(n.tipoNodo || '').toUpperCase() !== 'FORMULARIO')
-                    .forEach((modulo) => {
-                      (modulo.children || []).forEach((form) => {
-                        formularioIdsEnArbol.add(String(form._id));
-                      });
-                    });
+                // "Todas" selecciona TODO el catálogo de la regla/herencia sin importar suite activa
+                setCatalogSelectionFor(endpoint.id, {
+                  vistas: vistasCatalogo.map((v) => v.id),
+                  acciones: accionesCatalogo.map((a) => a.id),
                 });
-
-                if (suiteNodo) {
-                  // Seleccionar solo formularios de esta suite que estén en la herencia
-                  const vistasEnSuite = (suiteNodo.children || [])
-                    .filter((n) => String(n.tipoNodo || '').toUpperCase() !== 'FORMULARIO')
-                    .flatMap((modulo) => modulo.children || [])
-                    .map((f) => String(f._id))
-                    .filter((fid) => (esSA || allowedIds.has(fid)) && formularioIdsEnArbol.has(fid));
-                  setCatalogSelectionFor(endpoint.id, {
-                    vistas: vistasEnSuite,
-                    acciones: accionesCatalogo.map((a) => a.id),
-                  });
-                } else {
-                  // Sin suite: seleccionar solo los que tienen nodo en el árbol
-                  const vistasConNodo = vistasCatalogo
-                    .map((v) => v.id)
-                    .filter((id) => formularioIdsEnArbol.has(id));
-                  setCatalogSelectionFor(endpoint.id, {
-                    vistas: vistasConNodo,
-                    acciones: accionesCatalogo.map((a) => a.id),
-                  });
-                }
               }}
             >
               Todas
@@ -3260,27 +3494,24 @@ const ParametrosGobernanza: React.FC = () => {
               variant="default"
               className="bg-emerald-600 text-white hover:bg-emerald-700"
               onClick={() => {
-                // Sincronizar: recorre TODO el árbol (todas las suites) sin filtro de suite
-                // Selecciona todos los formularios que tengan nodo Suite→Módulo→Formulario
-                // y estén dentro del catálogo de la herencia (o sin restricción si SA)
+                // Sincronizar: recorre TODO el árbol y selecciona vistas que estén en el catálogo (sin filtro de tipoNodo)
                 const esSA = actorEsTenantSuperAdmin();
                 const allowedIds = new Set(vistasCatalogo.map((v) => v.id));
+                const hasCatalogIds = allowedIds.size > 0;
                 const todasLasVistas: string[] = [];
                 rutasJerarquia.forEach((suite) => {
-                  (suite.children || [])
-                    .filter((n) => String(n.tipoNodo || '').toUpperCase() !== 'FORMULARIO')
-                    .forEach((modulo) => {
-                      (modulo.children || []).forEach((form) => {
-                        const fid = String(form._id);
-                        if (esSA || allowedIds.has(fid)) {
-                          todasLasVistas.push(fid);
-                        }
-                      });
+                  getModuloNodes(suite).forEach((modulo) => {
+                    collectAllNodes(modulo.children || []).forEach((node) => {
+                      const fid = String(node._id);
+                      const incluir = esSA
+                        ? (hasCatalogIds ? allowedIds.has(fid) : esNodoFormularioLike(node))
+                        : allowedIds.has(fid);
+                      if (incluir) todasLasVistas.push(fid);
                     });
+                  });
                 });
-                const unicos = [...new Set(todasLasVistas)];
                 setCatalogSelectionFor(endpoint.id, {
-                  vistas: unicos,
+                  vistas: [...new Set(todasLasVistas)],
                   acciones: accionesCatalogo.map((a) => a.id),
                 });
               }}
@@ -3311,89 +3542,141 @@ const ParametrosGobernanza: React.FC = () => {
                 const suiteId = suiteSelByEndpoint[endpoint.id] || '';
                 const suiteNodo = suiteId ? rutasJerarquia.find((s) => s._id === suiteId) : null;
 
-                // Para tenantSuperAdmin el frontend no restringe vistas —
-                // el backend ya valida el techo con validarTechoPermisos.
-                // Para otros actores se filtra por las vistas de su herencia.
                 const esSA = actorEsTenantSuperAdmin();
                 const allowedVistaIds: Set<string> = esSA
-                  ? new Set<string>() // sin restricción (tamaño 0 = bypass en el filtro de abajo)
+                  ? new Set<string>()
                   : new Set(vistasCatalogo.map((v) => v.id));
-                const vistaPermitida = (fid: string) =>
-                  esSA ? true : allowedVistaIds.has(fid);
 
-                if (suiteNodo) {
-                  const modulos = (suiteNodo.children || []).filter(
-                    (n) => String(n.tipoNodo || '').toUpperCase() !== 'FORMULARIO'
-                  );
-                  const totalFormularios = modulos.reduce(
-                    (acc, m) => acc + (m.children || []).filter((f) => vistaPermitida(String(f._id))).length,
+                const catalogIds = new Set(vistasCatalogo.map((v) => v.id));
+                const hasCatalogFilter = catalogIds.size > 0;
+                // IDs de rutas activas (fuente de verdad del frontend)
+                const vistaIdsActivos = new Set(vistas.map((v) => v.id));
+
+                // Nodos visibles en el módulo:
+                // - Si hay regla: todos los nodos activos del árbol (habilitados si están en catálogo)
+                // - Si hay catálogo sin regla: nodos en catálogo o FORMULARIO/SUBFORMULARIO
+                // - Sin catálogo: solo FORMULARIO/SUBFORMULARIO
+                const getFormulariosDeModulo = (modulo: any) =>
+                  collectAllNodes(modulo.children || []).filter((f) => {
+                    const fid = String(f._id);
+                    if (!esSA && !allowedVistaIds.has(fid)) return false;
+                    if (esReglaSeleccionada) {
+                      // Mostrar cualquier nodo que esté activo en el árbol de rutas
+                      return vistaIdsActivos.has(fid) || esNodoFormularioLike(f);
+                    }
+                    return esNodoFormularioLike(f) || (hasCatalogFilter && catalogIds.has(fid));
+                  });
+
+                // Renderiza la jerarquía módulo → formularios de una suite
+                const renderSuiteTree = (suite: any) => {
+                  const modulos = getModuloNodes(suite);
+                  const totalCatalogEnSuite = modulos.reduce(
+                    (acc, m) => acc + getFormulariosDeModulo(m).filter((f) => !hasCatalogFilter || catalogIds.has(String(f._id))).length,
                     0
+                  );
+                  if (modulos.length === 0) return null;
+                  return (
+                    <div key={suite._id} className="mb-2">
+                      {!suiteNodo && (
+                        <p className="mb-1 text-xs font-bold text-slate-600 bg-slate-100 rounded px-2 py-1">
+                          {suite.name} ({totalCatalogEnSuite})
+                        </p>
+                      )}
+                      <div className="space-y-1">
+                        {modulos.map((modulo) => {
+                          const formularios = getFormulariosDeModulo(modulo);
+                          if (formularios.length === 0) return null;
+                          const moduleKey = `${endpoint.id}::${modulo._id}`;
+                          const isExpanded = expandedModulos.has(moduleKey);
+                          const selectedCount = formularios.filter((f) => selected.vistas.includes(String(f._id))).length;
+                          return (
+                            <div key={modulo._id} className="rounded-md border border-slate-200 bg-white">
+                              <button
+                                type="button"
+                                className="flex w-full items-center justify-between px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                                onClick={() =>
+                                  setExpandedModulos((prev) => {
+                                    const next = new Set(prev);
+                                    next.has(moduleKey) ? next.delete(moduleKey) : next.add(moduleKey);
+                                    return next;
+                                  })
+                                }
+                              >
+                                <span>{modulo.name}</span>
+                                <span className="text-slate-400 font-normal">{selectedCount}/{formularios.length} {isExpanded ? '▲' : '▼'}</span>
+                              </button>
+                              {isExpanded && (
+                                <div className="border-t border-slate-100 p-2 space-y-1">
+                                  {formularios.map((form) => {
+                                    const fid = String(form._id);
+                                    // En regla: habilitado si catálogo vacío (sin restricción) O si el nodo está en el catálogo
+                                    const enCatalogo = esReglaSeleccionada
+                                      ? (catalogIds.size === 0 || catalogIds.has(fid))
+                                      : (!hasCatalogFilter || catalogIds.has(fid));
+                                    return (
+                                      <label
+                                        key={fid}
+                                        className={`flex cursor-pointer items-center gap-2 text-xs ${!enCatalogo ? 'opacity-40 cursor-not-allowed' : ''}`}
+                                      >
+                                        <input
+                                          type="checkbox"
+                                          disabled={!enCatalogo}
+                                          checked={selected.vistas.includes(fid)}
+                                          onChange={(e) => toggleCatalogItem(endpoint.id, 'vistas', fid, e.target.checked)}
+                                        />
+                                        <span>
+                                          {form.name}
+                                          {getTipoNodoLabel(form) === 'SUBFORMULARIO' ? ' [Sub]' : ''}
+                                          {form.path ? <span className="text-slate-400"> ({form.path})</span> : ''}
+                                          {!enCatalogo && <span className="ml-1 text-slate-300">[fuera de regla]</span>}
+                                        </span>
+                                      </label>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                };
+
+                // Suite seleccionada: mostrar solo esa suite
+                if (suiteNodo) {
+                  const totalFormularios = getModuloNodes(suiteNodo).reduce(
+                    (acc, m) => acc + getFormulariosDeModulo(m).filter((f) => !hasCatalogFilter || catalogIds.has(String(f._id))).length, 0
                   );
                   return (
                     <>
                       <p className="mb-2 text-xs font-semibold text-slate-700">
                         Vistas ({selected.vistas.length}/{totalFormularios}) — {suiteNodo.name}
                       </p>
-                      <div className="max-h-56 overflow-auto space-y-1">
-                        {modulos.length === 0 ? (
-                          <p className="text-xs text-slate-500 px-2">Esta suite no tiene módulos disponibles.</p>
-                        ) : (
-                          modulos.map((modulo) => {
-                            const formularios = (modulo.children || []).filter((f) =>
-                              vistaPermitida(String(f._id))
-                            );
-                            const moduleKey = `${endpoint.id}::${modulo._id}`;
-                            const isExpanded = expandedModulos.has(moduleKey);
-                            const selectedCount = formularios.filter((f) =>
-                              selected.vistas.includes(String(f._id))
-                            ).length;
-                            return (
-                              <div key={modulo._id} className="rounded-md border border-slate-200 bg-white">
-                                <button
-                                  type="button"
-                                  className="flex w-full items-center justify-between px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                                  onClick={() =>
-                                    setExpandedModulos((prev) => {
-                                      const next = new Set(prev);
-                                      next.has(moduleKey) ? next.delete(moduleKey) : next.add(moduleKey);
-                                      return next;
-                                    })
-                                  }
-                                >
-                                  <span>{modulo.name}</span>
-                                  <span className="text-slate-400 font-normal">{selectedCount}/{formularios.length} {isExpanded ? '▲' : '▼'}</span>
-                                </button>
-                                {isExpanded && (
-                                  <div className="border-t border-slate-100 p-2 space-y-1">
-                                    {formularios.length === 0 ? (
-                                      <p className="text-xs text-slate-400 px-1">Sin formularios en tu herencia.</p>
-                                    ) : (
-                                      formularios.map((form) => {
-                                        const fid = String(form._id);
-                                        return (
-                                          <label key={fid} className="flex cursor-pointer items-center gap-2 text-xs">
-                                            <input
-                                              type="checkbox"
-                                              checked={selected.vistas.includes(fid)}
-                                              onChange={(e) => toggleCatalogItem(endpoint.id, 'vistas', fid, e.target.checked)}
-                                            />
-                                            <span>{form.name} {form.path ? <span className="text-slate-400">({form.path})</span> : ''}</span>
-                                          </label>
-                                        );
-                                      })
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })
-                        )}
+                      <div className="max-h-64 overflow-auto space-y-1">
+                        {renderSuiteTree(suiteNodo) || <p className="text-xs text-slate-500 px-2">Esta suite no tiene módulos disponibles.</p>}
                       </div>
                     </>
                   );
                 }
 
-                // Sin suite seleccionada: lista plana original
+                // Regla seleccionada sin suite → mostrar TODAS las suites con jerarquía completa
+                if (esReglaSeleccionada) {
+                  const suitesConNodos = rutasJerarquia.filter((s) => Array.isArray(s.children) && s.children.length > 0);
+                  const totalCatalog = vistasCatalogo.length;
+                  return (
+                    <>
+                      <p className="mb-2 text-xs font-semibold text-slate-700">
+                        Vistas ({selected.vistas.length}/{totalCatalog}) — Todas las suites
+                      </p>
+                      <div className="max-h-72 overflow-auto space-y-2">
+                        {suitesConNodos.map((suite) => renderSuiteTree(suite))}
+                      </div>
+                    </>
+                  );
+                }
+
+                // Sin suite y sin regla: lista plana del catálogo
                 return (
                   <>
                     <p className="mb-2 text-xs font-semibold text-slate-700">Vistas ({selected.vistas.length}/{vistasCatalogo.length})</p>
@@ -3870,13 +4153,12 @@ const ParametrosGobernanza: React.FC = () => {
                 const selectedHereda = getFieldValue(endpoint.id, field.name).trim();
                 const { vistasCatalogo: vcSuite } = selectedHereda ? getPermisosCatalog(endpoint.id) : { vistasCatalogo: [] };
                 const vistaIdsEnHerencia = new Set(vcSuite.map((v) => v.id));
-                // Solo suites que tengan al menos un formulario presente en la herencia seleccionada
+                // Suites que contengan al menos un nodo (cualquier tipo) cuyo _id esté en las vistas de la herencia
                 const suitesConJerarquia = rutasJerarquia.filter((s) => {
                   if (!Array.isArray(s.children) || s.children.length === 0) return false;
                   if (!selectedHereda) return false;
-                  return s.children.some((modulo) =>
-                    (modulo.children || []).some((form) => vistaIdsEnHerencia.has(String(form._id)))
-                  );
+                  if (vistaIdsEnHerencia.size === 0) return false;
+                  return collectAllNodes(s.children).some((node) => vistaIdsEnHerencia.has(String(node._id)));
                 });
                 const suiteDisabled = !esSuperAdmin || !tsaSelected || !selectedHereda;
                 return (
@@ -4052,6 +4334,7 @@ const ParametrosGobernanza: React.FC = () => {
               <p className="mt-1 text-xs text-slate-500">
                 Se usa la herencia como base de vistas y acciones para parametrizar.
               </p>
+              {renderHerenciaAsociadaDetalle(endpoint.id)}
             </div>
           );
         }
@@ -4292,12 +4575,17 @@ const ParametrosGobernanza: React.FC = () => {
           const heredaSelSA = getFieldValue(endpoint.id, 'heredaGlobal').trim();
           const { vistasCatalogo: vcSuite } = heredaSelSA ? getPermisosCatalog(endpoint.id) : { vistasCatalogo: [] };
           const vistaIdsEnHerencia = new Set(vcSuite.map((v) => v.id));
+          // Suites filtradas por vistas de la herencia/regla seleccionada.
+          // Si la herencia es una regla y las vistas no resolvieron IDs aún → mostrar todas las suites con hijos.
+          const esReglaSeleccionada = heredaSelSA && !!ruleCatalog[heredaSelSA];
           const suitesConJerarquia = rutasJerarquia.filter((s) => {
             if (!Array.isArray(s.children) || s.children.length === 0) return false;
             if (!heredaSelSA) return false;
-            return s.children.some((modulo) =>
-              (modulo.children || []).some((form) => vistaIdsEnHerencia.has(String(form._id)))
-            );
+            // Regla seleccionada → mostrar TODAS las suites con hijos (jerarquía completa)
+            if (esReglaSeleccionada) return true;
+            // Herencia directa → filtrar solo suites que contengan vistas del catálogo
+            if (vistaIdsEnHerencia.size === 0) return false;
+            return collectAllNodes(s.children).some((node) => vistaIdsEnHerencia.has(String(node._id)));
           });
           const suiteDisabled = !tsaSelected || !heredaSelSA;
           return (
@@ -4356,10 +4644,10 @@ const ParametrosGobernanza: React.FC = () => {
                     {!tsaSelected
                       ? 'Selecciona tenantGlobal primero'
                       : !heredaSelSA
-                      ? 'Selecciona primero una herencia'
+                      ? 'Selecciona primero una herencia o regla'
                       : suitesConJerarquia.length
                       ? 'Selecciona suite para filtrar vistas'
-                      : 'Sin suites con jerarquía disponibles'}
+                      : 'Sin suites disponibles en el árbol de rutas'}
                   </option>
                   {suitesConJerarquia.map((suite) => (
                     <option key={suite._id} value={suite._id}>{suite.name}</option>
@@ -4367,7 +4655,9 @@ const ParametrosGobernanza: React.FC = () => {
                 </select>
                 <p className="mt-1 text-xs text-slate-500">
                   {!heredaSelSA
-                    ? 'Elige primero la herencia para habilitar el filtro por suite.'
+                    ? 'Elige primero la herencia o regla para habilitar el filtro por suite.'
+                    : esReglaSeleccionada && vistaIdsEnHerencia.size === 0
+                    ? 'Mostrando todas las suites (la regla aún no tiene vistas resueltas en catálogo).'
                     : 'Filtra las vistas por suite y módulo según la herencia seleccionada.'}
                 </p>
               </div>

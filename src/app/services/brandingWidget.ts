@@ -1,4 +1,5 @@
 import { apiFetch } from '@/app/services/api';
+import { persistBrandingCache } from '@/app/services/brandingCache';
 
 export interface BrandingPalette {
   [key: string]: string | undefined;
@@ -20,13 +21,30 @@ export interface BrandingConfig {
     fontWeight?: string;
     extras?: Record<string, string>;
   };
-  widgets?: Record<string, unknown>;
+  widgets?: {
+    routes?: Array<Record<string, unknown>>;
+    navigation?: {
+      login?: { path?: string; enabled?: boolean };
+      postLogin?: { path?: string; enabled?: boolean };
+      logout?: { path?: string; enabled?: boolean };
+      register?: { path?: string; enabled?: boolean };
+      forgotPassword?: { path?: string; enabled?: boolean };
+      publicHome?: { path?: string; enabled?: boolean };
+      allowedPaths?: string[];
+    };
+    [key: string]: unknown;
+  };
   tokens?: Record<string, string>;
 }
 
 interface BrandingResponse {
   ok: boolean;
   branding?: BrandingConfig;
+}
+
+export interface BrandingScopeParams {
+  tenantGlobalId?: string | null;
+  guardarEnRegisUsu?: boolean;
 }
 
 export interface AccionBackend {
@@ -48,11 +66,27 @@ export const obtenerBrandingPublico = async (): Promise<BrandingConfig | null> =
     return null;
   }
 
+  persistBrandingCache(response.branding);
   return response.branding;
 };
 
-export const obtenerBrandingPrivado = async (): Promise<BrandingConfig | null> => {
-  const response = (await apiFetch('/api/config/parametrizacion/widget/branding', {
+const buildBrandingScopeQuery = (params?: BrandingScopeParams): string => {
+  const query = new URLSearchParams();
+  const tenantGlobalId = String(params?.tenantGlobalId || '').trim();
+  if (tenantGlobalId) {
+    query.set('tenantGlobalId', tenantGlobalId);
+  }
+
+  if (params?.guardarEnRegisUsu) {
+    query.set('guardarEnRegisUsu', 'true');
+  }
+
+  const qs = query.toString();
+  return qs ? `?${qs}` : '';
+};
+
+export const obtenerBrandingPrivado = async (params?: BrandingScopeParams): Promise<BrandingConfig | null> => {
+  const response = (await apiFetch(`/api/config/parametrizacion/widget/branding${buildBrandingScopeQuery(params)}`, {
     method: 'GET',
     useAuth: true
   })) as BrandingResponse | null;
@@ -61,11 +95,15 @@ export const obtenerBrandingPrivado = async (): Promise<BrandingConfig | null> =
     return null;
   }
 
+  persistBrandingCache(response.branding);
   return response.branding;
 };
 
-export const guardarBrandingPrivado = async (branding: BrandingConfig): Promise<BrandingConfig | null> => {
-  const response = (await apiFetch('/api/config/parametrizacion/widget/branding', {
+export const guardarBrandingPrivado = async (
+  branding: BrandingConfig,
+  params?: BrandingScopeParams
+): Promise<BrandingConfig | null> => {
+  const response = (await apiFetch(`/api/config/parametrizacion/widget/branding${buildBrandingScopeQuery(params)}`, {
     method: 'PUT',
     useAuth: true,
     body: branding
@@ -75,6 +113,7 @@ export const guardarBrandingPrivado = async (branding: BrandingConfig): Promise<
     return null;
   }
 
+  persistBrandingCache(response.branding);
   return response.branding;
 };
 

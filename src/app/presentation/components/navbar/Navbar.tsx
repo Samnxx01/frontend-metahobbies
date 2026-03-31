@@ -19,6 +19,7 @@ import ThemeToggle from "@/app/presentation/components/common/ThemeToggle";
 
 import { apiFetch } from "@/app/services/api";
 import { getPublicNavigationRoutes, getMenuUsuarioRoutes, MenuUsuarioItem } from "@/app/services/routeService";
+import { getGovernedLoginPath, getGovernedLogoutPath } from "@/app/services/governedNavigation";
 
 import type { NavbarProps } from '@/types/components';
 
@@ -141,7 +142,7 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
         });
         if (result.isConfirmed) {
             logout();
-            navigate('/public/render/view/login');
+            navigate(getGovernedLogoutPath());
             toast.success('Sesión cerrada correctamente');
         }
     };
@@ -293,7 +294,7 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
             <div className="hidden md:block"><ThemeToggle /></div>
             <div className="hidden md:block relative">{renderCartDropdown}</div>
             {user ? renderProfileDropdown : (
-                <Button variant="default" onClick={() => navigate("/public/render/view/login")} className="h-9 px-4 text-sm font-semibold bg-black hover:bg-gray-800 text-white">
+                <Button variant="default" onClick={() => navigate(getGovernedLoginPath())} className="h-9 px-4 text-sm font-semibold bg-black hover:bg-gray-800 text-white">
                     <LogIn className="mr-2 h-4 w-4" /> Ingresar
                 </Button>
             )}
@@ -362,7 +363,7 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
                             </>
                         ) : (
                             <SheetClose asChild>
-                                <Button variant="default" onClick={() => navigate('/public/render/view/login')} className="w-full justify-start font-semibold py-3 rounded-xl bg-black hover:bg-gray-800 text-white">
+                                <Button variant="default" onClick={() => navigate(getGovernedLoginPath())} className="w-full justify-start font-semibold py-3 rounded-xl bg-black hover:bg-gray-800 text-white">
                                     <LogIn className="mr-3 h-4 w-4" /> Ingresar
                                 </Button>
                             </SheetClose>

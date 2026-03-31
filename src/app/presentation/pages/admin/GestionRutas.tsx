@@ -9,6 +9,7 @@ import {
   getTiposNodoRuta,
   getTiposNodoRutaOpciones,
   getPerfilesCorporativosParaCodigo,
+  getTiposNodoCodigos,
   getCatalogoCodigos,
   createCatalogoCodigo,
   getAccessTypes,
@@ -30,6 +31,7 @@ import {
   type AccionOption,
   type PerfilCorporativoItem,
   type CatalogoCodigoItem,
+  type CodigoNodoItem,
 } from '@/app/services/routesService';
 import { swalFire } from '@/lib/sweetalert';
 import { normalizeRoutePath } from '@/app/services/routePathNormalizer';
@@ -105,6 +107,14 @@ interface SubFormFormState {
   acciones: string[];
 }
 
+interface NodeTypeCodeOption {
+  iud: string;
+  codigo: string;
+  source: 'catalogo' | 'codigoNodo';
+  tenantCorporativoId?: string | null;
+  perfilCorporativoId?: string | null;
+}
+
 export default function GestionRutas(): React.ReactElement {
   const [routes, setRoutes] = useState<Route[]>([]);
   const [nodeTypes, setNodeTypes] = useState<TipoNodoRuta[]>([]);
@@ -123,12 +133,13 @@ export default function GestionRutas(): React.ReactElement {
   const [savingNodeTypeCode, setSavingNodeTypeCode] = useState<boolean>(false);
   const [accessTypeSubmitting, setAccessTypeSubmitting] = useState<boolean>(false);
   const [editingAccessTypeId, setEditingAccessTypeId] = useState<string>('');
-  const [useCustomComponent, setUseCustomComponent] = useState<boolean>(false);
   const [creationType, setCreationType] = useState<NodeTypeRef>('');
   const [selectedSuiteIdForForm, setSelectedSuiteIdForForm] = useState<string>('');
   const [expandedTableNodes, setExpandedTableNodes] = useState<Record<string, boolean>>({});
   const [nameFilter, setNameFilter] = useState<string>('');
   const [nodeTypeFilter, setNodeTypeFilter] = useState<string>('ALL');
+  const [routesActorTipo, setRoutesActorTipo] = useState<string>('UNKNOWN');
+  const [routesSourceCollection, setRoutesSourceCollection] = useState<string>('');
   const [formularioPadreId, setFormularioPadreId] = useState<string>('');
   const [isSubFormModalOpen, setIsSubFormModalOpen] = useState<boolean>(false);
   const [subFormSubmitting, setSubFormSubmitting] = useState<boolean>(false);
@@ -164,13 +175,13 @@ export default function GestionRutas(): React.ReactElement {
   });
   const [nodeTypeCodeTouched, setNodeTypeCodeTouched] = useState<boolean>(false);
   const [nodeTypeCodeDraft, setNodeTypeCodeDraft] = useState<string>('');
-  const [savedNodeTypeCode, setSavedNodeTypeCode] = useState<{ iud: string; codigo: string } | null>(null);
+  const [savedNodeTypeCode, setSavedNodeTypeCode] = useState<NodeTypeCodeOption | null>(null);
   const [editingNodeTypeId, setEditingNodeTypeId] = useState<string | null>(null);
   const [editingNodeTypeOrder, setEditingNodeTypeOrder] = useState<number>(0);
   const [perfilesCorporativos, setPerfilesCorporativos] = useState<PerfilCorporativoItem[]>([]);
   const [loadingPerfilesCorporativos, setLoadingPerfilesCorporativos] = useState<boolean>(false);
   const [selectedPerfilCorporativoId, setSelectedPerfilCorporativoId] = useState<string>('');
-  const [catalogoCodigoOptions, setCatalogoCodigoOptions] = useState<CatalogoCodigoItem[]>([]);
+  const [catalogoCodigoOptions, setCatalogoCodigoOptions] = useState<NodeTypeCodeOption[]>([]);
 const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(false);
   const [accessTypeForm, setAccessTypeForm] = useState<AccessTypeFormState>({
     accessType: '',
@@ -186,7 +197,8 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
     tipoNodoId: '',
     padreId: null,
     heredaDeRuta: null,
-    mostrarEnSidebar: true,
+    mostrarEnNavbarPublico: false,
+    mostrarEnSidebar: false,
     mostrarEnMenuUsuario: false,
     tiquetaNavb: null,
     menuUsuarioLabel: '',
@@ -231,6 +243,19 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
     if (!parent) return null;
     if (typeof parent === 'string') return parent;
     return String(parent?._id || parent?.iud || '');
+  };
+  const getRouteIdentitySet = (route?: Route | null): Set<string> => {
+    const values = [
+      String(route?._id || '').trim(),
+      String(route?.iud || '').trim(),
+      resolveRouteId(route as Route),
+    ].filter(Boolean);
+    return new Set(values);
+  };
+  const findRouteByAnyId = (id: string | null | undefined): Route | undefined => {
+    const normalized = String(id || '').trim();
+    if (!normalized) return undefined;
+    return routes.find((route) => getRouteIdentitySet(route).has(normalized));
   };
 
   const getTypeByCode = (code?: string | null): TipoNodoRuta | undefined =>
@@ -288,16 +313,6 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
       .trim()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '');
-
-  const toPascalCase = (value: string): string =>
-    String(value || '')
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^a-zA-Z0-9 ]+/g, ' ')
-      .trim()
-      .split(/\s+/)
-      .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
-      .join('');
 
   const normalizePath = (value: string): string => {
     if (!value) return '';
@@ -359,8 +374,22 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
     return joinPath(parentPath, leaf);
   };
 
+  const resolveHierarchyPathForDraft = (
+    name: string,
+    parentId: string | null | undefined,
+    nodeOrder: number,
+    fallbackPath = ''
+  ): string => {
+    if (nodeOrder <= suiteOrder) {
+      return fallbackPath ? normalizePath(fallbackPath) : buildPathByContext(name, null, nodeOrder);
+    }
+
+    const derived = buildPathByContext(name, parentId, nodeOrder);
+    return derived || '';
+  };
+
   const resolveTypeIdForRoute = (route: Route): string => {
-    const routeTypeId = String(route?.tipoNodoId || '').trim();
+    const routeTypeId = String((route as any)?.tipoNodoId?._id || (route as any)?.tipoNodoId?.iud || route?.tipoNodoId || '').trim();
     if (routeTypeId && getTypeById(routeTypeId)) return routeTypeId;
     const byCode = getTypeByCode(String(route?.tipoNodo || ''));
     return String(byCode ? resolveNodeTypeId(byCode) : '');
@@ -370,6 +399,9 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
     const byId = getTypeById(resolveTypeIdForRoute(route));
     if (byId?.nombre) return String(byId.nombre);
     if (byId?.codigo) return String(byId.codigo);
+    const populatedTipo = (route as any)?.tipoNodoId;
+    if (populatedTipo?.nombre) return String(populatedTipo.nombre);
+    if (populatedTipo?.codigo) return String(populatedTipo.codigo);
     return String(route?.tipoNodo || '-');
   };
 
@@ -382,14 +414,28 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
     const ownOrder = getRouteTypeOrder(route);
     if (ownOrder === formularioOrder) return true;
 
-    const ownTypeText = String(route?.tipoNodo || '').trim().toUpperCase();
+    const ownTypeText = String(route?.tipoNodo || route?.tipoNodoId?.codigo || '').trim().toUpperCase();
     if (ownTypeText === 'FORMULARIO') return true;
 
     const parentId = resolveParentId(route);
     if (!parentId) return false;
 
-    const parentRoute = routes.find((item) => resolveRouteId(item) === String(parentId));
-    return !!parentRoute && getRouteTypeOrder(parentRoute) === Number(moduloType?.order ?? 2);
+    const parentRoute = findRouteByAnyId(parentId);
+    if (!parentRoute) return false;
+
+    const parentOrder = getRouteTypeOrder(parentRoute);
+    const parentTypeText = String(parentRoute?.tipoNodo || parentRoute?.tipoNodoId?.codigo || '').trim().toUpperCase();
+    if (parentOrder === Number(moduloType?.order ?? 2) || parentTypeText === 'MODULO') return true;
+
+    // Fallback para datos inconsistentes: si el nodo tiene padre y abuelo, y el abuelo luce como suite,
+    // tratar este nodo como formulario aunque su tipo no haya quedado perfectamente normalizado.
+    const grandParentRoute = findRouteByAnyId(resolveParentId(parentRoute));
+    if (!grandParentRoute) return false;
+    const grandParentOrder = getRouteTypeOrder(grandParentRoute);
+    const grandParentTypeText = String(
+      grandParentRoute?.tipoNodo || grandParentRoute?.tipoNodoId?.codigo || ''
+    ).trim().toUpperCase();
+    return grandParentOrder === Number(suiteType?.order ?? 1) || grandParentTypeText === 'SUITE';
   };
   const subFormParentOptions = useMemo(
     () =>
@@ -402,7 +448,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
 
   const getRouteNameById = (id: string | null | undefined): string => {
     if (!id) return '-';
-    const found = routes.find((route) => resolveRouteId(route) === String(id));
+    const found = findRouteByAnyId(String(id));
     return found?.name || '-';
   };
 
@@ -415,7 +461,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
       hierarchyNames.unshift(String(current.name || '').trim() || 'Sin nombre');
       const parentId = resolveParentId(current);
       if (!parentId) break;
-      current = routes.find((item) => resolveRouteId(item) === String(parentId));
+      current = findRouteByAnyId(parentId);
       safety += 1;
     }
 
@@ -465,9 +511,62 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
     const action = String((route as any)?.accionBajaPermitida || '').trim().toUpperCase();
     if (action === 'ELIMINAR' || action === 'DESACTIVAR') return true;
 
-    // Fallback para no ocultar el icono cuando el backend aun no envia flags.
-    return true;
+    const actorTipo = String(routesActorTipo || '').trim().toUpperCase();
+    if (actorTipo === 'SUPERADMIN' || actorTipo === 'GLOBAL') return true;
+    return false;
   };
+
+  const resolveCanEditRoute = (route: Route): boolean => {
+    const raw = (route as any)?.puedeEditar;
+    if (typeof raw === 'boolean') return raw;
+    if (typeof raw === 'number') return raw === 1;
+    if (typeof raw === 'string') {
+      const normalized = raw.trim().toLowerCase();
+      if (normalized === 'true' || normalized === '1') return true;
+      if (normalized === 'false' || normalized === '0') return false;
+    }
+
+    return String(routesActorTipo || '').trim().toUpperCase() !== 'CORPORATIVO';
+  };
+
+  const resolveCanToggleRouteStatus = (route: Route): boolean => {
+    const raw = (route as any)?.puedeCambiarEstado;
+    if (typeof raw === 'boolean') return raw;
+    if (typeof raw === 'number') return raw === 1;
+    if (typeof raw === 'string') {
+      const normalized = raw.trim().toLowerCase();
+      if (normalized === 'true' || normalized === '1') return true;
+      if (normalized === 'false' || normalized === '0') return false;
+    }
+
+    return String(routesActorTipo || '').trim().toUpperCase() !== 'CORPORATIVO';
+  };
+
+  const routesScopeSummary = useMemo(() => {
+    const actor = String(routesActorTipo || '').trim().toUpperCase();
+    const source = String(routesSourceCollection || '').trim();
+    if (actor === 'SUPERADMIN') {
+      return 'Scope activo: tenantSuperAdmin. El datatable se renderiza desde rutasSeguridad.';
+    }
+    if (actor === 'GLOBAL') {
+      return `Scope activo: tenantGlobal. El datatable se renderiza por herenciaGlobal${source ? ` (${source})` : ''}.`;
+    }
+    if (actor === 'CORPORATIVO') {
+      return `Scope activo: tenantCorporativo. El datatable se renderiza por herenciaCorporativa${source ? ` (${source})` : ''}.`;
+    }
+    if (source) {
+      return `Fuente de rutas actual: ${source}.`;
+    }
+    return '';
+  }, [routesActorTipo, routesSourceCollection]);
+
+  const filteredNodeTypeCodeOptions = useMemo(() => {
+    if (!selectedPerfilCorporativoId) return catalogoCodigoOptions;
+    return catalogoCodigoOptions.filter((item) => {
+      if (item.source === 'catalogo') return true;
+      return String(item.perfilCorporativoId || '') === String(selectedPerfilCorporativoId || '');
+    });
+  }, [catalogoCodigoOptions, selectedPerfilCorporativoId]);
 
   const getParentOptions = (typeId: string): Route[] => {
     const currentLevel = Number(getTypeById(typeId)?.order ?? 0);
@@ -480,29 +579,6 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
       return resolveRouteId(route) !== editingId;
     });
   };
-  const resolveSuiteIdForCurrentForm = (): string => {
-    if (isSuiteType) return '';
-    if (isModuloType) return String(formData.padreId || '');
-    if (isFormularioType) return String(selectedSuiteIdForForm || '');
-    if (isSubFormularioType) {
-      const formulario = routes.find((r) => resolveRouteId(r) === String(formData.padreId || ''));
-      const modulo = routes.find((r) => resolveRouteId(r) === String(resolveParentId(formulario as Route) || ''));
-      return String(resolveParentId(modulo as Route) || '');
-    }
-    return '';
-  };
-  const resolveSuiteComponentForCurrentForm = (): string => {
-    const suiteId = resolveSuiteIdForCurrentForm();
-    if (!suiteId) return '';
-    const suite = routes.find((route) => resolveRouteId(route) === suiteId);
-    return String(suite?.component || '');
-  };
-  const resolveSuiteComponentById = (suiteId: string): string => {
-    if (!suiteId) return '';
-    const suite = routes.find((route) => resolveRouteId(route) === String(suiteId));
-    return String(suite?.component || '');
-  };
-
   const suiteOptions = useMemo(
     () => routes.filter((route) => getRouteTypeOrder(route) === Number(suiteType?.order ?? 1)),
     [routes, nodeTypes]
@@ -510,11 +586,26 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
 
   const moduloOptionsBySuite = useMemo(
     () => routes.filter((route) => {
-      if (getRouteTypeOrder(route) !== Number(moduloType?.order ?? 2)) return false;
       if (!selectedSuiteIdForForm) return false;
       const editingId = editingRoute ? resolveRouteId(editingRoute) : '';
       if (editingId && resolveRouteId(route) === editingId) return false;
-      return String(resolveParentId(route) || '') === String(selectedSuiteIdForForm);
+      const selectedSuite = findRouteByAnyId(selectedSuiteIdForForm);
+      if (!selectedSuite) return false;
+      const selectedSuiteIds = getRouteIdentitySet(selectedSuite);
+      const parentRoute = findRouteByAnyId(resolveParentId(route));
+      if (!parentRoute) return false;
+      const parentMatchesSuite = Array.from(getRouteIdentitySet(parentRoute)).some((id) => selectedSuiteIds.has(id));
+      if (!parentMatchesSuite) return false;
+
+      const ownOrder = getRouteTypeOrder(route);
+      const ownTypeText = String(route?.tipoNodo || route?.tipoNodoId?.codigo || '').trim().toUpperCase();
+
+      if (ownOrder === Number(moduloType?.order ?? 2)) return true;
+      if (ownTypeText === 'MODULO') return true;
+
+      // Fallback para datos viejos/inconsistentes:
+      // si cuelga directo de la suite seleccionada, permitirlo como candidato a modulo.
+      return true;
     }),
     [routes, selectedSuiteIdForForm, nodeTypes, editingRoute]
   );
@@ -733,12 +824,16 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
       setLoading(true);
       const response = await getAllRoutes();
       if (response.success) {
-        setRoutes(response.data);
+        setRoutes(Array.isArray(response.data) ? response.data : []);
+        setRoutesActorTipo(String(response.actorTipo || 'UNKNOWN'));
+        setRoutesSourceCollection(String(response.sourceCollection || ''));
       } else {
         toast.error('Error loading routes');
       }
     } catch (error) {
       console.error('Error loading routes:', error);
+      setRoutesActorTipo('UNKNOWN');
+      setRoutesSourceCollection('');
       toast.error('Error loading routes');
     } finally {
       setLoading(false);
@@ -812,7 +907,8 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
       tipoNodoId: String(resolvedType ? resolveNodeTypeId(resolvedType) : ''),
       padreId: null,
       heredaDeRuta: null,
-      mostrarEnSidebar: true,
+      mostrarEnNavbarPublico: false,
+      mostrarEnSidebar: false,
       mostrarEnMenuUsuario: false,
       tiquetaNavb: null,
       menuUsuarioLabel: '',
@@ -820,7 +916,6 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
       accessType: [],
       acciones: [],
     });
-    setUseCustomComponent(false);
   };
 
   const openRouteModal = (route?: Route, forceTypeId?: string): void => {
@@ -839,22 +934,19 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
         const modulo = routes.find((r) => resolveRouteId(r) === String(resolveParentId(formulario as Route) || ''));
         suiteForForm = resolveParentId(modulo as Route) || '';
       }
-      const inheritedFromSuite = resolveSuiteComponentById(suiteForForm);
-      const isCustomForNonSuite = routeTypeOrder > Number(suiteType?.order ?? 1)
-        && String(route.component || '').trim() !== String(inheritedFromSuite || '').trim();
       setSelectedSuiteIdForForm(suiteForForm);
-      setUseCustomComponent(isCustomForNonSuite);
       setEditingRoute(route);
       setFormData({
         name: route.name,
-        path: route.path,
+        path: resolveHierarchyPathForDraft(route.name, resolveParentId(route), routeTypeOrder, route.path),
         component: route.component,
         layout: route.layout,
         tipoNodo: String(getTypeById(routeTypeId)?.codigo || route.tipoNodo || ''),
         tipoNodoId: routeTypeId,
         padreId: resolveParentId(route),
         heredaDeRuta: resolveInheritedRouteId(route),
-        mostrarEnSidebar: route?.mostrarEnSidebar !== false,
+        mostrarEnNavbarPublico: route?.mostrarEnNavbarPublico === true,
+        mostrarEnSidebar: route?.mostrarEnSidebar === true,
         mostrarEnMenuUsuario: route?.mostrarEnMenuUsuario === true,
         tiquetaNavb: route?.tiquetaNavb || null,
         menuUsuarioLabel: route?.menuUsuarioLabel || '',
@@ -867,7 +959,6 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
       setCreationType(typeId);
       setEditingRoute(null);
       setSelectedSuiteIdForForm('');
-      setUseCustomComponent(false);
       resetRouteForm(typeId);
     }
     setIsModalOpen(true);
@@ -877,7 +968,6 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
     setIsModalOpen(false);
     setEditingRoute(null);
     setSelectedSuiteIdForForm('');
-    setUseCustomComponent(false);
     setFormularioPadreId('');
     resetRouteForm();
   };
@@ -908,27 +998,13 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
       return;
     }
 
-    const resolvedComponent = (() => {
-      // Suite: usa su propio componente (PascalCase del nombre, auto-asignado)
-      if (isSuiteType) return String(formData.component || '').trim();
-      // Modulo: sin componente propio (hereda de suite en tiempo de render)
-      if (isModuloType) return null;
-      const custom = String(formData.component || '').trim();
-      if (useCustomComponent && custom) return custom;
-      return String(resolveSuiteComponentForCurrentForm() || '').trim();
-    })();
-
-    if (!isSuiteType && !isModuloType && !resolvedComponent) {
-      toast.error('Componente no disponible. Configura primero el componente en la suite.');
-      return;
-    }
-
     const selectedAccessTypeIds = Array.isArray(formData.accessType)
       ? formData.accessType.filter(Boolean)
       : (formData.accessType ? [String(formData.accessType)] : []);
     const selectedAccionesIds = Array.isArray(formData.acciones)
       ? formData.acciones.filter(Boolean)
       : (formData.acciones ? [String(formData.acciones)] : []);
+    const normalizedComponent = String(formData.component || '').trim();
 
     if (isFormularioType && selectedAccessTypeIds.length === 0) {
       toast.error('Selecciona al menos un tipo de acceso para el formulario');
@@ -937,6 +1013,10 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
 
     if ((isFormularioType || isSubFormularioType) && selectedAccionesIds.length === 0) {
       toast.error('Selecciona al menos una acción HTTP para este tipo de nodo');
+      return;
+    }
+    if ((isFormularioType || isSubFormularioType) && !normalizedComponent) {
+      toast.error('El componente es obligatorio para formulario y subformulario');
       return;
     }
 
@@ -962,7 +1042,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
       const payload: CreateRouteDto = {
         ...formData,
         path: normalizePath(formData.path || ''),
-        component: resolvedComponent ?? '',
+        component: (isFormularioType || isSubFormularioType) ? normalizedComponent : undefined,
         layout: resolvedLayout,
         tipoNodo: String(selectedTypeDoc.codigo || ''),
         tipoNodoId: resolveNodeTypeId(selectedTypeDoc),
@@ -1033,27 +1113,52 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
     }
   };
   const handleDeleteRoute = async (route: Route): Promise<void> => {
-    const actionType = String((route as any)?.accionBajaPermitida || 'DESACTIVAR').toUpperCase();
-    const actionLabel = actionType === 'ELIMINAR' ? 'eliminada' : 'desactivada';
-    const result = await swalFire({
-      title: 'Are you sure?',
-      text: `Route "${route.name}" sera ${actionLabel} segun tus permisos`,
-      icon: 'warning',
-      showCancelButton: true,
-      confirmButtonText: 'Yes, continue',
-      cancelButtonText: 'Cancel',
-    });
+    const actorTipo = String(routesActorTipo || '').trim().toUpperCase();
+    let accionSeleccionada: 'ELIMINAR' | 'DESACTIVAR' | null = null;
 
-    if (!result.isConfirmed) return;
+    if (actorTipo === 'SUPERADMIN') {
+      const result = await swalFire({
+        title: 'Gestionar baja de ruta',
+        text: `Selecciona si deseas desactivar o eliminar la ruta "${route.name}".`,
+        icon: 'warning',
+        showCancelButton: true,
+        showDenyButton: true,
+        confirmButtonText: 'Eliminar',
+        denyButtonText: 'Desactivar',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#dc2626',
+        denyButtonColor: '#2563eb',
+      });
+
+      if (result.isConfirmed) accionSeleccionada = 'ELIMINAR';
+      if (result.isDenied) accionSeleccionada = 'DESACTIVAR';
+      if (!accionSeleccionada) return;
+    } else if (actorTipo === 'GLOBAL') {
+      const result = await swalFire({
+        title: 'Desactivar ruta',
+        text: `La ruta "${route.name}" sera desactivada.`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Desactivar',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#2563eb',
+      });
+
+      if (!result.isConfirmed) return;
+      accionSeleccionada = 'DESACTIVAR';
+    } else {
+      return;
+    }
 
     try {
-      const response = await deleteRoute(resolveRouteId(route));
+      const response = await deleteRoute(resolveRouteId(route), { accion: accionSeleccionada });
       toast.success(response?.message || 'Action completed successfully');
       await loadRoutes();
       notifyRoutesUpdated();
     } catch (error: any) {
       console.error('Error deleting route:', error);
-      toast.error(error?.message || 'Error deactivating route');
+      const fallbackMessage = accionSeleccionada === 'ELIMINAR' ? 'Error deleting route' : 'Error deactivating route';
+      toast.error(error?.message || fallbackMessage);
     }
   };
 
@@ -1268,7 +1373,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
     setNodeTypeCodeDraft(nodeTypeForm.codigo || normalizeNodeTypeCode(nodeTypeForm.nombre));
     setSavedNodeTypeCode(
       nodeTypeForm.codigoCatalogoId && nodeTypeForm.codigo
-        ? { iud: nodeTypeForm.codigoCatalogoId, codigo: nodeTypeForm.codigo }
+        ? { iud: nodeTypeForm.codigoCatalogoId, codigo: nodeTypeForm.codigo, source: 'catalogo' }
         : null
     );
     setSelectedPerfilCorporativoId('');
@@ -1279,7 +1384,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
     setLoadingPerfilesCorporativos(true);
     setLoadingCatalogoCodigo(true);
     const currentSaved = nodeTypeForm.codigoCatalogoId && nodeTypeForm.codigo
-      ? { iud: nodeTypeForm.codigoCatalogoId, codigo: nodeTypeForm.codigo }
+      ? { iud: nodeTypeForm.codigoCatalogoId, codigo: nodeTypeForm.codigo, source: 'catalogo' as const }
       : null;
 
     Promise.all([
@@ -1288,20 +1393,35 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
         toast.error(err?.message || 'Error al cargar codigos del catalogo');
         return { data: [] as CatalogoCodigoItem[] };
       }),
-    ]).then(([perfilesRes, catalogoRes]) => {
+      getTiposNodoCodigos().catch(() => ({ data: [] as CodigoNodoItem[] })),
+    ]).then(([perfilesRes, catalogoRes, codigosRes]) => {
       setPerfilesCorporativos(perfilesRes?.data ?? []);
-      const catalogo = catalogoRes?.data ?? [];
-      setCatalogoCodigoOptions(catalogo);
+      const catalogo = (catalogoRes?.data ?? []).map((item) => ({
+        iud: item.iud,
+        codigo: item.codigo,
+        source: 'catalogo' as const,
+        tenantCorporativoId: null,
+        perfilCorporativoId: null,
+      }));
+      const codigosCorporativos = (codigosRes?.data ?? []).map((item) => ({
+        iud: item.iud,
+        codigo: item.codigo,
+        source: 'codigoNodo' as const,
+        tenantCorporativoId: item.tenantCorporativoId || null,
+        perfilCorporativoId: item.perfilCorporativoId || null,
+      }));
+      const catalogoUnificado = [...catalogo, ...codigosCorporativos];
+      setCatalogoCodigoOptions(catalogoUnificado);
       const savedSigueDisponible = currentSaved
-        ? catalogo.some((item) => item.iud === currentSaved.iud)
+        ? catalogoUnificado.some((item) => item.iud === currentSaved.iud && item.source === currentSaved.source)
         : false;
       if (currentSaved && !savedSigueDisponible) {
         setSavedNodeTypeCode(null);
         setNodeTypeCodeDraft('');
       }
-      if (!currentSaved && catalogo.length > 0) {
-        setSavedNodeTypeCode({ iud: catalogo[0].iud, codigo: catalogo[0].codigo });
-        setNodeTypeCodeDraft(catalogo[0].codigo);
+      if (!currentSaved && catalogoUnificado.length > 0) {
+        setSavedNodeTypeCode(catalogoUnificado[0]);
+        setNodeTypeCodeDraft(catalogoUnificado[0].codigo);
       }
     }).finally(() => {
       setLoadingPerfilesCorporativos(false);
@@ -1354,7 +1474,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
     setNodeTypeForm((prev) => ({
       ...prev,
       codigo: savedNodeTypeCode.codigo,
-      codigoCatalogoId: savedNodeTypeCode.iud,
+      codigoCatalogoId: savedNodeTypeCode.source === 'catalogo' ? savedNodeTypeCode.iud : '',
     }));
     setIsNodeTypeCodeModalOpen(false);
     toast.success('Codigo aplicado al formulario padre');
@@ -1388,7 +1508,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
     if (!subFormData.name.trim()) { toast.error('El nombre es obligatorio'); return; }
     if (!subFormData.padreId) { toast.error('Selecciona el formulario padre'); return; }
     if (!subFormData.acciones.length) { toast.error('Selecciona al menos una acción HTTP para el subformulario'); return; }
-    if (!subFormData.component.trim()) { toast.error('El componente es obligatorio'); return; }
+    if (!subFormData.component.trim()) { toast.error('El componente es obligatorio para el subformulario'); return; }
     if (!subFormData.path.trim()) { toast.error('La ruta es obligatoria'); return; }
 
     const formularioPadre = routes.find((r) => resolveRouteId(r) === subFormData.padreId);
@@ -1516,6 +1636,11 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
               </SelectContent>
             </Select>
           </div>
+          {routesScopeSummary && (
+            <p className="mb-4 text-xs text-muted-foreground">
+              {routesScopeSummary}
+            </p>
+          )}
           {loading ? (
             <div className="flex justify-center items-center py-12">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -1535,7 +1660,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
                     <TableHead>Acciones HTTP</TableHead>
                     <TableHead>Padre</TableHead>
                     <TableHead>Ruta</TableHead>
-                    <TableHead>Componente</TableHead>
+                    <TableHead>Componente Efectivo</TableHead>
                     <TableHead>Layout</TableHead>
                     <TableHead>Estado</TableHead>
                     <TableHead className="text-right">Acciones</TableHead>
@@ -1606,13 +1731,14 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
                         <TableCell>
                           <code className="px-2 py-1 bg-muted rounded text-xs">{route.path}</code>
                         </TableCell>
-                        <TableCell>{route.component}</TableCell>
+                        <TableCell>{route.component || '-'}</TableCell>
                         <TableCell>
                           <Badge variant="outline">{route.layout}</Badge>
                         </TableCell>
                         <TableCell>
                           <Switch
                             checked={route.estadoRuta}
+                            disabled={!resolveCanToggleRouteStatus(route)}
                             onCheckedChange={() => void handleToggleStatus(route)}
                           />
                         </TableCell>
@@ -1621,7 +1747,13 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
                             <Button variant="ghost" size="icon" onClick={() => void handlePreviewRoute(route)} title="Previsualizar">
                               <Eye className="h-4 w-4" />
                             </Button>
-                            <Button variant="ghost" size="icon" onClick={() => openRouteModal(route)}>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              disabled={!resolveCanEditRoute(route)}
+                              onClick={() => openRouteModal(route)}
+                              title={resolveCanEditRoute(route) ? 'Editar' : 'Tu scope actual no puede editar esta ruta'}
+                            >
                               <Edit className="h-4 w-4" />
                             </Button>
                             {resolveCanManageBaja(route) && (
@@ -1669,6 +1801,9 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
                         tipoNodo: String(nextType?.codigo || ''),
                         tipoNodoId: String(nextType ? resolveNodeTypeId(nextType) : ''),
                         padreId: nextOrder <= 1 ? null : prev.padreId,
+                        path: nextOrder <= 1
+                          ? prev.path
+                          : resolveHierarchyPathForDraft(prev.name, prev.padreId, nextOrder, prev.path),
                       }));
                       if (nextOrder !== Number(formularioType?.order ?? 3)) {
                         setSelectedSuiteIdForForm('');
@@ -1707,7 +1842,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
                       setFormData((prev) => ({
                         ...prev,
                         padreId: null,
-                        path: editingRoute ? prev.path : '',
+                        path: resolveHierarchyPathForDraft(prev.name, null, selectedTypeOrder, ''),
                       }));
                     }}
                   >
@@ -1740,9 +1875,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
                       setFormData((prev) => ({
                         ...prev,
                         padreId: value,
-                        path: editingRoute
-                          ? prev.path
-                          : buildPathByContext(prev.name, value, selectedTypeOrder),
+                        path: resolveHierarchyPathForDraft(prev.name, value, selectedTypeOrder, prev.path),
                       }))
                     }
                     disabled={isFormularioType && !selectedSuiteIdForForm}
@@ -1759,15 +1892,21 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
                     <SelectContent>
                       {isFormularioType
                         ? moduloOptionsBySuite.map((parent) => (
-                          <SelectItem key={resolveRouteId(parent)} value={resolveRouteId(parent)}>
-                            {getRouteHierarchyLabel(parent)}
-                          </SelectItem>
-                        ))
+                            <SelectItem key={resolveRouteId(parent)} value={resolveRouteId(parent)}>
+                              {getRouteHierarchyLabel(parent)}
+                            </SelectItem>
+                          ))
+                        : isSubFormularioType
+                          ? subFormParentOptions.map((parent) => (
+                              <SelectItem key={resolveRouteId(parent)} value={resolveRouteId(parent)}>
+                                {getRouteHierarchyLabel(parent)}
+                              </SelectItem>
+                            ))
                         : getParentOptions(String(formData.tipoNodoId || '')).map((parent) => (
-                          <SelectItem key={resolveRouteId(parent)} value={resolveRouteId(parent)}>
-                            {getRouteHierarchyLabel(parent)}
-                          </SelectItem>
-                        ))}
+                            <SelectItem key={resolveRouteId(parent)} value={resolveRouteId(parent)}>
+                              {getRouteHierarchyLabel(parent)}
+                            </SelectItem>
+                          ))}
                     </SelectContent>
                   </Select>
                   {!editingRoute && isModuloType && getParentOptions(String(formData.tipoNodoId || '')).length === 0 && (
@@ -1785,6 +1924,11 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
                       No hay modulos en la suite seleccionada.
                     </p>
                   )}
+                  {!editingRoute && isSubFormularioType && subFormParentOptions.length === 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      No hay formularios disponibles para asociar el subformulario.
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -1800,12 +1944,9 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
                     setFormData((prev) => ({
                       ...prev,
                       name: nextName,
-                      component: isSuiteType ? toPascalCase(nextName) : prev.component,
-                      path: editingRoute
+                      path: isSuiteType
                         ? prev.path
-                        : isSuiteType
-                          ? prev.path
-                          : buildPathByContext(nextName, efectivePadre || prev.padreId || null, selectedTypeOrder),
+                        : resolveHierarchyPathForDraft(nextName, efectivePadre || prev.padreId || null, selectedTypeOrder, prev.path),
                     }));
                   }}
                   placeholder="Ej: Gobernanza"
@@ -1818,7 +1959,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
                   id="path"
                   value={formData.path}
                   onChange={(e) => setFormData({ ...formData, path: e.target.value })}
-                  readOnly={!editingRoute && !isSuiteType}
+                  readOnly={!isSuiteType}
                   placeholder={
                     isSuiteType
                       ? 'Ej: /gobernanza'
@@ -1834,30 +1975,27 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
                   </p>
                 )}
               </div>
+              <div className="space-y-2 md:col-span-2 rounded-md border border-dashed p-3 bg-muted/30">
+                <p className="text-sm font-medium">Guia de jerarquia</p>
+                <p className="text-xs text-muted-foreground">
+                  Suite: crea la raiz del flujo. Modulo: depende de una suite. Formulario: depende de un modulo dentro de la suite seleccionada. Subformulario: depende de un formulario existente.
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Suite y Modulo no manejan componente. Formulario y Subformulario si deben enviar componente y ese valor se guarda en backend.
+                </p>
+              </div>
               {!isSuiteType && !isModuloType && (
                 <div className="space-y-2 md:col-span-2">
                   <Label htmlFor="component">Componente *</Label>
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between rounded-md border px-3 py-2">
-                      <Label htmlFor="useCustomComponent" className="cursor-pointer text-sm">
-                        Usar componente personalizado
-                      </Label>
-                      <Switch
-                        id="useCustomComponent"
-                        checked={useCustomComponent}
-                        onCheckedChange={(checked) => setUseCustomComponent(checked)}
-                      />
-                    </div>
-                    <Input
-                      id="component"
-                      value={useCustomComponent ? String(formData.component || '') : (resolveSuiteComponentForCurrentForm() || '')}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, component: e.target.value }))}
-                      placeholder={useCustomComponent ? 'Ej: ParametrosAvanzados' : 'Heredado desde suite'}
-                      disabled={!useCustomComponent}
-                    />
-                  </div>
+                  <Input
+                    id="component"
+                    value={String(formData.component || '')}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, component: e.target.value }))}
+                    placeholder="Ej: ParametrosGobernanza"
+                    required={isFormularioType || isSubFormularioType}
+                  />
                   <p className="text-xs text-muted-foreground">
-                    Si no activas personalizado, el componente se hereda desde la suite.
+                    Obligatorio para formulario y subformulario. Debe coincidir con el componente que el frontend puede resolver.
                   </p>
                 </div>
               )}
@@ -2246,7 +2384,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
                   required
                 />
                 <p className="text-xs text-muted-foreground">
-                  Debe coincidir exactamente con el nombre del archivo .tsx en pages/.
+                  Obligatorio para el subformulario y debe existir en el frontend.
                 </p>
               </div>
 
@@ -2573,9 +2711,9 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
                       setNodeTypeCodeDraft('');
                       return;
                     }
-                    const found = catalogoCodigoOptions.find((c) => c.iud === v);
+                    const found = filteredNodeTypeCodeOptions.find((c) => c.iud === v);
                     if (found) {
-                      setSavedNodeTypeCode({ iud: found.iud, codigo: found.codigo });
+                      setSavedNodeTypeCode(found);
                       setNodeTypeCodeDraft(found.codigo);
                     }
                   }}
@@ -2585,7 +2723,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__none__">— Seleccionar codigo —</SelectItem>
-                    {catalogoCodigoOptions.map((c) => (
+                    {filteredNodeTypeCodeOptions.map((c) => (
                       <SelectItem key={c.iud} value={c.iud}>
                         {c.codigo}
                       </SelectItem>
@@ -2612,7 +2750,22 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
               ) : (
                 <Select
                   value={selectedPerfilCorporativoId || '__none__'}
-                  onValueChange={(v) => setSelectedPerfilCorporativoId(v === '__none__' ? '' : v)}
+                  onValueChange={(v) => {
+                    const nextValue = v === '__none__' ? '' : v;
+                    setSelectedPerfilCorporativoId(nextValue);
+                    if (nextValue) {
+                      const firstMatch = catalogoCodigoOptions.find((item) =>
+                        item.source === 'catalogo' || String(item.perfilCorporativoId || '') === nextValue
+                      );
+                      if (firstMatch) {
+                        setSavedNodeTypeCode(firstMatch);
+                        setNodeTypeCodeDraft(firstMatch.codigo);
+                      } else {
+                        setSavedNodeTypeCode(null);
+                        setNodeTypeCodeDraft('');
+                      }
+                    }
+                  }}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Sin perfil corporativo (scope global)" />
@@ -2642,7 +2795,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
             </p>
           </div>
           <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-between">
-            {savedNodeTypeCode ? (
+            {savedNodeTypeCode && savedNodeTypeCode.source === 'catalogo' ? (
               <Button
                 type="button"
                 variant="destructive"

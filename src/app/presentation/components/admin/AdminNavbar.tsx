@@ -6,6 +6,7 @@ import { useMembership } from '@/app/hooks/useMembership'
 import { apiFetch } from '@/app/services/api'
 import { getPrivateHomeRoute, getUserShortcutRoutes } from '@/app/services/routeService'
 import { resolveCurrentRouteMenuTags, RouteMenuTag } from '@/app/services/routesService'
+import { getGovernedLogoutPath } from '@/app/services/governedNavigation'
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
@@ -148,7 +149,7 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
 
     const handleLogout = (): void => {
         logout()
-        navigate('/public/render/view/login')
+        navigate(getGovernedLogoutPath())
     }
 
     const handleMenuToggle = (): void => {
@@ -212,9 +213,14 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
                         {menuItems.filter((item) => item.visible && item.path).map((item) => {
                             const Icon = item.Icon
                             return (
-                                <DropdownMenuItem key={item.key} onClick={() => navigate(item.path)} className="cursor-pointer py-2.5">
-                                    <Icon className="mr-2 h-4 w-4" />
-                                    {item.label}
+                                <DropdownMenuItem key={item.key} asChild className="cursor-pointer py-2.5">
+                                    <a
+                                        href={item.path}
+                                        onClick={(e) => { e.preventDefault(); navigate(item.path) }}
+                                    >
+                                        <Icon className="mr-2 h-4 w-4" />
+                                        {item.label}
+                                    </a>
                                 </DropdownMenuItem>
                             )
                         })}

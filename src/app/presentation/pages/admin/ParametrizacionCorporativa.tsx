@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import type { ReactElement } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import RepresentanteEmpresarial from './RepresentanteEmpresarial';
 import SociedadesCorporativas from './SociedadesCorporativas';
 import DireccionCorporativa from './DireccionCorporativa';
@@ -8,21 +9,79 @@ import LogosCorporativos from './LogosCorporativos';
 import SectorIndustriaEmpresa from './SectorIndustriaEmpresa';
 import PerfilCorporativo from './PerfilCorporativo';
 import DesactivarPerfilCorporativo from './DesactivarPerfilCorporativo';
-// import DesactivarRepresentante from './DesactivarRepresentante';
-import { apiFetch } from '../../../services/api';
-import { useAuth } from '@/app/providers/AuthProvider';
-// import { Loader2 } from 'lucide-react';
+import { getAdminSidebarTreeWithContext, type AdminNavTreeItem } from '@/app/services/routeService';
 
-type AccionHerencia = {
-  method?: string;
-  etiquetas?: string;
+type TabComponent = () => ReactElement;
+
+type DynamicTabDefinition = {
+  value: string;
+  label: string;
+  componentKey: string;
+  render: TabComponent;
+  path?: string;
+  destructive?: boolean;
+  aliases?: string[];
 };
 
-type HerenciaPermiso = {
-  acciones?: AccionHerencia[];
-};
+const TAB_DEFINITIONS: DynamicTabDefinition[] = [
+  {
+    value: 'representante',
+    label: 'Representante Empresarial',
+    componentKey: 'RepresentanteEmpresarial',
+    aliases: ['ParametrizacionRepresentante'],
+    render: RepresentanteEmpresarial,
+  },
+  {
+    value: 'sociedades',
+    label: 'Sociedades Corporativas',
+    componentKey: 'SociedadesCorporativas',
+    aliases: ['ParametrizacionSociedades'],
+    render: SociedadesCorporativas,
+  },
+  {
+    value: 'direccion',
+    label: 'Direccion Corporativa',
+    componentKey: 'DireccionCorporativa',
+    render: DireccionCorporativa,
+  },
+  {
+    value: 'documentos',
+    label: 'Documentos Corporativos',
+    componentKey: 'DocumentosCorporativos',
+    render: DocumentosCorporativos,
+  },
+  {
+    value: 'logos',
+    label: 'Logos Corporativos',
+    componentKey: 'LogosCorporativos',
+    aliases: ['CargaLogoCorporativo'],
+    render: LogosCorporativos,
+  },
+  {
+    value: 'sector',
+    label: 'Sector/Industria Empresa',
+    componentKey: 'SectorIndustriaEmpresa',
+    aliases: ['SectorIndustrial'],
+    render: SectorIndustriaEmpresa,
+  },
+  {
+    value: 'perfil',
+    label: 'Perfil Corporativo',
+    componentKey: 'PerfilCorporativo',
+    aliases: ['ParametrizacionCorporativa'],
+    render: PerfilCorporativo,
+  },
+  {
+    value: 'desactivar-perfil',
+    label: 'Desactivar Perfil',
+    componentKey: 'DesactivarPerfilCorporativo',
+    aliases: ['DesactivarPerfil'],
+    render: DesactivarPerfilCorporativo,
+    destructive: true,
+  },
+];
 
-const normalizePermissionKey = (value: unknown): string =>
+const normalizeKey = (value: string): string =>
   String(value || '')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
@@ -30,143 +89,156 @@ const normalizePermissionKey = (value: unknown): string =>
     .trim()
     .toLowerCase();
 
-const PERFIL_CORPORATIVO_ACTION_KEYS = new Set([
-  'perfilcorporativo',
-  'perfilcoporativo',
-]);
+const matchesDefinition = (definition: DynamicTabDefinition, componentName: string): boolean => {
+  const normalizedComponent = normalizeKey(componentName);
+  if (normalizeKey(definition.componentKey) === normalizedComponent) return true;
+  return Array.isArray(definition.aliases)
+    ? definition.aliases.some((alias) => normalizeKey(alias) === normalizedComponent)
+    : false;
+};
+
+const findNodeByComponent = (nodes: AdminNavTreeItem[], componentNames: string[]): AdminNavTreeItem | null => {
+  for (const node of nodes) {
+    const component = String(node.component || '').trim();
+    if (componentNames.some((name) => normalizeKey(name) === normalizeKey(component))) {
+      return node;
+    }
+
+    const childMatch = findNodeByComponent(node.children || [], componentNames);
+    if (childMatch) return childMatch;
+  }
+
+  return null;
+};
 
 export default function ParametrizacionCorporativa() {
-  const { user } = useAuth();
-  const normalizedRole = String(user?.role || user?.rol || '').toUpperCase();
-  const isTenantSuperAdmin = normalizedRole === 'DIOS';
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('representante');
-  const [canManagePerfilCorporativo, setCanManagePerfilCorporativo] = useState(isTenantSuperAdmin);
+  const [dynamicTabs, setDynamicTabs] = useState<DynamicTabDefinition[]>([]);
+  const [parentRoutePath, setParentRoutePath] = useState<string>('');
 
   useEffect(() => {
     let active = true;
 
-    const resolvePerfilPermission = async () => {
+    const loadDynamicTabs = async () => {
       try {
-        if (isTenantSuperAdmin) {
-          if (active) setCanManagePerfilCorporativo(true);
-          return;
-        }
+        const { tree } = await getAdminSidebarTreeWithContext();
+        const parentNode = findNodeByComponent(tree, ['ParametrizacionCorporativa']);
+        const children = Array.isArray(parentNode?.children) ? parentNode.children : [];
 
-        const res = await apiFetch('/api/config/permisos/listar/usu/tenant/libres', {
-          method: 'GET',
-          useAuth: true
-        }) as { ok?: boolean; herencias?: HerenciaPermiso[] } | null;
+        const resolvedTabs = children
+          .map((child) => {
+            const componentName = String(child.component || '').trim();
+            const definition = TAB_DEFINITIONS.find((item) => matchesDefinition(item, componentName));
+            if (!definition) return null;
+            return {
+              ...definition,
+              path: String(child.path || '').trim() || undefined,
+            };
+          })
+          .filter((item): item is DynamicTabDefinition => item !== null);
 
-        const herencias = Array.isArray(res?.herencias) ? res.herencias : [];
-        const hasPerfilAction = herencias.some((herencia) => {
-          const acciones = Array.isArray(herencia?.acciones) ? herencia.acciones : [];
-          return acciones.some((accion) => {
-            const methodKey = normalizePermissionKey(accion?.method);
-            const etiquetaKey = normalizePermissionKey(accion?.etiquetas);
-            return PERFIL_CORPORATIVO_ACTION_KEYS.has(methodKey) || PERFIL_CORPORATIVO_ACTION_KEYS.has(etiquetaKey);
+        const uniqueTabs = resolvedTabs.filter(
+          (tab, index, array) => array.findIndex((candidate) => candidate.value === tab.value) === index
+        );
+
+        const nextTabs = uniqueTabs.length
+          ? uniqueTabs
+          : TAB_DEFINITIONS.filter((tab) => tab.value !== 'desactivar-perfil');
+
+        if (active) {
+          setParentRoutePath(String(parentNode?.path || '').trim());
+          setDynamicTabs(nextTabs);
+          setActiveTab((current) => {
+            if (nextTabs.some((tab) => tab.value === current)) return current;
+            return nextTabs[0]?.value || 'representante';
           });
-        });
-
-        if (active) setCanManagePerfilCorporativo(hasPerfilAction);
+        }
       } catch (error) {
-        console.error('Error resolviendo permiso de Perfil Corporativo:', error);
-        if (active) setCanManagePerfilCorporativo(isTenantSuperAdmin);
+        console.error('Error resolviendo tabs dinamicos de parametrizacion corporativa:', error);
+        if (active) {
+          setParentRoutePath('');
+          const fallbackTabs = TAB_DEFINITIONS.filter((tab) => tab.value !== 'desactivar-perfil');
+          setDynamicTabs(fallbackTabs);
+          setActiveTab((current) => (fallbackTabs.some((tab) => tab.value === current) ? current : fallbackTabs[0].value));
+        }
       } finally {
         if (active) setLoading(false);
       }
     };
 
-    void resolvePerfilPermission();
+    void loadDynamicTabs();
 
     return () => {
       active = false;
     };
-  }, [isTenantSuperAdmin]);
+  }, []);
+
+  const visibleTabs = useMemo(() => dynamicTabs, [dynamicTabs]);
+  const activeTabConfig = useMemo(
+    () => visibleTabs.find((tab) => tab.value === activeTab) || visibleTabs[0] || null,
+    [activeTab, visibleTabs]
+  );
 
   useEffect(() => {
-    if (!canManagePerfilCorporativo && activeTab === 'perfil') {
-      setActiveTab('representante');
+    if (!visibleTabs.length) return;
+
+    const currentPath = window.location.pathname;
+    if (parentRoutePath && currentPath === parentRoutePath) {
+      const firstTabValue = visibleTabs[0]?.value || 'representante';
+      if (firstTabValue !== activeTab) {
+        setActiveTab(firstTabValue);
+      }
+      return;
     }
-  }, [activeTab, canManagePerfilCorporativo]);
+
+    const matchedTab = visibleTabs.find((tab) => tab.path && tab.path === currentPath);
+    if (matchedTab && matchedTab.value !== activeTab) {
+      setActiveTab(matchedTab.value);
+    }
+  }, [activeTab, parentRoutePath, visibleTabs]);
+
+  useEffect(() => {
+    if (!activeTabConfig?.path) return;
+    if (parentRoutePath && window.location.pathname === parentRoutePath) return;
+    if (window.location.pathname === activeTabConfig.path) return;
+
+    window.history.replaceState(window.history.state, '', activeTabConfig.path);
+  }, [activeTabConfig?.path, parentRoutePath]);
 
   if (loading) {
-    return <div className="p-4 text-sm text-muted-foreground">Cargando permisos...</div>;
+    return <div className="p-4 text-sm text-muted-foreground">Cargando parametrizacion dinamica...</div>;
   }
 
   return (
     <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-      <div className="w-full flex flex-col items-center">
-        <TabsList className="flex flex-wrap w-full max-w-[80vw] md:max-w-[80%] gap-2 justify-center mb-4 min-h-[88px] md:min-h-[44px]">
-          <TabsTrigger value="representante">Representante Empresarial</TabsTrigger>
-          <TabsTrigger value="sociedades">Sociedades Corporativas</TabsTrigger>
-          <TabsTrigger value="direccion">Dirección Corporativa</TabsTrigger>
-          <TabsTrigger value="documentos">Documentos Corporativos</TabsTrigger>
-          <TabsTrigger value="logos">Logos Corporativos</TabsTrigger>
-          <TabsTrigger value="sector">Sector/Industria Empresa</TabsTrigger>
-          {canManagePerfilCorporativo && (
-            <TabsTrigger value="perfil">Perfil Corporativo</TabsTrigger>
-          )}
-          {isTenantSuperAdmin && (
-            <TabsTrigger value="desactivar-perfil" className="text-destructive">
-              Desactivar Perfil
+      <div className="flex w-full flex-col items-center">
+        <TabsList className="mb-4 flex min-h-[88px] w-full max-w-[80vw] flex-wrap justify-center gap-2 md:min-h-[44px] md:max-w-[80%]">
+          {visibleTabs.map((tab) => (
+            <TabsTrigger
+              key={tab.value}
+              value={tab.value}
+              className={tab.destructive ? 'text-destructive' : undefined}
+            >
+              {tab.label}
             </TabsTrigger>
-          )}
-          {/* <TabsTrigger value="config" className="text-destructive">Desactivar Representante</TabsTrigger> */}
+          ))}
         </TabsList>
+        {activeTabConfig?.path ? (
+          <div className="mb-4 w-full max-w-[80vw] rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700 md:max-w-[80%]">
+            Ruta parametrizada: <span className="font-medium">{activeTabConfig.path}</span>
+          </div>
+        ) : null}
       </div>
-      <TabsContent value="representante">
-        <RepresentanteEmpresarial />
-      </TabsContent>
-      <TabsContent value="sociedades">
-        <SociedadesCorporativas />
-      </TabsContent>
-      <TabsContent value="direccion">
-        <DireccionCorporativa />
-      </TabsContent>
-      <TabsContent value="documentos">
-        <DocumentosCorporativos />
-      </TabsContent>
-      <TabsContent value="logos">
-        <LogosCorporativos />
-      </TabsContent>
-      <TabsContent value="sector">
-        <SectorIndustriaEmpresa />
-      </TabsContent>
-      {canManagePerfilCorporativo && (
-        <TabsContent value="perfil">
-          <PerfilCorporativo />
-        </TabsContent>
-      )}
-      {isTenantSuperAdmin && (
-        <TabsContent value="desactivar-perfil">
-          <DesactivarPerfilCorporativo />
-        </TabsContent>
-      )}
-      {/* <TabsContent value="config">
-        <div className="flex flex-col items-center justify-center p-12 border rounded-lg bg-card space-y-4 shadow-sm">
-          <h3 className="text-xl font-bold">Zona Peligrosa</h3>
-          <p className="text-muted-foreground text-sm text-center max-w-md">
-            Si desactivas este perfil, se realizará una eliminación lógica del representante legal en el sistema.
-          </p>
 
-          {loading ? (
-            <Loader2 className="animate-spin h-6 w-6 text-primary" />
-          ) : representanteId ? (
-            <DesactivarRepresentante
-              idRepresentante={representanteId}
-              onSuccess={() => setRepresentanteId(null)}
-            />
-          ) : (
-            <p className="text-amber-600 text-sm font-medium bg-amber-50 p-3 rounded-md">
-              No se encontró un representante legal activo para desactivar.
-            </p>
-          )}
-        </div>
-      </TabsContent> */}
+      {visibleTabs.map((tab) => {
+        const TabComponent = tab.render;
+        return (
+          <TabsContent key={tab.value} value={tab.value}>
+            <TabComponent />
+          </TabsContent>
+        );
+      })}
     </Tabs>
   );
 }
-
-// PR hecho por Gustavo Pereira el 13-02-2026
-
