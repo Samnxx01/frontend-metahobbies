@@ -1,11 +1,11 @@
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTheme } from 'next-themes'
 import { useAuth } from '@/app/providers/AuthProvider'
 import { useMembership } from '@/app/hooks/useMembership'
 import { apiFetch } from '@/app/services/api'
-import { getPrivateHomeRoute, getUserShortcutRoutes } from '@/app/services/routeService'
-import { resolveCurrentRouteMenuTags, RouteMenuTag } from '@/app/services/routesService'
+import { getMenuUsuarioRoutes, getPrivateHomeRoute, getUserShortcutRoutes, type MenuUsuarioItem } from '@/app/services/routeService'
+import { getRouteMenuTags, resolveCurrentRouteMenuTags, type RouteMenuTag } from '@/app/services/routesService'
 import { getGovernedLogoutPath } from '@/app/services/governedNavigation'
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -25,6 +25,32 @@ const MENU_ICON_MAP: Record<string, React.ElementType> = {
     CIRCLE: UserIcon,
 }
 
+const mergeMenuUsuarioItems = (...sources: Array<MenuUsuarioItem[] | RouteMenuTag[] | null | undefined>): MenuUsuarioItem[] => {
+    const items = new Map<string, MenuUsuarioItem>()
+
+    sources.forEach((source) => {
+        ;(Array.isArray(source) ? source : []).forEach((row: any) => {
+            const key = String(row?.key || row?.codigo || row?.iud || '').trim()
+            const path = String(row?.path || row?.routePath || row?.ruta?.path || '').trim()
+            const label = String(row?.label || row?.nombreTag || '').trim()
+
+            if (!key || !path || !label) return
+
+            items.set(key, {
+                key,
+                label,
+                path,
+                icon: row?.icon ?? row?.iconKey ?? null,
+                order: Number(row?.order ?? 0),
+            })
+        })
+    })
+
+    return Array.from(items.values()).sort(
+        (a, b) => Number(a.order ?? 0) - Number(b.order ?? 0) || String(a.label || '').localeCompare(String(b.label || ''))
+    )
+}
+
 export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarProps): React.ReactElement {
     const navigate = useNavigate()
     const { user, logout } = useAuth()
@@ -35,7 +61,8 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
     const [adminHomePath, setAdminHomePath] = useState<string>('/admin')
     const [profilePath, setProfilePath] = useState<string>(ADMIN_PROFILE_VIEW_PATH)
     const [membershipPath, setMembershipPath] = useState<string>('/membresia/dashboard')
-    const [dynamicMenuTags, setDynamicMenuTags] = useState<RouteMenuTag[]>([])
+    const [dynamicMenuItems, setDynamicMenuItems] = useState<MenuUsuarioItem[]>([])
+    const [menuOpen, setMenuOpen] = useState(false)
 
     useEffect(() => {
         let active = true
@@ -122,26 +149,44 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
         }
     }, [user?._id])
 
+    const cargarMenuDinamico = useCallback(async (): Promise<void> => {
+        try {
+            const [resolvedItems, listResponse, resolvedResponse] = await Promise.all([
+                getMenuUsuarioRoutes(),
+                getRouteMenuTags({ menuTipo: 'USER_DROPDOWN', soloActivos: true }).catch(() => null),
+                resolveCurrentRouteMenuTags({ menuTipo: 'USER_DROPDOWN' }).catch(() => null),
+            ])
+
+            setDynamicMenuItems(
+                mergeMenuUsuarioItems(
+                    Array.isArray(resolvedItems) ? resolvedItems : [],
+                    Array.isArray((listResponse as any)?.data) ? (listResponse as any).data : [],
+                    Array.isArray((resolvedResponse as any)?.data) ? (resolvedResponse as any).data : []
+                )
+            )
+        } catch (error) {
+            console.error('Error cargando menu dinamico del avatar:', error)
+            setDynamicMenuItems([])
+        }
+    }, [])
+
     useEffect(() => {
-        let active = true
+        void cargarMenuDinamico()
 
-        const cargarMenuDinamico = async (): Promise<void> => {
-            try {
-                const response = await resolveCurrentRouteMenuTags({ menuTipo: 'USER_DROPDOWN' })
-                if (!active) return
-                setDynamicMenuTags(Array.isArray(response?.data) ? response.data.filter((item) => item.estado !== false) : [])
-            } catch (error) {
-                if (!active) return
-                console.error('Error cargando menu dinamico del avatar:', error)
-                setDynamicMenuTags([])
-            }
+        const handleMenuUpdated = (): void => {
+            void cargarMenuDinamico()
         }
 
-        cargarMenuDinamico()
+        window.addEventListener('user-menu-tags-updated', handleMenuUpdated)
         return () => {
-            active = false
+            window.removeEventListener('user-menu-tags-updated', handleMenuUpdated)
         }
-    }, [user?._id])
+    }, [cargarMenuDinamico, user?._id])
+
+    useEffect(() => {
+        if (!menuOpen) return
+        void cargarMenuDinamico()
+    }, [menuOpen, cargarMenuDinamico])
 
     const toggleTheme = (): void => {
         setTheme(theme === 'dark' ? 'light' : 'dark')
@@ -176,16 +221,18 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
         return user?.correo || 'admin@example.com'
     }
 
-    const menuItems = dynamicMenuTags.map((tag) => ({
-        key: tag.iud,
-        label: tag.label,
-        path: tag.ruta?.path || tag.routePath,
-        Icon: MENU_ICON_MAP[String(tag.iconKey || '').toUpperCase()] || UserIcon,
-        visible: true,
-    }))
+    const menuItems = [...dynamicMenuItems]
+        .sort((a, b) => Number(a.order ?? 0) - Number(b.order ?? 0) || String(a.label || '').localeCompare(String(b.label || '')))
+        .map((item) => ({
+            key: item.key,
+            label: item.label,
+            path: item.path,
+            Icon: MENU_ICON_MAP[String(item.icon || '').toUpperCase()] || UserIcon,
+            visible: true,
+        }))
 
     const renderProfileDropdown = (
-        <DropdownMenu>
+        <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
             <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="icon" className="h-9 w-9 p-0 rounded-full hover:border-primary/40 transition-colors">
                     <Avatar className="h-full w-full">
@@ -195,42 +242,79 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
                     </Avatar>
                 </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-56 backdrop-blur-lg border-none shadow-xl" align="end">
-                <div className="flex items-center gap-2 p-3">
-                    <Avatar className="h-9 w-9">
-                        <AvatarFallback className="bg-primary text-primary-foreground text-sm">
-                            {getUserInitials()}
-                        </AvatarFallback>
-                    </Avatar>
-                    <div className="flex flex-col space-y-0.5">
-                        <p className="text-sm font-medium leading-none">{getUserName()}</p>
-                        <p className="text-xs leading-none text-muted-foreground">{getUserEmail()}</p>
+            <DropdownMenuContent
+                className="w-80 overflow-hidden rounded-3xl border border-primary/10 bg-background/95 p-0 shadow-2xl backdrop-blur-2xl"
+                align="end"
+                sideOffset={14}
+            >
+                <div className="border-b border-primary/10 bg-gradient-to-br from-primary/10 via-background to-amber-50/80 px-4 py-4">
+                    <div className="flex items-center gap-3">
+                        <Avatar className="h-11 w-11 ring-2 ring-primary/15">
+                            <AvatarFallback className="bg-primary text-primary-foreground text-sm font-semibold">
+                                {getUserInitials()}
+                            </AvatarFallback>
+                        </Avatar>
+                        <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-semibold leading-none text-foreground">{getUserName()}</p>
+                            <p className="mt-1 truncate text-xs text-muted-foreground">{getUserEmail()}</p>
+                            <div className="mt-2 flex flex-wrap items-center gap-2">
+                                <div className="inline-flex items-center rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-medium text-primary">
+                                    Panel privado
+                                </div>
+                                <div className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-medium text-amber-700">
+                                    {menuItems.length} accesos
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
-                <DropdownMenuSeparator />
-                {menuItems.filter((item) => item.visible && item.path).length > 0 ? (
-                    <>
-                        {menuItems.filter((item) => item.visible && item.path).map((item) => {
-                            const Icon = item.Icon
-                            return (
-                                <DropdownMenuItem key={item.key} asChild className="cursor-pointer py-2.5">
-                                    <a
-                                        href={item.path}
-                                        onClick={(e) => { e.preventDefault(); navigate(item.path) }}
+                <div className="px-3 py-3">
+                    {menuItems.filter((item) => item.visible && item.path).length > 0 ? (
+                        <div className="space-y-1.5">
+                            <div className="px-2 pb-1 text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                                Navegacion dinamica
+                            </div>
+                            {menuItems.filter((item) => item.visible && item.path).map((item) => {
+                                const Icon = item.Icon
+                                return (
+                                    <DropdownMenuItem
+                                        key={item.key}
+                                        asChild
+                                        className="cursor-pointer rounded-2xl px-3 py-0 focus:bg-transparent"
                                     >
-                                        <Icon className="mr-2 h-4 w-4" />
-                                        {item.label}
-                                    </a>
-                                </DropdownMenuItem>
-                            )
-                        })}
-                        <DropdownMenuSeparator />
-                    </>
-                ) : null}
-                <DropdownMenuItem onClick={handleLogout} className="cursor-pointer text-destructive focus:text-destructive py-2.5">
-                    <LogOut className="mr-2 h-4 w-4" />
-                    Cerrar Sesion
-                </DropdownMenuItem>
+                                        <a
+                                            href={item.path}
+                                            onClick={(e) => { e.preventDefault(); navigate(item.path) }}
+                                            className="group flex min-h-[56px] items-center gap-3 rounded-2xl border border-transparent bg-muted/35 px-3 py-3 transition-all hover:border-primary/15 hover:bg-primary/5"
+                                        >
+                                            <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary transition-transform group-hover:scale-105">
+                                                <Icon className="h-4.5 w-4.5" />
+                                            </span>
+                                            <span className="min-w-0 flex-1">
+                                                <span className="block truncate text-sm font-medium text-foreground">{item.label}</span>
+                                                <span className="block truncate text-xs text-muted-foreground">{item.path}</span>
+                                            </span>
+                                        </a>
+                                    </DropdownMenuItem>
+                                )
+                            })}
+                        </div>
+                    ) : (
+                        <div className="rounded-2xl border border-dashed border-primary/15 bg-muted/20 px-4 py-5 text-center">
+                            <p className="text-sm font-medium text-foreground">Sin accesos visibles</p>
+                            <p className="mt-1 text-xs text-muted-foreground">Cuando parametrices los tags del avatar, apareceran aqui.</p>
+                        </div>
+                    )}
+                </div>
+                <div className="border-t border-primary/10 bg-muted/15 p-3">
+                    <DropdownMenuItem
+                        onClick={handleLogout}
+                        className="cursor-pointer rounded-2xl px-3 py-3 text-destructive focus:bg-destructive/5 focus:text-destructive"
+                    >
+                        <LogOut className="mr-2 h-4 w-4" />
+                        Cerrar Sesion
+                    </DropdownMenuItem>
+                </div>
             </DropdownMenuContent>
         </DropdownMenu>
     )

@@ -51,23 +51,15 @@ interface ScopeOption {
 
 const GLOBAL_SCOPE_VALUE = '__global__';
 
-const DEFAULT_ALLOWED_PATHS = [
-  '/public/render/login',
-  '/public/render/view/login',
-  '/admin/gestor-rutas/administracion/dashboardadmin',
-  '/registro',
-  '/recuperar-contrasena',
-  '/public/render/home',
-];
-
-const DEFAULT_FORM: RedirectFormState = {
-  login: { path: '/public/render/login', enabled: true },
-  postLogin: { path: '/admin/gestor-rutas/administracion/dashboardadmin', enabled: true },
-  logout: { path: '/public/render/login', enabled: true },
-  register: { path: '/registro', enabled: true },
-  forgotPassword: { path: '/recuperar-contrasena', enabled: true },
-  publicHome: { path: '/public/render/home', enabled: true },
-  allowedPathsJson: JSON.stringify(DEFAULT_ALLOWED_PATHS, null, 2),
+// Estado vacío — los paths se cargan exclusivamente desde branding (backend) o se seleccionan del catálogo
+const EMPTY_FORM: RedirectFormState = {
+  login: { path: '', enabled: true },
+  postLogin: { path: '', enabled: true },
+  logout: { path: '', enabled: true },
+  register: { path: '', enabled: true },
+  forgotPassword: { path: '', enabled: true },
+  publicHome: { path: '', enabled: true },
+  allowedPathsJson: '[]',
 };
 
 const REDIRECT_FIELDS: Array<{
@@ -75,29 +67,19 @@ const REDIRECT_FIELDS: Array<{
   label: string;
   description: string;
 }> = [
-  { key: 'login', label: 'Login', description: 'Destino base para autenticacion y sesiones expiradas.' },
-  { key: 'postLogin', label: 'Post Login', description: 'Destino por defecto al entrar al modulo privado.' },
-  { key: 'logout', label: 'Logout', description: 'Destino al cerrar sesion o perder autenticacion.' },
-  { key: 'register', label: 'Registro', description: 'Destino usado por pantallas que envian al registro.' },
-  { key: 'forgotPassword', label: 'Recuperar clave', description: 'Destino para flujos de recuperacion de contrasena.' },
-  { key: 'publicHome', label: 'Home publica', description: 'Fallback seguro cuando una ruta privada no aplica.' },
+  { key: 'login',          label: 'Login',           description: 'Destino base para autenticacion y sesiones expiradas.' },
+  { key: 'postLogin',      label: 'Post Login',       description: 'Destino por defecto al entrar al modulo privado.' },
+  { key: 'logout',         label: 'Logout',           description: 'Destino al cerrar sesion o perder autenticacion.' },
+  { key: 'register',       label: 'Registro',         description: 'Destino usado por pantallas que envian al registro.' },
+  { key: 'forgotPassword', label: 'Recuperar clave',  description: 'Destino para flujos de recuperacion de contrasena.' },
+  { key: 'publicHome',     label: 'Home publica',     description: 'Fallback seguro cuando una ruta privada no aplica.' },
 ];
-
-const ROOT_RESTRICTED_FIELDS = new Set<keyof Omit<RedirectFormState, 'allowedPathsJson'>>([
-  'login',
-  'postLogin',
-  'logout',
-  'register',
-  'forgotPassword',
-  'publicHome',
-]);
 
 const parseAllowedPaths = (value: string): string[] => {
   const parsed = JSON.parse(value || '[]');
   if (!Array.isArray(parsed)) {
     throw new Error('La whitelist debe ser un arreglo JSON');
   }
-
   return parsed
     .map((item) => String(item || '').trim())
     .filter((item) => item.startsWith('/'));
@@ -107,17 +89,13 @@ const collectTenantGlobalOptions = (nodes: TenantGlobalNode[] = [], acc: ScopeOp
   nodes.forEach((node) => {
     const tenant = node?.tenantGlobal;
     const id = String(tenant?.iud || '').trim();
-
     if (id) {
-      const label = tenant?.razon_social || tenant?.titulo || `Tenant ${id.slice(0, 8)}`;
-      acc.push({ value: id, label });
+      acc.push({ value: id, label: tenant?.razon_social || tenant?.titulo || `Tenant ${id.slice(0, 8)}` });
     }
-
     if (Array.isArray(node?.subTenantGlobales) && node.subTenantGlobales.length > 0) {
       collectTenantGlobalOptions(node.subTenantGlobales, acc);
     }
   });
-
   return acc;
 };
 
@@ -133,7 +111,7 @@ export default function ParametrizacionRedirects({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [branding, setBranding] = useState<BrandingConfig | null>(null);
-  const [form, setForm] = useState<RedirectFormState>(DEFAULT_FORM);
+  const [form, setForm] = useState<RedirectFormState>(EMPTY_FORM);
   const [routeCatalog, setRouteCatalog] = useState<RouteCatalogItem[]>([]);
   const [scopeOptions, setScopeOptions] = useState<ScopeOption[]>([{ value: GLOBAL_SCOPE_VALUE, label: 'Global del sistema' }]);
   const [selectedScopeValue, setSelectedScopeValue] = useState<string>(GLOBAL_SCOPE_VALUE);
@@ -144,37 +122,18 @@ export default function ParametrizacionRedirects({
     guardarEnRegisUsu,
   });
 
+  // Hidrata el form desde la config guardada en backend — sin fallbacks hardcodeados
   const hydrateForm = (brandingData: BrandingConfig | null): void => {
     const navigation = brandingData?.widgets?.navigation;
-    const allowedPaths = Array.isArray(navigation?.allowedPaths) && navigation.allowedPaths.length > 0
-      ? navigation.allowedPaths
-      : DEFAULT_ALLOWED_PATHS;
+    const allowedPaths = Array.isArray(navigation?.allowedPaths) ? navigation.allowedPaths : [];
 
     setForm({
-      login: {
-        path: String(navigation?.login?.path || DEFAULT_FORM.login.path),
-        enabled: navigation?.login?.enabled !== false,
-      },
-      postLogin: {
-        path: String(navigation?.postLogin?.path || DEFAULT_FORM.postLogin.path),
-        enabled: navigation?.postLogin?.enabled !== false,
-      },
-      logout: {
-        path: String(navigation?.logout?.path || DEFAULT_FORM.logout.path),
-        enabled: navigation?.logout?.enabled !== false,
-      },
-      register: {
-        path: String(navigation?.register?.path || DEFAULT_FORM.register.path),
-        enabled: navigation?.register?.enabled !== false,
-      },
-      forgotPassword: {
-        path: String(navigation?.forgotPassword?.path || DEFAULT_FORM.forgotPassword.path),
-        enabled: navigation?.forgotPassword?.enabled !== false,
-      },
-      publicHome: {
-        path: String(navigation?.publicHome?.path || DEFAULT_FORM.publicHome.path),
-        enabled: navigation?.publicHome?.enabled !== false,
-      },
+      login:          { path: String(navigation?.login?.path          || ''), enabled: navigation?.login?.enabled          !== false },
+      postLogin:      { path: String(navigation?.postLogin?.path      || ''), enabled: navigation?.postLogin?.enabled      !== false },
+      logout:         { path: String(navigation?.logout?.path         || ''), enabled: navigation?.logout?.enabled         !== false },
+      register:       { path: String(navigation?.register?.path       || ''), enabled: navigation?.register?.enabled       !== false },
+      forgotPassword: { path: String(navigation?.forgotPassword?.path || ''), enabled: navigation?.forgotPassword?.enabled !== false },
+      publicHome:     { path: String(navigation?.publicHome?.path     || ''), enabled: navigation?.publicHome?.enabled     !== false },
       allowedPathsJson: JSON.stringify(allowedPaths, null, 2),
     });
   };
@@ -191,7 +150,7 @@ export default function ParametrizacionRedirects({
       const tenantOptions = collectTenantGlobalOptions(jerarquia?.tenantsGlobales || []);
       const uniqueOptions = Array.from(
         new Map(
-          [{ value: GLOBAL_SCOPE_VALUE, label: 'Global del sistema' }, ...tenantOptions].map((option) => [option.value, option])
+          [{ value: GLOBAL_SCOPE_VALUE, label: 'Global del sistema' }, ...tenantOptions].map((o) => [o.value, o])
         ).values()
       );
 
@@ -207,6 +166,11 @@ export default function ParametrizacionRedirects({
     }
   };
 
+  useEffect(() => {
+    void loadData();
+  }, [selectedScopeValue, guardarEnRegisUsu]);
+
+  // Paths únicos del catálogo de rutasSeguridad — la fuente dinámica de verdad
   const routePaths = Array.from(
     new Set(
       routeCatalog
@@ -215,43 +179,26 @@ export default function ParametrizacionRedirects({
     )
   ).sort((a, b) => a.localeCompare(b));
 
+  // Incluye el path actual del campo (si existe) para que el Select lo muestre aunque no esté en el catálogo
   const getPathOptions = (currentPath: string): string[] => {
-    const normalizedCurrent = String(currentPath || '').trim();
-    return Array.from(
-      new Set([normalizedCurrent, ...routePaths].filter((path) => path.startsWith('/')))
-    ).sort((a, b) => a.localeCompare(b));
+    const current = String(currentPath || '').trim();
+    const base = current.startsWith('/') ? [current] : [];
+    return Array.from(new Set([...base, ...routePaths])).sort((a, b) => a.localeCompare(b));
   };
 
   const loadWhitelistFromSecurityRoutes = (): void => {
-    setForm((prev) => ({
-      ...prev,
-      allowedPathsJson: JSON.stringify(routePaths, null, 2),
-    }));
+    setForm((prev) => ({ ...prev, allowedPathsJson: JSON.stringify(routePaths, null, 2) }));
     toast.info('Se cargaron los paths de rutasSeguridad en la whitelist.');
   };
-
-  useEffect(() => {
-    void loadData();
-  }, [selectedScopeValue, guardarEnRegisUsu]);
 
   const updateField = (
     key: keyof Omit<RedirectFormState, 'allowedPathsJson'>,
     patch: Partial<RedirectEntryState>
   ): void => {
-    setForm((prev) => ({
-      ...prev,
-      [key]: {
-        ...prev[key],
-        ...patch,
-      },
-    }));
-
+    setForm((prev) => ({ ...prev, [key]: { ...prev[key], ...patch } }));
     if (typeof patch.enabled === 'boolean') {
-      toast.info(`${REDIRECT_FIELDS.find((field) => field.key === key)?.label || key} ${patch.enabled ? 'activado' : 'desactivado'}.`);
-    }
-
-    if (typeof patch.path === 'string' && patch.path.trim()) {
-      toast.info(`Path seleccionado para ${REDIRECT_FIELDS.find((field) => field.key === key)?.label || key}.`);
+      const label = REDIRECT_FIELDS.find((f) => f.key === key)?.label || key;
+      toast.info(`${label} ${patch.enabled ? 'activado' : 'desactivado'}.`);
     }
   };
 
@@ -262,12 +209,10 @@ export default function ParametrizacionRedirects({
       setSaving(true);
       const allowedPaths = parseAllowedPaths(form.allowedPathsJson);
 
-      const invalidRootField = REDIRECT_FIELDS.find((field) =>
-        ROOT_RESTRICTED_FIELDS.has(field.key) && form[field.key].path.trim() === '/'
-      );
-
-      if (invalidRootField) {
-        throw new Error(`La accion ${invalidRootField.label} no puede apuntar a "/". Usa una ruta especifica del modulo.`);
+      // Ningún redirect puede apuntar a "/" (raíz), ya que rompe el flujo de navegación
+      const invalidField = REDIRECT_FIELDS.find((field) => form[field.key].path.trim() === '/');
+      if (invalidField) {
+        throw new Error(`La accion ${invalidField.label} no puede apuntar a "/". Usa una ruta especifica del modulo.`);
       }
 
       const payload: BrandingConfig & { guardarEnRegisUsu?: boolean } = {
@@ -275,12 +220,12 @@ export default function ParametrizacionRedirects({
         widgets: {
           ...(branding.widgets || {}),
           navigation: {
-            login: form.login,
-            postLogin: form.postLogin,
-            logout: form.logout,
-            register: form.register,
+            login:          form.login,
+            postLogin:      form.postLogin,
+            logout:         form.logout,
+            register:       form.register,
             forgotPassword: form.forgotPassword,
-            publicHome: form.publicHome,
+            publicHome:     form.publicHome,
             allowedPaths,
           },
         },
@@ -369,7 +314,7 @@ export default function ParametrizacionRedirects({
                 value={selectedScopeValue}
                 onValueChange={(value) => {
                   setSelectedScopeValue(value);
-                  const label = scopeOptions.find((option) => option.value === value)?.label || value;
+                  const label = scopeOptions.find((o) => o.value === value)?.label || value;
                   toast.info(`Scope seleccionado: ${label}.`);
                 }}
                 disabled={guardarEnRegisUsu}
@@ -414,7 +359,7 @@ export default function ParametrizacionRedirects({
               <div className="space-y-2">
                 <Label>Path</Label>
                 <Select
-                  value={form[field.key].path}
+                  value={form[field.key].path || undefined}
                   onValueChange={(value) => updateField(field.key, { path: value })}
                 >
                   <SelectTrigger>
@@ -450,10 +395,7 @@ export default function ParametrizacionRedirects({
           <Textarea
             rows={compact ? 6 : 8}
             value={form.allowedPathsJson}
-            onChange={(e) => {
-              setForm((prev) => ({ ...prev, allowedPathsJson: e.target.value }));
-              toast.info('Whitelist actualizada manualmente.');
-            }}
+            onChange={(e) => setForm((prev) => ({ ...prev, allowedPathsJson: e.target.value }))}
           />
           <p className="text-xs text-muted-foreground">
             El helper solo aceptara rutas internas incluidas aqui. Si un destino sale de esta whitelist, se usa fallback seguro.
@@ -467,10 +409,7 @@ export default function ParametrizacionRedirects({
           </Button>
           <Button
             variant="outline"
-            onClick={() => {
-              toast.info('Recargando configuracion de redirects...');
-              void loadData();
-            }}
+            onClick={() => void loadData()}
             disabled={saving}
           >
             <RefreshCw className="h-4 w-4 mr-2" />

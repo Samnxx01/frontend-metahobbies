@@ -29,6 +29,7 @@ export interface GuardarConexionPayload {
   tenantGlobalId: string;
   mongoUri: string;
   dbName: string;
+  urlBase?: string | null;
 }
 
 export interface ConfigurarSyncPayload {

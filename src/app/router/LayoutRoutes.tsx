@@ -20,6 +20,8 @@ import RecuperarContrasenaToken from '@/app/presentation/pages/recuperar-contras
 import NotFound from '@/app/presentation/pages/not-found/NotFound';
 import Home from '@/app/presentation/pages/home/Home';
 import Login from '@/app/presentation/pages/login/Login';
+import Carrito from '@/app/presentation/pages/carrito/Carrito';
+import DynamicRouteFallback from '@/app/presentation/pages/admin/DynamicRouteFallback';
 
 // ── Dynamic component map via Vite glob ───────────────────────────────────────
 // Escanea TODOS los .tsx de pages/ y components/admin/ automáticamente.
@@ -63,6 +65,14 @@ const buildComponentMap = (): ComponentMapType => {
         // Suite/Módulo "Usuarios" y "Administracion" usan GestionUsuarios como componente base
         Usuarios:                      'GestionUsuarios',
         Administracion:                'GestionUsuarios',
+        // Productos: wrappers explícitos para público/privado
+        ProductosAdmin:                'ProductosPrivado',
+        ProductosPrivate:              'ProductosPrivado',
+        ProductosPrivados:             'ProductosPrivado',
+        GestionProductosAdmin:         'ProductosPrivado',
+        ProductosPublic:               'ProductosPublico',
+        ProductosPublicos:             'ProductosPublico',
+        CatalogoProductos:             'ProductosPublico',
     };
 
     for (const [alias, target] of Object.entries(aliases)) {
@@ -258,6 +268,10 @@ export default function LayoutRoutes(): ReactElement {
         );
     }
 
+    const renderFallbackElement = (route: RouteConfig): ReactElement => (
+        <DynamicRouteFallback routePath={route.path} componentName={route.component} />
+    );
+
     const renderRoutes = (routes: RouteConfig[], parentPath = ''): ReactElement[] => {
         return routes.map(route => {
             const LazyComponent = componentMap[route.component];
@@ -270,11 +284,7 @@ export default function LayoutRoutes(): ReactElement {
 
             const leafElement = LazyComponent
                 ? <Suspense fallback={<div>Cargando...</div>}><LazyComponent /></Suspense>
-                : (
-                    <div className="p-6 text-sm text-muted-foreground">
-                        Componente no registrado: {route.component}
-                    </div>
-                );
+                : renderFallbackElement(route);
 
             if (!hasChildren) {
                 return (
@@ -301,6 +311,10 @@ export default function LayoutRoutes(): ReactElement {
             <Route element={<PublicLayout />}>
                 <Route path="public/render" element={<Navigate to={getGovernedPublicHomePath()} replace />} />
                 <Route path="public/render/home" element={<Home />} />
+                <Route path="carrito" element={<Carrito />} />
+                <Route path="public/render/carrito" element={<Carrito />} />
+                <Route path="public/render/carrito-compras" element={<Carrito />} />
+                <Route path="public/render/carrrto-compras" element={<Carrito />} />
                 {authorizedRoutes.publicRoutes && renderRoutes(authorizedRoutes.publicRoutes)}
                 <Route path="membresia/*" element={<MembershipRoutes />} />
                 <Route path="cambiar-contrasena-provisional" element={<CambiarContrasenaProvisional />} />
@@ -331,7 +345,7 @@ export default function LayoutRoutes(): ReactElement {
                 </Route>
             )}
 
-            <Route path="*" element={<Navigate to={getGovernedPublicHomePath()} replace />} />
+            <Route path="*" element={user ? <NotFound /> : <Navigate to={getGovernedPublicHomePath()} replace />} />
         </Routes>
     );
 }

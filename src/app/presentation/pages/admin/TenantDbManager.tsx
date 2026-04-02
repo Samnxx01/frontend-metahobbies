@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { toast } from 'react-toastify';
 import {
   Database,
@@ -80,11 +80,13 @@ function MigrationBadge({ status }: { status: TenantDbConfig['migrationStatus'] 
 
 interface FormConexion {
   tenantGlobalId: string;
+  contenedor: string;   // nombre descriptivo / alias del tenant
   mongoUri: string;
   dbName: string;
+  urlBase: string;
 }
 
-const FORM_VACIO: FormConexion = { tenantGlobalId: '', mongoUri: '', dbName: '' };
+const FORM_VACIO: FormConexion = { tenantGlobalId: '', contenedor: '', mongoUri: '', dbName: '', urlBase: '' };
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 
@@ -152,7 +154,12 @@ export default function TenantDbManager() {
     }
     setSaving(true);
     try {
-      const res = await tenantDbService.guardarConexion(form);
+      const res = await tenantDbService.guardarConexion({
+        tenantGlobalId: form.tenantGlobalId,
+        mongoUri:       form.mongoUri,
+        dbName:         form.dbName,
+        urlBase:        form.urlBase || null,
+      });
       toast.success(res.msg ?? 'Conexión guardada');
       setDlgConexion(false);
       setForm(FORM_VACIO);
@@ -315,6 +322,7 @@ export default function TenantDbManager() {
                     <TableRow>
                       <TableHead>Tenant Global ID</TableHead>
                       <TableHead>Base de datos</TableHead>
+                      <TableHead>URL parametrizada</TableHead>
                       <TableHead>Migración</TableHead>
                       <TableHead>Colecciones sync</TableHead>
                       <TableHead>Estado</TableHead>
@@ -330,6 +338,12 @@ export default function TenantDbManager() {
                             {id.slice(0, 12)}…
                           </TableCell>
                           <TableCell className="font-medium">{cfg.dbName}</TableCell>
+                          <TableCell className="text-xs text-muted-foreground max-w-[160px] truncate" title={cfg.urlBase ?? '—'}>
+                            {cfg.urlBase
+                              ? <a href={cfg.urlBase} target="_blank" rel="noreferrer" className="text-primary underline underline-offset-2">{cfg.urlBase}</a>
+                              : <span className="opacity-40">—</span>
+                            }
+                          </TableCell>
                           <TableCell>
                             <MigrationBadge status={cfg.migrationStatus} />
                             {cfg.migrationError && (
@@ -603,6 +617,22 @@ export default function TenantDbManager() {
           </DialogHeader>
 
           <div className="space-y-4 py-2">
+
+            {/* Contenedor / alias */}
+            <div className="space-y-1">
+              <Label htmlFor="contenedor">Contenedor (nombre descriptivo)</Label>
+              <Input
+                id="contenedor"
+                placeholder="Ej: Empresa Acme — Producción"
+                value={form.contenedor}
+                onChange={e => setForm(f => ({ ...f, contenedor: e.target.value }))}
+              />
+              <p className="text-xs text-muted-foreground">
+                Alias visual para identificar este tenant en la UI. No se guarda en BD.
+              </p>
+            </div>
+
+            {/* Tenant Global ID */}
             <div className="space-y-1">
               <Label htmlFor="tenantGlobalId">Tenant Global ID <span className="text-destructive">*</span></Label>
               <Input
@@ -612,19 +642,20 @@ export default function TenantDbManager() {
                 onChange={e => setForm(f => ({ ...f, tenantGlobalId: e.target.value }))}
               />
               <p className="text-xs text-muted-foreground">
-                El _id del documento en la colección <code>tenantGlobal</code>.
+                El <code>_id</code> del documento en la colección <code>tenantGlobal</code>.
               </p>
             </div>
 
+            {/* Cadena de conexión */}
             <div className="space-y-1">
               <Label htmlFor="mongoUri">
-                MongoDB URI <span className="text-destructive">*</span>
+                Cadena de conexión (MongoDB URI) <span className="text-destructive">*</span>
               </Label>
               <div className="relative">
                 <Input
                   id="mongoUri"
                   type={showUri ? 'text' : 'password'}
-                  placeholder="mongodb+srv://user:pass@cluster.mongodb.net/"
+                  placeholder="mongodb+srv://usuario:contraseña@cluster.mongodb.net/"
                   value={form.mongoUri}
                   onChange={e => setForm(f => ({ ...f, mongoUri: e.target.value }))}
                   className="pr-10"
@@ -639,8 +670,9 @@ export default function TenantDbManager() {
               </div>
             </div>
 
+            {/* Nombre de la BD */}
             <div className="space-y-1">
-              <Label htmlFor="dbName">Nombre de la BD <span className="text-destructive">*</span></Label>
+              <Label htmlFor="dbName">Nombre de la base de datos <span className="text-destructive">*</span></Label>
               <Input
                 id="dbName"
                 placeholder="empresa-acme-produccion"
@@ -649,12 +681,26 @@ export default function TenantDbManager() {
               />
             </div>
 
+            {/* URL parametrizada */}
+            <div className="space-y-1">
+              <Label htmlFor="urlBase">URL parametrizada del tenant</Label>
+              <Input
+                id="urlBase"
+                placeholder="https://acme.tuapp.com"
+                value={form.urlBase}
+                onChange={e => setForm(f => ({ ...f, urlBase: e.target.value }))}
+              />
+              <p className="text-xs text-muted-foreground">
+                URL pública asociada a este tenant. Se usa para enrutamiento y configuración de dominio.
+              </p>
+            </div>
+
             <div className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground space-y-1">
               <p className="font-medium text-foreground">¿Qué ocurre al guardar?</p>
               <ul className="list-disc pl-4 space-y-0.5">
                 <li>Se abre la conexión al MongoDB del tenant.</li>
                 <li>Se migran todos los schemas (colecciones + índices) del master a la nueva BD.</li>
-                <li>La URI no se expone en respuestas futuras.</li>
+                <li>La cadena de conexión no se expone en respuestas futuras.</li>
               </ul>
             </div>
           </div>

@@ -14,6 +14,13 @@ interface RouteResponse {
         layout: string;
         icon: string | null;
         tipoNodo?: string | null;
+        tipoNodoId?: {
+            _id?: string;
+            codigo?: string;
+            nombre?: string;
+            descripcion?: string;
+            order?: number;
+        } | null;
         padreId?: string | { _id?: string; iud?: string } | null;
         allowedRoles: Array<{ iud: string }>;
         estadoRuta: boolean;
@@ -24,6 +31,11 @@ interface RouteResponse {
         menuUsuarioLabel?: string | null;
         menuUsuarioOrder?: number;
         renderTag?: string | null;
+        formulariosConfig?: {
+            habilitado?: boolean;
+            modoAsignacion?: 'TENANT' | 'USUARIO' | 'NINGUNO';
+            soloDios?: boolean;
+        } | null;
         accessType: { _id: string; accessType: string; layout?: string } | Array<{ _id: string; accessType: string; layout?: string }>;
         order: number;
     }>;
@@ -149,6 +161,15 @@ export interface RouteCatalogItem {
     component: string;
     name: string;
     icon?: string | null;
+    tipoNodo?: string | null;
+    tipoNodoId?: {
+        _id?: string;
+        codigo?: string;
+        nombre?: string;
+        descripcion?: string;
+        order?: number;
+    } | null;
+    accessType?: Array<{ _id: string; accessType: string; layout?: string }>;
     mostrarEnNavbarPublico?: boolean;
     mostrarEnSidebar?: boolean;
     mostrarEnMenuUsuario?: boolean;
@@ -309,15 +330,25 @@ export const getRouteCatalog = async (): Promise<RouteCatalogItem[]> => {
                 iud: String(r.iud || r._id || ''),
                 path: normalizeRoutePath(r.path),
                 layout: r.layout.replace("/", "").trim(),
-                component: r.component.replace(/\.(jsx|tsx|js|ts)$/i, ""),
+                component: String(r.component || '').replace(/\.(jsx|tsx|js|ts)$/i, ""),
                 name: r.name,
                 icon: r.icon ?? null,
+                tipoNodo: r.tipoNodo ?? null,
+                tipoNodoId: r.tipoNodoId ?? null,
+                accessType: Array.isArray(r.accessType) ? r.accessType : (r.accessType ? [r.accessType] : []),
                 mostrarEnNavbarPublico: r.mostrarEnNavbarPublico === true,
                 mostrarEnSidebar: r.mostrarEnSidebar === true,
                 mostrarEnMenuUsuario: r.mostrarEnMenuUsuario === true,
                 tiquetaNavb: String(r.tiquetaNavb || '').trim() || null,
                 menuUsuarioLabel: String(r.menuUsuarioLabel || '').trim() || null,
                 menuUsuarioOrder: Number(r.menuUsuarioOrder ?? 0),
+                formulariosConfig: r.formulariosConfig
+                    ? {
+                        habilitado: r.formulariosConfig.habilitado === true,
+                        modoAsignacion: r.formulariosConfig.modoAsignacion ?? 'NINGUNO',
+                        soloDios: r.formulariosConfig.soloDios === true,
+                    }
+                    : undefined,
             }));
     } catch (error) {
         console.error("Error al obtener catalogo de rutas:", error);
@@ -428,7 +459,7 @@ export const getAuthorizedRoutes = async (): Promise<AuthorizedRoutes> => {
 
         // Normaliza nombres de componentes (strip extensiones y puntos trailing de la BD)
         const normalizeComponent = (name: string) =>
-            name.replace(/\.(jsx|tsx|js|ts)$/i, "").replace(/\.+$/, "").trim();
+            String(name || '').replace(/\.(jsx|tsx|js|ts)$/i, "").replace(/\.+$/, "").trim();
 
         // Helpers para detectar rutas híbridas (múltiples accessType que cruzan contextos)
         const getAccessTypeEntries = (r: typeof result.data[number]) => {
@@ -592,12 +623,19 @@ export const getPublicNavigationRoutes = async (
                 // Filtrar por PUBLIC cuando no hay sesión, PRIVATE cuando sí hay
                 if (!accessTypes.includes(targetAccessType)) return false;
 
-                // Solo rutas marcadas para el navbar
-                // Se usa renderTag o mostrarEnNavbarPublico como criterio secundario
-                const tieneRenderTag = route.renderTag === 'publico-view' || route.renderTag === 'private-view';
-                const tieneNavbarFlag = route.mostrarEnNavbarPublico === true || route.mostrarEnSidebar === true;
+                const hasPublic = accessTypes.includes('PUBLIC');
+                const hasPrivate = accessTypes.includes('PRIVATE') || accessTypes.includes('AUTH') || accessTypes.includes('ADMIN');
+                const isHybrid = hasPublic && hasPrivate;
 
-                return tieneRenderTag || tieneNavbarFlag;
+                if (isAuthenticated) {
+                    if (route.mostrarEnSidebar !== true) return false;
+                    if (route.mostrarEnNavbarPublico === true && !isHybrid) return false;
+                    return true;
+                }
+
+                if (route.mostrarEnNavbarPublico !== true) return false;
+                if (route.mostrarEnSidebar === true && !isHybrid) return false;
+                return true;
             })
             .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
             .map((route) => ({

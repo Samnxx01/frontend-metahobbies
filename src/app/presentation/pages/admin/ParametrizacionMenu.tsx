@@ -13,6 +13,13 @@ import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -28,18 +35,17 @@ import {
   LayoutDashboard,
   Lock,
   Loader2,
-  Network,
   Pencil,
   Plus,
   RefreshCw,
   Save,
   Settings,
   ShieldCheck,
+  SlidersHorizontal,
   Trash2,
   User,
   X,
 } from 'lucide-react';
-import ParametrizacionGenyProcent from './ParametrizacionGenyProcent/ParametrizacionGenyProcent';
 import { getRouteCatalog, RouteCatalogItem } from '@/app/services/routeService';
 import { apiFetch } from '@/app/services/api';
 import { useAuth } from '@/app/providers/AuthProvider';
@@ -47,6 +53,7 @@ import {
   createRouteMenuTag,
   deleteRouteMenuTag,
   getRouteMenuTags,
+  resolveCurrentRouteMenuTags,
   RouteMenuTag,
   updateRoute,
   updateRouteMenuTag,
@@ -74,6 +81,38 @@ interface NavbarItemState {
   saving: boolean;
 }
 
+interface SidebarItemState {
+  route: RouteCatalogItem;
+  enabled: boolean;
+  saving: boolean;
+}
+
+interface VisibilityModalState {
+  open: boolean;
+}
+
+interface FormularioRutaOption {
+  iud: string;
+  name: string;
+  path: string;
+}
+
+const mergeMenuTags = (...sources: Array<RouteMenuTag[] | undefined | null>): RouteMenuTag[] => {
+  const byId = new Map<string, RouteMenuTag>();
+
+  sources.forEach((rows) => {
+    (Array.isArray(rows) ? rows : []).forEach((tag) => {
+      const key = String(tag?.iud || tag?.codigo || '').trim();
+      if (!key) return;
+      byId.set(key, tag);
+    });
+  });
+
+  return Array.from(byId.values()).sort(
+    (a, b) => Number(a.order ?? 0) - Number(b.order ?? 0) || String(a.label || '').localeCompare(String(b.label || ''))
+  );
+};
+
 interface MenuTagFormState {
   id: string | null;
   nombreTag: string;
@@ -87,8 +126,6 @@ interface MenuTagFormState {
   tagTenantSuperAdminId: string | null;
   tagTenantGlobalIds: string[];
   tagTenantCorporativoId: string | null;
-  canView: boolean;
-  canInherit: boolean;
   permitirSinTenant: boolean;
 }
 
@@ -135,8 +172,6 @@ const EMPTY_TAG_FORM: MenuTagFormState = {
   tagTenantSuperAdminId: null,
   tagTenantGlobalIds: [],
   tagTenantCorporativoId: null,
-  canView: true,
-  canInherit: true,
   permitirSinTenant: false,
 };
 
@@ -159,21 +194,17 @@ export default function ParametrizacionMenu() {
     MI_PERFIL: { route: null, enabled: false, label: '', order: 0, saving: false, saved: false },
   });
   const [navbarItems, setNavbarItems] = useState<NavbarItemState[]>([]);
+  const [sidebarItems, setSidebarItems] = useState<SidebarItemState[]>([]);
+  const [visibilityModal, setVisibilityModal] = useState<VisibilityModalState>({ open: false });
+  const [selectedVisibilityRouteId, setSelectedVisibilityRouteId] = useState<string>('');
+  const [formularioRoutes, setFormularioRoutes] = useState<FormularioRutaOption[]>([]);
   const [routeCatalog, setRouteCatalog] = useState<RouteCatalogItem[]>([]);
   const [menuTags, setMenuTags] = useState<RouteMenuTag[]>([]);
   const [savingAcciones, setSavingAcciones] = useState<Record<string, boolean>>({});
   const [tagForm, setTagForm] = useState<MenuTagFormState>(EMPTY_TAG_FORM);
 
-  // ── Multinivel: selector de TenantGlobal ──────────────────────────────────
   const [tenantsGlobales, setTenantsGlobales] = useState<TenantGlobalInfo[]>([]);
   const [jerarquiaGlobales, setJerarquiaGlobales] = useState<TenantGlobalNode[]>([]);
-  const [loadingTenants, setLoadingTenants] = useState(false);
-  const [selectedTenantGlobalId, setSelectedTenantGlobalId] = useState<string | null>(null);
-
-  // ── Permiso modoReferir por TenantGlobal ──────────────────────────────────
-  const [modoReferir, setModoReferir] = useState<'TODOS' | 'SELECCION' | 'INHABILITADO'>('TODOS');
-  const [loadingParametrizacion, setLoadingParametrizacion] = useState(false);
-  const [savingModoReferir, setSavingModoReferir] = useState(false);
 
   const tenantScope = user?.auth?.tenantScope || {};
   const actorScope = {
@@ -184,29 +215,14 @@ export default function ParametrizacionMenu() {
 
   // Roles con acceso total — DIOS y DESAROLLADOR pueden no tener tenantSuperAdminId
   // en el rol si son cuentas de sistema, pero igual tienen permisos de SuperAdmin
-  const userRol = (user?.rol ?? '').toUpperCase();
-  const esRolGlobal = ['DIOS', 'DESAROLLADOR'].includes(userRol);
 
   // SA puro = tenantSuperAdminId presente SIN tenantGlobalId propio
   // TG lleva ambos (el tenantSuperAdminId del SA que lo gestiona + su propio tenantGlobalId)
   // DIOS/DESAROLLADOR: sin tenant ids pero son SA por nombre de rol
-  const esSuperAdmin = (!!(actorScope.tenantSuperAdminId && !actorScope.tenantGlobalId)) || esRolGlobal;
-  const mostrarSeccionMultinivel = !!(actorScope.tenantSuperAdminId || actorScope.tenantGlobalId) || esRolGlobal;
-
-  // Para TG: el tenant activo es directo. Para SA: el que elija en el selector.
-  const activeTenantGlobalId = actorScope.tenantGlobalId ?? selectedTenantGlobalId;
-  const activeTenantLabel = actorScope.tenantGlobalId
-    ? (tenantsGlobales.find(t => t.iud === actorScope.tenantGlobalId)?.razon_social
-        ?? tenantsGlobales.find(t => t.iud === actorScope.tenantGlobalId)?.titulo
-        ?? 'Mi TenantGlobal')
-    : (tenantsGlobales.find(t => t.iud === selectedTenantGlobalId)?.razon_social
-        ?? tenantsGlobales.find(t => t.iud === selectedTenantGlobalId)?.titulo
-        ?? null);
 
   // Carga la jerarquía de tenants para cualquier admin que gestione tags
   useEffect(() => {
     if (actorScope.tenantCorporativoId) return; // corporativo ya tiene sus IDs fijos
-    setLoadingTenants(true);
     getJerarquiaUsuarios()
       .then(res => {
         const nodos: TenantGlobalNode[] = res?.tenantsGlobales ?? [];
@@ -216,40 +232,8 @@ export default function ParametrizacionMenu() {
           .filter((tg): tg is TenantGlobalInfo => tg !== null);
         setTenantsGlobales(lista);
       })
-      .catch(() => {/* silencioso */})
-      .finally(() => setLoadingTenants(false));
+      .catch(() => {/* silencioso */});
   }, []);
-
-  // Carga la parametrización vigente (modoReferir) cuando cambia el tenant activo
-  useEffect(() => {
-    if (!activeTenantGlobalId) { setModoReferir('TODOS'); return; }
-    setLoadingParametrizacion(true);
-    apiFetch(`/api/governance/parametrizacion/global/${activeTenantGlobalId}`, { method: 'GET' })
-      .then(res => setModoReferir(res?.parametrizacion?.modoReferir ?? 'TODOS'))
-      .catch(() => setModoReferir('TODOS'))
-      .finally(() => setLoadingParametrizacion(false));
-  }, [activeTenantGlobalId]);
-
-  const saveModoReferir = async (modo: 'TODOS' | 'SELECCION' | 'INHABILITADO') => {
-    if (!activeTenantGlobalId) return;
-    setSavingModoReferir(true);
-    try {
-      const res = await apiFetch(
-        `/api/governance/parametrizacion/global/${activeTenantGlobalId}`,
-        {
-          method: 'PUT',
-          body: { canCreateCorporativos: true, modoReferir: modo },
-        }
-      );
-      setModoReferir(res?.parametrizacion?.modoReferir ?? modo);
-      toast.success('Configuración de referidos actualizada.');
-    } catch (err: any) {
-      toast.error(err?.message || 'No se pudo guardar el modo de referidos.');
-    } finally {
-      setSavingModoReferir(false);
-    }
-  };
-
   const routeOptions = useMemo(
     () =>
       routeCatalog
@@ -279,13 +263,60 @@ export default function ParametrizacionMenu() {
     ? [{ iud: actorScope.tenantSuperAdminId, nombre: 'Mi SuperAdmin' }]
     : [];
 
+  const getAccessTypeCodes = (route: RouteCatalogItem): string[] =>
+    Array.isArray((route as any)?.accessType)
+      ? (route as any).accessType
+          .map((item: any) => String(typeof item === 'string' ? item : item?.accessType || '').trim().toUpperCase())
+          .filter(Boolean)
+      : [];
+
+  const isHybridPublicRoute = (route: RouteCatalogItem): boolean => {
+    const codes = getAccessTypeCodes(route);
+    return codes.includes('PUBLIC') && codes.includes('PRIVATE');
+  };
+
+  const isPublicRoute = (route: RouteCatalogItem): boolean => getAccessTypeCodes(route).includes('PUBLIC');
+
+  const isPrivateRoute = (route: RouteCatalogItem): boolean => getAccessTypeCodes(route).includes('PRIVATE');
+
+  const isFormularioRoute = (route: RouteCatalogItem): boolean => {
+    const tipoCodigo = String(route.tipoNodoId?.codigo || route.tipoNodoId?.nombre || route.tipoNodo || '')
+      .trim()
+      .toUpperCase();
+
+    return tipoCodigo === 'FORMULARIO' || route.formulariosConfig?.habilitado === true;
+  };
+
+  const rutasVisibilidadHibrida = useMemo(
+    () => {
+      const formularioIds = new Set(formularioRoutes.map((route) => route.iud));
+      return routeCatalog
+        .filter((route) => (formularioIds.size > 0 ? formularioIds.has(route.iud) : isFormularioRoute(route)))
+        .sort((a, b) => a.name.localeCompare(b.name));
+    },
+    [routeCatalog, formularioRoutes]
+  );
+
+  const selectedVisibilityRoute =
+    rutasVisibilidadHibrida.find((route) => route.iud === selectedVisibilityRouteId) || rutasVisibilidadHibrida[0] || null;
+
   // Rutas agrupadas por contexto de renderización
   const rutasNavbarPublico = useMemo(
-    () => routeCatalog.filter((r) => r.mostrarEnNavbarPublico === true),
+    () =>
+      routeCatalog.filter(
+        (r) =>
+          r.mostrarEnNavbarPublico === true &&
+          isPublicRoute(r)
+      ),
     [routeCatalog]
   );
   const rutasSidebar = useMemo(
-    () => routeCatalog.filter((r) => r.mostrarEnSidebar === true && r.mostrarEnNavbarPublico !== true),
+    () =>
+      routeCatalog.filter(
+        (r) =>
+          r.mostrarEnSidebar === true &&
+          isPrivateRoute(r)
+      ),
     [routeCatalog]
   );
   const rutasConConfig = useMemo(
@@ -316,11 +347,21 @@ export default function ParametrizacionMenu() {
 
   const refreshMenuTags = async () => {
     try {
-      const response = await apiFetch(
-        `${import.meta.env.VITE_API_BASE_URL ?? '/api'}/seguridad/rutas/menu-tags?menuTipo=USER_DROPDOWN&_t=${Date.now()}`,
-        { method: 'GET', cache: 'no-store' as RequestCache }
+      const [listResponse, resolvedResponse] = await Promise.all([
+        apiFetch(
+          `${import.meta.env.VITE_API_BASE_URL ?? '/api'}/seguridad/rutas/menu-tags?menuTipo=USER_DROPDOWN&_t=${Date.now()}`,
+          { method: 'GET', cache: 'no-store' as RequestCache }
+        ),
+        resolveCurrentRouteMenuTags({ menuTipo: 'USER_DROPDOWN' }).catch(() => null),
+      ]);
+
+      setMenuTags(
+        mergeMenuTags(
+          Array.isArray(listResponse?.data) ? listResponse.data : [],
+          Array.isArray((resolvedResponse as any)?.data) ? (resolvedResponse as any).data : []
+        )
       );
-      setMenuTags(Array.isArray(response?.data) ? response.data : []);
+      window.dispatchEvent(new CustomEvent('user-menu-tags-updated'));
     } catch (error) {
       console.error('Error al refrescar tags:', error);
     }
@@ -329,13 +370,34 @@ export default function ParametrizacionMenu() {
   const loadCatalog = async () => {
     setLoading(true);
     try {
-      const [catalog, menuTagsResponse] = await Promise.all([
+      const [catalog, menuTagsResponse, resolvedMenuTagsResponse, formulariosResponse] = await Promise.all([
         getRouteCatalog(),
         getRouteMenuTags({ menuTipo: 'USER_DROPDOWN', soloActivos: false }),
+        resolveCurrentRouteMenuTags({ menuTipo: 'USER_DROPDOWN' }).catch(() => null),
+        apiFetch(`${import.meta.env.VITE_API_BASE_URL ?? '/api'}/seguridad/rutas/formularios/opciones`, {
+          method: 'GET',
+        }).catch(() => null),
       ]);
 
       setRouteCatalog(catalog);
-      setMenuTags(Array.isArray(menuTagsResponse?.data) ? menuTagsResponse.data : []);
+      setMenuTags(
+        mergeMenuTags(
+          Array.isArray(menuTagsResponse?.data) ? menuTagsResponse.data : [],
+          Array.isArray((resolvedMenuTagsResponse as any)?.data) ? (resolvedMenuTagsResponse as any).data : []
+        )
+      );
+      window.dispatchEvent(new CustomEvent('user-menu-tags-updated'));
+      setFormularioRoutes(
+        Array.isArray((formulariosResponse as any)?.data?.rutasAcciones)
+          ? (formulariosResponse as any).data.rutasAcciones
+              .map((route: any) => ({
+                iud: String(route?.iud || '').trim(),
+                name: String(route?.name || '').trim(),
+                path: String(route?.path || '').trim(),
+              }))
+              .filter((route: FormularioRutaOption) => route.iud)
+          : []
+      );
 
       const nextSlots = { ...slots };
       for (const slot of USER_MENU_SLOTS) {
@@ -352,9 +414,18 @@ export default function ParametrizacionMenu() {
       setSlots(nextSlots);
 
       const nextNavbarItems = catalog
-        .filter((r) => r.mostrarEnNavbarPublico !== undefined)
+        .filter((r) => {
+          if (!isPublicRoute(r)) return false;
+          if (r.mostrarEnSidebar === true && !isHybridPublicRoute(r)) return false;
+          return r.mostrarEnNavbarPublico !== undefined;
+        })
         .map((r) => ({ route: r, enabled: r.mostrarEnNavbarPublico === true, saving: false }));
       setNavbarItems(nextNavbarItems);
+      setSidebarItems(
+        catalog
+          .filter((r) => r.mostrarEnSidebar === true && isPrivateRoute(r))
+          .map((route) => ({ route, enabled: route.mostrarEnSidebar === true, saving: false }))
+      );
     } catch (error) {
       console.error(error);
       toast.error('No se pudo cargar la parametrizacion del menu.');
@@ -366,6 +437,18 @@ export default function ParametrizacionMenu() {
   useEffect(() => {
     loadCatalog();
   }, []);
+
+  useEffect(() => {
+    if (rutasVisibilidadHibrida.length === 0) {
+      if (selectedVisibilityRouteId) setSelectedVisibilityRouteId('');
+      return;
+    }
+
+    const exists = rutasVisibilidadHibrida.some((route) => route.iud === selectedVisibilityRouteId);
+    if (!exists) {
+      setSelectedVisibilityRouteId(rutasVisibilidadHibrida[0].iud);
+    }
+  }, [rutasVisibilidadHibrida, selectedVisibilityRouteId]);
 
   const resetTagForm = () => {
     setTagForm(EMPTY_TAG_FORM);
@@ -395,8 +478,6 @@ export default function ParametrizacionMenu() {
       tagTenantSuperAdminId: tSuperAdmin,
       tagTenantGlobalIds: rawGlobalIds.filter(Boolean) as string[],
       tagTenantCorporativoId: tCorp,
-      canView: tag.canView ?? true,
-      canInherit: tag.canInherit ?? true,
       permitirSinTenant: tag.permitirSinTenant === true,
     });
   };
@@ -426,11 +507,35 @@ export default function ParametrizacionMenu() {
 
   const saveNavbarItem = async (index: number, enabled: boolean) => {
     const item = navbarItems[index];
+    if (!item) return;
+    if (enabled && !isPublicRoute(item.route)) {
+      toast.error('Para activar navbar publico la ruta debe tener access PUBLIC.');
+      return;
+    }
+    if (enabled && item.route.mostrarEnSidebar === true && !isHybridPublicRoute(item.route)) {
+      toast.error('Solo las rutas HYBRID pueden quedar activas a la vez en navbar publico y sidebar.');
+      return;
+    }
     setNavbarItems((prev) =>
       prev.map((it, i) => (i === index ? { ...it, enabled, saving: true } : it))
     );
     try {
       await updateRoute(item.route.iud, { mostrarEnNavbarPublico: enabled } as any);
+      setRouteCatalog((prev) =>
+        prev.map((route) =>
+          route.iud === item.route.iud ? { ...route, mostrarEnNavbarPublico: enabled } : route
+        )
+      );
+      setSidebarItems((prev) =>
+        prev.map((itemState) =>
+          itemState.route.iud === item.route.iud
+            ? {
+                ...itemState,
+                route: { ...itemState.route, mostrarEnNavbarPublico: enabled },
+              }
+            : itemState
+        )
+      );
     } catch (error) {
       console.error(error);
       toast.error('No se pudo guardar el navbar publico.');
@@ -438,6 +543,50 @@ export default function ParametrizacionMenu() {
       setNavbarItems((prev) =>
         prev.map((it, i) => (i === index ? { ...it, enabled, saving: false } : it))
       );
+    }
+  };
+
+  const saveSidebarItem = async (routeIud: string, enabled: boolean) => {
+    const item = routeCatalog.find((route) => route.iud === routeIud);
+    if (!item) return;
+    if (enabled && !isPrivateRoute(item)) {
+      toast.error('Para activar sidebar privado la ruta debe tener access PRIVATE.');
+      return;
+    }
+    if (enabled && item.mostrarEnNavbarPublico === true && !isHybridPublicRoute(item)) {
+      toast.error('Solo las rutas HYBRID pueden quedar activas a la vez en navbar publico y sidebar.');
+      return;
+    }
+
+    setRouteCatalog((prev) =>
+      prev.map((route) =>
+        route.iud === routeIud ? { ...route, mostrarEnSidebar: enabled } : route
+      )
+    );
+
+    try {
+      await updateRoute(routeIud, { mostrarEnSidebar: enabled } as any);
+      setSidebarItems((prev) => {
+        const exists = prev.some((entry) => entry.route.iud === routeIud);
+        if (enabled && !exists) {
+          return [...prev, { route: { ...item, mostrarEnSidebar: true }, enabled: true, saving: false }];
+        }
+        return prev
+          .map((entry) =>
+            entry.route.iud === routeIud
+              ? { ...entry, enabled, route: { ...entry.route, mostrarEnSidebar: enabled } }
+              : entry
+          )
+          .filter((entry) => entry.enabled);
+      });
+    } catch (error) {
+      console.error(error);
+      setRouteCatalog((prev) =>
+        prev.map((route) =>
+          route.iud === routeIud ? { ...route, mostrarEnSidebar: item.mostrarEnSidebar === true } : route
+        )
+      );
+      toast.error('No se pudo guardar el sidebar privado.');
     }
   };
 
@@ -824,27 +973,7 @@ export default function ParametrizacionMenu() {
               </div>
 
               <div className="space-y-3">
-                <Label>Permisos adicionales</Label>
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    id="canView"
-                    className="h-4 w-4 rounded border-gray-300 accent-primary"
-                    checked={tagForm.canView}
-                    onChange={(e) => setTagForm((prev) => ({ ...prev, canView: e.target.checked, canInherit: e.target.checked }))}
-                  />
-                  <Label htmlFor="canView" className="text-sm">Permitir vista</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    id="canInherit"
-                    className="h-4 w-4 rounded border-gray-300 accent-primary"
-                    checked={tagForm.canInherit}
-                    onChange={(e) => setTagForm((prev) => ({ ...prev, canView: e.target.checked, canInherit: e.target.checked }))}
-                  />
-                  <Label htmlFor="canInherit" className="text-sm">Permitir herencia</Label>
-                </div>
+                <Label>Acceso adicional</Label>
                 <div className="flex items-center space-x-2">
                   <input
                     type="checkbox"
@@ -1062,12 +1191,18 @@ export default function ParametrizacionMenu() {
 
       {navbarItems.length > 0 && (
         <section className="space-y-4">
-          <div className="flex items-center gap-2">
-            <Globe className="h-5 w-5 text-primary" />
-            <h2 className="text-lg font-semibold">Navbar publico</h2>
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-2">
+              <Globe className="h-5 w-5 text-primary" />
+              <h2 className="text-lg font-semibold">Navbar publico</h2>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => setVisibilityModal({ open: true })}>
+              <SlidersHorizontal className="h-4 w-4 mr-2" />
+              Configurar estados
+            </Button>
           </div>
           <p className="text-sm text-muted-foreground -mt-2">
-            Rutas visibles en la barra de navegacion publica.
+            Esta configuracion se administra en privado desde aqui, pero el render del navbar se resuelve desde la API publica de rutas.
           </p>
 
           <Card>
@@ -1077,7 +1212,10 @@ export default function ParametrizacionMenu() {
                   <div className="flex items-center gap-3">
                     <LayoutDashboard className="h-4 w-4 text-muted-foreground" />
                     <div>
-                      <p className="text-sm font-medium">{item.route.name}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium">{item.route.name}</p>
+                        {isHybridPublicRoute(item.route) && <Badge variant="outline">HYBRID</Badge>}
+                      </div>
                       <p className="text-xs text-muted-foreground font-mono">{item.route.path}</p>
                     </div>
                   </div>
@@ -1096,114 +1234,153 @@ export default function ParametrizacionMenu() {
         </section>
       )}
 
-      {mostrarSeccionMultinivel && (
+      {rutasSidebar.length > 0 && (
         <section className="space-y-4">
           <div className="flex items-center gap-2">
-            <Network className="h-5 w-5 text-primary" />
-            <h2 className="text-lg font-semibold">Parametrizacion multinivel</h2>
-            {activeTenantLabel
-              ? <Badge variant="secondary">{activeTenantLabel}</Badge>
-              : <Badge variant="outline">Sin tenant seleccionado</Badge>
-            }
+            <Settings className="h-5 w-5 text-primary" />
+            <h2 className="text-lg font-semibold">Sidebar privado</h2>
           </div>
           <p className="text-sm text-muted-foreground -mt-2">
-            Configura las generaciones y porcentajes de comision del sistema de referidos multinivel
-            para el TenantGlobal activo.
+            Desde aqui controlas la visibilidad privada. Si una ruta tambien aparece en el navbar publico, debe ser HYBRID.
           </p>
 
-          {/* Selector de TenantGlobal — solo visible para SuperAdmin */}
-          {esSuperAdmin && (
-            <div className="flex items-center gap-3">
-              <div className="w-72">
-                <Select
-                  value={selectedTenantGlobalId ?? ''}
-                  onValueChange={setSelectedTenantGlobalId}
-                  disabled={loadingTenants}
-                >
-                  <SelectTrigger>
-                    {loadingTenants
-                      ? <span className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <Loader2 className="h-3 w-3 animate-spin" /> Cargando tenants...
-                        </span>
-                      : <SelectValue placeholder="Selecciona un TenantGlobal" />
-                    }
-                  </SelectTrigger>
-                  <SelectContent>
-                    {tenantsGlobales.map(tg => (
-                      <SelectItem key={tg.iud} value={tg.iud}>
-                        {tg.razon_social ?? tg.titulo ?? tg.iud}
-                        {tg.nit_ruc_rtn && (
-                          <span className="ml-1 text-xs text-muted-foreground">· {tg.nit_ruc_rtn}</span>
+          <Card>
+            <CardContent className="pt-4 divide-y">
+              {rutasSidebar.map((route) => (
+                <div key={route.iud} className="flex items-center justify-between py-3">
+                  <div className="flex items-center gap-3">
+                    <LayoutDashboard className="h-4 w-4 text-muted-foreground" />
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium">{route.name}</p>
+                        {isHybridPublicRoute(route) && <Badge variant="outline">HYBRID</Badge>}
+                        {route.mostrarEnNavbarPublico === true && (
+                          <Badge variant="secondary">Navbar publico</Badge>
                         )}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              {selectedTenantGlobalId && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-xs text-muted-foreground"
-                  onClick={() => setSelectedTenantGlobalId(null)}
-                >
-                  Limpiar
-                </Button>
-              )}
-            </div>
-          )}
-
-          {/* Permiso de referidos + niveles — solo cuando hay tenant activo */}
-          {activeTenantGlobalId ? (
-            <div className="space-y-4">
-              {/* Tarjeta: modo de referidos */}
-              <Card>
-                <CardContent className="pt-5 pb-4 space-y-3">
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="space-y-0.5">
-                      <p className="text-sm font-medium">Modo de referidos</p>
-                      <p className="text-xs text-muted-foreground">
-                        Define quién puede generar enlaces de referido en este TenantGlobal.
-                      </p>
+                      </div>
+                      <p className="text-xs text-muted-foreground font-mono">{route.path}</p>
                     </div>
-                    {(loadingParametrizacion || savingModoReferir) && (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground shrink-0" />
-                    )}
                   </div>
-                  <div className="flex gap-2">
-                    {(['TODOS', 'SELECCION', 'INHABILITADO'] as const).map(modo => (
-                      <Button
-                        key={modo}
-                        size="sm"
-                        variant={modoReferir === modo ? 'default' : 'outline'}
-                        disabled={loadingParametrizacion || savingModoReferir}
-                        onClick={() => saveModoReferir(modo)}
-                        className="flex-1 text-xs"
-                      >
-                        {modo === 'TODOS' && 'Todos'}
-                        {modo === 'SELECCION' && 'Selección'}
-                        {modo === 'INHABILITADO' && 'Inhabilitado'}
-                      </Button>
-                    ))}
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    {modoReferir === 'TODOS' && 'Todos los usuarios del tenant pueden generar referidos.'}
-                    {modoReferir === 'SELECCION' && 'Solo los usuarios con permiso individual (canReferir) pueden referir.'}
-                    {modoReferir === 'INHABILITADO' && 'Ningún usuario puede generar referidos en este tenant.'}
-                  </p>
-                </CardContent>
-              </Card>
-
-              {/* Niveles de generación y porcentajes */}
-              <ParametrizacionGenyProcent scope={esSuperAdmin ? 'SUPER_ADMIN' : 'TENANT_GLOBAL'} />
-            </div>
-          ) : esSuperAdmin && (
-            <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground text-center">
-              Selecciona un TenantGlobal para gestionar sus niveles de generacion y porcentajes.
-            </div>
-          )}
+                  <Switch
+                    checked={route.mostrarEnSidebar === true}
+                    onCheckedChange={(checked) => saveSidebarItem(route.iud, checked)}
+                  />
+                </div>
+              ))}
+            </CardContent>
+          </Card>
         </section>
       )}
+
+      <Dialog open={visibilityModal.open} onOpenChange={(open) => setVisibilityModal({ open })}>
+        <DialogContent className="sm:max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>Estados de navbar publico y sidebar privado</DialogTitle>
+            <DialogDescription>
+              Desde este modal puedes activar rutas publicas en el navbar y, si la ruta es HYBRID, tambien dejar activa su visibilidad privada en sidebar.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
+            {rutasVisibilidadHibrida.length === 0 && (
+              <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
+                No hay rutas de tipo FORMULARIO disponibles para configurar desde este modal.
+              </div>
+            )}
+
+            {rutasVisibilidadHibrida.length > 0 && (
+              <Card>
+                <CardContent className="pt-4 space-y-4">
+                  <div className="space-y-2">
+                    <Label>Ruta seguridad tipo formulario</Label>
+                    <Select value={selectedVisibilityRoute?.iud || ''} onValueChange={setSelectedVisibilityRouteId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecciona una ruta formulario" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {rutasVisibilidadHibrida.map((route) => (
+                          <SelectItem key={route.iud} value={route.iud}>
+                            {route.name} - {route.path}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {selectedVisibilityRoute && (
+                    <>
+                      <div className="rounded-lg border px-4 py-3 space-y-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-sm font-medium">{selectedVisibilityRoute.name}</p>
+                          {isHybridPublicRoute(selectedVisibilityRoute) && <Badge variant="outline">HYBRID</Badge>}
+                          {isPublicRoute(selectedVisibilityRoute) && !isHybridPublicRoute(selectedVisibilityRoute) && (
+                            <Badge variant="secondary">PUBLIC</Badge>
+                          )}
+                          {selectedVisibilityRoute.mostrarEnNavbarPublico === true && (
+                            <Badge variant="secondary">Navbar activo</Badge>
+                          )}
+                          {selectedVisibilityRoute.mostrarEnSidebar === true && (
+                            <Badge variant="secondary">Sidebar activo</Badge>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground font-mono break-all">
+                          {selectedVisibilityRoute.path}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Access actual: {getAccessTypeCodes(selectedVisibilityRoute).join(' + ') || 'Sin accessType'}
+                        </p>
+                      </div>
+
+                      <div className="grid md:grid-cols-2 gap-4">
+                        <div className="flex items-center justify-between rounded-lg border px-3 py-3">
+                          <div className="space-y-1">
+                            <p className="text-sm font-medium">Navbar publico</p>
+                            <p className="text-xs text-muted-foreground">
+                              Activa la ruta en el retorno de la API publica.
+                            </p>
+                          </div>
+                          <Switch
+                            checked={selectedVisibilityRoute.mostrarEnNavbarPublico === true}
+                            onCheckedChange={(checked) => {
+                              const index = navbarItems.findIndex((item) => item.route.iud === selectedVisibilityRoute.iud);
+                              if (index >= 0) {
+                                void saveNavbarItem(index, checked);
+                              } else if (checked) {
+                                toast.error('Esta ruta no puede activarse en navbar publico con el catalogo actual.');
+                              }
+                            }}
+                          />
+                        </div>
+
+                        <div className="flex items-center justify-between rounded-lg border px-3 py-3">
+                          <div className="space-y-1">
+                            <p className="text-sm font-medium">Sidebar privado</p>
+                            <p className="text-xs text-muted-foreground">
+                              Si ambos estados quedan activos, la ruta debe ser HYBRID.
+                            </p>
+                          </div>
+                          <Switch
+                            checked={selectedVisibilityRoute.mostrarEnSidebar === true}
+                            onCheckedChange={(checked) => void saveSidebarItem(selectedVisibilityRoute.iud, checked)}
+                          />
+                        </div>
+                      </div>
+
+                      {!isHybridPublicRoute(selectedVisibilityRoute) && (
+                        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                          Esta ruta no es HYBRID. Puedes activar solo uno de los dos estados al tiempo.
+                        </div>
+                      )}
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 }
+

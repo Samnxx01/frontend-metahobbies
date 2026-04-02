@@ -1028,6 +1028,12 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
       );
 
       const resolvedLayout = (() => {
+        if (editingRoute && (isFormularioType || isSubFormularioType)) {
+          const selectedAtIds = Array.isArray(formData.accessType) ? formData.accessType : [];
+          const firstAt = accessTypes.find((a) => selectedAtIds.includes(String(a._id || '')));
+          if (firstAt?.layout) return firstAt.layout;
+          return formData.layout || '';
+        }
         if (editingRoute) return formData.layout;
         if (isFormularioType) {
           // Formulario: el layout se deriva del primer accessType seleccionado
@@ -1088,8 +1094,8 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
         payload.acciones = selectedAccionesIds;
       }
       if (isSubFormularioType) {
-        // SubFormulario: acciones requeridas, sin accessType propio
-        delete (payload as any).accessType;
+        // SubFormulario: acciones requeridas y accessType opcional/multiple
+        payload.accessType = selectedAccessTypeIds;
         payload.acciones = selectedAccionesIds;
       }
 
@@ -1999,7 +2005,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
                   </p>
                 </div>
               )}
-              {(editingRoute || !isFormularioType) ? (
+              {(editingRoute || !isFormularioType) && !isSubFormularioType ? (
                 <div className="space-y-2 md:col-span-2">
                   <Label htmlFor="layout">Layout *</Label>
                   <Select
@@ -2043,9 +2049,9 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
                 </div>
               )}
 
-              {isFormularioType && (
+              {(isFormularioType || isSubFormularioType) && (
                 <div className="space-y-2 md:col-span-2">
-                  <Label>Tipo de acceso *</Label>
+                  <Label>Tipo de acceso {isFormularioType ? '*' : ''}</Label>
                   <div className="rounded-md border p-3 flex flex-wrap gap-6">
                     {accessTypes
                       .filter((item) => item.estadoAcces !== false)
@@ -2076,7 +2082,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
                     })}
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Puedes seleccionar uno o ambos tipos de acceso.
+                    Puedes seleccionar uno o varios tipos de acceso. El layout efectivo se resolvera desde la seleccion.
                   </p>
                 </div>
               )}

@@ -27,9 +27,9 @@ export interface GovernedNavigationConfig {
 const DEFAULT_PATHS: Record<GovernedNavigationAction, string> = {
   login: '/public/render/login',
   postLogin: '/admin/gestor-rutas/administracion/dashboardadmin',
-  logout: '/public/render/login',
-  register: '/registro',
-  forgotPassword: '/recuperar-contrasena',
+  logout: '/admin/gestor-rutas/administracion/dashboardadmin',
+  register: '/admin/gestor-rutas/administracion/dashboardadmin',
+  forgotPassword: '/admin/gestor-rutas/administracion/dashboardadmin',
   publicHome: '/public/render/home',
 };
 
