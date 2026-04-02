@@ -69,7 +69,7 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
                         useAuth: false,
                         logoutOn401: false
                     }),
-                    getPublicNavigationRoutes(),
+                    getPublicNavigationRoutes(!!user),
                     user ? getMenuUsuarioRoutes() : Promise.resolve([])
                 ]);
 
@@ -243,10 +243,10 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
     );
 
     const ICON_MAP: Record<string, React.ReactNode> = {
-        USER:         <User className="mr-2 h-4 w-4" />,
+        USER: <User className="mr-2 h-4 w-4" />,
         SHIELD_CHECK: <ShieldCheck className="mr-2 h-4 w-4" />,
-        CROWN:        <Crown className="mr-2 h-4 w-4" />,
-        LOG_OUT:      <LogOut className="mr-2 h-4 w-4" />,
+        CROWN: <Crown className="mr-2 h-4 w-4" />,
+        LOG_OUT: <LogOut className="mr-2 h-4 w-4" />,
     };
 
     const resolveIcon = (icon: string | null): React.ReactNode =>

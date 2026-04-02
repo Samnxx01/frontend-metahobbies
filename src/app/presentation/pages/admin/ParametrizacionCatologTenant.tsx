@@ -3,12 +3,15 @@ import { toast } from 'react-toastify';
 import { apiFetch } from '@/app/services/api';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Play, Settings2 } from 'lucide-react';
+import {
+  Play, Settings2, Search, Loader2, RotateCcw,
+  ChevronRight, Terminal, Layers
+} from 'lucide-react';
 
 type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE';
 type EndpointSection = 'catalogos';
@@ -34,11 +37,11 @@ type EndpointSpec = {
   fields: FieldSpec[];
 };
 
-const METHOD_STYLE: Record<HttpMethod, string> = {
-  GET: 'bg-blue-100 text-blue-700 border-blue-200',
-  POST: 'bg-emerald-100 text-emerald-700 border-emerald-200',
-  PUT: 'bg-amber-100 text-amber-700 border-amber-200',
-  DELETE: 'bg-red-100 text-red-700 border-red-200',
+const METHOD_COLORS: Record<HttpMethod, { pill: string; dot: string; label: string }> = {
+  GET: { pill: 'bg-sky-50 text-sky-700 border border-sky-200', dot: 'bg-sky-400', label: 'GET' },
+  POST: { pill: 'bg-emerald-50 text-emerald-700 border border-emerald-200', dot: 'bg-emerald-400', label: 'POST' },
+  PUT: { pill: 'bg-amber-50 text-amber-700 border border-amber-200', dot: 'bg-amber-400', label: 'PUT' },
+  DELETE: { pill: 'bg-red-50 text-red-600 border border-red-200', dot: 'bg-red-400', label: 'DELETE' },
 };
 
 const ENDPOINTS: EndpointSpec[] = [
@@ -125,9 +128,7 @@ const ENDPOINTS: EndpointSpec[] = [
   },
 ];
 
-const sectionLabel: Record<EndpointSection, string> = {
-  catalogos: 'Catalogos',
-};
+const sectionLabel: Record<EndpointSection, string> = { catalogos: 'Catálogos' };
 
 const parseMaybeJson = (rawValue: string): unknown => {
   const value = rawValue.trim();
@@ -137,6 +138,16 @@ const parseMaybeJson = (rawValue: string): unknown => {
   }
   return value;
 };
+
+function MethodPill({ method }: { method: HttpMethod }) {
+  const c = METHOD_COLORS[method];
+  return (
+    <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-bold tracking-wide ${c.pill}`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${c.dot}`} />
+      {c.label}
+    </span>
+  );
+}
 
 const ParametrizacionCatologTenant: React.FC = () => {
   const [endpointModal, setEndpointModal] = useState<EndpointSpec | null>(null);
@@ -161,10 +172,7 @@ const ParametrizacionCatologTenant: React.FC = () => {
   const setField = (endpointId: string, name: string, value: string): void => {
     setFieldValues((prev) => ({
       ...prev,
-      [endpointId]: {
-        ...(prev[endpointId] || {}),
-        [name]: value,
-      },
+      [endpointId]: { ...(prev[endpointId] || {}), [name]: value },
     }));
   };
 
@@ -176,20 +184,10 @@ const ParametrizacionCatologTenant: React.FC = () => {
     endpoint.fields.forEach((field) => {
       const rawValue = getField(endpoint.id, field.name);
       const value = rawValue.trim();
-
-      if (field.required && !value) {
-        throw new Error(`Completa: ${field.label}`);
-      }
+      if (field.required && !value) throw new Error(`Completa: ${field.label}`);
       if (!value) return;
-
-      if (field.pathParam) {
-        resolvedPath = resolvedPath.replace(`:${field.name}`, encodeURIComponent(value));
-        return;
-      }
-      if (field.header) {
-        headers[field.name] = value;
-        return;
-      }
+      if (field.pathParam) { resolvedPath = resolvedPath.replace(`:${field.name}`, encodeURIComponent(value)); return; }
+      if (field.header) { headers[field.name] = value; return; }
       body[field.name] = field.type === 'json' ? parseMaybeJson(value) : value;
     });
 
@@ -201,13 +199,8 @@ const ParametrizacionCatologTenant: React.FC = () => {
       setLoading((prev) => ({ ...prev, [endpoint.id]: true }));
       const { path, body, headers } = buildRequest(endpoint);
       const hasBody = endpoint.method !== 'GET' && endpoint.method !== 'DELETE';
-      const response = await apiFetch(path, {
-        method: endpoint.method,
-        headers,
-        ...(hasBody ? { body } : {}),
-      });
-      const text = JSON.stringify(response, null, 2);
-      setResult((prev) => ({ ...prev, [endpoint.id]: text }));
+      const response = await apiFetch(path, { method: endpoint.method, headers, ...(hasBody ? { body } : {}) });
+      setResult((prev) => ({ ...prev, [endpoint.id]: JSON.stringify(response, null, 2) }));
       toast.success(`${endpoint.title} ejecutado`);
     } catch (error: any) {
       const msg = String(error?.message || 'Error ejecutando endpoint');
@@ -223,109 +216,216 @@ const ParametrizacionCatologTenant: React.FC = () => {
     setResult((prev) => ({ ...prev, [endpointId]: '' }));
   };
 
+  const hasResult = (id: string) => !!result[id];
+  const isSuccess = (id: string) => {
+    try { const p = JSON.parse(result[id]); return p && typeof p === 'object'; }
+    catch { return false; }
+  };
+
   return (
-    <div className="space-y-6 p-4 md:p-6">
-      <Card className="border-rose-100">
-        <CardHeader>
-          <CardTitle className="text-slate-900">Parametrizacion Catalog Tenant</CardTitle>
-          <CardDescription>Consola CRUD de catalogos tenant. Ejecuta con JWT actual.</CardDescription>
-          <div className="pt-2">
+    <div className="min-h-screen bg-background">
+      <div className="max-w-5xl mx-auto px-4 py-8 space-y-6">
+
+        {/* ── Header ── */}
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <Layers className="w-4 h-4 text-primary" />
+              <span className="text-xs font-semibold text-primary uppercase tracking-widest">Consola interna</span>
+            </div>
+            <h1 className="text-2xl font-bold text-foreground tracking-tight">Catálogos Tenant</h1>
+            <p className="text-sm text-muted-foreground mt-0.5">Ejecuta endpoints con el JWT activo de la sesión</p>
+          </div>
+
+          {/* Buscador */}
+          <div className="relative w-full sm:w-64">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar endpoint por titulo, ruta o metodo..."
+              placeholder="Buscar endpoint..."
+              className="pl-8 h-9 text-sm bg-muted/40 border-border/60 focus:bg-background"
             />
           </div>
-        </CardHeader>
-      </Card>
+        </div>
 
-      {(Object.keys(endpointGroups) as EndpointSection[]).map((section) => (
-        <Card key={section} className="border-rose-100">
-          <CardHeader>
-            <CardTitle className="text-xl">{sectionLabel[section]}</CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-4 md:grid-cols-2">
-            {endpointGroups[section].map((endpoint) => (
-              <div key={endpoint.id} className="rounded-xl border border-rose-100 bg-white p-4">
-                <div className="mb-2 flex items-center justify-between">
-                  <Badge className={METHOD_STYLE[endpoint.method]}>{endpoint.method}</Badge>
-                  <Badge variant="outline">{sectionLabel[endpoint.section]}</Badge>
-                </div>
-                <h3 className="text-xl font-semibold text-slate-900">{endpoint.title}</h3>
-                <p className="mt-1 text-sm text-slate-600">{endpoint.description}</p>
-                <div className="mt-3 rounded bg-slate-100 px-3 py-2 text-xs text-slate-800">{endpoint.path}</div>
-                <div className="mt-3 grid grid-cols-2 gap-2">
-                  <Button variant="outline" onClick={() => setEndpointModal(endpoint)}>
-                    <Settings2 className="mr-2 h-4 w-4" />
-                    Configurar
-                  </Button>
-                  <Button onClick={() => void handleRun(endpoint)} disabled={!!loading[endpoint.id]}>
-                    <Play className="mr-2 h-4 w-4" />
-                    {loading[endpoint.id] ? 'Ejecutando...' : 'Ejecutar'}
-                  </Button>
-                </div>
+        {/* ── Grupos de endpoints ── */}
+        {(Object.keys(endpointGroups) as EndpointSection[]).map((section) => {
+          const group = endpointGroups[section];
+          if (group.length === 0) return (
+            <div key={section} className="text-center py-12 text-sm text-muted-foreground">
+              Sin resultados para <span className="font-medium">"{search}"</span>
+            </div>
+          );
+
+          return (
+            <div key={section} className="space-y-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">
+                  {sectionLabel[section]}
+                </span>
+                <span className="text-xs text-muted-foreground bg-muted rounded-full px-2 py-0.5">
+                  {group.length}
+                </span>
               </div>
-            ))}
-          </CardContent>
-        </Card>
-      ))}
 
+              <div className="grid gap-2 sm:grid-cols-2">
+                {group.map((endpoint) => {
+                  const isLoading = !!loading[endpoint.id];
+                  const hasFields = endpoint.fields.length > 0;
+
+                  return (
+                    <div
+                      key={endpoint.id}
+                      className="group relative bg-card border border-border/50 rounded-xl p-4 hover:border-primary/30 hover:shadow-sm transition-all duration-150"
+                    >
+                      {/* Cabecera */}
+                      <div className="flex items-start justify-between gap-2 mb-3">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <MethodPill method={endpoint.method} />
+                        </div>
+                        {hasResult(endpoint.id) && (
+                          <span className={`w-2 h-2 rounded-full flex-shrink-0 mt-1 ${isSuccess(endpoint.id) ? 'bg-emerald-400' : 'bg-red-400'}`} title={isSuccess(endpoint.id) ? 'Éxito' : 'Error'} />
+                        )}
+                      </div>
+
+                      {/* Título y descripción */}
+                      <h3 className="text-sm font-semibold text-foreground leading-snug">{endpoint.title}</h3>
+                      <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{endpoint.description}</p>
+
+                      {/* Ruta */}
+                      <div className="mt-3 flex items-center gap-1.5 bg-muted/40 rounded-lg px-2.5 py-1.5 min-w-0">
+                        <Terminal className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+                        <code className="text-[10px] text-muted-foreground truncate font-mono">{endpoint.path}</code>
+                      </div>
+
+                      {/* Acciones */}
+                      <div className="mt-3 flex items-center gap-2">
+                        {hasFields && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 px-3 text-xs gap-1.5 border-border/60"
+                            onClick={() => setEndpointModal(endpoint)}
+                          >
+                            <Settings2 className="w-3 h-3" />
+                            Params
+                          </Button>
+                        )}
+                        <Button
+                          size="sm"
+                          className="h-7 px-3 text-xs gap-1.5 ml-auto"
+                          onClick={() => void handleRun(endpoint)}
+                          disabled={isLoading}
+                        >
+                          {isLoading
+                            ? <><Loader2 className="w-3 h-3 animate-spin" /> Ejecutando</>
+                            : <><Play className="w-3 h-3" /> Ejecutar</>
+                          }
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Modal de configuración */}
       <Dialog open={!!endpointModal} onOpenChange={(open) => !open && setEndpointModal(null)}>
-        <DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-[980px]">
+        <DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-xl">
           {endpointModal && (
-            <>
+            <div className="space-y-5">
               <DialogHeader>
-                <DialogTitle>{endpointModal.title}</DialogTitle>
+                <DialogTitle className="text-base font-semibold">{endpointModal.title}</DialogTitle>
+                <div className="flex items-center gap-2 pt-1">
+                  <MethodPill method={endpointModal.method} />
+                  <code className="text-[11px] text-muted-foreground font-mono bg-muted/50 px-2 py-0.5 rounded-md truncate max-w-xs">
+                    {endpointModal.path}
+                  </code>
+                </div>
               </DialogHeader>
 
+              {/* Separador */}
+              <div className="h-px bg-border/50" />
+
+              {/* Campos */}
               <div className="space-y-4">
-                <div className="flex items-center gap-2">
-                  <Badge className={METHOD_STYLE[endpointModal.method]}>{endpointModal.method}</Badge>
-                  <code className="rounded bg-slate-100 px-2 py-1 text-xs">{endpointModal.path}</code>
-                </div>
-
-                <div className="grid gap-3">
-                  {endpointModal.fields.length === 0 && (
-                    <p className="text-sm text-slate-500">Este endpoint no requiere body adicional.</p>
-                  )}
-
-                  {endpointModal.fields.map((field) => (
-                    <div key={field.name} className="space-y-1">
-                      <Label>{field.label}{field.required ? ' *' : ''}</Label>
+                {endpointModal.fields.length === 0 ? (
+                  <div className="flex items-center gap-2 p-3 bg-muted/30 rounded-lg">
+                    <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
+                    <p className="text-sm text-muted-foreground">Este endpoint no requiere parámetros.</p>
+                  </div>
+                ) : (
+                  endpointModal.fields.map((field) => (
+                    <div key={field.name} className="space-y-1.5">
+                      <Label className="text-xs font-medium text-foreground flex items-center gap-1">
+                        {field.label}
+                        {field.required && <span className="text-primary">*</span>}
+                        {field.pathParam && <Badge variant="outline" className="text-[9px] px-1 py-0 h-4">path</Badge>}
+                        {field.header && <Badge variant="outline" className="text-[9px] px-1 py-0 h-4">header</Badge>}
+                      </Label>
                       {field.type === 'textarea' ? (
                         <Textarea
                           value={getField(endpointModal.id, field.name)}
                           placeholder={field.placeholder || ''}
                           onChange={(e) => setField(endpointModal.id, field.name, e.target.value)}
+                          className="text-sm min-h-[80px] bg-muted/30"
                         />
                       ) : (
                         <Input
                           value={getField(endpointModal.id, field.name)}
-                          placeholder={field.placeholder || `Ingresa ${field.label}`}
+                          placeholder={field.placeholder || `Ingresa ${field.label.toLowerCase()}`}
                           onChange={(e) => setField(endpointModal.id, field.name, e.target.value)}
+                          className="h-9 text-sm bg-muted/30"
                         />
                       )}
                     </div>
-                  ))}
-                </div>
-
-                <div className="flex gap-2">
-                  <Button onClick={() => void handleRun(endpointModal)} disabled={!!loading[endpointModal.id]}>
-                    <Play className="mr-2 h-4 w-4" />
-                    {loading[endpointModal.id] ? 'Ejecutando...' : 'Ejecutar'}
-                  </Button>
-                  <Button variant="outline" onClick={() => handleClean(endpointModal.id)}>
-                    Limpiar formulario
-                  </Button>
-                </div>
-
-                <Textarea
-                  className="min-h-[180px] font-mono text-xs"
-                  readOnly
-                  value={result[endpointModal.id] || 'Aun sin respuesta'}
-                />
+                  ))
+                )}
               </div>
-            </>
+
+              {/* Botones */}
+              <div className="flex items-center gap-2 pt-1">
+                <Button
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={() => void handleRun(endpointModal)}
+                  disabled={!!loading[endpointModal.id]}
+                >
+                  {loading[endpointModal.id]
+                    ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Ejecutando...</>
+                    : <><Play className="w-3.5 h-3.5" /> Ejecutar</>
+                  }
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="gap-1.5 text-muted-foreground hover:text-foreground"
+                  onClick={() => handleClean(endpointModal.id)}
+                >
+                  <RotateCcw className="w-3.5 h-3.5" /> Limpiar
+                </Button>
+              </div>
+
+              {/* Respuesta */}
+              {result[endpointModal.id] && (
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <Terminal className="w-3 h-3 text-muted-foreground" />
+                    <span className="text-xs font-medium text-muted-foreground">Respuesta</span>
+                    <span className={`w-1.5 h-1.5 rounded-full ml-auto ${isSuccess(endpointModal.id) ? 'bg-emerald-400' : 'bg-red-400'}`} />
+                  </div>
+                  <Textarea
+                    className="min-h-[160px] font-mono text-[11px] bg-muted/30 border-border/50 resize-none"
+                    readOnly
+                    value={result[endpointModal.id]}
+                  />
+                </div>
+              )}
+            </div>
           )}
         </DialogContent>
       </Dialog>

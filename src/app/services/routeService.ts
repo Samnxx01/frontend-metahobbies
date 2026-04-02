@@ -23,6 +23,7 @@ interface RouteResponse {
         tiquetaNavb?: string | null;
         menuUsuarioLabel?: string | null;
         menuUsuarioOrder?: number;
+        renderTag?: string | null;
         accessType: { _id: string; accessType: string; layout?: string } | Array<{ _id: string; accessType: string; layout?: string }>;
         order: number;
     }>;
@@ -223,22 +224,23 @@ const resolveSidebarSourceCollection = (actorTipo: AdminActorTipo): string | nul
     return null;
 };
 
-const resolveEffectiveAdminActorTipo = (actorTipo?: AdminActorTipo | string | null): AdminActorTipo => {
-    const actorNormalizado = String(actorTipo || '').trim().toUpperCase() as AdminActorTipo;
-    if (actorNormalizado && actorNormalizado !== 'UNKNOWN') {
-        return actorNormalizado;
+const resolveEffectiveAdminActorTipo = (actorTipo?: string | null): AdminActorTipo => {
+    const validActorTipos: string[] = ['SUPERADMIN', 'GLOBAL', 'CORPORATIVO'];
+    const actorNormalizado = String(actorTipo || '').trim().toUpperCase();
+    if (actorNormalizado && actorNormalizado !== 'UNKNOWN' && validActorTipos.includes(actorNormalizado)) {
+        return actorNormalizado as AdminActorTipo;
     }
     return resolveAdminActorTipoFromToken();
 };
 
-const decodeJwtPayload = (token: string): any | null => {
+const decodeJwtPayload = (token: string): Record<string, unknown> | null => {
     try {
         const parts = String(token || '').split('.');
         if (parts.length < 2) return null;
         const normalized = parts[1].replace(/-/g, '+').replace(/_/g, '/');
         const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
-        const decoded = typeof window !== 'undefined' ? window.atob(padded) : Buffer.from(padded, 'base64').toString('binary');
-        return JSON.parse(decoded);
+        const decoded = globalThis.atob(padded);
+        return JSON.parse(decoded) as Record<string, unknown>;
     } catch {
         return null;
     }
@@ -249,7 +251,7 @@ const resolveAdminActorTipoFromToken = (): AdminActorTipo => {
         const token = localStorage.getItem('token');
         if (!token) return 'UNKNOWN';
 
-        const payload = decodeJwtPayload(token);
+        const payload = decodeJwtPayload(token) as any;
         const tenantScope = payload?.auth?.tenantScope || payload?.tenantScope || {};
         const rol = String(payload?.rol?.rol || payload?.rol || '').trim().toUpperCase();
 
@@ -344,18 +346,18 @@ const findCatalogRoute = (
         names?: string[];
     }
 ): RouteCatalogItem | undefined => {
-    const expectedPaths = (options.paths || []).map((value) => normalizeRoutePath(value));
-    const expectedComponents = (options.components || []).map(normalizeText);
-    const expectedNames = (options.names || []).map(normalizeText);
+    const expectedPaths = new Set((options.paths || []).map((value) => normalizeRoutePath(value)));
+    const expectedComponents = new Set((options.components || []).map(normalizeText));
+    const expectedNames = new Set((options.names || []).map(normalizeText));
 
     return catalog.find((route) => {
         const routePath = normalizeRoutePath(route.path);
         const routeComponent = normalizeText(route.component);
         const routeName = normalizeText(route.name);
 
-        return expectedPaths.includes(routePath)
-            || expectedComponents.includes(routeComponent)
-            || expectedNames.includes(routeName);
+        return expectedPaths.has(routePath)
+            || expectedComponents.has(routeComponent)
+            || expectedNames.has(routeName);
     });
 };
 
@@ -406,7 +408,6 @@ export const getAuthorizedRoutes = async (): Promise<AuthorizedRoutes> => {
         const token = localStorage.getItem("token");
         const hasToken = Boolean(token);
         const actorTipo = resolveAdminActorTipoFromToken();
-        const herencia = hasToken ? await getHerenciaAdminPermitida() : { idsPermitidos: new Set<string>(), pathsPermitidos: new Set<string>() };
         const endpoint = hasToken
             ? `${API_BASE_URL}/seguridad/rutas/listarRutas/admin`
             : `${API_BASE_URL}/seguridad/rutas/listarRutas/public`;
@@ -536,7 +537,35 @@ export const getAuthorizedRoutes = async (): Promise<AuthorizedRoutes> => {
     }
 };
 
-export const getPublicNavigationRoutes = async (): Promise<PublicNavItem[]> => {
+// export const getPublicNavigationRoutes = async (): Promise<PublicNavItem[]> => {
+//     try {
+//         const result = await fetchAllSecurityRoutes(false);
+
+//         if (!result?.success || !result?.data) {
+//             return [];
+//         }
+
+//         return result.data
+//             .filter((route) =>
+//                 route.estadoRuta &&
+//                 normalizeLayout(route.layout) === "publiclayout" &&
+//                 route.mostrarEnNavbarPublico === true
+//             )
+//             .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+//             .map((route) => ({
+//                 path: normalizeRoutePath(route.path),
+//                 label: route.name,
+//                 order: route.order ?? 0
+//             }));
+//     } catch (error) {
+//         console.error("Error al obtener rutas de navegacion publica:", error);
+//         return [];
+//     }
+// };
+
+export const getPublicNavigationRoutes = async (
+    isAuthenticated: boolean = false
+): Promise<PublicNavItem[]> => {
     try {
         const result = await fetchAllSecurityRoutes(false);
 
@@ -544,17 +573,37 @@ export const getPublicNavigationRoutes = async (): Promise<PublicNavItem[]> => {
             return [];
         }
 
+        const targetAccessType = isAuthenticated ? 'PRIVATE' : 'PUBLIC';
+
         return result.data
-            .filter((route) =>
-                route.estadoRuta &&
-                normalizeLayout(route.layout) === "publiclayout" &&
-                route.mostrarEnNavbarPublico === true
-            )
+            .filter((route) => {
+                // Debe estar activa
+                if (!route.estadoRuta) return false;
+
+                // Debe tener accessType definido
+                const accessTypes = Array.isArray(route.accessType)
+                    ? route.accessType.map((a: any) =>
+                        typeof a === 'string' ? a : a?.accessType
+                    )
+                    : [];
+
+                if (accessTypes.length === 0) return false;
+
+                // Filtrar por PUBLIC cuando no hay sesión, PRIVATE cuando sí hay
+                if (!accessTypes.includes(targetAccessType)) return false;
+
+                // Solo rutas marcadas para el navbar
+                // Se usa renderTag o mostrarEnNavbarPublico como criterio secundario
+                const tieneRenderTag = route.renderTag === 'publico-view' || route.renderTag === 'private-view';
+                const tieneNavbarFlag = route.mostrarEnNavbarPublico === true || route.mostrarEnSidebar === true;
+
+                return tieneRenderTag || tieneNavbarFlag;
+            })
             .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
             .map((route) => ({
                 path: normalizeRoutePath(route.path),
                 label: route.name,
-                order: route.order ?? 0
+                order: route.order ?? 0,
             }));
     } catch (error) {
         console.error("Error al obtener rutas de navegacion publica:", error);
@@ -605,10 +654,13 @@ export const getAdminSidebarRoutes = async (): Promise<AdminNavItem[]> => {
                 const routeId = String(r._id || r.iud || "");
                 const routePath = normalizeRoutePath(r.path);
                 return herencia.idsPermitidos.has(routeId) || herencia.pathsPermitidos.has(routePath);
-            })
-            : (actorTipo === 'SUPERADMIN' ? adminSource : []);
+            }) : [];
 
-        return adminFiltrado
+        const isSuperadmin = actorTipo === 'SUPERADMIN';
+        const fallbackResult = isSuperadmin ? adminSource : [];
+        const resultado = adminFiltrado.length > 0 ? adminFiltrado : fallbackResult;
+
+        return resultado
             .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
             .map((r) => ({
                 path: normalizeRoutePath(r.path),
@@ -663,13 +715,17 @@ export const getAdminSidebarFallbackTree = async (actorTipo: AdminActorTipo): Pr
         );
 
         const hasHerenciaAdmin = herencia.idsPermitidos.size > 0 || herencia.pathsPermitidos.size > 0;
-        const visibles = hasHerenciaAdmin
+        const filterEdByHerencia = hasHerenciaAdmin
             ? adminSource.filter((r) => {
                 const routeId = String(r._id || r.iud || "");
                 const routePath = normalizeRoutePath(r.path);
                 return herencia.idsPermitidos.has(routeId) || herencia.pathsPermitidos.has(routePath);
             })
-            : (effectiveActorTipo === 'SUPERADMIN' ? adminSource : []);
+            : [];
+
+        const isSuperAdminEff = effectiveActorTipo === 'SUPERADMIN';
+        const visibleFallback = isSuperAdminEff ? adminSource : [];
+        const visibles = filterEdByHerencia.length > 0 ? filterEdByHerencia : visibleFallback;
 
         if (!visibles.length) return [];
 
@@ -683,7 +739,7 @@ export const getAdminSidebarFallbackTree = async (actorTipo: AdminActorTipo): Pr
                 label: String(route.name || '').trim(),
                 component: String(route.component || '').replace(/\.(jsx|tsx|js|ts)$/i, ''),
                 order: Number(route.order ?? 0),
-                tipoNodo: String(route.tipoNodoId?.codigo || route.tipoNodo || 'FORMULARIO').toUpperCase(),
+                tipoNodo: String(route.tipoNodo || 'FORMULARIO').toUpperCase(),
                 children: []
             });
         });
@@ -736,7 +792,7 @@ export const getAdminSidebarTreeWithContext = async (): Promise<AdminSidebarTree
 
         if (treeResult?.success && Array.isArray(treeResult?.data)) {
             const actorTipoBackend = String(treeResult?.actorTipo || '').trim().toUpperCase() as AdminActorTipo;
-            const actorTipo = actorTipoJwt !== 'UNKNOWN' ? actorTipoJwt : resolveEffectiveAdminActorTipo(actorTipoBackend);
+            const actorTipo = actorTipoJwt === 'UNKNOWN' ? resolveEffectiveAdminActorTipo(actorTipoBackend) : actorTipoJwt;
             const sourceCollection = resolveSidebarSourceCollection(actorTipo);
             return {
                 actorTipo,
@@ -764,7 +820,7 @@ export const getAdminSidebarTreeWithContext = async (): Promise<AdminSidebarTree
 export const getPrivateHomeRoute = async (): Promise<string> => {
     try {
         const shortcuts = await getUserShortcutRoutes();
-        if (shortcuts.admin && shortcuts.admin.trim()) {
+        if (shortcuts.admin?.trim()) {
             return shortcuts.admin;
         }
         return "/admin/gestor-rutas/administracion/dashboardadmin";
@@ -815,10 +871,10 @@ export const getMenuUsuarioRoutes = async (): Promise<MenuUsuarioItem[]> => {
         return result.data
             .filter((t: any) => t?.estado !== false)
             .map((t: any) => ({
-                key:   String(t.codigo || t.iud || ''),
-                label: String(t.label  || t.nombreTag || ''),
-                path:  String(t.routePath || t.ruta?.path || '/'),
-                icon:  t.iconKey ?? null,
+                key: String(t.codigo || t.iud || ''),
+                label: String(t.label || t.nombreTag || ''),
+                path: String(t.routePath || t.ruta?.path || '/'),
+                icon: t.iconKey ?? null,
                 order: Number(t.order ?? 0),
             }));
     } catch {
