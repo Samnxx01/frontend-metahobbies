@@ -54,6 +54,8 @@ export interface Route {
 
 export interface RouteMenuTag {
   iud: string;
+  counterTagId?: string | null;
+  secuenciaTag?: number;
   nombreTag: string;
   codigo: string;
   descripcion?: string | null;

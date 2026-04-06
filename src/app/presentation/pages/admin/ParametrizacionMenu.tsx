@@ -53,7 +53,6 @@ import {
   createRouteMenuTag,
   deleteRouteMenuTag,
   getRouteMenuTags,
-  resolveCurrentRouteMenuTags,
   RouteMenuTag,
   updateRoute,
   updateRouteMenuTag,
@@ -97,21 +96,6 @@ interface FormularioRutaOption {
   path: string;
 }
 
-const mergeMenuTags = (...sources: Array<RouteMenuTag[] | undefined | null>): RouteMenuTag[] => {
-  const byId = new Map<string, RouteMenuTag>();
-
-  sources.forEach((rows) => {
-    (Array.isArray(rows) ? rows : []).forEach((tag) => {
-      const key = String(tag?.iud || tag?.codigo || '').trim();
-      if (!key) return;
-      byId.set(key, tag);
-    });
-  });
-
-  return Array.from(byId.values()).sort(
-    (a, b) => Number(a.order ?? 0) - Number(b.order ?? 0) || String(a.label || '').localeCompare(String(b.label || ''))
-  );
-};
 
 interface MenuTagFormState {
   id: string | null;
@@ -347,20 +331,12 @@ export default function ParametrizacionMenu() {
 
   const refreshMenuTags = async () => {
     try {
-      const [listResponse, resolvedResponse] = await Promise.all([
-        apiFetch(
-          `${import.meta.env.VITE_API_BASE_URL ?? '/api'}/seguridad/rutas/menu-tags?menuTipo=USER_DROPDOWN&_t=${Date.now()}`,
-          { method: 'GET', cache: 'no-store' as RequestCache }
-        ),
-        resolveCurrentRouteMenuTags({ menuTipo: 'USER_DROPDOWN' }).catch(() => null),
-      ]);
-
-      setMenuTags(
-        mergeMenuTags(
-          Array.isArray(listResponse?.data) ? listResponse.data : [],
-          Array.isArray((resolvedResponse as any)?.data) ? (resolvedResponse as any).data : []
-        )
+      const listResponse = await apiFetch(
+        `${import.meta.env.VITE_API_BASE_URL ?? '/api'}/seguridad/rutas/menu-tags?menuTipo=USER_DROPDOWN&_t=${Date.now()}`,
+        { method: 'GET', cache: 'no-store' as RequestCache }
       );
+
+      setMenuTags(Array.isArray(listResponse?.data) ? listResponse.data : []);
       window.dispatchEvent(new CustomEvent('user-menu-tags-updated'));
     } catch (error) {
       console.error('Error al refrescar tags:', error);
@@ -370,22 +346,16 @@ export default function ParametrizacionMenu() {
   const loadCatalog = async () => {
     setLoading(true);
     try {
-      const [catalog, menuTagsResponse, resolvedMenuTagsResponse, formulariosResponse] = await Promise.all([
+      const [catalog, menuTagsResponse, formulariosResponse] = await Promise.all([
         getRouteCatalog(),
         getRouteMenuTags({ menuTipo: 'USER_DROPDOWN', soloActivos: false }),
-        resolveCurrentRouteMenuTags({ menuTipo: 'USER_DROPDOWN' }).catch(() => null),
         apiFetch(`${import.meta.env.VITE_API_BASE_URL ?? '/api'}/seguridad/rutas/formularios/opciones`, {
           method: 'GET',
         }).catch(() => null),
       ]);
 
       setRouteCatalog(catalog);
-      setMenuTags(
-        mergeMenuTags(
-          Array.isArray(menuTagsResponse?.data) ? menuTagsResponse.data : [],
-          Array.isArray((resolvedMenuTagsResponse as any)?.data) ? (resolvedMenuTagsResponse as any).data : []
-        )
-      );
+      setMenuTags(Array.isArray(menuTagsResponse?.data) ? menuTagsResponse.data : []);
       window.dispatchEvent(new CustomEvent('user-menu-tags-updated'));
       setFormularioRoutes(
         Array.isArray((formulariosResponse as any)?.data?.rutasAcciones)
@@ -1030,11 +1000,14 @@ export default function ParametrizacionMenu() {
                 </div>
               )}
 
-              {menuTags.map((tag) => (
+              {menuTags.map((tag, index) => (
                 <div key={tag.iud} className="rounded-lg border p-4 space-y-3">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="flex items-center gap-2">
+                        <Badge variant="secondary" className="min-w-7 justify-center">
+                          {Number(tag.secuenciaTag || index + 1)}
+                        </Badge>
                         <p className="font-medium">{tag.label}</p>
                         <Badge variant={tag.estado ? 'default' : 'secondary'}>
                           {tag.estado ? 'Activo' : 'Inactivo'}
@@ -1056,18 +1029,28 @@ export default function ParametrizacionMenu() {
                     <p><span className="font-medium">Ruta:</span> {tag.routeName}</p>
                     <p className="font-mono text-xs text-muted-foreground break-all">{tag.routePath}</p>
                     <p><span className="font-medium">Icono:</span> {tag.iconKey}</p>
+                    <p><span className="font-medium">Secuencia:</span> {Number(tag.secuenciaTag || 0) || '—'}</p>
                     <p><span className="font-medium">Orden:</span> {tag.order}</p>
-                    <div className="flex flex-wrap gap-2 pt-1">
-                      {(() => {
-                        const hasSuper = !!(tag.scope?.tenantSuperAdminId);
-                        const hasGlobal = !!(tag.scope?.tenantGlobalId);
-                        const hasCorp = !!(tag.scope?.tenantCorporativoId);
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        {(() => {
+                        const hasSuper = !!(tag.tenantSuperAdminId || tag.scope?.tenantSuperAdminId);
+                        const globalIds = Array.isArray((tag as any).tenantGlobalIds) && (tag as any).tenantGlobalIds.length > 0
+                          ? (tag as any).tenantGlobalIds
+                          : Array.isArray(tag.scope?.tenantGlobalIds) && (tag.scope as any).tenantGlobalIds.length > 0
+                            ? (tag.scope as any).tenantGlobalIds
+                            : (tag.tenantGlobalId || tag.scope?.tenantGlobalId)
+                              ? [tag.tenantGlobalId || tag.scope?.tenantGlobalId]
+                              : [];
+                        const hasGlobal = globalIds.filter(Boolean).length > 0;
+                        const hasCorp = !!(tag.tenantCorporativoId || tag.scope?.tenantCorporativoId);
                         if (!hasSuper && !hasGlobal && !hasCorp) return <Badge variant="secondary">General</Badge>;
                         if (hasSuper && !hasGlobal && !hasCorp) return <Badge variant="outline">Solo SuperAdmin</Badge>;
+                        if (hasSuper && hasGlobal && hasCorp) return <Badge variant="outline">SuperAdmin + Global + Corporativo</Badge>;
                         if (hasSuper && hasGlobal && !hasCorp) return <Badge variant="outline">Global + SuperAdmin</Badge>;
-                        if (hasGlobal && hasCorp) return <Badge variant="outline">Global + Corporativo</Badge>;
-                        if (hasGlobal) return <Badge variant="outline">Solo Global</Badge>;
-                        return null;
+                        if (!hasSuper && hasGlobal && hasCorp) return <Badge variant="outline">Global + Corporativo</Badge>;
+                        if (hasGlobal) return <Badge variant="outline">{globalIds.length > 1 ? 'Multi-Global' : 'Solo Global'}</Badge>;
+                        if (hasCorp) return <Badge variant="outline">Solo Corporativo</Badge>;
+                        return <Badge variant="secondary">General</Badge>;
                       })()}
                       {tag.permitirSinTenant && (
                         <Badge variant="secondary" className="bg-amber-100 text-amber-800 border-amber-300">
@@ -1083,109 +1066,6 @@ export default function ParametrizacionMenu() {
               ))}
             </CardContent>
           </Card>
-        </div>
-      </section>
-
-      <section className="space-y-4">
-        <div className="flex items-center gap-2">
-          <User className="h-5 w-5 text-primary" />
-          <h2 className="text-lg font-semibold">Slots legacy del menu de usuario</h2>
-        </div>
-        <p className="text-sm text-muted-foreground -mt-2">
-          Compatibilidad con la configuracion previa basada en una sola ruta por slot fijo.
-        </p>
-
-        <div className="grid gap-4">
-          {USER_MENU_SLOTS.map(({ key, title, description, Icon }) => {
-            const slot = slots[key];
-            const hasRoute = slot.route !== null;
-
-            return (
-              <Card key={key} className={!hasRoute ? 'border-dashed opacity-70' : ''}>
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 rounded-md bg-primary/10">
-                        <Icon className="h-5 w-5 text-primary" />
-                      </div>
-                      <div>
-                        <CardTitle className="text-base">{title}</CardTitle>
-                        <CardDescription className="text-xs">{description}</CardDescription>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      {hasRoute ? (
-                        <Badge variant="outline" className="text-xs font-mono">
-                          {slot.route!.path}
-                        </Badge>
-                      ) : (
-                        <Badge variant="secondary" className="text-xs">Sin ruta asignada</Badge>
-                      )}
-                      <Switch
-                        checked={slot.enabled}
-                        disabled={!hasRoute}
-                        onCheckedChange={(checked) =>
-                          setSlots((prev) => ({ ...prev, [key]: { ...prev[key], enabled: checked } }))
-                        }
-                      />
-                    </div>
-                  </div>
-                </CardHeader>
-
-                {hasRoute && slot.enabled && (
-                  <>
-                    <Separator />
-                    <CardContent className="pt-4 grid md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor={`label-${key}`}>Label personalizado</Label>
-                        <Input
-                          id={`label-${key}`}
-                          value={slot.label}
-                          onChange={(e) =>
-                            setSlots((prev) => ({ ...prev, [key]: { ...prev[key], label: e.target.value } }))
-                          }
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor={`order-${key}`}>Orden</Label>
-                        <Input
-                          id={`order-${key}`}
-                          type="number"
-                          value={slot.order}
-                          onChange={(e) =>
-                            setSlots((prev) => ({
-                              ...prev,
-                              [key]: { ...prev[key], order: Number(e.target.value || 0) },
-                            }))
-                          }
-                        />
-                      </div>
-                    </CardContent>
-                  </>
-                )}
-
-                {hasRoute && (
-                  <CardContent className="pt-0">
-                    <Button
-                      size="sm"
-                      onClick={() => saveSlot(key)}
-                      disabled={slot.saving}
-                      variant={slot.saved ? 'outline' : 'default'}
-                      className="w-full"
-                    >
-                      {slot.saving ? (
-                        <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Guardando...</>
-                      ) : slot.saved ? (
-                        'Guardado ok'
-                      ) : (
-                        <><Save className="h-4 w-4 mr-2" /> Guardar slot</>
-                      )}
-                    </Button>
-                  </CardContent>
-                )}
-              </Card>
-            );
-          })}
         </div>
       </section>
 

@@ -1,5 +1,6 @@
 import type { BrandingConfig } from '@/app/services/brandingWidget';
 import { readCachedBranding } from '@/app/services/brandingCache';
+import { normalizeRoutePath } from '@/app/services/routePathNormalizer';
 
 export type GovernedNavigationAction =
   | 'login'
@@ -26,10 +27,10 @@ export interface GovernedNavigationConfig {
 
 const DEFAULT_PATHS: Record<GovernedNavigationAction, string> = {
   login: '/public/render/login',
-  postLogin: '/admin/gestor-rutas/administracion/dashboardadmin',
-  logout: '/admin/gestor-rutas/administracion/dashboardadmin',
-  register: '/admin/gestor-rutas/administracion/dashboardadmin',
-  forgotPassword: '/admin/gestor-rutas/administracion/dashboardadmin',
+  postLogin: '/admin',
+  logout: '/admin',
+  register: '/admin',
+  forgotPassword: '/admin',
   publicHome: '/public/render/home',
 };
 
@@ -48,7 +49,8 @@ const getNavigationConfig = (branding?: BrandingConfig | null): GovernedNavigati
 
 const isAllowedByGovernance = (path: string, allowedPaths: string[]): boolean => {
   if (allowedPaths.length === 0) return true;
-  return allowedPaths.includes(path);
+  const normalizedPath = normalizeRoutePath(path);
+  return allowedPaths.map((item) => normalizeRoutePath(item)).includes(normalizedPath);
 };
 
 const isDisallowedRootForAction = (
@@ -67,6 +69,7 @@ export const getGovernedPath = (
   }
 ): string => {
   const fallback = options?.fallback || DEFAULT_PATHS[action];
+  const normalizedFallback = normalizeRoutePath(fallback);
   const branding = options?.branding ?? readCachedBranding();
   const config = getNavigationConfig(branding);
   const entry = config[action];
@@ -74,14 +77,16 @@ export const getGovernedPath = (
     ? config.allowedPaths.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
     : [];
 
-  if (entry?.enabled === false) return fallback;
+  if (entry?.enabled === false) return normalizedFallback;
 
   const candidate = String(entry.path || '').trim();
-  if (!isSafeInternalPath(candidate)) return fallback;
-  if (isDisallowedRootForAction(action, candidate)) return fallback;
-  if (!isAllowedByGovernance(candidate, allowedPaths)) return fallback;
+  if (!isSafeInternalPath(candidate)) return normalizedFallback;
 
-  return candidate;
+  const normalizedCandidate = normalizeRoutePath(candidate);
+  if (isDisallowedRootForAction(action, normalizedCandidate)) return normalizedFallback;
+  if (!isAllowedByGovernance(normalizedCandidate, allowedPaths)) return normalizedFallback;
+
+  return normalizedCandidate;
 };
 
 export const getGovernedLoginPath = (): string => getGovernedPath('login');

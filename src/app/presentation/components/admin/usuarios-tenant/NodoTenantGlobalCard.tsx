@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronDown, ChevronRight, Building2, Users, UserPlus, Edit, Globe } from 'lucide-react';
+import { ChevronDown, ChevronRight, Users, Edit, Globe } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { NodoCorpCard } from './NodoCorpCard';
@@ -34,6 +34,7 @@ interface NodoTenantGlobalCardProps {
     scope: 'SUPER_ADMIN' | 'TENANT_GLOBAL' | 'CORPORATIVO';
     onAddUsuario: (nodo: CorpNode) => void;
     onEditUsuario?: (u: TenantUsuario, tg: any) => void;
+    onEditUsuarioCorp?: (u: TenantUsuario, corp: CorpNode) => void;
     onEditTG?: (tg: any) => void;
 }
 
@@ -45,6 +46,7 @@ export const NodoTenantGlobalCard = ({
     scope,
     onAddUsuario,
     onEditUsuario,
+    onEditUsuarioCorp,
     onEditTG,
 }: NodoTenantGlobalCardProps): React.ReactElement => {
     const [expanded, setExpanded] = useState(nivel < 2);
@@ -163,6 +165,7 @@ export const NodoTenantGlobalCard = ({
                                     scope={scope}
                                     onAddUsuario={onAddUsuario}
                                     onEditUsuario={onEditUsuario}
+                                    onEditUsuarioCorp={onEditUsuarioCorp}
                                     onEditTG={onEditTG}
                                 />
                             ))}
@@ -179,6 +182,7 @@ export const NodoTenantGlobalCard = ({
                                     nivel={0}
                                     scope={scope}
                                     onAddUsuario={onAddUsuario}
+                                    onEditUsuario={onEditUsuarioCorp}
                                 />
                             ))}
                         </div>

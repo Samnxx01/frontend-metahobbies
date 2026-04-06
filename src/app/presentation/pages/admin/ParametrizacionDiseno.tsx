@@ -73,20 +73,20 @@ const DEFAULT_FORM: DesignFormState = {
   tokensJson: '{}',
   loginPath: '/public/render/login',
   loginEnabled: true,
-  postLoginPath: '/admin/gestor-rutas/administracion/dashboardadmin',
+  postLoginPath: '/admin',
   postLoginEnabled: true,
-  logoutPath: '/admin/gestor-rutas/administracion/dashboardadmin',
+  logoutPath: '/admin',
   logoutEnabled: true,
-  registerPath: '/admin/gestor-rutas/administracion/dashboardadmin',
+  registerPath: '/admin',
   registerEnabled: true,
-  forgotPasswordPath: '/admin/gestor-rutas/administracion/dashboardadmin',
+  forgotPasswordPath: '/admin',
   forgotPasswordEnabled: true,
   publicHomePath: '/public/render/home',
   publicHomeEnabled: true,
   allowedPathsJson: JSON.stringify([
     '/public/render/login',
     '/public/render/view/login',
-    '/admin/gestor-rutas/administracion/dashboardadmin',
+    '/admin',
     '/public/render/home'
   ], null, 2)
 };

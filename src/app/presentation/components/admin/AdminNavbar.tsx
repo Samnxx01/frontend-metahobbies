@@ -151,19 +151,9 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
 
     const cargarMenuDinamico = useCallback(async (): Promise<void> => {
         try {
-            const [resolvedItems, listResponse, resolvedResponse] = await Promise.all([
-                getMenuUsuarioRoutes(),
-                getRouteMenuTags({ menuTipo: 'USER_DROPDOWN', soloActivos: true }).catch(() => null),
-                resolveCurrentRouteMenuTags({ menuTipo: 'USER_DROPDOWN' }).catch(() => null),
-            ])
-
-            setDynamicMenuItems(
-                mergeMenuUsuarioItems(
-                    Array.isArray(resolvedItems) ? resolvedItems : [],
-                    Array.isArray((listResponse as any)?.data) ? (listResponse as any).data : [],
-                    Array.isArray((resolvedResponse as any)?.data) ? (resolvedResponse as any).data : []
-                )
-            )
+            const resolvedItems = await getMenuUsuarioRoutes()
+            console.log('[MABS][AdminNavbar][cargarMenuDinamico][resolvedItems]', resolvedItems)
+            setDynamicMenuItems(Array.isArray(resolvedItems) ? resolvedItems : [])
         } catch (error) {
             console.error('Error cargando menu dinamico del avatar:', error)
             setDynamicMenuItems([])

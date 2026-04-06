@@ -13,11 +13,13 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { apiFetch } from '@/app/services/api';
 import { useAuth } from '@/app/providers/AuthProvider';
 import { getJerarquiaUsuarios, TenantGlobalInfo, TenantGlobalNode } from '@/app/services/tenantUsuariosService';
 import ParametrizacionGenyProcent from './ParametrizacionGenyProcent/ParametrizacionGenyProcent';
+import ParametrizacionRedirects from './ParametrizacionRedirects';
 import { Edit, Loader2, Network, RefreshCw, Route, Users } from 'lucide-react';
 
 type DashboardUser = {
@@ -360,6 +362,31 @@ export default function Dashboard(): React.ReactElement {
                                 Selecciona un TenantGlobal para gestionar sus niveles de generacion y porcentajes.
                             </div>
                         )}
+                    </CardContent>
+                </Card>
+            )}
+
+            {esSuperAdmin && (
+                <Card className="shadow-lg border-border">
+                    <CardContent className="pt-4">
+                        <Accordion type="single" collapsible className="w-full">
+                            <AccordionItem value="redirects-dashboard-admin" className="border-0">
+                                <AccordionTrigger className="rounded-lg px-1 py-2 text-left hover:no-underline">
+                                    <div className="flex items-center gap-2">
+                                        <Route className="h-5 w-5 text-primary" />
+                                        <div>
+                                            <p className="text-sm font-semibold">Redirects del modulo</p>
+                                            <p className="text-xs text-muted-foreground">
+                                                Permanece cerrado por defecto y solo se despliega al abrirlo manualmente.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </AccordionTrigger>
+                                <AccordionContent className="pt-4">
+                                    <ParametrizacionRedirects compact />
+                                </AccordionContent>
+                            </AccordionItem>
+                        </Accordion>
                     </CardContent>
                 </Card>
             )}

@@ -124,6 +124,7 @@ export default function Login(): React.ReactElement {
         try {
             // Map correo to email for the login service
             const response = await login({ correo: data.correo, password: data.password }) as LoginResponse;
+            console.log('[MABS][Login][response]', response);
 
             if (response?.token && response?.usuario) {
                 // Verificar si requiere actualización de contraseña
@@ -140,7 +141,16 @@ export default function Login(): React.ReactElement {
 
                 setTimeout(async () => {
                     const adminPath = await getAdminHomeRoute();
-                    navigate(adminPath ?? getGovernedPostLoginPath());
+                    const governedPath = getGovernedPostLoginPath();
+                    const targetPath = adminPath ?? governedPath;
+                    console.log('[MABS][Login][post-auth-redirect]', {
+                        adminPath,
+                        governedPath,
+                        targetPath,
+                        userId: response?.usuario?._id ?? null,
+                        correo: response?.usuario?.correo ?? null,
+                    });
+                    navigate(targetPath);
                 }, 1000);
                 return;
             } else {

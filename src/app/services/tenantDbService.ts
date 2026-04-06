@@ -61,6 +61,54 @@ export interface PoolEstado {
   watchersActivos: string[];
 }
 
+export interface ApiDominio {
+  iud: string;
+  etiquetas: string;
+  dominio: string;
+  proovedor: string;
+  estadoDominio: boolean;
+}
+
+export interface ContenedorParametrizacion {
+  iud: string;
+  tenantGlobal: string;
+  corporativo: { iud: string; razon_social: string; nit_ruc_rtn: string } | null;
+  nombre: string;
+  secuencia: number;
+  apisDominios: ApiDominio | null;
+  descripcion: string;
+  estado: boolean;
+  creadoEl: string;
+  actualizadoEl: string;
+  creadoPor?: { iud: string; nombre_cliente: string; correo: string };
+}
+
+export interface CrearContenedorPayload {
+  nombre: string;
+  apisDominios: string;
+  descripcion?: string;
+}
+
+export interface ActualizarContenedorPayload {
+  nombre?: string;
+  apisDominios?: string;
+  descripcion?: string;
+  estado?: boolean;
+}
+
+export interface TenantConContenedores {
+  tenantGlobal: { iud: string; corporativo: any };
+  contenedores: ContenedorParametrizacion[];
+  total: number;
+}
+
+export interface TenantDisponible {
+  iud: string;
+  corporativo: any;
+  estado: boolean;
+  tenantGlobalAdmin?: string | null;
+}
+
 // ─── Servicio ─────────────────────────────────────────────────────────────────
 
 export const tenantDbService = {
@@ -108,4 +156,60 @@ export const tenantDbService = {
   /** Estado del pool de conexiones y watchers activos */
   estadoPool: (): Promise<{ ok: boolean } & PoolEstado> =>
     apiFetch('/api/tenant-db/pool', { method: 'GET' }),
+
+  // ─── CONTENEDOR PARAMETRIZACION ─────────────────────────────────────────────
+
+  /** Lista todos los tenantGlobals disponibles para parametrización */
+  listarTenantDisponibles: (): Promise<{ ok: boolean; total: number; data: TenantDisponible[] }> =>
+    apiFetch('/api/tenant-db/tenants-disponibles', { method: 'GET' }),
+
+  /** Obtiene tenantGlobal con sus contenedores parametrizados */
+  obtenerTenantConContenedores: (
+    tenantGlobalId: string
+  ): Promise<{ ok: boolean; data: TenantConContenedores }> =>
+    apiFetch(`/api/tenant-db/contenedores/tenant/${tenantGlobalId}/preview`, { method: 'GET' }),
+
+  /** Crea un nuevo contenedor parametrizado */
+  crearContenedor: (
+    tenantGlobalId: string,
+    payload: CrearContenedorPayload
+  ): Promise<{ ok: boolean; msg: string; data: ContenedorParametrizacion }> =>
+    apiFetch(`/api/tenant-db/contenedores/${tenantGlobalId}`, { method: 'POST', body: payload }),
+
+  /** Lista todos los dominios registrados en apisDominios */
+  listarApisDominios: (): Promise<{ ok: boolean; total: number; data: ApiDominio[] }> =>
+    apiFetch('/api/seguridad/listar/dominios', { method: 'GET' }),
+
+  /** Lista contenedores de un tenantGlobal */
+  listarContenedores: (
+    tenantGlobalId: string,
+    estado?: boolean
+  ): Promise<{ ok: boolean; total: number; data: ContenedorParametrizacion[] }> =>
+    apiFetch(`/api/tenant-db/contenedores/${tenantGlobalId}${estado !== undefined ? `?estado=${estado}` : ''}`, { method: 'GET' }),
+
+  /** Obtiene un contenedor por ID */
+  obtenerContenedor: (contenedorId: string): Promise<{ ok: boolean; data: ContenedorParametrizacion }> =>
+    apiFetch(`/api/tenant-db/contenedores/${contenedorId}`, { method: 'GET' }),
+
+  /** Actualiza un contenedor */
+  actualizarContenedor: (
+    contenedorId: string,
+    payload: ActualizarContenedorPayload
+  ): Promise<{ ok: boolean; msg: string; data: ContenedorParametrizacion }> =>
+    apiFetch(`/api/tenant-db/contenedores/${contenedorId}`, { method: 'PUT', body: payload }),
+
+  /** Desactiva un contenedor */
+  desactivarContenedor: (contenedorId: string): Promise<{ ok: boolean; msg: string }> =>
+    apiFetch(`/api/tenant-db/contenedores/${contenedorId}`, { method: 'DELETE' }),
+
+  /** Activa un contenedor */
+  activarContenedor: (contenedorId: string): Promise<{ ok: boolean; msg: string; data: ContenedorParametrizacion }> =>
+    apiFetch(`/api/tenant-db/contenedores/${contenedorId}/activar`, { method: 'POST' }),
+
+  /** Resuelve contenedor por slug (para URL parametrizadas) */
+  resolverPorSlug: (
+    tenantGlobalId: string,
+    slug: string
+  ): Promise<{ ok: boolean; data: ContenedorParametrizacion }> =>
+    apiFetch(`/api/tenant-db/contenedores/${tenantGlobalId}/slug/${slug}`, { method: 'GET' }),
 };

@@ -2190,60 +2190,71 @@ const ParametrizacionCatologTenant: React.FC = () => {
                         </Button>
                       </div>
                     </div>
-                    <div className="overflow-hidden rounded-xl border border-slate-200">
-                      <div className="grid grid-cols-[110px_170px_180px_120px_120px_220px] gap-0 bg-slate-100 text-xs font-semibold uppercase tracking-wide text-slate-600">
-                        <div className="px-4 py-3">NVL</div>
-                        <div className="px-4 py-3">Clave</div>
-                        <div className="px-4 py-3">Nombre</div>
-                        <div className="px-4 py-3">Secuencia</div>
-                        <div className="px-4 py-3">Estado</div>
-                        <div className="px-4 py-3">Acciones</div>
+                    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                      <div className="grid grid-cols-2 gap-0 bg-slate-100 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                        <div className="px-4 py-3">Resumen del nivel</div>
+                        <div className="px-4 py-3 text-left lg:text-right">Estado y acciones</div>
                       </div>
                       <div className="divide-y divide-slate-200 bg-white">
                         {nvlGlobalListData.map((item) => {
                           const itemId = String(item?.iud || item?._id || '');
                           const busy = nvlGlobalActionId === itemId;
                           return (
-                            <div key={itemId || `${item?.nvl}-${item?.generation_tenant}`} className="grid grid-cols-[110px_170px_180px_120px_120px_220px] gap-0 text-sm">
-                              <div className="px-4 py-4">
-                                <Badge variant="outline" className="bg-white">NVL {String(item?.nvl ?? '-')}</Badge>
-                              </div>
-                              <div className="px-4 py-4 font-mono text-xs text-slate-600">{String(item?.generation_tenant ?? 'SIN-CLAVE')}</div>
-                              <div className="px-4 py-4">
-                                <p className="font-semibold text-slate-800">{String(item?.nombre ?? 'Sin nombre')}</p>
-                                <p className="mt-1 text-xs text-slate-500">{String(item?.descripcion ?? 'Sin descripcion')}</p>
-                              </div>
-                              <div className="px-4 py-4">
-                                <div className="flex flex-col gap-1">
-                                  <Badge variant="secondary" className="w-fit">#{Number(item?.secuencia ?? item?.orden ?? 0)}</Badge>
-                                  <span className="text-[11px] text-slate-500">
-                                    Acceso libre: {item?.securityPlatform ? 'true' : 'false'}
-                                  </span>
+                            <div
+                              key={itemId || `${item?.nvl}-${item?.generation_tenant}`}
+                              className="grid gap-4 px-4 py-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(320px,0.95fr)]"
+                            >
+                              <div className="space-y-3">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <Badge variant="outline" className="bg-white">NVL {String(item?.nvl ?? '-')}</Badge>
+                                  <Badge variant="secondary">Secuencia #{Number(item?.secuencia ?? item?.orden ?? 0)}</Badge>
+                                  <Badge variant={item?.estado === false ? 'secondary' : 'default'}>
+                                    {item?.estado === false ? 'Inactivo' : 'Activo'}
+                                  </Badge>
+                                </div>
+                                <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                                  <div className="flex flex-col gap-1">
+                                    <p className="text-base font-semibold text-slate-900">{String(item?.nombre ?? 'Sin nombre')}</p>
+                                    <p className="font-mono text-xs text-slate-500">{String(item?.generation_tenant ?? 'SIN-CLAVE')}</p>
+                                    <p className="text-sm text-slate-500">{String(item?.descripcion ?? 'Sin descripcion')}</p>
+                                  </div>
                                 </div>
                               </div>
-                              <div className="px-4 py-4">
-                                <Badge variant={item?.estado === false ? 'secondary' : 'default'}>
-                                  {item?.estado === false ? 'Inactivo' : 'Activo'}
-                                </Badge>
-                              </div>
-                              <div className="px-4 py-4">
-                                {canManageGlobalNvlState ? (
-                                  <div className="flex flex-wrap gap-2">
-                                    <Button type="button" variant="outline" size="sm" className="gap-1" onClick={() => openNvlListEditModal(item)} disabled={busy}>
-                                      <Pencil className="h-3.5 w-3.5" />
-                                      Update
-                                    </Button>
-                                    <Button type="button" variant="outline" size="sm" onClick={() => void handleDeactivateNvlGlobal(item)} disabled={busy || item?.estado === false}>
-                                      {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Desactivar'}
-                                    </Button>
-                                    <Button type="button" variant="outline" size="sm" className="gap-1 text-red-600" onClick={() => void handleDeleteNvlGlobal(item)} disabled={busy}>
-                                      <Trash2 className="h-3.5 w-3.5" />
-                                      Eliminar
-                                    </Button>
+                              <div className="space-y-3 rounded-2xl border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-4">
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                  <div className="rounded-xl border border-slate-200 bg-white px-3 py-3">
+                                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Acceso libre</p>
+                                    <p className={`mt-2 text-sm font-semibold ${item?.securityPlatform ? 'text-emerald-600' : 'text-amber-600'}`}>
+                                      {item?.securityPlatform ? 'true' : 'false'}
+                                    </p>
                                   </div>
-                                ) : (
-                                  <span className="text-xs text-slate-400">Sin acciones para este scope</span>
-                                )}
+                                  <div className="rounded-xl border border-slate-200 bg-white px-3 py-3">
+                                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Registro</p>
+                                    <p className="mt-2 break-all text-xs text-slate-500">{itemId || 'Sin id'}</p>
+                                  </div>
+                                </div>
+                                <div className="border-t border-slate-200 pt-3">
+                                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Acciones disponibles</p>
+                                  {canManageGlobalNvlState ? (
+                                    <div className="flex flex-wrap gap-2">
+                                      <Button type="button" variant="outline" size="sm" className="gap-1" onClick={() => openNvlListEditModal(item)} disabled={busy}>
+                                        <Pencil className="h-3.5 w-3.5" />
+                                        Update
+                                      </Button>
+                                      <Button type="button" variant="outline" size="sm" onClick={() => void handleDeactivateNvlGlobal(item)} disabled={busy || item?.estado === false}>
+                                        {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Desactivar'}
+                                      </Button>
+                                      <Button type="button" variant="outline" size="sm" className="gap-1 text-red-600" onClick={() => void handleDeleteNvlGlobal(item)} disabled={busy}>
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                        Eliminar
+                                      </Button>
+                                    </div>
+                                  ) : (
+                                    <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-400">
+                                      Sin acciones para este scope
+                                    </div>
+                                  )}
+                                </div>
                               </div>
                             </div>
                           );

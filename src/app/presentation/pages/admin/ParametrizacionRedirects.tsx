@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Save, RefreshCw, Route, ListTree, UserCog } from 'lucide-react';
+import { Save, RefreshCw, Route, ListTree } from 'lucide-react';
 import {
   BrandingConfig,
   guardarBrandingPrivado,
@@ -115,11 +115,9 @@ export default function ParametrizacionRedirects({
   const [routeCatalog, setRouteCatalog] = useState<RouteCatalogItem[]>([]);
   const [scopeOptions, setScopeOptions] = useState<ScopeOption[]>([{ value: GLOBAL_SCOPE_VALUE, label: 'Global del sistema' }]);
   const [selectedScopeValue, setSelectedScopeValue] = useState<string>(GLOBAL_SCOPE_VALUE);
-  const [guardarEnRegisUsu, setGuardarEnRegisUsu] = useState(false);
 
   const getBrandingScopeParams = (): BrandingScopeParams => ({
-    tenantGlobalId: !guardarEnRegisUsu && selectedScopeValue !== GLOBAL_SCOPE_VALUE ? selectedScopeValue : undefined,
-    guardarEnRegisUsu,
+    tenantGlobalId: selectedScopeValue !== GLOBAL_SCOPE_VALUE ? selectedScopeValue : undefined,
   });
 
   // Hidrata el form desde la config guardada en backend — sin fallbacks hardcodeados
@@ -168,7 +166,7 @@ export default function ParametrizacionRedirects({
 
   useEffect(() => {
     void loadData();
-  }, [selectedScopeValue, guardarEnRegisUsu]);
+  }, [selectedScopeValue]);
 
   // Paths únicos del catálogo de rutasSeguridad — la fuente dinámica de verdad
   const routePaths = Array.from(
@@ -215,7 +213,7 @@ export default function ParametrizacionRedirects({
         throw new Error(`La accion ${invalidField.label} no puede apuntar a "/". Usa una ruta especifica del modulo.`);
       }
 
-      const payload: BrandingConfig & { guardarEnRegisUsu?: boolean } = {
+      const payload: BrandingConfig = {
         ...branding,
         widgets: {
           ...(branding.widgets || {}),
@@ -229,7 +227,6 @@ export default function ParametrizacionRedirects({
             allowedPaths,
           },
         },
-        guardarEnRegisUsu,
       };
 
       const saved = await guardarBrandingPrivado(payload, getBrandingScopeParams());
@@ -283,29 +280,8 @@ export default function ParametrizacionRedirects({
             <div>
               <p className="text-sm font-semibold">Scope de configuracion</p>
               <p className="text-xs text-muted-foreground">
-                Elige si la configuracion se guarda global, por tenantGlobal o en tu regisUsu.
+                Elige si la configuracion se guarda global o para un tenantGlobal visible desde tu jerarquia.
               </p>
-            </div>
-
-            <div className="flex items-start justify-between gap-4 rounded-md bg-muted/40 p-3">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <UserCog className="h-4 w-4 text-primary" />
-                  <p className="text-sm font-medium">Guardar en regisUsu</p>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Si lo activas, esta parametrizacion queda asociada a tu usuario autenticado.
-                </p>
-              </div>
-              <Switch
-                checked={guardarEnRegisUsu}
-                onCheckedChange={(checked) => {
-                  setGuardarEnRegisUsu(checked);
-                  toast.info(checked
-                    ? 'Scope cambiado: la configuracion se guardara en regisUsu.'
-                    : 'Scope cambiado: la configuracion vuelve al alcance global o tenantGlobal.');
-                }}
-              />
             </div>
 
             <div className="space-y-2">
@@ -317,7 +293,6 @@ export default function ParametrizacionRedirects({
                   const label = scopeOptions.find((o) => o.value === value)?.label || value;
                   toast.info(`Scope seleccionado: ${label}.`);
                 }}
-                disabled={guardarEnRegisUsu}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Selecciona el scope a parametrizar" />
@@ -331,9 +306,7 @@ export default function ParametrizacionRedirects({
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                {guardarEnRegisUsu
-                  ? 'El selector se bloquea porque el scope activo es tu regisUsu.'
-                  : 'Puedes dejarlo global o apuntarlo a un tenantGlobal visible desde tu jerarquia.'}
+                Puedes dejarlo global o apuntarlo a un tenantGlobal visible desde tu jerarquia. Al seleccionar uno, editas los redirects que aplican a ese tenant y su contexto corporativo.
               </p>
             </div>
           </div>

@@ -9,12 +9,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { apiFetch } from '@/app/services/api';
 import { toast } from 'react-toastify';
 import { useTenantUsuarios } from '@/app/hooks/useTenantUsuarios';
-import { NodoCorpCard } from '@/app/presentation/components/admin/usuarios-tenant/NodoCorpCard';
 import { NodoTenantGlobalCard } from '@/app/presentation/components/admin/usuarios-tenant/NodoTenantGlobalCard';
 import { UsuarioGlobalModal } from '@/app/presentation/components/admin/usuarios-tenant/UsuarioGlobalModal';
 import { UsuarioCorporativoModal } from '@/app/presentation/components/admin/usuarios-tenant/UsuarioCorporativoModal';
 import { UsuarioSuperAdminModal } from '@/app/presentation/components/admin/usuarios-tenant/UsuarioSuperAdminModal';
-import ParametrizacionRedirects from './ParametrizacionRedirects';
+import { RolGlobalEditModal } from '@/app/presentation/components/admin/usuarios-tenant/RolGlobalEditModal';
+import { RolCorporativoEditModal } from '@/app/presentation/components/admin/usuarios-tenant/RolCorporativoEditModal';
+import { RolesGlobalesModal } from '@/app/presentation/components/admin/usuarios-tenant/RolesGlobalesModal';
+import { RolesCorporativosModal } from '@/app/presentation/components/admin/usuarios-tenant/RolesCorporativosModal';
 import type { CorpNode, TenantGlobalInfo, TenantUsuario } from '@/app/services/tenantUsuariosService';
 
 export default function UsuariosTenant(): React.ReactElement {
@@ -49,6 +51,10 @@ export default function UsuariosTenant(): React.ReactElement {
     // Modal corporativo — guarda el nodo seleccionado
     const [nodoCorp, setNodoCorp] = useState<CorpNode | null>(null);
 
+    // Modales de gestión de roles
+    const [modalRolesGlobales, setModalRolesGlobales] = useState(false);
+    const [modalRolesCorporativos, setModalRolesCorporativos] = useState(false);
+
     const scope = jerarquia?.scope ?? 'TENANT_GLOBAL';
 
     // Lista de TenantGlobales para el selector del SUPER_ADMIN
@@ -68,39 +74,19 @@ export default function UsuariosTenant(): React.ReactElement {
         return sincronizarCanReferirUsuarios({ tenantCorporativoId: nodoCorp.tenantCorporativo.iud, canReferir });
     };
 
-    // ─── Editar Usuario (SA o TG) ─────────────────────────────────────────────
+    // ─── Editar Usuario Global (SA o TG) ─────────────────────────────────────
     const [editUserModal, setEditUserModal] = useState(false);
     const [editUserTarget, setEditUserTarget] = useState<any | null>(null);
-    const [editUserForm, setEditUserForm] = useState({ correo: '', password: '', rol: '' });
     const [editUserSaving, setEditUserSaving] = useState(false);
-    // TG del usuario (para mostrar y cambiar, solo SA)
     const [editUserTG, setEditUserTG] = useState<any | null>(null);
-    const [editUserTGSelected, setEditUserTGSelected] = useState('');
 
     const openEditUser = (u: any, tg?: any) => {
         setEditUserTarget(u);
-        setEditUserForm({ correo: String(u?.correo || ''), password: '', rol: String(u?.rol || '') });
         setEditUserTG(tg ?? null);
-        setEditUserTGSelected(String(tg?.iud || tg?._id || ''));
         setEditUserModal(true);
     };
 
-    const handleGuardarUsuario = async () => {
-        const id = String(editUserTarget?.iud || editUserTarget?._id || '');
-        if (!id) { toast.error('Sin ID de usuario'); return; }
-        const body: Record<string, string> = {};
-        const originalCorreo = String(editUserTarget?.correo || '');
-        const originalRol = String(editUserTarget?.rol || '');
-        if (editUserForm.correo.trim() && editUserForm.correo.trim() !== originalCorreo) body.correo = editUserForm.correo.trim();
-        if (editUserForm.rol.trim() && editUserForm.rol.trim() !== originalRol) body.rol = editUserForm.rol.trim();
-        if (editUserForm.password.trim()) body.password = editUserForm.password.trim();
-        // Reasignar tenant global si cambió
-        const originalTGId = String(editUserTG?.iud || editUserTG?._id || '');
-        if (editUserTGSelected && editUserTGSelected !== originalTGId) {
-            body.tenantGlobal = editUserTGSelected;
-        }
-        if (!Object.keys(body).length) { toast.error('Modifica al menos un campo'); return; }
-        if (body.password && body.password.length < 6) { toast.error('La contraseña debe tener mínimo 6 caracteres'); return; }
+    const handleGuardarGlobal = async (id: string, body: Record<string, string>) => {
         setEditUserSaving(true);
         try {
             await apiFetch(`/api/seguridad/pruebas/actualizar/registro/${id}`, { method: 'PUT', body });
@@ -109,8 +95,40 @@ export default function UsuariosTenant(): React.ReactElement {
             refetch();
         } catch (err: any) {
             toast.error(String(err?.message || 'Error al guardar'));
+            throw new Error(String(err?.message || 'Error al guardar'));
         } finally {
             setEditUserSaving(false);
+        }
+    };
+
+    // ─── Editar Usuario Corporativo ───────────────────────────────────────────
+    const [editCorpModal, setEditCorpModal] = useState(false);
+    const [editCorpTarget, setEditCorpTarget] = useState<any | null>(null);
+    const [editCorpNodo, setEditCorpNodo] = useState<CorpNode | null>(null);
+    const [editCorpSaving, setEditCorpSaving] = useState(false);
+    const [editCorpError, setEditCorpError] = useState<Error | null>(null);
+
+    const openEditCorp = (u: any, corp: CorpNode) => {
+        setEditCorpTarget(u);
+        setEditCorpNodo(corp);
+        setEditCorpError(null);
+        setEditCorpModal(true);
+    };
+
+    const handleGuardarCorp = async (id: string, body: Record<string, string>) => {
+        setEditCorpSaving(true);
+        setEditCorpError(null);
+        try {
+            await apiFetch(`/api/seguridad/pruebas/actualizar/registro/${id}`, { method: 'PUT', body });
+            toast.success('Guardado correctamente');
+            setEditCorpModal(false);
+            refetch();
+        } catch (err: any) {
+            const e = new Error(String(err?.message || 'Error al guardar'));
+            setEditCorpError(e);
+            throw e;
+        } finally {
+            setEditCorpSaving(false);
         }
     };
 
@@ -308,6 +326,15 @@ export default function UsuariosTenant(): React.ReactElement {
                             Dominios
                         </Button>
                     )}
+                    {/* Gestión de roles */}
+                    <Button size="sm" variant="outline" onClick={() => setModalRolesGlobales(true)}>
+                        <Globe className="h-4 w-4 mr-2" />
+                        Rol Global
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => setModalRolesCorporativos(true)}>
+                        <Building2 className="h-4 w-4 mr-2" />
+                        Rol Corporativo
+                    </Button>
                     {/* Agregar usuario global solo para SA y TG */}
                     {(scope === 'SUPER_ADMIN' || scope === 'TENANT_GLOBAL') && (
                         <Button size="sm" onClick={() => setModalGlobal(true)}>
@@ -317,10 +344,6 @@ export default function UsuariosTenant(): React.ReactElement {
                     )}
                 </div>
             </div>
-
-            {scope === 'SUPER_ADMIN' && (
-                <ParametrizacionRedirects compact embeddedInUsuariosTenant />
-            )}
 
             {/* SuperAdmins — solo visible para SUPER_ADMIN */}
             {scope === 'SUPER_ADMIN' && (jerarquia?.superAdmins.length ?? 0) > 0 && (
@@ -362,6 +385,7 @@ export default function UsuariosTenant(): React.ReactElement {
                     scope={scope as 'SUPER_ADMIN' | 'TENANT_GLOBAL' | 'CORPORATIVO'}
                     onAddUsuario={nodo => setNodoCorp(nodo)}
                     onEditUsuario={(u: TenantUsuario, tg: any) => void openEditUser(u, tg)}
+                    onEditUsuarioCorp={(u: TenantUsuario, corp: CorpNode) => void openEditCorp(u, corp)}
                     onEditTG={(tg: any) => void openEditTG(tg)}
                 />
             ))}
@@ -529,81 +553,39 @@ export default function UsuariosTenant(): React.ReactElement {
                 sincronizarError={errorSincronizarCanReferir}
             />
 
-            {/* ── Modal Editar Usuario (solo SA) ───────────────────────────── */}
-            <Dialog open={editUserModal} onOpenChange={(v) => { if (!v) setEditUserModal(false); }}>
-                <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
-                    <DialogHeader>
-                        <DialogTitle className="flex items-center gap-2">
-                            <Edit className="h-4 w-4 text-primary" />
-                            Editar usuario
-                        </DialogTitle>
-                    </DialogHeader>
-                    <div className="space-y-4 py-2">
-                        <p className="text-xs text-muted-foreground">
-                            <span className="font-medium text-foreground">{String(editUserTarget?.correo || editUserTarget?.nombre || '')}</span>
-                            <span className="ml-2 text-muted-foreground/60">— solo modifica los campos que quieras cambiar</span>
-                        </p>
+            {/* ── Modales de gestión de catálogo de roles ──────────────────── */}
+            <RolesGlobalesModal
+                open={modalRolesGlobales}
+                onClose={() => setModalRolesGlobales(false)}
+                scope={scope as 'SUPER_ADMIN' | 'TENANT_GLOBAL' | 'CORPORATIVO'}
+            />
+            <RolesCorporativosModal
+                open={modalRolesCorporativos}
+                onClose={() => setModalRolesCorporativos(false)}
+            />
 
-                        {/* ── Datos del usuario ── */}
-                        <div className="rounded-lg border p-3 space-y-3">
-                            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Datos del usuario</p>
-                            <div className="space-y-1">
-                                <Label>Correo <span className="text-muted-foreground text-xs">(opcional)</span></Label>
-                                <Input
-                                    type="email"
-                                    value={editUserForm.correo}
-                                    onChange={(e) => setEditUserForm(p => ({ ...p, correo: e.target.value }))}
-                                    placeholder="nuevo@correo.com"
-                                />
-                            </div>
-                            <div className="space-y-1">
-                                <Label>Rol <span className="text-muted-foreground text-xs">(opcional)</span></Label>
-                                <Input
-                                    value={editUserForm.rol}
-                                    onChange={(e) => setEditUserForm(p => ({ ...p, rol: e.target.value }))}
-                                    placeholder="ADMIN_ROLE / USER_ROLE..."
-                                />
-                            </div>
-                            <div className="space-y-1">
-                                <Label>Nueva contraseña <span className="text-muted-foreground text-xs">(opcional, min. 6)</span></Label>
-                                <Input
-                                    type="password"
-                                    value={editUserForm.password}
-                                    onChange={(e) => setEditUserForm(p => ({ ...p, password: e.target.value }))}
-                                    placeholder="Dejar vacío para no cambiar"
-                                />
-                            </div>
-                        </div>
+            {/* ── Modal Editar Rol Global ───────────────────────────────────── */}
+            <RolGlobalEditModal
+                open={editUserModal}
+                onClose={() => setEditUserModal(false)}
+                usuario={editUserTarget}
+                tenantGlobalActual={editUserTG}
+                tenantsGlobales={scope === 'SUPER_ADMIN' ? tenantsGlobalesInfo : []}
+                scope={scope as 'SUPER_ADMIN' | 'TENANT_GLOBAL' | 'CORPORATIVO'}
+                onSave={handleGuardarGlobal}
+                isUpdating={editUserSaving}
+            />
 
-                        {/* ── Reasignar Tenant Global (solo SA) ── */}
-                        {editUserTG !== undefined && scope === 'SUPER_ADMIN' && (
-                            <div className="rounded-lg border p-3 space-y-3">
-                                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Tenant Global</p>
-                                <div className="space-y-1">
-                                    <Label>Tenant asignado</Label>
-                                    <Select value={editUserTGSelected} onValueChange={setEditUserTGSelected}>
-                                        <SelectTrigger><SelectValue placeholder="Seleccionar tenant global" /></SelectTrigger>
-                                        <SelectContent>
-                                            {(jerarquia?.tenantsGlobales ?? []).map((tgNode: any) => {
-                                                const tg = tgNode?.tenantGlobal;
-                                                const tid = String(tg?.iud || tg?._id || '');
-                                                const label = String(tg?.razon_social || tg?.titulo || tid);
-                                                return <SelectItem key={tid} value={tid}>{label}</SelectItem>;
-                                            })}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                    <div className="flex justify-end gap-2 pt-2">
-                        <Button variant="outline" onClick={() => setEditUserModal(false)} disabled={editUserSaving}>Cancelar</Button>
-                        <Button onClick={() => void handleGuardarUsuario()} disabled={editUserSaving}>
-                            {editUserSaving ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Guardando...</> : 'Guardar'}
-                        </Button>
-                    </div>
-                </DialogContent>
-            </Dialog>
+            {/* ── Modal Editar Rol Corporativo ──────────────────────────────── */}
+            <RolCorporativoEditModal
+                open={editCorpModal}
+                onClose={() => setEditCorpModal(false)}
+                usuario={editCorpTarget}
+                tenantCorporativo={editCorpNodo?.tenantCorporativo ?? null}
+                onSave={handleGuardarCorp}
+                isUpdating={editCorpSaving}
+                updateError={editCorpError}
+            />
 
             {/* ── Modal Editar TenantGlobal ────────────────────────────────── */}
             <Dialog open={editTGModal} onOpenChange={(v) => { if (!v) setEditTGModal(false); }}>

@@ -15,6 +15,7 @@ import {
   CAMPOS_CONTENIDO,
   activarPaleta,
   actualizarPaleta,
+  asignarTiposPaleta,
   crearPaleta,
   eliminarPaleta,
   listarPaletas,
@@ -115,14 +116,14 @@ function injectInteractivity(html: string): string {
 
 function isValidHex(v: string) { return /^#[0-9A-Fa-f]{6}$/.test(v); }
 
-const EMPTY_FORM = { nombre: '', colores: { ...DEFAULT_COLORS } };
+const EMPTY_FORM = { nombre: '', colores: { ...DEFAULT_COLORS }, tiposAsignados: [] as TipoCorreo[] };
 
 export default function EnvioCorreos() {
   const [paletas, setPaletas] = useState<EmailPaleta[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState<{ nombre: string; colores: PaletaColores }>(EMPTY_FORM);
+  const [form, setForm] = useState<{ nombre: string; colores: PaletaColores; tiposAsignados: TipoCorreo[] }>(EMPTY_FORM);
   const [hexDraft, setHexDraft] = useState<Partial<Record<keyof PaletaColores, string>>>({});
   const [tipoPreview, setTipoPreview] = useState<TipoCorreo>('activacion-membresia');
   const [previewHtml, setPreviewHtml] = useState<string>('');
@@ -232,14 +233,14 @@ export default function EnvioCorreos() {
   const handleEdit = (paleta: EmailPaleta) => {
     setEditingId(paleta._id);
     const colores = { ...DEFAULT_COLORS, ...paleta.colores };
-    setForm({ nombre: paleta.nombre, colores });
+    setForm({ nombre: paleta.nombre, colores, tiposAsignados: paleta.tiposAsignados ?? [] });
     setHexDraft({});
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleCancel = () => {
     setEditingId(null);
-    setForm(EMPTY_FORM);
+    setForm({ ...EMPTY_FORM, tiposAsignados: [] });
     setHexDraft({});
   };
 
@@ -249,10 +250,18 @@ export default function EnvioCorreos() {
     setSaving(true);
     try {
       if (editingId) {
-        await actualizarPaleta(editingId, form);
+        await actualizarPaleta(editingId, {
+          nombre: form.nombre,
+          colores: form.colores,
+          tiposAsignados: form.tiposAsignados,
+        });
         toast.success('Paleta actualizada');
       } else {
-        await crearPaleta(form);
+        await crearPaleta({
+          nombre: form.nombre,
+          colores: form.colores,
+          tiposAsignados: form.tiposAsignados,
+        });
         toast.success('Paleta creada');
       }
       handleCancel();
@@ -263,6 +272,40 @@ export default function EnvioCorreos() {
       setSaving(false);
     }
   };
+
+  // Toggle de tipo en el formulario
+  const handleToggleTipo = (tipo: TipoCorreo) => {
+    setForm(prev => ({
+      ...prev,
+      tiposAsignados: prev.tiposAsignados.includes(tipo)
+        ? prev.tiposAsignados.filter(t => t !== tipo)
+        : [...prev.tiposAsignados, tipo],
+    }));
+  };
+
+  // Asignación rápida de tipos desde la card (sin abrir el formulario de edición)
+  const handleAsignarTipos = async (paleta: EmailPaleta, tipo: TipoCorreo) => {
+    const tiposActuales = paleta.tiposAsignados ?? [];
+    const nuevosTipos = tiposActuales.includes(tipo)
+      ? tiposActuales.filter(t => t !== tipo)
+      : [...tiposActuales, tipo];
+    try {
+      await asignarTiposPaleta(paleta._id, nuevosTipos);
+      toast.success(`Tipos de "${paleta.nombre}" actualizados`);
+      await cargar();
+    } catch (err: any) {
+      toast.error(err.message ?? 'Error al asignar tipos');
+    }
+  };
+
+  // Jerarquía efectiva para el tipo de correo en preview
+  const paletaEfectivaParaPreview = (() => {
+    const porTipo = paletas.find(p => (p.tiposAsignados ?? []).includes(tipoPreview));
+    if (porTipo) return { paleta: porTipo, nivel: 'tipo' as const };
+    const activa = paletas.find(p => p.activa);
+    if (activa) return { paleta: activa, nivel: 'global' as const };
+    return { paleta: null, nivel: 'default' as const };
+  })();
 
   // Activar paleta — aplica colores en la app inmediatamente
   const handleActivar = async (paleta: EmailPaleta) => {
@@ -427,6 +470,49 @@ export default function EnvioCorreos() {
                 </div>
               </div>
 
+              {/* Asignación de tipos de correo */}
+              <div>
+                <p className="text-sm font-medium mb-1">Aplicar a tipos de correo</p>
+                <p className="text-xs text-muted-foreground mb-3">
+                  Esta paleta se usará prioritariamente para los correos seleccionados.
+                  Cada tipo solo puede tener una paleta asignada; si otro ya lo tiene, se moverá automáticamente.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {TIPOS_CORREO.map(t => {
+                    const checked = form.tiposAsignados.includes(t.value);
+                    // ¿Qué paleta tiene este tipo actualmente? (excluyendo la que estamos editando)
+                    const propietarioActual = paletas.find(
+                      p => p._id !== editingId && (p.tiposAsignados ?? []).includes(t.value)
+                    );
+                    return (
+                      <label
+                        key={t.value}
+                        className={`flex items-start gap-2.5 p-2.5 rounded-lg border cursor-pointer transition-colors ${
+                          checked
+                            ? 'border-primary bg-primary/8'
+                            : 'border-border hover:bg-muted/40'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => handleToggleTipo(t.value)}
+                          className="mt-0.5 accent-primary"
+                        />
+                        <div className="min-w-0">
+                          <p className="text-xs font-medium leading-tight">{t.label}</p>
+                          {propietarioActual && !checked && (
+                            <p className="text-[10px] text-muted-foreground mt-0.5">
+                              Asignado a: <span className="font-medium">{propietarioActual.nombre}</span>
+                            </p>
+                          )}
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
               {/* Acciones */}
               <div className="flex gap-3 pt-1">
                 <Button type="submit" disabled={saving}>
@@ -469,6 +555,32 @@ export default function EnvioCorreos() {
                 {t.label}
               </button>
             ))}
+          </div>
+
+          {/* Indicador de jerarquía de paleta */}
+          <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs border ${
+            paletaEfectivaParaPreview.nivel === 'tipo'
+              ? 'bg-primary/8 border-primary/30 text-primary'
+              : paletaEfectivaParaPreview.nivel === 'global'
+              ? 'bg-muted/40 border-border text-muted-foreground'
+              : 'bg-muted/20 border-border text-muted-foreground'
+          }`}>
+            <span className="shrink-0">
+              {paletaEfectivaParaPreview.nivel === 'tipo' && '🎨'}
+              {paletaEfectivaParaPreview.nivel === 'global' && '🌐'}
+              {paletaEfectivaParaPreview.nivel === 'default' && '⬜'}
+            </span>
+            <span>
+              {paletaEfectivaParaPreview.nivel === 'tipo' && (
+                <>Paleta específica: <strong>{paletaEfectivaParaPreview.paleta!.nombre}</strong></>
+              )}
+              {paletaEfectivaParaPreview.nivel === 'global' && (
+                <>Paleta activa global: <strong>{paletaEfectivaParaPreview.paleta!.nombre}</strong></>
+              )}
+              {paletaEfectivaParaPreview.nivel === 'default' && (
+                <>Sin paleta asignada — usando colores por defecto</>
+              )}
+            </span>
           </div>
 
           {/* Edición de contenido por template */}
@@ -562,6 +674,27 @@ export default function EnvioCorreos() {
                     />
                   ))}
                 </div>
+
+                {/* Tipos de correo asignados — clic para desasignar */}
+                {(paleta.tiposAsignados ?? []).length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {(paleta.tiposAsignados ?? []).map(tipo => {
+                      const label = TIPOS_CORREO.find(t => t.value === tipo)?.label ?? tipo;
+                      return (
+                        <button
+                          key={tipo}
+                          type="button"
+                          onClick={() => handleAsignarTipos(paleta, tipo)}
+                          title={`Quitar "${label}" de esta paleta`}
+                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-primary/10 text-primary border border-primary/20 font-medium hover:bg-destructive/10 hover:text-destructive hover:border-destructive/20 transition-colors"
+                        >
+                          {label}
+                          <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
 
                 <div
                   className="h-1.5 rounded-full"

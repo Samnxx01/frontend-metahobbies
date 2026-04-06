@@ -23,6 +23,9 @@ import {
   tenantDbService,
   type TenantDbConfig,
   type SyncColeccion,
+  type TenantDisponible,
+  type ContenedorParametrizacion,
+  type TenantConContenedores,
 } from '../../../services/tenantDbService';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -80,13 +83,13 @@ function MigrationBadge({ status }: { status: TenantDbConfig['migrationStatus'] 
 
 interface FormConexion {
   tenantGlobalId: string;
-  contenedor: string;   // nombre descriptivo / alias del tenant
+  contenedorId: string;      // ID del contenedor parametrizado seleccionado
   mongoUri: string;
   dbName: string;
   urlBase: string;
 }
 
-const FORM_VACIO: FormConexion = { tenantGlobalId: '', contenedor: '', mongoUri: '', dbName: '', urlBase: '' };
+const FORM_VACIO: FormConexion = { tenantGlobalId: '', contenedorId: '', mongoUri: '', dbName: '', urlBase: '' };
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 
@@ -117,6 +120,18 @@ export default function TenantDbManager() {
   const [pool, setPool] = useState<{ pool: Record<string, { readyState: number; nombre: string }>; watchersActivos: string[] } | null>(null);
   const [poolLoading, setPoolLoading] = useState(false);
 
+  // ── Parametrización de contenedores ──
+  const [tenantsDisponibles, setTenantsDisponibles] = useState<TenantDisponible[]>([]);
+  const [tenantsLoading, setTenantsLoading] = useState(false);
+  const [contenedoresPorTenant, setContenedoresPorTenant] = useState<Map<string, ContenedorParametrizacion[]>>(new Map());
+  const [apisDominios, setApisDominios] = useState<{ iud: string; etiquetas: string; dominio: string }[]>([]);
+
+  // ── Dialog parametrización ──
+  const [dlgParametrizacion, setDlgParametrizacion] = useState(false);
+  const [tenantParaParametrizar, setTenantParaParametrizar] = useState<TenantDisponible | null>(null);
+  const [formContenedor, setFormContenedor] = useState({ nombre: '', apisDominios: '', descripcion: '' });
+  const [parametrizacionLoading, setParametrizacionLoading] = useState(false);
+
   // ─── Carga ────────────────────────────────────────────────────────────────
 
   const cargarConfigs = useCallback(async () => {
@@ -143,7 +158,41 @@ export default function TenantDbManager() {
     }
   }, []);
 
-  useEffect(() => { void cargarConfigs(); }, [cargarConfigs]);
+  const cargarTenantsDisponibles = useCallback(async () => {
+    setTenantsLoading(true);
+    try {
+      const res = await tenantDbService.listarTenantDisponibles();
+      setTenantsDisponibles(res?.data ?? []);
+    } catch (err: any) {
+      toast.error(err?.message ?? 'Error cargando tenants disponibles');
+    } finally {
+      setTenantsLoading(false);
+    }
+  }, []);
+
+  const cargarApisDominios = useCallback(async () => {
+    try {
+      const res = await tenantDbService.listarApisDominios();
+      setApisDominios(Array.isArray(res?.data) ? res.data : []);
+    } catch (err: any) {
+      toast.error(err?.message ?? 'Error cargando dominios');
+    }
+  }, []);
+
+  const cargarContenedoresTenant = useCallback(async (tenantGlobalId: string) => {
+    try {
+      const res = await tenantDbService.obtenerTenantConContenedores(tenantGlobalId);
+      setContenedoresPorTenant(prev => new Map(prev).set(tenantGlobalId, res.data.contenedores));
+    } catch (err: any) {
+      toast.error(err?.message ?? 'Error cargando contenedores');
+    }
+  }, []);
+
+  useEffect(() => {
+    void cargarConfigs();
+    void cargarTenantsDisponibles();
+    void cargarApisDominios();
+  }, [cargarConfigs, cargarTenantsDisponibles, cargarApisDominios]);
 
   // ─── Conexión ─────────────────────────────────────────────────────────────
 
@@ -169,6 +218,55 @@ export default function TenantDbManager() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleAbrirParametrizacion = (tenant: TenantDisponible) => {
+    setTenantParaParametrizar(tenant);
+    setFormContenedor({ nombre: '', apisDominios: '', descripcion: '' });
+    void cargarContenedoresTenant(tenant.iud);
+    setDlgParametrizacion(true);
+  };
+
+  const handleCrearContenedor = async () => {
+    if (!tenantParaParametrizar || !formContenedor.nombre.trim() || !formContenedor.apisDominios.trim()) {
+      toast.warning('Completa el nombre y el dominio apisDominios');
+      return;
+    }
+
+    setParametrizacionLoading(true);
+    try {
+      const res = await tenantDbService.crearContenedor(tenantParaParametrizar.iud, {
+        nombre: formContenedor.nombre,
+        apisDominios: formContenedor.apisDominios,
+        descripcion: formContenedor.descripcion || undefined,
+      });
+
+      toast.success('Contenedor creado exitosamente');
+      setFormContenedor({ nombre: '', apisDominios: '', descripcion: '' });
+      void cargarContenedoresTenant(tenantParaParametrizar.iud);
+    } catch (err: any) {
+      toast.error(err?.message ?? 'Error creando contenedor');
+    } finally {
+      setParametrizacionLoading(false);
+    }
+  };
+
+  const handleSeleccionarTenant = (tenantGlobalId: string) => {
+    setForm(f => ({ ...f, tenantGlobalId, contenedorId: '' }));
+    if (!tenantGlobalId) {
+      return;
+    }
+    if (!contenedoresPorTenant.has(tenantGlobalId)) {
+      void cargarContenedoresTenant(tenantGlobalId);
+    }
+  };
+
+  const handleSeleccionarContenedor = (contenedor: ContenedorParametrizacion) => {
+    setForm(f => ({
+      ...f,
+      contenedorId: contenedor.iud,
+      urlBase: contenedor.apisDominios?.dominio || f.urlBase,
+    }));
   };
 
   const handleDesactivar = async (tenantGlobalId: string) => {
@@ -618,33 +716,71 @@ export default function TenantDbManager() {
 
           <div className="space-y-4 py-2">
 
-            {/* Contenedor / alias */}
-            <div className="space-y-1">
-              <Label htmlFor="contenedor">Contenedor (nombre descriptivo)</Label>
-              <Input
-                id="contenedor"
-                placeholder="Ej: Empresa Acme — Producción"
-                value={form.contenedor}
-                onChange={e => setForm(f => ({ ...f, contenedor: e.target.value }))}
-              />
+            {/* Seleccionar Tenant Global */}
+            <div className="space-y-2">
+              <Label htmlFor="tenant-select">Empresa (Tenant Global) <span className="text-destructive">*</span></Label>
+              <div className="flex gap-2">
+                <select
+                  id="tenant-select"
+                  className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 flex-1"
+                  value={form.tenantGlobalId}
+                  onChange={e => handleSeleccionarTenant(e.target.value)}
+                  disabled={tenantsLoading}
+                >
+                  <option value="">Selecciona una empresa...</option>
+                  {tenantsDisponibles.map(t => (
+                    <option key={t.iud} value={t.iud}>
+                      {typeof t.corporativo === 'object' && t.corporativo?.razon_social
+                        ? t.corporativo.razon_social
+                        : `Tenant ${t.iud?.slice(0, 8)}...`}
+                    </option>
+                  ))}
+                </select>
+                {form.tenantGlobalId && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleAbrirParametrizacion({
+                      iud: form.tenantGlobalId,
+                      corporativo: tenantsDisponibles.find(t => t.iud === form.tenantGlobalId)?.corporativo,
+                      estado: true,
+                    })}
+                    title="Parametrizar contenedores"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </Button>
+                )}
+              </div>
               <p className="text-xs text-muted-foreground">
-                Alias visual para identificar este tenant en la UI. No se guarda en BD.
+                Selecciona la empresa que será propietaria de esta conexión de BD.
               </p>
             </div>
 
-            {/* Tenant Global ID */}
-            <div className="space-y-1">
-              <Label htmlFor="tenantGlobalId">Tenant Global ID <span className="text-destructive">*</span></Label>
-              <Input
-                id="tenantGlobalId"
-                placeholder="ObjectId del tenantGlobal"
-                value={form.tenantGlobalId}
-                onChange={e => setForm(f => ({ ...f, tenantGlobalId: e.target.value }))}
-              />
-              <p className="text-xs text-muted-foreground">
-                El <code>_id</code> del documento en la colección <code>tenantGlobal</code>.
-              </p>
-            </div>
+            {/* Seleccionar Contenedor Parametrizado */}
+            {form.tenantGlobalId && (
+              <div className="space-y-2">
+                <Label htmlFor="contenedor-select">Contenedor (nombre descriptivo)</Label>
+                <select
+                  id="contenedor-select"
+                  className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 w-full"
+                  value={form.contenedorId}
+                  onChange={e => {
+                    const contenedor = contenedoresPorTenant.get(form.tenantGlobalId)?.find(c => c.iud === e.target.value);
+                    if (contenedor) handleSeleccionarContenedor(contenedor);
+                  }}
+                >
+                  <option value="">Selecciona un contenedor u opción manual...</option>
+                  {contenedoresPorTenant.get(form.tenantGlobalId)?.map(c => (
+                    <option key={c.iud} value={c.iud}>
+                      {c.nombre} (seq: {c.secuencia})
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-muted-foreground">
+                  Alias visual para identificar este tenant. Crea nuevos en el botón + arriba.
+                </p>
+              </div>
+            )}
 
             {/* Cadena de conexión */}
             <div className="space-y-1">
@@ -681,7 +817,7 @@ export default function TenantDbManager() {
               />
             </div>
 
-            {/* URL parametrizada */}
+            {/* URL parametrizada (auto-llenada) */}
             <div className="space-y-1">
               <Label htmlFor="urlBase">URL parametrizada del tenant</Label>
               <Input
@@ -691,7 +827,7 @@ export default function TenantDbManager() {
                 onChange={e => setForm(f => ({ ...f, urlBase: e.target.value }))}
               />
               <p className="text-xs text-muted-foreground">
-                URL pública asociada a este tenant. Se usa para enrutamiento y configuración de dominio.
+                Auto-llenada desde el contenedor parametrizado. Se usa para enrutamiento y configuración de dominio.
               </p>
             </div>
 
@@ -789,6 +925,116 @@ export default function TenantDbManager() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ── DIALOG: Parametrización de contenedores ── */}
+      <Dialog open={dlgParametrizacion} onOpenChange={setDlgParametrizacion}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Plus className="w-5 h-5" />
+              Parametrizar contenedores
+            </DialogTitle>
+          </DialogHeader>
+
+          {tenantParaParametrizar && (
+            <div className="space-y-4 py-2">
+              <div className="rounded-md bg-muted px-3 py-2 text-sm">
+                <p className="font-medium">
+                  {typeof tenantParaParametrizar.corporativo === 'object' && tenantParaParametrizar.corporativo?.razon_social
+                    ? tenantParaParametrizar.corporativo.razon_social
+                    : `Tenant ${tenantParaParametrizar.iud?.slice(0, 8)}...`}
+                </p>
+              </div>
+
+              {/* Formulario para crear contenedor */}
+              <div className="space-y-3 border-b pb-4">
+                <h3 className="font-medium text-sm">Crear nuevo contenedor</h3>
+
+                <div className="space-y-1">
+                  <Label htmlFor="cont-nombre">Nombre del contenedor *</Label>
+                  <Input
+                    id="cont-nombre"
+                    placeholder="Ej: Ambiente de Producción"
+                    value={formContenedor.nombre}
+                    onChange={e => setFormContenedor(f => ({ ...f, nombre: e.target.value }))}
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <Label htmlFor="cont-api-dominio">Dominio apisDominios</Label>
+                  <select
+                    id="cont-api-dominio"
+                    className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 w-full"
+                    value={formContenedor.apisDominios}
+                    onChange={e => setFormContenedor(f => ({ ...f, apisDominios: e.target.value }))}
+                  >
+                    <option value="">Selecciona un dominio registrado</option>
+                    {apisDominios.map((dominio) => (
+                      <option key={dominio.iud} value={dominio.iud}>
+                        {dominio.etiquetas} - {dominio.dominio}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-muted-foreground">Selecciona el dominio que se usará como URL parametrizada para este contenedor.</p>
+                </div>
+
+                <div className="space-y-1">
+                  <Label htmlFor="cont-desc">Descripción (opcional)</Label>
+                  <Input
+                    id="cont-desc"
+                    placeholder="Notas internas sobre este contenedor"
+                    value={formContenedor.descripcion}
+                    onChange={e => setFormContenedor(f => ({ ...f, descripcion: e.target.value }))}
+                  />
+                </div>
+
+                <Button
+                  onClick={handleCrearContenedor}
+                  disabled={parametrizacionLoading || !formContenedor.nombre.trim()}
+                  className="w-full"
+                >
+                  {parametrizacionLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Plus className="w-4 h-4 mr-2" />}
+                  Crear contenedor
+                </Button>
+              </div>
+
+              {/* Lista de contenedores existentes */}
+              <div className="space-y-3">
+                <h3 className="font-medium text-sm">Contenedores existentes</h3>
+                {(contenedoresPorTenant.get(tenantParaParametrizar.iud) ?? []).length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-4 text-center">
+                    No hay contenedores parametrizados aún. Crea uno arriba.
+                  </p>
+                ) : (
+                  <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {(contenedoresPorTenant.get(tenantParaParametrizar.iud) ?? []).map(c => (
+                      <div key={c.iud} className="flex items-start justify-between p-2 border rounded-md">
+                        <div className="flex-1">
+                          <p className="font-medium text-sm">{c.nombre}</p>
+                          <div className="text-xs text-muted-foreground space-y-0.5">
+                            {c.apisDominios?.dominio && <p>Dominio: {c.apisDominios.dominio}</p>}
+                            <p>Secuencia: #{c.secuencia}</p>
+                          </div>
+                        </div>
+                        <Badge variant={c.estado ? 'default' : 'secondary'}>
+                          {c.estado ? 'Activo' : 'Inactivo'}
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDlgParametrizacion(false)}>
+              Cerrar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
+

@@ -14,6 +14,7 @@ export interface EmailPaleta {
   nombre: string;
   activa: boolean;
   colores: PaletaColores;
+  tiposAsignados: TipoCorreo[];
   fechaCreacion: string;
   fechaActualizacion?: string;
 }
@@ -39,11 +40,14 @@ export const COLOR_LABELS: Record<keyof PaletaColores, string> = {
 export const listarPaletas = (): Promise<{ ok: boolean; paletas: EmailPaleta[] }> =>
   apiFetch('/api/email-paleta', { method: 'GET' });
 
-export const crearPaleta = (data: { nombre: string; colores: PaletaColores }): Promise<{ ok: boolean; paleta: EmailPaleta }> =>
+export const crearPaleta = (data: { nombre: string; colores: PaletaColores; tiposAsignados?: TipoCorreo[] }): Promise<{ ok: boolean; paleta: EmailPaleta }> =>
   apiFetch('/api/email-paleta', { method: 'POST', body: data });
 
-export const actualizarPaleta = (id: string, data: { nombre?: string; colores?: Partial<PaletaColores> }): Promise<{ ok: boolean; paleta: EmailPaleta }> =>
+export const actualizarPaleta = (id: string, data: { nombre?: string; colores?: Partial<PaletaColores>; tiposAsignados?: TipoCorreo[] }): Promise<{ ok: boolean; paleta: EmailPaleta }> =>
   apiFetch(`/api/email-paleta/${id}`, { method: 'PUT', body: data });
+
+export const asignarTiposPaleta = (id: string, tiposAsignados: TipoCorreo[]): Promise<{ ok: boolean; paleta: EmailPaleta }> =>
+  apiFetch(`/api/email-paleta/${id}/tipos`, { method: 'PATCH', body: { tiposAsignados } });
 
 export const activarPaleta = (id: string): Promise<{ ok: boolean; paleta: EmailPaleta }> =>
   apiFetch(`/api/email-paleta/${id}/activar`, { method: 'PATCH' });
@@ -56,14 +60,15 @@ export type TipoCorreo =
   | 'verificacion-cuenta'
   | 'recuperar-contrasena'
   | 'cambio-contrasena'
-  | 'referido-vencimiento';
+  | 'referido-vencimiento'
+  | 'pago-cancelado';
 
 export const TIPOS_CORREO: { value: TipoCorreo; label: string }[] = [
   { value: 'activacion-membresia',  label: 'Activación de membresía' },
   { value: 'verificacion-cuenta',   label: 'Verificación de cuenta' },
   { value: 'recuperar-contrasena',  label: 'Recuperar contraseña' },
   { value: 'cambio-contrasena',     label: 'Cambio de contraseña' },
-  { value: 'referido-vencimiento',  label: 'Vencimiento referido' },
+  { value: 'pago-cancelado',        label: 'Pago cancelado' },
 ];
 
 export type ContenidoCorreo = Record<string, string>;
@@ -90,6 +95,11 @@ export const CAMPOS_CONTENIDO: Record<TipoCorreo, CampoContenido[]> = {
     { key: 'nombrePadre',     label: 'Nombre del remitente (ejemplo)',   placeholder: 'Carlos Pérez' },
     { key: 'codigoReferido',  label: 'Código de referido (ejemplo)',     placeholder: 'MABS-XXXXX' },
     { key: 'horasRestantes',  label: 'Horas restantes (ejemplo)',        placeholder: '12', type: 'number' },
+  ],
+  'pago-cancelado': [
+    { key: 'emailCliente',    label: 'Correo del cliente (ejemplo)',     placeholder: 'cliente@ejemplo.com' },
+    { key: 'referencia',      label: 'Referencia de pago (ejemplo)',     placeholder: 'MABS-0001-000042' },
+    { key: 'enlaceReintento', label: 'Enlace para reintentar (ejemplo)', placeholder: 'https://mabs.com/membresia' },
   ],
 };
 

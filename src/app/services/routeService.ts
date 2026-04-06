@@ -112,6 +112,28 @@ const flattenAdminRoutes = (routes: AdminRouteConfig[] = []): AdminRouteConfig[]
     return flat;
 };
 
+const toAdminAppPath = (path: string): string => {
+    const normalized = normalizeRoutePath(path);
+    if (normalized === '/') return '/admin';
+    return normalized.startsWith('/admin/')
+        ? normalized
+        : `/admin/${toRelativeRoutePath(normalized)}`;
+};
+
+const findFirstAuthorizedAdminPath = (nodes: Array<{ path: string; component?: string; children?: any[] }> = []): string | null => {
+    for (const node of nodes) {
+        const children = Array.isArray(node.children) ? node.children : [];
+        const childPath = findFirstAuthorizedAdminPath(children);
+        if (childPath) return childPath;
+
+        const nodePath = String(node.path || '').trim();
+        if (nodePath) {
+            return toAdminAppPath(nodePath);
+        }
+    }
+    return null;
+};
+
 const getHerenciaAdminPermitida = async (): Promise<{
     idsPermitidos: Set<string>;
     pathsPermitidos: Set<string>;
@@ -275,12 +297,23 @@ const resolveAdminActorTipoFromToken = (): AdminActorTipo => {
         const payload = decodeJwtPayload(token) as any;
         const tenantScope = payload?.auth?.tenantScope || payload?.tenantScope || {};
         const rol = String(payload?.rol?.rol || payload?.rol || '').trim().toUpperCase();
+        const actorTipoDetectado = String(tenantScope?.tenantCorporativoId || '').trim()
+            ? 'CORPORATIVO'
+            : String(tenantScope?.tenantGlobalId || '').trim()
+                ? 'GLOBAL'
+                : String(tenantScope?.tenantSuperAdminId || '').trim()
+                    ? 'SUPERADMIN'
+                    : ['DIOS', 'DESAROLLADOR'].includes(rol)
+                        ? 'SUPERADMIN'
+                        : 'UNKNOWN';
+        console.log('[MABS][routeService][resolveAdminActorTipoFromToken]', {
+            actorTipoDetectado,
+            tenantScope,
+            rol,
+            payloadKeys: payload ? Object.keys(payload) : [],
+        });
 
-        if (String(tenantScope?.tenantCorporativoId || '').trim()) return 'CORPORATIVO';
-        if (String(tenantScope?.tenantGlobalId || '').trim()) return 'GLOBAL';
-        if (String(tenantScope?.tenantSuperAdminId || '').trim()) return 'SUPERADMIN';
-        if (['DIOS', 'DESAROLLADOR'].includes(rol)) return 'SUPERADMIN';
-        return 'UNKNOWN';
+        return actorTipoDetectado as AdminActorTipo;
     } catch {
         return 'UNKNOWN';
     }
@@ -394,17 +427,15 @@ const findCatalogRoute = (
 
 export const getUserShortcutRoutes = async (): Promise<UserShortcutRoutes> => {
     try {
+        const { tree } = await getAdminSidebarTreeWithContext();
+        const firstAdminPath = findFirstAuthorizedAdminPath(tree);
         const catalog = await getRouteCatalog();
 
         const adminByMenu = catalog.find((route) => route.mostrarEnMenuUsuario && route.tiquetaNavb === 'PANEL_ADMIN');
         const perfilByMenu = catalog.find((route) => route.mostrarEnMenuUsuario && route.tiquetaNavb === 'MI_PERFIL');
         const membresiaByMenu = catalog.find((route) => route.mostrarEnMenuUsuario && route.tiquetaNavb === 'MI_MEMBRESIA');
 
-        const adminRoute = adminByMenu || findCatalogRoute(catalog, {
-            paths: ['/admin/gestor-rutas/administracion/dashboardadmin', '/admin/dashboardadmin', '/admin/dashboard'],
-            components: ['DashboardAdmin'],
-            names: ['DashboardAdmin', 'Panel Admin', 'Dashboard'],
-        });
+        const adminRoute = adminByMenu || catalog.find((route) => isAdminLayout(route.layout));
 
         const perfilRoute = perfilByMenu || findCatalogRoute(catalog, {
             paths: ['/perfil', '/mi-perfil', '/perfil/usuario'],
@@ -418,15 +449,24 @@ export const getUserShortcutRoutes = async (): Promise<UserShortcutRoutes> => {
             names: ['Mi Membresía', 'Mi Membresia', 'Membresía', 'Membresia'],
         });
 
+        console.log('[MABS][routeService][getUserShortcutRoutes]', {
+            treeSize: tree.length,
+            firstAdminPath,
+            adminByMenu: adminByMenu?.path ?? null,
+            adminRoute: adminRoute?.path ?? null,
+            perfilRoute: perfilRoute?.path ?? null,
+            membresiaRoute: membresiaRoute?.path ?? null,
+        });
+
         return {
-            admin: adminRoute ? toAppRoutePath(adminRoute) : '/admin/gestor-rutas/administracion/dashboardadmin',
+            admin: firstAdminPath || (adminRoute ? toAppRoutePath(adminRoute) : '/admin'),
             perfil: perfilRoute ? toAppRoutePath(perfilRoute) : '/perfil',
             membresia: membresiaRoute ? toAppRoutePath(membresiaRoute) : '/membresia/dashboard',
         };
     } catch (error) {
         console.error('Error al resolver shortcuts de usuario:', error);
         return {
-            admin: '/admin/gestor-rutas/administracion/dashboardadmin',
+            admin: '/admin',
             perfil: '/perfil',
             membresia: '/membresia/dashboard',
         };
@@ -437,6 +477,7 @@ export const getAuthorizedRoutes = async (): Promise<AuthorizedRoutes> => {
     try {
         const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "/api";
         const token = localStorage.getItem("token");
+        const rawUser = localStorage.getItem("user");
         const hasToken = Boolean(token);
         const actorTipo = resolveAdminActorTipoFromToken();
         const endpoint = hasToken
@@ -454,6 +495,12 @@ export const getAuthorizedRoutes = async (): Promise<AuthorizedRoutes> => {
             });
 
         if (!result.success || !result.data) {
+            console.log('[MABS][routeService][getAuthorizedRoutes][empty-result]', {
+                hasToken,
+                actorTipo,
+                rawUser,
+                result,
+            });
             return { publicRoutes: [], adminRoutes: [], authRoutes: [] };
         }
 
@@ -559,6 +606,18 @@ export const getAuthorizedRoutes = async (): Promise<AuthorizedRoutes> => {
                 }
             }
         }
+
+        console.log('[MABS][routeService][getAuthorizedRoutes]', {
+            hasToken,
+            actorTipo,
+            rawUser,
+            resultTotal: result.total,
+            publicRoutes: publicRoutes.length,
+            authRoutes: authRoutes.length,
+            hybridRoutes: hybridRoutes.length,
+            adminRoots: adminRoutes.length,
+            adminFlatPaths: flattenAdminRoutes(adminRoutes).map((route) => route.path),
+        });
 
         return { publicRoutes, authRoutes, adminRoutes, hybridRoutes };
 
@@ -832,13 +891,29 @@ export const getAdminSidebarTreeWithContext = async (): Promise<AdminSidebarTree
             const actorTipoBackend = String(treeResult?.actorTipo || '').trim().toUpperCase() as AdminActorTipo;
             const actorTipo = actorTipoJwt === 'UNKNOWN' ? resolveEffectiveAdminActorTipo(actorTipoBackend) : actorTipoJwt;
             const sourceCollection = resolveSidebarSourceCollection(actorTipo);
+            const filteredTree = filterRootsByActorTipo(mapTreeNodes(treeResult.data), actorTipo);
+            console.log('[MABS][routeService][getAdminSidebarTreeWithContext]', {
+                actorTipoJwt,
+                actorTipoBackend,
+                actorTipo,
+                sourceCollection,
+                treeResultTotal: treeResult.total ?? null,
+                rawDataLength: treeResult.data.length,
+                rawData: treeResult.data,
+                rootCount: filteredTree.length,
+                flatPaths: flattenTreePaths(filteredTree),
+            });
             return {
                 actorTipo,
                 sourceCollection,
-                tree: filterRootsByActorTipo(mapTreeNodes(treeResult.data), actorTipo)
+                tree: filteredTree
             };
         }
         const actorTipo = actorTipoJwt;
+        console.log('[MABS][routeService][getAdminSidebarTreeWithContext][empty]', {
+            actorTipoJwt,
+            actorTipo,
+        });
         return {
             actorTipo,
             sourceCollection: resolveSidebarSourceCollection(actorTipo),
@@ -859,11 +934,20 @@ export const getPrivateHomeRoute = async (): Promise<string> => {
     try {
         const shortcuts = await getUserShortcutRoutes();
         if (shortcuts.admin?.trim()) {
+            console.log('[MABS][routeService][getPrivateHomeRoute]', {
+                resolved: shortcuts.admin,
+            });
             return shortcuts.admin;
         }
-        return "/admin/gestor-rutas/administracion/dashboardadmin";
+        console.log('[MABS][routeService][getPrivateHomeRoute][fallback]', {
+            resolved: '/admin',
+        });
+        return "/admin";
     } catch (_error) {
-        return "/admin/gestor-rutas/administracion/dashboardadmin";
+        console.log('[MABS][routeService][getPrivateHomeRoute][catch]', {
+            resolved: '/admin',
+        });
+        return "/admin";
     }
 };
 
@@ -874,23 +958,38 @@ export const getPrivateHomeRoute = async (): Promise<string> => {
  */
 export const getAdminHomeRoute = async (): Promise<string | null> => {
     try {
+        const { tree } = await getAdminSidebarTreeWithContext();
+        const treeHome = findFirstAuthorizedAdminPath(tree);
+        if (treeHome) {
+            console.log('[MABS][routeService][getAdminHomeRoute][tree]', {
+                resolved: treeHome,
+            });
+            return treeHome;
+        }
+
         const catalog = await getRouteCatalog();
         if (!catalog.length) return null;
 
         const adminEntry =
             catalog.find((r) => r.mostrarEnMenuUsuario && r.tiquetaNavb === 'PANEL_ADMIN') ||
-            findCatalogRoute(catalog, {
-                paths: ['/admin/gestor-rutas/administracion/dashboardadmin', '/admin/dashboardadmin', '/admin/dashboard'],
-                components: ['DashboardAdmin'],
-                names: ['DashboardAdmin', 'Panel Admin', 'Dashboard'],
-            }) ||
             catalog.find((r) => isAdminLayout(r.layout));
 
-        return adminEntry ? toAppRoutePath(adminEntry) : null;
+        const resolved = adminEntry ? toAppRoutePath(adminEntry) : null;
+        console.log('[MABS][routeService][getAdminHomeRoute][catalog]', {
+            resolved,
+            adminEntry: adminEntry?.path ?? null,
+        });
+        return resolved;
     } catch {
+        console.log('[MABS][routeService][getAdminHomeRoute][catch]', {
+            resolved: null,
+        });
         return null;
     }
 };
+
+const flattenTreePaths = (nodes: AdminNavTreeItem[] = []): string[] =>
+    nodes.flatMap((node) => [node.path, ...flattenTreePaths(node.children || [])]);
 
 /**
  * Retorna los ítems del menú de usuario desde el endpoint de menu-tags,
@@ -904,9 +1003,11 @@ export const getMenuUsuarioRoutes = async (): Promise<MenuUsuarioItem[]> => {
             { method: 'GET', useAuth: true, logoutOn401: false }
         );
 
+        console.log('[MABS][routeService][getMenuUsuarioRoutes][raw]', result);
+
         if (!result?.success || !Array.isArray(result?.data)) return [];
 
-        return result.data
+        const items = result.data
             .filter((t: any) => t?.estado !== false)
             .map((t: any) => ({
                 key: String(t.codigo || t.iud || ''),
@@ -915,6 +1016,8 @@ export const getMenuUsuarioRoutes = async (): Promise<MenuUsuarioItem[]> => {
                 icon: t.iconKey ?? null,
                 order: Number(t.order ?? 0),
             }));
+        console.log('[MABS][routeService][getMenuUsuarioRoutes][items]', items);
+        return items;
     } catch {
         return [];
     }

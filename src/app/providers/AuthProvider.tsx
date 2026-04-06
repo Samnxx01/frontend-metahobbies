@@ -41,9 +41,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     // Cargar usuario desde localStorage al iniciar
     useEffect(() => {
         const userJson = localStorage.getItem('user');
+        console.log('[MABS][AuthProvider][bootstrap]', {
+            hasToken: Boolean(localStorage.getItem('token')),
+            hasUser: Boolean(userJson),
+            rawUser: userJson,
+        });
         if (userJson) {
             try {
-                setUser(JSON.parse(userJson) as User);
+                const parsedUser = JSON.parse(userJson) as User;
+                console.log('[MABS][AuthProvider][bootstrap][parsedUser]', parsedUser);
+                setUser(parsedUser);
             } catch (error) {
                 console.error('Error parsing user from localStorage:', error);
                 localStorage.removeItem('user');
@@ -73,6 +80,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                 localStorage.setItem('user', JSON.stringify(userToSave));
                 setToken(response.token);
                 setUser(userToSave);
+
+                console.log('[MABS][AuthProvider][login]', {
+                    tokenSaved: Boolean(response.token),
+                    userToSave,
+                });
 
                 // 5. Devolvemos la respuesta completa al componente Login
                 return response;

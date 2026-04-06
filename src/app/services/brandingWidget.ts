@@ -44,7 +44,6 @@ interface BrandingResponse {
 
 export interface BrandingScopeParams {
   tenantGlobalId?: string | null;
-  guardarEnRegisUsu?: boolean;
 }
 
 export interface AccionBackend {
@@ -75,10 +74,6 @@ const buildBrandingScopeQuery = (params?: BrandingScopeParams): string => {
   const tenantGlobalId = String(params?.tenantGlobalId || '').trim();
   if (tenantGlobalId) {
     query.set('tenantGlobalId', tenantGlobalId);
-  }
-
-  if (params?.guardarEnRegisUsu) {
-    query.set('guardarEnRegisUsu', 'true');
   }
 
   const qs = query.toString();

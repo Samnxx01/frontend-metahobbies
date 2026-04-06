@@ -4,7 +4,7 @@ import { useAuth } from '@/app/providers/AuthProvider';
 import { getAuthorizedRoutes, getPrivateHomeRoute } from '@/app/services/routeService';
 import { resolveCurrentRouteMenuTags } from '@/app/services/routesService';
 import { useLoading } from '@/app/providers/LoadingProvider';
-import { getGovernedPostLoginPath, getGovernedPublicHomePath } from '@/app/services/governedNavigation';
+import { getGovernedPublicHomePath } from '@/app/services/governedNavigation';
 
 import PublicLayout from '@/app/presentation/layouts/PublicLayout';
 import AuthLayout from '@/app/presentation/layouts/AuthLayout';
@@ -118,7 +118,45 @@ function HybridLayout(): ReactElement {
 // ── Root redirect ──────────────────────────────────────────────────────────────
 
 function RootRedirect({ user }: { user: any }): ReactElement {
-    return <Navigate to={user ? getGovernedPostLoginPath() : getGovernedPublicHomePath()} replace />;
+    const [targetPath, setTargetPath] = useState<string | null>(user ? null : getGovernedPublicHomePath());
+
+    useEffect(() => {
+        if (!user) {
+            console.log('[MABS][LayoutRoutes][RootRedirect][public]', {
+                target: getGovernedPublicHomePath(),
+            });
+            setTargetPath(getGovernedPublicHomePath());
+            return;
+        }
+
+        let active = true;
+        const resolveTarget = async (): Promise<void> => {
+            try {
+                const nextPath = await getPrivateHomeRoute();
+                if (!active) return;
+                console.log('[MABS][LayoutRoutes][RootRedirect][private]', {
+                    nextPath,
+                    fallback: '/admin',
+                });
+                setTargetPath(nextPath?.trim() || '/admin');
+            } catch {
+                if (!active) return;
+                console.log('[MABS][LayoutRoutes][RootRedirect][catch]', {
+                    fallback: '/admin',
+                });
+                setTargetPath('/admin');
+            }
+        };
+
+        void resolveTarget();
+        return () => { active = false; };
+    }, [user]);
+
+    if (!targetPath) {
+        return <div>Cargando redireccion...</div>;
+    }
+
+    return <Navigate to={targetPath} replace />;
 }
 
 // ── Admin redirect ─────────────────────────────────────────────────────────────
@@ -133,10 +171,17 @@ function AdminEntryRedirect(): ReactElement {
             try {
                 const nextPath = await getPrivateHomeRoute();
                 if (!active) return;
-                setTargetPath(nextPath?.trim() || getGovernedPostLoginPath());
+                console.log('[MABS][LayoutRoutes][AdminEntryRedirect]', {
+                    nextPath,
+                    fallback: '/admin',
+                });
+                setTargetPath(nextPath?.trim() || '/admin');
             } catch (_error) {
                 if (!active) return;
-                setTargetPath(getGovernedPostLoginPath());
+                console.log('[MABS][LayoutRoutes][AdminEntryRedirect][catch]', {
+                    fallback: '/admin',
+                });
+                setTargetPath('/admin');
             }
         };
 
@@ -182,6 +227,13 @@ export default function LayoutRoutes(): ReactElement {
                     getAuthorizedRoutes(),
                     user ? resolveCurrentRouteMenuTags({ menuTipo: 'USER_DROPDOWN' }) : Promise.resolve({ data: [] }),
                 ]);
+                console.log('[MABS][LayoutRoutes][loadRoutes]', {
+                    userId: user?._id ?? null,
+                    adminRoots: routes?.adminRoutes?.length ?? 0,
+                    publicRoutes: routes?.publicRoutes?.length ?? 0,
+                    authRoutes: routes?.authRoutes?.length ?? 0,
+                    hybridRoutes: routes?.hybridRoutes?.length ?? 0,
+                });
                 setAuthorizedRoutes(routes as AuthorizedRoutes);
 
                 // Extraer rutas únicas de los menu tags que tengan componente definido
