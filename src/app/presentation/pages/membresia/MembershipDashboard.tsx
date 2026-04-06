@@ -194,7 +194,7 @@ export default function MembershipDashboard(): React.ReactElement {
     const fetchReferidos = async (): Promise<void> => {
         try {
             setLoadingReferidos(true);
-            const response = await apiFetch('/referido/listarMiMembresia', { method: 'GET' });
+            const response = await apiFetch('/api/referido/listarMiMembresia', { method: 'GET' });
             setReferidosData(response);
         } catch (err) {
             console.error('Error al cargar datos de referidos:', err);

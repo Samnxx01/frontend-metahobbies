@@ -9,7 +9,7 @@ import { getRouteMenuTags, resolveCurrentRouteMenuTags, type RouteMenuTag } from
 import { getGovernedLogoutPath } from '@/app/services/governedNavigation'
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Crown, Home, Landmark, LayoutDashboard, LogOut, Menu, Moon, Settings, Sun, User as UserIcon } from 'lucide-react'
 import type { AdminNavbarProps } from '@/types/components'
 
@@ -119,7 +119,7 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
         return () => {
             active = false
         }
-    }, [user?._id, user?.correo, user?.rol])
+    }, [user?.iud, user?._id, user?.correo, user?.rol])
 
     useEffect(() => {
         let active = true
@@ -147,7 +147,7 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
         return () => {
             active = false
         }
-    }, [user?._id])
+    }, [user?.iud, user?._id, user?.correo])
 
     const cargarMenuDinamico = useCallback(async (): Promise<void> => {
         try {
@@ -220,6 +220,8 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
             Icon: MENU_ICON_MAP[String(item.icon || '').toUpperCase()] || UserIcon,
             visible: true,
         }))
+
+    const visibleMenuItems = menuItems.filter((item) => item.visible && item.path)
 
     const renderProfileDropdown = (
         <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>

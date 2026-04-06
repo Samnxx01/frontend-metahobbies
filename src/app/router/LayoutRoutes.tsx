@@ -23,7 +23,7 @@ import Login from '@/app/presentation/pages/login/Login';
 import Carrito from '@/app/presentation/pages/carrito/Carrito';
 import DynamicRouteFallback from '@/app/presentation/pages/admin/DynamicRouteFallback';
 
-// ── Dynamic component map via Vite glob ───────────────────────────────────────
+// —— Dynamic component map via Vite glob —————————————————————
 // Escanea TODOS los .tsx de pages/ y components/admin/ automáticamente.
 // Al agregar un nuevo componente, se registra solo con el nombre del archivo.
 const _pageModules = import.meta.glob<{ default: React.ComponentType<any> }>(
@@ -92,7 +92,7 @@ const buildComponentMap = (): ComponentMapType => {
 
 const componentMap = buildComponentMap();
 
-// ── Types ─────────────────────────────────────────────────────────────────────
+// —— Types ———————————————————————————————————————————————————————————————————————
 
 interface RouteConfig {
     path: string;
@@ -159,7 +159,7 @@ function RootRedirect({ user }: { user: any }): ReactElement {
     return <Navigate to={targetPath} replace />;
 }
 
-// ── Admin redirect ─────────────────────────────────────────────────────────────
+// —— Admin redirect ———————————————————————————————————————————————————————————————
 
 function AdminEntryRedirect(): ReactElement {
     const [targetPath, setTargetPath] = useState<string | null>(null);
@@ -196,7 +196,7 @@ function AdminEntryRedirect(): ReactElement {
     return <Navigate to={targetPath} replace />;
 }
 
-// ── Layout routes ──────────────────────────────────────────────────────────────
+// —— Layout routes ————————————————————————————————————————————————————————————————
 
 interface RouteLoadError {
     status?: number;
