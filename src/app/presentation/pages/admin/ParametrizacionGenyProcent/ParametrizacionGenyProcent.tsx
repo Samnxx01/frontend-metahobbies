@@ -63,7 +63,13 @@ const fmtPct = (p: number) => {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function ParametrizacionGenyProcent() {
+interface Props {
+    /** 'SUPER_ADMIN' → crear + editar + eliminar. 'TENANT_GLOBAL' → solo editar. */
+    scope?: 'SUPER_ADMIN' | 'TENANT_GLOBAL';
+}
+
+export default function ParametrizacionGenyProcent({ scope = 'SUPER_ADMIN' }: Props) {
+    const esSoloLectura = scope === 'TENANT_GLOBAL';
     const [niveles, setNiveles] = useState<NivelGeneracion[]>([]);
     const [loading, setLoading] = useState(false);
     const [creando, setCreando] = useState(false);
@@ -107,10 +113,6 @@ export default function ParametrizacionGenyProcent() {
     // ── CRUD ──────────────────────────────────────────────────────────────────
 
     const handleCrear = async () => {
-        if (niveles.length >= 5) {
-            mostrarError('Ya existen todos los niveles (Gen0 a Gen4). No se pueden crear más.');
-            return;
-        }
         setCreando(true);
         try {
             await apiFetch('/api/referido/comisiones', {
@@ -182,8 +184,11 @@ export default function ParametrizacionGenyProcent() {
 
     // ── Derived ───────────────────────────────────────────────────────────────
 
-    const maxAlcanzado = niveles.length >= 5;
-    const siguienteGen = niveles.length;
+    const maxAlcanzado = false; // sin límite en frontend — el backend decide
+    const ultimoGen = niveles.length > 0
+        ? Math.max(...niveles.map(n => n.GeneracionLevel))
+        : -1;
+    const siguienteGen = ultimoGen + 1;
     const nivelesConComision = niveles.filter(n => n.GeneracionLevel > 0);
 
     // ── Render ────────────────────────────────────────────────────────────────
@@ -204,7 +209,7 @@ export default function ParametrizacionGenyProcent() {
                                     Parametrización de Generaciones y Porcentajes
                                 </CardTitle>
                                 <p className="text-xs text-muted-foreground mt-0.5">
-                                    Define los niveles del sistema multinivel (Gen0–Gen4) y sus porcentajes de comisión.
+                                    Define los niveles del sistema multinivel y sus porcentajes de comisión.
                                 </p>
                             </div>
                         </div>
@@ -239,22 +244,28 @@ export default function ParametrizacionGenyProcent() {
                             <p className="text-xs text-muted-foreground">
                                 Niveles configurados:
                                 <span className="font-semibold text-foreground ml-1">
-                                    {niveles.length} / 5
+                                    {niveles.length}
                                 </span>
                             </p>
                         </div>
-                        <Button
-                            size="sm"
-                            onClick={handleCrear}
-                            disabled={creando || maxAlcanzado}
-                            className="gap-2 h-8 text-xs"
-                        >
-                            {creando
-                                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                : <Plus className="w-3.5 h-3.5" />
-                            }
-                            {maxAlcanzado ? 'Máximo alcanzado' : `Crear Gen${siguienteGen}`}
-                        </Button>
+                        {esSoloLectura ? (
+                            <Badge variant="secondary" className="text-xs">
+                                Solo lectura · contacta al SuperAdmin para crear o eliminar niveles
+                            </Badge>
+                        ) : (
+                            <Button
+                                size="sm"
+                                onClick={handleCrear}
+                                disabled={creando || maxAlcanzado}
+                                className="gap-2 h-8 text-xs"
+                            >
+                                {creando
+                                    ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                    : <Plus className="w-3.5 h-3.5" />
+                                }
+                                {maxAlcanzado ? 'Máximo alcanzado' : `Crear Gen${siguienteGen}`}
+                            </Button>
+                        )}
                     </div>
 
                     <Separator />
@@ -349,18 +360,20 @@ export default function ParametrizacionGenyProcent() {
                                                             <Pencil className="w-3 h-3" />
                                                             Editar
                                                         </button>
-                                                        <button
-                                                            onClick={() => handleEliminar(n.iud, n.NombreLevel)}
-                                                            disabled={isEliminando}
-                                                            className="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors disabled:opacity-50"
-                                                            title="Eliminar"
-                                                        >
-                                                            {isEliminando
-                                                                ? <Loader2 className="w-3 h-3 animate-spin" />
-                                                                : <Trash2 className="w-3 h-3" />
-                                                            }
-                                                            Eliminar
-                                                        </button>
+                                                        {!esSoloLectura && (
+                                                            <button
+                                                                onClick={() => handleEliminar(n.iud, n.NombreLevel)}
+                                                                disabled={isEliminando}
+                                                                className="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors disabled:opacity-50"
+                                                                title="Eliminar"
+                                                            >
+                                                                {isEliminando
+                                                                    ? <Loader2 className="w-3 h-3 animate-spin" />
+                                                                    : <Trash2 className="w-3 h-3" />
+                                                                }
+                                                                Eliminar
+                                                            </button>
+                                                        )}
                                                     </div>
                                                 </td>
                                             </tr>

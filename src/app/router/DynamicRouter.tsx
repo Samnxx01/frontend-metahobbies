@@ -3,6 +3,7 @@ import React, { Suspense } from 'react';
 import { Route, Routes } from 'react-router-dom';
 import { getLazyComponent } from './componentRegistry';
 import { RouteCatalogItem } from '../services/routeService';
+import DynamicRouteFallback from '@/app/presentation/pages/admin/DynamicRouteFallback';
 
 interface DynamicRouterProps {
     routes: RouteCatalogItem[];
@@ -17,7 +18,13 @@ export function DynamicRouter({ routes, fallback = <div>Cargando...</div> }: Dyn
 
                 if (!LazyComponent) {
                     console.warn(`Componente "${route.component}" no encontrado para la ruta "${route.path}"`);
-                    return null;
+                    return (
+                        <Route
+                            key={route.iud || route.path}
+                            path={route.path}
+                            element={<DynamicRouteFallback routePath={route.path} componentName={route.component} />}
+                        />
+                    );
                 }
 
                 return (

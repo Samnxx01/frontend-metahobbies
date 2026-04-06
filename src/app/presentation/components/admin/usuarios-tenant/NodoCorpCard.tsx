@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronDown, ChevronRight, Building2, Users, UserCheck, UserPlus } from 'lucide-react';
+import { ChevronDown, ChevronRight, Building2, Users, UserCheck, UserPlus, Edit } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import type { CorpNode, TenantUsuario } from '@/app/services/tenantUsuariosService';
@@ -7,9 +7,10 @@ import type { CorpNode, TenantUsuario } from '@/app/services/tenantUsuariosServi
 interface UsuarioRowProps {
     usuario: TenantUsuario;
     tipo: 'admin' | 'cliente';
+    onEdit?: () => void;
 }
 
-const UsuarioRow = ({ usuario, tipo }: UsuarioRowProps) => (
+const UsuarioRow = ({ usuario, tipo, onEdit }: UsuarioRowProps) => (
     <div className="flex items-center justify-between py-1.5 px-3 text-sm rounded hover:bg-muted/50">
         <div className="flex items-center gap-2 min-w-0">
             <div className={`h-2 w-2 rounded-full flex-shrink-0 ${
@@ -26,6 +27,11 @@ const UsuarioRow = ({ usuario, tipo }: UsuarioRowProps) => (
             <Badge variant={tipo === 'cliente' ? 'secondary' : 'default'} className="text-xs">
                 {tipo === 'cliente' ? 'Cliente' : 'Admin'}
             </Badge>
+            {onEdit && (
+                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onEdit}>
+                    <Edit className="h-3.5 w-3.5" />
+                </Button>
+            )}
         </div>
     </div>
 );
@@ -35,6 +41,7 @@ interface NodoCorpCardProps {
     nivel?: number;
     scope: 'SUPER_ADMIN' | 'TENANT_GLOBAL' | 'CORPORATIVO';
     onAddUsuario: (nodo: CorpNode) => void;
+    onEditUsuario?: (u: TenantUsuario, corp: CorpNode) => void;
 }
 
 export const NodoCorpCard = ({
@@ -42,6 +49,7 @@ export const NodoCorpCard = ({
     nivel = 0,
     scope,
     onAddUsuario,
+    onEditUsuario,
 }: NodoCorpCardProps): React.ReactElement => {
     const [expanded, setExpanded] = useState(nivel < 2);
     const { tenantCorporativo, usuarios, clientes, hijos } = nodo;
@@ -119,7 +127,14 @@ export const NodoCorpCard = ({
                                 Usuarios ({usuarios.length})
                             </p>
                             <div className="space-y-0.5">
-                                {usuarios.map(u => <UsuarioRow key={u.iud} usuario={u} tipo="admin" />)}
+                                {usuarios.map(u => (
+                                    <UsuarioRow
+                                        key={u.iud}
+                                        usuario={u}
+                                        tipo="admin"
+                                        onEdit={onEditUsuario ? () => onEditUsuario(u, nodo) : undefined}
+                                    />
+                                ))}
                             </div>
                         </div>
                     )}
@@ -131,7 +146,14 @@ export const NodoCorpCard = ({
                                 Clientes ({clientes.length})
                             </p>
                             <div className="space-y-0.5">
-                                {clientes.map(u => <UsuarioRow key={u.iud} usuario={u} tipo="cliente" />)}
+                                {clientes.map(u => (
+                                    <UsuarioRow
+                                        key={u.iud}
+                                        usuario={u}
+                                        tipo="cliente"
+                                        onEdit={onEditUsuario ? () => onEditUsuario(u, nodo) : undefined}
+                                    />
+                                ))}
                             </div>
                         </div>
                     )}
@@ -150,6 +172,7 @@ export const NodoCorpCard = ({
                                     nivel={nivel + 1}
                                     scope={scope}
                                     onAddUsuario={onAddUsuario}
+                                    onEditUsuario={onEditUsuario}
                                 />
                             ))}
                         </div>

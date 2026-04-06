@@ -26,6 +26,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import { Loader2, AlertTriangle } from 'lucide-react';
 import { apiFetch } from '@/app/services/api';
 import { getAdminHomeRoute } from '@/app/services/routeService';
+import { getGovernedPostLoginPath } from '@/app/services/governedNavigation';
 
 // --- Interfaces ---
 interface LoginFormData {
@@ -48,7 +49,6 @@ interface LoginError {
 }
 
 // --- Constantes y Esquemas ---
-const LOGO_URL = '/assets/logo.png';
 const EMPTY_FIELDS_MESSAGE = 'Por favor, completa todos los campos requeridos para acceder.';
 const CREDENTIAL_ERROR_MESSAGE = 'Credenciales inválidas. Verifica tu correo y contraseña.';
 const CRITICAL_ERROR_TITLE = 'Error de Conexión';
@@ -69,7 +69,7 @@ export default function Login(): React.ReactElement {
     // Estado para el Dialog (Errores críticos de API)
     const [dialogOpen, setDialogOpen] = useState<boolean>(false);
     const [dialogMessage, setDialogMessage] = useState<string>('');
-    const [logoUrl, setLogoUrl] = useState<string>(LOGO_URL);
+    const [logoUrl, setLogoUrl] = useState<string | null>(null);
 
     // 1. Inicializar useForm
     const form = useForm<LoginFormData>({
@@ -97,7 +97,7 @@ export default function Login(): React.ReactElement {
                 }
             } catch (error) {
                 console.warn('No se pudo cargar el logo publico para login:', error);
-                setLogoUrl(LOGO_URL);
+                setLogoUrl(null);
             }
         };
 
@@ -124,6 +124,7 @@ export default function Login(): React.ReactElement {
         try {
             // Map correo to email for the login service
             const response = await login({ correo: data.correo, password: data.password }) as LoginResponse;
+            console.log('[MABS][Login][response]', response);
 
             if (response?.token && response?.usuario) {
                 // Verificar si requiere actualización de contraseña
@@ -140,7 +141,16 @@ export default function Login(): React.ReactElement {
 
                 setTimeout(async () => {
                     const adminPath = await getAdminHomeRoute();
-                    navigate(adminPath ?? '/');
+                    const governedPath = getGovernedPostLoginPath();
+                    const targetPath = adminPath ?? governedPath;
+                    console.log('[MABS][Login][post-auth-redirect]', {
+                        adminPath,
+                        governedPath,
+                        targetPath,
+                        userId: response?.usuario?._id ?? null,
+                        correo: response?.usuario?.correo ?? null,
+                    });
+                    navigate(targetPath);
                 }, 1000);
                 return;
             } else {
@@ -209,12 +219,18 @@ export default function Login(): React.ReactElement {
 
                     {/* Logo y Títulos */}
                     <div className="mb-4 p-4 rounded-full bg-primary/10 dark:bg-primary/20">
-                        <img 
-                            src={logoUrl} 
-                            alt="Mabs Logo" 
-                            className="h-16 w-auto filter dark:brightness-110" 
-                            onError={() => setLogoUrl(LOGO_URL)}
-                        />
+                        {logoUrl ? (
+                            <img
+                                src={logoUrl}
+                                alt="Logo"
+                                className="h-16 w-auto filter dark:brightness-110"
+                                onError={() => setLogoUrl(null)}
+                            />
+                        ) : (
+                            <span className="inline-flex h-16 items-center text-sm text-muted-foreground italic">
+                                Sin logo
+                            </span>
+                        )}
                     </div>
                     <h1 className="text-2xl font-semibold mb-1 text-center text-foreground">
                         Bienvenido/a de vuelta

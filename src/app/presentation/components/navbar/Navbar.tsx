@@ -18,12 +18,10 @@ import { Menu, ShoppingCart, User, X, Trash2, ShieldCheck, LogOut, LogIn, Chevro
 import ThemeToggle from "@/app/presentation/components/common/ThemeToggle";
 
 import { apiFetch } from "@/app/services/api";
-import { getPublicNavigationRoutes, MenuUsuarioItem } from "@/app/services/routeService";
-import { resolveCurrentRouteMenuTags } from "@/app/services/routesService";
+import { getPublicNavigationRoutes, getMenuUsuarioRoutes, MenuUsuarioItem } from "@/app/services/routeService";
+import { getGovernedLoginPath, getGovernedLogoutPath } from "@/app/services/governedNavigation";
 
 import type { NavbarProps } from '@/types/components';
-
-const DEFAULT_LOGO = "/assets/logo.png";
 
 interface MenuItem {
     label: string;
@@ -52,7 +50,7 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
     const [isScrolled, setIsScrolled] = useState<boolean>(false);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
 
-    const [logoUrl, setLogoUrl] = useState<string>(DEFAULT_LOGO);
+    const [logoUrl, setLogoUrl] = useState<string | null>(null);
     const [logoError, setLogoError] = useState<boolean>(false);
     const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
     const [menuUsuarioItems, setMenuUsuarioItems] = useState<MenuUsuarioItem[]>([]);
@@ -71,16 +69,8 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
                         useAuth: false,
                         logoutOn401: false
                     }),
-                    getPublicNavigationRoutes(),
-                    user ? resolveCurrentRouteMenuTags({ menuTipo: 'USER_DROPDOWN' }).then(res =>
-                        (res?.data || []).filter(t => t.estado !== false).map(t => ({
-                            key: t.iud,
-                            label: t.label,
-                            path: t.ruta?.path || t.routePath,
-                            icon: t.iconKey || null,
-                            order: t.order || 0,
-                        }))
-                    ) : Promise.resolve([])
+                    getPublicNavigationRoutes(!!user),
+                    user ? getMenuUsuarioRoutes() : Promise.resolve([])
                 ]);
 
                 if (logoRes?.ok && logoRes?.logo) {
@@ -89,10 +79,10 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
                         setLogoUrl(`data:${mimetype};base64,${base64}`);
                         setLogoError(false);
                     } else {
-                        setLogoUrl(DEFAULT_LOGO);
+                        setLogoUrl(null);
                     }
                 } else {
-                    setLogoUrl(DEFAULT_LOGO);
+                    setLogoUrl(null);
                 }
 
                 setMenuItems(dynamicRoutes.map((route: any) => ({
@@ -104,7 +94,7 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
             } catch (err) {
                 console.error('Error en el flujo de header dinamico:', err);
                 setLogoError(true);
-                setLogoUrl(DEFAULT_LOGO);
+                setLogoUrl(null);
                 setMenuItems([]);
             }
         };
@@ -152,7 +142,7 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
         });
         if (result.isConfirmed) {
             logout();
-            navigate('/public/render/view/login');
+            navigate(getGovernedLogoutPath());
             toast.success('Sesión cerrada correctamente');
         }
     };
@@ -184,10 +174,10 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
     };
 
     const handleLogoError = (): void => {
-        if (!logoError && logoUrl !== DEFAULT_LOGO) {
+        if (!logoError && logoUrl) {
             console.warn('⚠️ Error al renderizar imagen del logo, usando fallback');
             setLogoError(true);
-            setLogoUrl(DEFAULT_LOGO);
+            setLogoUrl(null);
         }
     };
 
@@ -253,10 +243,10 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
     );
 
     const ICON_MAP: Record<string, React.ReactNode> = {
-        USER:         <User className="mr-2 h-4 w-4" />,
+        USER: <User className="mr-2 h-4 w-4" />,
         SHIELD_CHECK: <ShieldCheck className="mr-2 h-4 w-4" />,
-        CROWN:        <Crown className="mr-2 h-4 w-4" />,
-        LOG_OUT:      <LogOut className="mr-2 h-4 w-4" />,
+        CROWN: <Crown className="mr-2 h-4 w-4" />,
+        LOG_OUT: <LogOut className="mr-2 h-4 w-4" />,
     };
 
     const resolveIcon = (icon: string | null): React.ReactNode =>
@@ -304,7 +294,7 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
             <div className="hidden md:block"><ThemeToggle /></div>
             <div className="hidden md:block relative">{renderCartDropdown}</div>
             {user ? renderProfileDropdown : (
-                <Button variant="default" onClick={() => navigate("/public/render/view/login")} className="h-9 px-4 text-sm font-semibold bg-black hover:bg-gray-800 text-white">
+                <Button variant="default" onClick={() => navigate(getGovernedLoginPath())} className="h-9 px-4 text-sm font-semibold bg-black hover:bg-gray-800 text-white">
                     <LogIn className="mr-2 h-4 w-4" /> Ingresar
                 </Button>
             )}
@@ -373,7 +363,7 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
                             </>
                         ) : (
                             <SheetClose asChild>
-                                <Button variant="default" onClick={() => navigate('/public/render/view/login')} className="w-full justify-start font-semibold py-3 rounded-xl bg-black hover:bg-gray-800 text-white">
+                                <Button variant="default" onClick={() => navigate(getGovernedLoginPath())} className="w-full justify-start font-semibold py-3 rounded-xl bg-black hover:bg-gray-800 text-white">
                                     <LogIn className="mr-3 h-4 w-4" /> Ingresar
                                 </Button>
                             </SheetClose>
@@ -392,13 +382,22 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
                     <div className="flex items-center h-full">
                         <div className="dark:bg-white dark:rounded-lg dark:p-1.5 dark:shadow-sm">
                             {/* LOGO RENDERIZADO AQUÍ */}
-                            <img
-                                src={logoError ? DEFAULT_LOGO : logoUrl}
-                                alt="Logo"
-                                className="h-7 md:h-8 max-w-[120px] object-contain cursor-pointer flex-shrink-0 hover:opacity-80 transition-opacity"
-                                onClick={() => navigate("/")}
-                                onError={handleLogoError}
-                            />
+                            {logoUrl && !logoError ? (
+                                <img
+                                    src={logoUrl}
+                                    alt="Logo"
+                                    className="h-7 md:h-8 max-w-[120px] object-contain cursor-pointer flex-shrink-0 hover:opacity-80 transition-opacity"
+                                    onClick={() => navigate("/")}
+                                    onError={handleLogoError}
+                                />
+                            ) : (
+                                <span
+                                    className="text-xs text-muted-foreground italic px-1 cursor-pointer"
+                                    onClick={() => navigate("/")}
+                                >
+                                    Sin logo
+                                </span>
+                            )}
                         </div>
 
                         <div className="hidden md:flex items-center gap-1 h-full ml-6">

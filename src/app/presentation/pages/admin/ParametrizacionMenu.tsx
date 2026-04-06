@@ -13,6 +13,13 @@ import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -26,6 +33,7 @@ import {
   Home,
   Landmark,
   LayoutDashboard,
+  Lock,
   Loader2,
   Pencil,
   Plus,
@@ -33,10 +41,13 @@ import {
   Save,
   Settings,
   ShieldCheck,
+  SlidersHorizontal,
   Trash2,
   User,
+  X,
 } from 'lucide-react';
 import { getRouteCatalog, RouteCatalogItem } from '@/app/services/routeService';
+import { apiFetch } from '@/app/services/api';
 import { useAuth } from '@/app/providers/AuthProvider';
 import {
   createRouteMenuTag,
@@ -46,6 +57,11 @@ import {
   updateRoute,
   updateRouteMenuTag,
 } from '@/app/services/routesService';
+import {
+  getJerarquiaUsuarios,
+  TenantGlobalInfo,
+  TenantGlobalNode,
+} from '@/app/services/tenantUsuariosService';
 
 type MenuKey = 'PANEL_ADMIN' | 'MI_MEMBRESIA' | 'MI_PERFIL';
 
@@ -64,6 +80,23 @@ interface NavbarItemState {
   saving: boolean;
 }
 
+interface SidebarItemState {
+  route: RouteCatalogItem;
+  enabled: boolean;
+  saving: boolean;
+}
+
+interface VisibilityModalState {
+  open: boolean;
+}
+
+interface FormularioRutaOption {
+  iud: string;
+  name: string;
+  path: string;
+}
+
+
 interface MenuTagFormState {
   id: string | null;
   nombreTag: string;
@@ -74,7 +107,10 @@ interface MenuTagFormState {
   iconKey: string;
   order: string;
   estado: boolean;
-  scopeMode: 'GENERAL' | 'GLOBAL_Y_SUPER' | 'GLOBAL_Y_CORPORATIVO' | 'SOLO_SUPER_ADMIN';
+  tagTenantSuperAdminId: string | null;
+  tagTenantGlobalIds: string[];
+  tagTenantCorporativoId: string | null;
+  permitirSinTenant: boolean;
 }
 
 const USER_MENU_SLOTS: { key: MenuKey; title: string; description: string; Icon: React.ElementType }[] = [
@@ -117,7 +153,10 @@ const EMPTY_TAG_FORM: MenuTagFormState = {
   iconKey: 'USER',
   order: '0',
   estado: true,
-  scopeMode: 'GENERAL',
+  tagTenantSuperAdminId: null,
+  tagTenantGlobalIds: [],
+  tagTenantCorporativoId: null,
+  permitirSinTenant: false,
 };
 
 const normalizeCode = (value: string): string =>
@@ -139,9 +178,17 @@ export default function ParametrizacionMenu() {
     MI_PERFIL: { route: null, enabled: false, label: '', order: 0, saving: false, saved: false },
   });
   const [navbarItems, setNavbarItems] = useState<NavbarItemState[]>([]);
+  const [sidebarItems, setSidebarItems] = useState<SidebarItemState[]>([]);
+  const [visibilityModal, setVisibilityModal] = useState<VisibilityModalState>({ open: false });
+  const [selectedVisibilityRouteId, setSelectedVisibilityRouteId] = useState<string>('');
+  const [formularioRoutes, setFormularioRoutes] = useState<FormularioRutaOption[]>([]);
   const [routeCatalog, setRouteCatalog] = useState<RouteCatalogItem[]>([]);
   const [menuTags, setMenuTags] = useState<RouteMenuTag[]>([]);
+  const [savingAcciones, setSavingAcciones] = useState<Record<string, boolean>>({});
   const [tagForm, setTagForm] = useState<MenuTagFormState>(EMPTY_TAG_FORM);
+
+  const [tenantsGlobales, setTenantsGlobales] = useState<TenantGlobalInfo[]>([]);
+  const [jerarquiaGlobales, setJerarquiaGlobales] = useState<TenantGlobalNode[]>([]);
 
   const tenantScope = user?.auth?.tenantScope || {};
   const actorScope = {
@@ -150,6 +197,27 @@ export default function ParametrizacionMenu() {
     tenantCorporativoId: String(user?.tenantCorporativoId || tenantScope?.tenantCorporativoId || '').trim() || null,
   };
 
+  // Roles con acceso total — DIOS y DESAROLLADOR pueden no tener tenantSuperAdminId
+  // en el rol si son cuentas de sistema, pero igual tienen permisos de SuperAdmin
+
+  // SA puro = tenantSuperAdminId presente SIN tenantGlobalId propio
+  // TG lleva ambos (el tenantSuperAdminId del SA que lo gestiona + su propio tenantGlobalId)
+  // DIOS/DESAROLLADOR: sin tenant ids pero son SA por nombre de rol
+
+  // Carga la jerarquía de tenants para cualquier admin que gestione tags
+  useEffect(() => {
+    if (actorScope.tenantCorporativoId) return; // corporativo ya tiene sus IDs fijos
+    getJerarquiaUsuarios()
+      .then(res => {
+        const nodos: TenantGlobalNode[] = res?.tenantsGlobales ?? [];
+        setJerarquiaGlobales(nodos);
+        const lista: TenantGlobalInfo[] = nodos
+          .map((tg) => tg.tenantGlobal)
+          .filter((tg): tg is TenantGlobalInfo => tg !== null);
+        setTenantsGlobales(lista);
+      })
+      .catch(() => {/* silencioso */});
+  }, []);
   const routeOptions = useMemo(
     () =>
       routeCatalog
@@ -162,20 +230,148 @@ export default function ParametrizacionMenu() {
     [routeCatalog]
   );
 
+  // ── Datos para los 3 selectores de tenant ────────────────────────────────
+  const allCorporativos = useMemo(() =>
+    jerarquiaGlobales.flatMap(nodo =>
+      (nodo.corporativos ?? []).map(c => ({
+        iud: c.tenantCorporativo.iud,
+        nombre: c.tenantCorporativo.razon_social ?? c.tenantCorporativo.titulo ?? c.tenantCorporativo.iud,
+        parentGlobalId: nodo.tenantGlobal?.iud ?? null,
+        parentGlobalNombre: nodo.tenantGlobal?.razon_social ?? nodo.tenantGlobal?.titulo ?? null,
+      }))
+    ),
+    [jerarquiaGlobales]
+  );
+
+  const superAdminOptions = actorScope.tenantSuperAdminId
+    ? [{ iud: actorScope.tenantSuperAdminId, nombre: 'Mi SuperAdmin' }]
+    : [];
+
+  const getAccessTypeCodes = (route: RouteCatalogItem): string[] =>
+    Array.isArray((route as any)?.accessType)
+      ? (route as any).accessType
+          .map((item: any) => String(typeof item === 'string' ? item : item?.accessType || '').trim().toUpperCase())
+          .filter(Boolean)
+      : [];
+
+  const isHybridPublicRoute = (route: RouteCatalogItem): boolean => {
+    const codes = getAccessTypeCodes(route);
+    return codes.includes('PUBLIC') && codes.includes('PRIVATE');
+  };
+
+  const isPublicRoute = (route: RouteCatalogItem): boolean => getAccessTypeCodes(route).includes('PUBLIC');
+
+  const isPrivateRoute = (route: RouteCatalogItem): boolean => getAccessTypeCodes(route).includes('PRIVATE');
+
+  const isFormularioRoute = (route: RouteCatalogItem): boolean => {
+    const tipoCodigo = String(route.tipoNodoId?.codigo || route.tipoNodoId?.nombre || route.tipoNodo || '')
+      .trim()
+      .toUpperCase();
+
+    return tipoCodigo === 'FORMULARIO' || route.formulariosConfig?.habilitado === true;
+  };
+
+  const rutasVisibilidadHibrida = useMemo(
+    () => {
+      const formularioIds = new Set(formularioRoutes.map((route) => route.iud));
+      return routeCatalog
+        .filter((route) => (formularioIds.size > 0 ? formularioIds.has(route.iud) : isFormularioRoute(route)))
+        .sort((a, b) => a.name.localeCompare(b.name));
+    },
+    [routeCatalog, formularioRoutes]
+  );
+
+  const selectedVisibilityRoute =
+    rutasVisibilidadHibrida.find((route) => route.iud === selectedVisibilityRouteId) || rutasVisibilidadHibrida[0] || null;
+
+  // Rutas agrupadas por contexto de renderización
+  const rutasNavbarPublico = useMemo(
+    () =>
+      routeCatalog.filter(
+        (r) =>
+          r.mostrarEnNavbarPublico === true &&
+          isPublicRoute(r)
+      ),
+    [routeCatalog]
+  );
+  const rutasSidebar = useMemo(
+    () =>
+      routeCatalog.filter(
+        (r) =>
+          r.mostrarEnSidebar === true &&
+          isPrivateRoute(r)
+      ),
+    [routeCatalog]
+  );
+  const rutasConConfig = useMemo(
+    () => routeCatalog.filter((r) =>
+      (r.accionesPublicas && r.accionesPublicas.length > 0) ||
+      (r.accionesPrivadas && r.accionesPrivadas.length > 0) ||
+      r.formulariosConfig?.habilitado === true
+    ),
+    [routeCatalog]
+  );
+
+  const derivedScope = (() => {
+    const s = !!tagForm.tagTenantSuperAdminId;
+    const g = tagForm.tagTenantGlobalIds.length > 0;
+    const c = !!tagForm.tagTenantCorporativoId;
+    const multi = tagForm.tagTenantGlobalIds.length > 1;
+    if (!s && !g && !c) return { label: 'General', variant: 'secondary' as const, desc: 'Visible para todos los usuarios.' };
+    if (s && !g && !c) return { label: 'Solo SuperAdmin', variant: 'outline' as const, desc: 'Solo para el SuperAdmin asignado.' };
+    if (s && g && !c) return { label: 'Global + SuperAdmin', variant: 'outline' as const, desc: `Para ${multi ? 'varios Globals' : 'ese Global'} y SuperAdmin. No corporativos.` };
+    if (!s && g && c) return { label: 'Global + Corporativo', variant: 'outline' as const, desc: 'Para ese corporativo y su global.' };
+    if (!s && g && !c) return { label: multi ? 'Multi-Global' : 'Solo Global', variant: 'outline' as const, desc: multi ? `Aplica a ${tagForm.tagTenantGlobalIds.length} TenantGlobales.` : 'Solo para ese TenantGlobal.' };
+    return { label: 'Personalizado', variant: 'outline' as const, desc: 'Combinacion de tenants.' };
+  })();
+
+  const corporativosFiltrados = tagForm.tagTenantGlobalIds.length > 0
+    ? allCorporativos.filter(c => tagForm.tagTenantGlobalIds.includes(c.parentGlobalId ?? ''))
+    : allCorporativos;
+
+  const refreshMenuTags = async () => {
+    try {
+      const listResponse = await apiFetch(
+        `${import.meta.env.VITE_API_BASE_URL ?? '/api'}/seguridad/rutas/menu-tags?menuTipo=USER_DROPDOWN&_t=${Date.now()}`,
+        { method: 'GET', cache: 'no-store' as RequestCache }
+      );
+
+      setMenuTags(Array.isArray(listResponse?.data) ? listResponse.data : []);
+      window.dispatchEvent(new CustomEvent('user-menu-tags-updated'));
+    } catch (error) {
+      console.error('Error al refrescar tags:', error);
+    }
+  };
+
   const loadCatalog = async () => {
     setLoading(true);
     try {
-      const [catalog, menuTagsResponse] = await Promise.all([
+      const [catalog, menuTagsResponse, formulariosResponse] = await Promise.all([
         getRouteCatalog(),
-        getRouteMenuTags({ menuTipo: 'USER_DROPDOWN' }),
+        getRouteMenuTags({ menuTipo: 'USER_DROPDOWN', soloActivos: false }),
+        apiFetch(`${import.meta.env.VITE_API_BASE_URL ?? '/api'}/seguridad/rutas/formularios/opciones`, {
+          method: 'GET',
+        }).catch(() => null),
       ]);
 
       setRouteCatalog(catalog);
       setMenuTags(Array.isArray(menuTagsResponse?.data) ? menuTagsResponse.data : []);
+      window.dispatchEvent(new CustomEvent('user-menu-tags-updated'));
+      setFormularioRoutes(
+        Array.isArray((formulariosResponse as any)?.data?.rutasAcciones)
+          ? (formulariosResponse as any).data.rutasAcciones
+              .map((route: any) => ({
+                iud: String(route?.iud || '').trim(),
+                name: String(route?.name || '').trim(),
+                path: String(route?.path || '').trim(),
+              }))
+              .filter((route: FormularioRutaOption) => route.iud)
+          : []
+      );
 
       const nextSlots = { ...slots };
       for (const slot of USER_MENU_SLOTS) {
-        const route = catalog.find((r) => r.menuUsuarioKey === slot.key) ?? null;
+        const route = catalog.find((r) => r.tiquetaNavb === slot.key) ?? null;
         nextSlots[slot.key] = {
           route,
           enabled: route?.mostrarEnMenuUsuario === true,
@@ -188,9 +384,18 @@ export default function ParametrizacionMenu() {
       setSlots(nextSlots);
 
       const nextNavbarItems = catalog
-        .filter((r) => r.mostrarEnNavbarPublico !== undefined)
+        .filter((r) => {
+          if (!isPublicRoute(r)) return false;
+          if (r.mostrarEnSidebar === true && !isHybridPublicRoute(r)) return false;
+          return r.mostrarEnNavbarPublico !== undefined;
+        })
         .map((r) => ({ route: r, enabled: r.mostrarEnNavbarPublico === true, saving: false }));
       setNavbarItems(nextNavbarItems);
+      setSidebarItems(
+        catalog
+          .filter((r) => r.mostrarEnSidebar === true && isPrivateRoute(r))
+          .map((route) => ({ route, enabled: route.mostrarEnSidebar === true, saving: false }))
+      );
     } catch (error) {
       console.error(error);
       toast.error('No se pudo cargar la parametrizacion del menu.');
@@ -203,11 +408,33 @@ export default function ParametrizacionMenu() {
     loadCatalog();
   }, []);
 
+  useEffect(() => {
+    if (rutasVisibilidadHibrida.length === 0) {
+      if (selectedVisibilityRouteId) setSelectedVisibilityRouteId('');
+      return;
+    }
+
+    const exists = rutasVisibilidadHibrida.some((route) => route.iud === selectedVisibilityRouteId);
+    if (!exists) {
+      setSelectedVisibilityRouteId(rutasVisibilidadHibrida[0].iud);
+    }
+  }, [rutasVisibilidadHibrida, selectedVisibilityRouteId]);
+
   const resetTagForm = () => {
     setTagForm(EMPTY_TAG_FORM);
   };
 
   const populateTagForm = (tag: RouteMenuTag) => {
+    const tSuperAdmin = tag.tenantSuperAdminId || tag.scope?.tenantSuperAdminId || null;
+    const tCorp = tag.tenantCorporativoId || tag.scope?.tenantCorporativoId || null;
+    // Prioridad: tenantGlobalIds array > scope.tenantGlobalIds > tenantGlobalId fallback
+    const rawGlobalIds: string[] = Array.isArray((tag as any).tenantGlobalIds) && (tag as any).tenantGlobalIds.length > 0
+      ? (tag as any).tenantGlobalIds
+      : Array.isArray(tag.scope?.tenantGlobalIds) && (tag.scope as any).tenantGlobalIds.length > 0
+        ? (tag.scope as any).tenantGlobalIds
+        : (tag.tenantGlobalId || tag.scope?.tenantGlobalId)
+          ? [tag.tenantGlobalId || tag.scope?.tenantGlobalId!]
+          : [];
     setTagForm({
       id: tag.iud,
       nombreTag: tag.nombreTag || '',
@@ -218,15 +445,10 @@ export default function ParametrizacionMenu() {
       iconKey: tag.iconKey || 'USER',
       order: String(tag.order ?? 0),
       estado: tag.estado !== false,
-      scopeMode: (() => {
-        const hasSuper = !!(tag.tenantSuperAdminId || tag.scope?.tenantSuperAdminId);
-        const hasGlobal = !!(tag.tenantGlobalId || tag.scope?.tenantGlobalId);
-        const hasCorp = !!(tag.tenantCorporativoId || tag.scope?.tenantCorporativoId);
-        if (hasSuper && !hasGlobal && !hasCorp) return 'SOLO_SUPER_ADMIN';
-        if (hasSuper && hasGlobal && !hasCorp) return 'GLOBAL_Y_SUPER';
-        if (hasGlobal && hasCorp) return 'GLOBAL_Y_CORPORATIVO';
-        return 'GENERAL';
-      })(),
+      tagTenantSuperAdminId: tSuperAdmin,
+      tagTenantGlobalIds: rawGlobalIds.filter(Boolean) as string[],
+      tagTenantCorporativoId: tCorp,
+      permitirSinTenant: tag.permitirSinTenant === true,
     });
   };
 
@@ -238,7 +460,7 @@ export default function ParametrizacionMenu() {
     try {
       await updateRoute(slot.route.iud, {
         mostrarEnMenuUsuario: slot.enabled,
-        menuUsuarioKey: slot.enabled ? key : null,
+        tiquetaNavb: slot.enabled ? key : null,
         menuUsuarioLabel: slot.enabled ? slot.label.trim() || null : null,
         menuUsuarioOrder: slot.enabled ? slot.order : 0,
       } as any);
@@ -255,11 +477,35 @@ export default function ParametrizacionMenu() {
 
   const saveNavbarItem = async (index: number, enabled: boolean) => {
     const item = navbarItems[index];
+    if (!item) return;
+    if (enabled && !isPublicRoute(item.route)) {
+      toast.error('Para activar navbar publico la ruta debe tener access PUBLIC.');
+      return;
+    }
+    if (enabled && item.route.mostrarEnSidebar === true && !isHybridPublicRoute(item.route)) {
+      toast.error('Solo las rutas HYBRID pueden quedar activas a la vez en navbar publico y sidebar.');
+      return;
+    }
     setNavbarItems((prev) =>
       prev.map((it, i) => (i === index ? { ...it, enabled, saving: true } : it))
     );
     try {
       await updateRoute(item.route.iud, { mostrarEnNavbarPublico: enabled } as any);
+      setRouteCatalog((prev) =>
+        prev.map((route) =>
+          route.iud === item.route.iud ? { ...route, mostrarEnNavbarPublico: enabled } : route
+        )
+      );
+      setSidebarItems((prev) =>
+        prev.map((itemState) =>
+          itemState.route.iud === item.route.iud
+            ? {
+                ...itemState,
+                route: { ...itemState.route, mostrarEnNavbarPublico: enabled },
+              }
+            : itemState
+        )
+      );
     } catch (error) {
       console.error(error);
       toast.error('No se pudo guardar el navbar publico.');
@@ -267,6 +513,91 @@ export default function ParametrizacionMenu() {
       setNavbarItems((prev) =>
         prev.map((it, i) => (i === index ? { ...it, enabled, saving: false } : it))
       );
+    }
+  };
+
+  const saveSidebarItem = async (routeIud: string, enabled: boolean) => {
+    const item = routeCatalog.find((route) => route.iud === routeIud);
+    if (!item) return;
+    if (enabled && !isPrivateRoute(item)) {
+      toast.error('Para activar sidebar privado la ruta debe tener access PRIVATE.');
+      return;
+    }
+    if (enabled && item.mostrarEnNavbarPublico === true && !isHybridPublicRoute(item)) {
+      toast.error('Solo las rutas HYBRID pueden quedar activas a la vez en navbar publico y sidebar.');
+      return;
+    }
+
+    setRouteCatalog((prev) =>
+      prev.map((route) =>
+        route.iud === routeIud ? { ...route, mostrarEnSidebar: enabled } : route
+      )
+    );
+
+    try {
+      await updateRoute(routeIud, { mostrarEnSidebar: enabled } as any);
+      setSidebarItems((prev) => {
+        const exists = prev.some((entry) => entry.route.iud === routeIud);
+        if (enabled && !exists) {
+          return [...prev, { route: { ...item, mostrarEnSidebar: true }, enabled: true, saving: false }];
+        }
+        return prev
+          .map((entry) =>
+            entry.route.iud === routeIud
+              ? { ...entry, enabled, route: { ...entry.route, mostrarEnSidebar: enabled } }
+              : entry
+          )
+          .filter((entry) => entry.enabled);
+      });
+    } catch (error) {
+      console.error(error);
+      setRouteCatalog((prev) =>
+        prev.map((route) =>
+          route.iud === routeIud ? { ...route, mostrarEnSidebar: item.mostrarEnSidebar === true } : route
+        )
+      );
+      toast.error('No se pudo guardar el sidebar privado.');
+    }
+  };
+
+  const removeAccion = async (
+    routeIud: string,
+    field: 'accionesPublicas' | 'accionesPrivadas',
+    method: string
+  ) => {
+    const route = routeCatalog.find((r) => r.iud === routeIud);
+    if (!route) return;
+    const current: string[] = Array.isArray((route as any)[field]) ? [...(route as any)[field]] : [];
+    const next = current.filter((m) => m !== method);
+    setSavingAcciones((prev) => ({ ...prev, [`${routeIud}_${field}`]: true }));
+    try {
+      await updateRoute(routeIud, { [field]: next } as any);
+      setRouteCatalog((prev) =>
+        prev.map((r) => r.iud === routeIud ? { ...r, [field]: next } : r)
+      );
+    } catch (error) {
+      console.error(error);
+      toast.error('No se pudo eliminar la accion.');
+    } finally {
+      setSavingAcciones((prev) => ({ ...prev, [`${routeIud}_${field}`]: false }));
+    }
+  };
+
+  const clearAcciones = async (
+    routeIud: string,
+    field: 'accionesPublicas' | 'accionesPrivadas'
+  ) => {
+    setSavingAcciones((prev) => ({ ...prev, [`${routeIud}_${field}`]: true }));
+    try {
+      await updateRoute(routeIud, { [field]: [] } as any);
+      setRouteCatalog((prev) =>
+        prev.map((r) => r.iud === routeIud ? { ...r, [field]: [] } : r)
+      );
+    } catch (error) {
+      console.error(error);
+      toast.error('No se pudo limpiar las acciones.');
+    } finally {
+      setSavingAcciones((prev) => ({ ...prev, [`${routeIud}_${field}`]: false }));
     }
   };
 
@@ -286,42 +617,16 @@ export default function ParametrizacionMenu() {
 
     setSavingTag(true);
     try {
-      // Validaciones mínimas por alcance
-      if (tagForm.scopeMode === 'SOLO_SUPER_ADMIN' && !actorScope.tenantSuperAdminId) {
-        toast.error('El usuario actual no tiene tenantSuperAdmin en su scope.');
-        setSavingTag(false);
-        return;
-      }
-      if (tagForm.scopeMode === 'GLOBAL_Y_CORPORATIVO' && !actorScope.tenantGlobalId) {
-        toast.error('El usuario actual no tiene tenantGlobal en su scope.');
-        setSavingTag(false);
-        return;
-      }
-      if (tagForm.scopeMode === 'GLOBAL_Y_CORPORATIVO' && !actorScope.tenantCorporativoId) {
-        toast.error('El usuario actual no tiene tenantCorporativo en su scope.');
-        setSavingTag(false);
-        return;
-      }
-      if (tagForm.scopeMode === 'GLOBAL_Y_SUPER' && !actorScope.tenantSuperAdminId && !actorScope.tenantGlobalId) {
-        toast.error('El usuario actual no tiene tenantSuperAdmin ni tenantGlobal en su scope.');
-        setSavingTag(false);
-        return;
-      }
+      const tenantSuperAdminId = tagForm.tagTenantSuperAdminId || null;
+      const tenantGlobalIds = tagForm.tagTenantGlobalIds.filter(Boolean);
+      const tenantCorporativoId = tagForm.tagTenantCorporativoId || null;
 
-      // Construir el scope con lo que el actor tenga disponible
-      const scopePayload = (() => {
-        switch (tagForm.scopeMode) {
-          case 'SOLO_SUPER_ADMIN':
-            return { tenantSuperAdminId: actorScope.tenantSuperAdminId, tenantGlobalId: null, tenantCorporativoId: null };
-          case 'GLOBAL_Y_SUPER':
-            // Usa lo que el actor tenga: puede ser solo superAdmin, solo global, o ambos
-            return { tenantSuperAdminId: actorScope.tenantSuperAdminId || null, tenantGlobalId: actorScope.tenantGlobalId || null, tenantCorporativoId: null };
-          case 'GLOBAL_Y_CORPORATIVO':
-            return { tenantSuperAdminId: null, tenantGlobalId: actorScope.tenantGlobalId, tenantCorporativoId: actorScope.tenantCorporativoId };
-          default: // GENERAL
-            return { tenantSuperAdminId: null, tenantGlobalId: null, tenantCorporativoId: null };
-        }
-      })();
+      // Validación: corporativo requiere al menos un global
+      if (tenantCorporativoId && tenantGlobalIds.length === 0) {
+        toast.error('Debes seleccionar al menos un TenantGlobal si asignas un Corporativo.');
+        setSavingTag(false);
+        return;
+      }
 
       const payload = {
         nombreTag: tagForm.nombreTag.trim(),
@@ -333,12 +638,21 @@ export default function ParametrizacionMenu() {
         iconKey: tagForm.iconKey,
         order: Number(tagForm.order || 0),
         estado: tagForm.estado,
-        ...scopePayload,
+        tenantSuperAdminId,
+        tenantGlobalIds,
+        tenantCorporativoId,
+        permitirSinTenant: tagForm.permitirSinTenant,
       };
 
       if (tagForm.id) {
         const res = await updateRouteMenuTag(tagForm.id, payload);
         if (res?.success === false) throw new Error(res?.message || 'Error al actualizar el tag.');
+        // Actualizar el tag directamente en el estado local con los datos devueltos
+        if (res?.data) {
+          setMenuTags((prev) =>
+            prev.map((t) => (t.iud === tagForm.id ? { ...t, ...res.data } : t))
+          );
+        }
         toast.success('Tag de menu actualizado.');
       } else {
         const res = await createRouteMenuTag(payload);
@@ -347,7 +661,7 @@ export default function ParametrizacionMenu() {
       }
 
       resetTagForm();
-      await loadCatalog();
+      await refreshMenuTags();
     } catch (error: any) {
       console.error(error);
       toast.error(error?.message || 'No se pudo guardar el tag de menu.');
@@ -362,7 +676,7 @@ export default function ParametrizacionMenu() {
       if ((res as any)?.success === false) throw new Error((res as any)?.message || 'Error al eliminar.');
       toast.success('Tag eliminado.');
       if (tagForm.id === tagId) resetTagForm();
-      await loadCatalog();
+      await refreshMenuTags();
     } catch (error: any) {
       console.error(error);
       toast.error(error?.message || 'No se pudo eliminar el tag.');
@@ -501,32 +815,120 @@ export default function ParametrizacionMenu() {
                 </div>
               </div>
 
-              <div className="grid md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Aplicacion por alcance</Label>
-                  <Select
-                    value={tagForm.scopeMode}
-                    onValueChange={(value) =>
-                      setTagForm((prev) => ({ ...prev, scopeMode: value as MenuTagFormState['scopeMode'] }))
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecciona alcance" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="GENERAL">General — todos los usuarios</SelectItem>
-                      <SelectItem value="GLOBAL_Y_SUPER">Global + SuperAdmin</SelectItem>
-                      <SelectItem value="GLOBAL_Y_CORPORATIVO">Global + Corporativo</SelectItem>
-                      <SelectItem value="SOLO_SUPER_ADMIN">Solo SuperAdmin</SelectItem>
-                    </SelectContent>
-                  </Select>
+              {/* 3 selectores de tenant — el scope se deriva automáticamente */}
+              <div className="space-y-3">
+                <Label>Aplicacion por alcance</Label>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {/* SuperAdmin */}
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">SuperAdmin</p>
+                    <Select
+                      value={tagForm.tagTenantSuperAdminId ?? '__none__'}
+                      onValueChange={(v) => setTagForm(prev => ({ ...prev, tagTenantSuperAdminId: v === '__none__' ? null : v }))}
+                      disabled={superAdminOptions.length === 0}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Sin asignar" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">— Sin asignar —</SelectItem>
+                        {superAdminOptions.map(opt => (
+                          <SelectItem key={opt.iud} value={opt.iud}>{opt.nombre}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Global — multi-selección con checkboxes */}
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">TenantGlobal</p>
+                    <div className="border rounded-md p-2 space-y-1 max-h-40 overflow-y-auto bg-background">
+                      {actorScope.tenantGlobalId ? (
+                        // TG propio: solo uno disponible
+                        <label className="flex items-center gap-2 cursor-pointer text-sm py-0.5">
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 rounded border-gray-300 accent-primary"
+                            checked={tagForm.tagTenantGlobalIds.includes(actorScope.tenantGlobalId)}
+                            onChange={(e) => {
+                              const checked = e.target.checked;
+                              const id = actorScope.tenantGlobalId!;
+                              setTagForm(prev => ({
+                                ...prev,
+                                tagTenantGlobalIds: checked
+                                  ? [...prev.tagTenantGlobalIds.filter(x => x !== id), id]
+                                  : prev.tagTenantGlobalIds.filter(x => x !== id),
+                                tagTenantCorporativoId: checked ? prev.tagTenantCorporativoId : null,
+                              }));
+                            }}
+                          />
+                          {tenantsGlobales.find(t => t.iud === actorScope.tenantGlobalId)?.razon_social
+                            ?? tenantsGlobales.find(t => t.iud === actorScope.tenantGlobalId)?.titulo
+                            ?? 'Mi TenantGlobal'}
+                        </label>
+                      ) : tenantsGlobales.length === 0 ? (
+                        <p className="text-xs text-muted-foreground px-1">Sin tenants disponibles</p>
+                      ) : (
+                        tenantsGlobales.map(tg => (
+                          <label key={tg.iud} className="flex items-center gap-2 cursor-pointer text-sm py-0.5">
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4 rounded border-gray-300 accent-primary"
+                              checked={tagForm.tagTenantGlobalIds.includes(tg.iud)}
+                              onChange={(e) => {
+                                const checked = e.target.checked;
+                                setTagForm(prev => {
+                                  const next = checked
+                                    ? [...prev.tagTenantGlobalIds.filter(x => x !== tg.iud), tg.iud]
+                                    : prev.tagTenantGlobalIds.filter(x => x !== tg.iud);
+                                  return {
+                                    ...prev,
+                                    tagTenantGlobalIds: next,
+                                    tagTenantCorporativoId: next.length === 0 ? null : prev.tagTenantCorporativoId,
+                                  };
+                                });
+                              }}
+                            />
+                            {tg.razon_social ?? tg.titulo ?? tg.iud}
+                          </label>
+                        ))
+                      )}
+                    </div>
+                    {tagForm.tagTenantGlobalIds.length > 0 && (
+                      <p className="text-xs text-muted-foreground">{tagForm.tagTenantGlobalIds.length} seleccionado(s)</p>
+                    )}
+                  </div>
+
+                  {/* Corporativo */}
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">TenantCorporativo</p>
+                    <Select
+                      value={tagForm.tagTenantCorporativoId ?? '__none__'}
+                      onValueChange={(v) => setTagForm(prev => ({ ...prev, tagTenantCorporativoId: v === '__none__' ? null : v }))}
+                      disabled={corporativosFiltrados.length === 0 && !actorScope.tenantCorporativoId}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Sin asignar" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">— Sin asignar —</SelectItem>
+                        {actorScope.tenantCorporativoId ? (
+                          <SelectItem value={actorScope.tenantCorporativoId}>Mi Corporativo</SelectItem>
+                        ) : corporativosFiltrados.map(c => (
+                          <SelectItem key={c.iud} value={c.iud}>
+                            {c.nombre}{tagForm.tagTenantGlobalIds.length === 0 && c.parentGlobalNombre ? ` (${c.parentGlobalNombre})` : ''}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
 
-                <div className="rounded-md border p-3 text-sm text-muted-foreground">
-                  {tagForm.scopeMode === 'GENERAL' && 'Visible para todos los usuarios (fallback global).'}
-                  {tagForm.scopeMode === 'GLOBAL_Y_SUPER' && 'Visible para tenantGlobal y tenantSuperAdmin. No corporativo.'}
-                  {tagForm.scopeMode === 'GLOBAL_Y_CORPORATIVO' && 'Visible para tenantGlobal y tenantCorporativo. No superAdmin.'}
-                  {tagForm.scopeMode === 'SOLO_SUPER_ADMIN' && 'Visible unicamente para el tenantSuperAdmin.'}
+                {/* Scope derivado automáticamente */}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">Alcance resultante:</span>
+                  <Badge variant={derivedScope.variant}>{derivedScope.label}</Badge>
+                  <span className="text-xs text-muted-foreground">{derivedScope.desc}</span>
                 </div>
               </div>
 
@@ -538,6 +940,27 @@ export default function ParametrizacionMenu() {
                   onChange={(e) => setTagForm((prev) => ({ ...prev, descripcion: e.target.value }))}
                   placeholder="Que hace este item dentro del menu"
                 />
+              </div>
+
+              <div className="space-y-3">
+                <Label>Acceso adicional</Label>
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    id="permitirSinTenant"
+                    className="h-4 w-4 rounded border-gray-300 accent-primary"
+                    checked={tagForm.permitirSinTenant}
+                    onChange={(e) => setTagForm((prev) => ({ ...prev, permitirSinTenant: e.target.checked }))}
+                  />
+                  <Label htmlFor="permitirSinTenant" className="text-sm">
+                    Permitir acceso sin tenant
+                  </Label>
+                </div>
+                {tagForm.permitirSinTenant && (
+                  <p className="text-xs text-muted-foreground pl-6">
+                    Este tag será visible para usuarios que aún no tienen ningún tenant asignado.
+                  </p>
+                )}
               </div>
 
               <div className="flex gap-3">
@@ -577,11 +1000,14 @@ export default function ParametrizacionMenu() {
                 </div>
               )}
 
-              {menuTags.map((tag) => (
+              {menuTags.map((tag, index) => (
                 <div key={tag.iud} className="rounded-lg border p-4 space-y-3">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="flex items-center gap-2">
+                        <Badge variant="secondary" className="min-w-7 justify-center">
+                          {Number(tag.secuenciaTag || index + 1)}
+                        </Badge>
                         <p className="font-medium">{tag.label}</p>
                         <Badge variant={tag.estado ? 'default' : 'secondary'}>
                           {tag.estado ? 'Activo' : 'Inactivo'}
@@ -603,19 +1029,34 @@ export default function ParametrizacionMenu() {
                     <p><span className="font-medium">Ruta:</span> {tag.routeName}</p>
                     <p className="font-mono text-xs text-muted-foreground break-all">{tag.routePath}</p>
                     <p><span className="font-medium">Icono:</span> {tag.iconKey}</p>
+                    <p><span className="font-medium">Secuencia:</span> {Number(tag.secuenciaTag || 0) || '—'}</p>
                     <p><span className="font-medium">Orden:</span> {tag.order}</p>
-                    <div className="flex flex-wrap gap-2 pt-1">
-                      {(() => {
-                        const hasSuper = !!(tag.scope?.tenantSuperAdminId);
-                        const hasGlobal = !!(tag.scope?.tenantGlobalId);
-                        const hasCorp = !!(tag.scope?.tenantCorporativoId);
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        {(() => {
+                        const hasSuper = !!(tag.tenantSuperAdminId || tag.scope?.tenantSuperAdminId);
+                        const globalIds = Array.isArray((tag as any).tenantGlobalIds) && (tag as any).tenantGlobalIds.length > 0
+                          ? (tag as any).tenantGlobalIds
+                          : Array.isArray(tag.scope?.tenantGlobalIds) && (tag.scope as any).tenantGlobalIds.length > 0
+                            ? (tag.scope as any).tenantGlobalIds
+                            : (tag.tenantGlobalId || tag.scope?.tenantGlobalId)
+                              ? [tag.tenantGlobalId || tag.scope?.tenantGlobalId]
+                              : [];
+                        const hasGlobal = globalIds.filter(Boolean).length > 0;
+                        const hasCorp = !!(tag.tenantCorporativoId || tag.scope?.tenantCorporativoId);
                         if (!hasSuper && !hasGlobal && !hasCorp) return <Badge variant="secondary">General</Badge>;
                         if (hasSuper && !hasGlobal && !hasCorp) return <Badge variant="outline">Solo SuperAdmin</Badge>;
+                        if (hasSuper && hasGlobal && hasCorp) return <Badge variant="outline">SuperAdmin + Global + Corporativo</Badge>;
                         if (hasSuper && hasGlobal && !hasCorp) return <Badge variant="outline">Global + SuperAdmin</Badge>;
-                        if (hasGlobal && hasCorp) return <Badge variant="outline">Global + Corporativo</Badge>;
-                        if (hasGlobal) return <Badge variant="outline">Solo Global</Badge>;
-                        return null;
+                        if (!hasSuper && hasGlobal && hasCorp) return <Badge variant="outline">Global + Corporativo</Badge>;
+                        if (hasGlobal) return <Badge variant="outline">{globalIds.length > 1 ? 'Multi-Global' : 'Solo Global'}</Badge>;
+                        if (hasCorp) return <Badge variant="outline">Solo Corporativo</Badge>;
+                        return <Badge variant="secondary">General</Badge>;
                       })()}
+                      {tag.permitirSinTenant && (
+                        <Badge variant="secondary" className="bg-amber-100 text-amber-800 border-amber-300">
+                          Sin tenant
+                        </Badge>
+                      )}
                     </div>
                     {tag.descripcion && (
                       <p className="text-muted-foreground">{tag.descripcion}</p>
@@ -628,117 +1069,20 @@ export default function ParametrizacionMenu() {
         </div>
       </section>
 
-      <section className="space-y-4">
-        <div className="flex items-center gap-2">
-          <User className="h-5 w-5 text-primary" />
-          <h2 className="text-lg font-semibold">Slots legacy del menu de usuario</h2>
-        </div>
-        <p className="text-sm text-muted-foreground -mt-2">
-          Compatibilidad con la configuracion previa basada en una sola ruta por slot fijo.
-        </p>
-
-        <div className="grid gap-4">
-          {USER_MENU_SLOTS.map(({ key, title, description, Icon }) => {
-            const slot = slots[key];
-            const hasRoute = slot.route !== null;
-
-            return (
-              <Card key={key} className={!hasRoute ? 'border-dashed opacity-70' : ''}>
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 rounded-md bg-primary/10">
-                        <Icon className="h-5 w-5 text-primary" />
-                      </div>
-                      <div>
-                        <CardTitle className="text-base">{title}</CardTitle>
-                        <CardDescription className="text-xs">{description}</CardDescription>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      {hasRoute ? (
-                        <Badge variant="outline" className="text-xs font-mono">
-                          {slot.route!.path}
-                        </Badge>
-                      ) : (
-                        <Badge variant="secondary" className="text-xs">Sin ruta asignada</Badge>
-                      )}
-                      <Switch
-                        checked={slot.enabled}
-                        disabled={!hasRoute}
-                        onCheckedChange={(checked) =>
-                          setSlots((prev) => ({ ...prev, [key]: { ...prev[key], enabled: checked } }))
-                        }
-                      />
-                    </div>
-                  </div>
-                </CardHeader>
-
-                {hasRoute && slot.enabled && (
-                  <>
-                    <Separator />
-                    <CardContent className="pt-4 grid md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor={`label-${key}`}>Label personalizado</Label>
-                        <Input
-                          id={`label-${key}`}
-                          value={slot.label}
-                          onChange={(e) =>
-                            setSlots((prev) => ({ ...prev, [key]: { ...prev[key], label: e.target.value } }))
-                          }
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor={`order-${key}`}>Orden</Label>
-                        <Input
-                          id={`order-${key}`}
-                          type="number"
-                          value={slot.order}
-                          onChange={(e) =>
-                            setSlots((prev) => ({
-                              ...prev,
-                              [key]: { ...prev[key], order: Number(e.target.value || 0) },
-                            }))
-                          }
-                        />
-                      </div>
-                    </CardContent>
-                  </>
-                )}
-
-                {hasRoute && (
-                  <CardContent className="pt-0">
-                    <Button
-                      size="sm"
-                      onClick={() => saveSlot(key)}
-                      disabled={slot.saving}
-                      variant={slot.saved ? 'outline' : 'default'}
-                      className="w-full"
-                    >
-                      {slot.saving ? (
-                        <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Guardando...</>
-                      ) : slot.saved ? (
-                        'Guardado ok'
-                      ) : (
-                        <><Save className="h-4 w-4 mr-2" /> Guardar slot</>
-                      )}
-                    </Button>
-                  </CardContent>
-                )}
-              </Card>
-            );
-          })}
-        </div>
-      </section>
-
       {navbarItems.length > 0 && (
         <section className="space-y-4">
-          <div className="flex items-center gap-2">
-            <Globe className="h-5 w-5 text-primary" />
-            <h2 className="text-lg font-semibold">Navbar publico</h2>
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-2">
+              <Globe className="h-5 w-5 text-primary" />
+              <h2 className="text-lg font-semibold">Navbar publico</h2>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => setVisibilityModal({ open: true })}>
+              <SlidersHorizontal className="h-4 w-4 mr-2" />
+              Configurar estados
+            </Button>
           </div>
           <p className="text-sm text-muted-foreground -mt-2">
-            Rutas visibles en la barra de navegacion publica.
+            Esta configuracion se administra en privado desde aqui, pero el render del navbar se resuelve desde la API publica de rutas.
           </p>
 
           <Card>
@@ -748,7 +1092,10 @@ export default function ParametrizacionMenu() {
                   <div className="flex items-center gap-3">
                     <LayoutDashboard className="h-4 w-4 text-muted-foreground" />
                     <div>
-                      <p className="text-sm font-medium">{item.route.name}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium">{item.route.name}</p>
+                        {isHybridPublicRoute(item.route) && <Badge variant="outline">HYBRID</Badge>}
+                      </div>
                       <p className="text-xs text-muted-foreground font-mono">{item.route.path}</p>
                     </div>
                   </div>
@@ -766,6 +1113,154 @@ export default function ParametrizacionMenu() {
           </Card>
         </section>
       )}
+
+      {rutasSidebar.length > 0 && (
+        <section className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Settings className="h-5 w-5 text-primary" />
+            <h2 className="text-lg font-semibold">Sidebar privado</h2>
+          </div>
+          <p className="text-sm text-muted-foreground -mt-2">
+            Desde aqui controlas la visibilidad privada. Si una ruta tambien aparece en el navbar publico, debe ser HYBRID.
+          </p>
+
+          <Card>
+            <CardContent className="pt-4 divide-y">
+              {rutasSidebar.map((route) => (
+                <div key={route.iud} className="flex items-center justify-between py-3">
+                  <div className="flex items-center gap-3">
+                    <LayoutDashboard className="h-4 w-4 text-muted-foreground" />
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium">{route.name}</p>
+                        {isHybridPublicRoute(route) && <Badge variant="outline">HYBRID</Badge>}
+                        {route.mostrarEnNavbarPublico === true && (
+                          <Badge variant="secondary">Navbar publico</Badge>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground font-mono">{route.path}</p>
+                    </div>
+                  </div>
+                  <Switch
+                    checked={route.mostrarEnSidebar === true}
+                    onCheckedChange={(checked) => saveSidebarItem(route.iud, checked)}
+                  />
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </section>
+      )}
+
+      <Dialog open={visibilityModal.open} onOpenChange={(open) => setVisibilityModal({ open })}>
+        <DialogContent className="sm:max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>Estados de navbar publico y sidebar privado</DialogTitle>
+            <DialogDescription>
+              Desde este modal puedes activar rutas publicas en el navbar y, si la ruta es HYBRID, tambien dejar activa su visibilidad privada en sidebar.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
+            {rutasVisibilidadHibrida.length === 0 && (
+              <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
+                No hay rutas de tipo FORMULARIO disponibles para configurar desde este modal.
+              </div>
+            )}
+
+            {rutasVisibilidadHibrida.length > 0 && (
+              <Card>
+                <CardContent className="pt-4 space-y-4">
+                  <div className="space-y-2">
+                    <Label>Ruta seguridad tipo formulario</Label>
+                    <Select value={selectedVisibilityRoute?.iud || ''} onValueChange={setSelectedVisibilityRouteId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecciona una ruta formulario" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {rutasVisibilidadHibrida.map((route) => (
+                          <SelectItem key={route.iud} value={route.iud}>
+                            {route.name} - {route.path}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {selectedVisibilityRoute && (
+                    <>
+                      <div className="rounded-lg border px-4 py-3 space-y-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-sm font-medium">{selectedVisibilityRoute.name}</p>
+                          {isHybridPublicRoute(selectedVisibilityRoute) && <Badge variant="outline">HYBRID</Badge>}
+                          {isPublicRoute(selectedVisibilityRoute) && !isHybridPublicRoute(selectedVisibilityRoute) && (
+                            <Badge variant="secondary">PUBLIC</Badge>
+                          )}
+                          {selectedVisibilityRoute.mostrarEnNavbarPublico === true && (
+                            <Badge variant="secondary">Navbar activo</Badge>
+                          )}
+                          {selectedVisibilityRoute.mostrarEnSidebar === true && (
+                            <Badge variant="secondary">Sidebar activo</Badge>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground font-mono break-all">
+                          {selectedVisibilityRoute.path}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Access actual: {getAccessTypeCodes(selectedVisibilityRoute).join(' + ') || 'Sin accessType'}
+                        </p>
+                      </div>
+
+                      <div className="grid md:grid-cols-2 gap-4">
+                        <div className="flex items-center justify-between rounded-lg border px-3 py-3">
+                          <div className="space-y-1">
+                            <p className="text-sm font-medium">Navbar publico</p>
+                            <p className="text-xs text-muted-foreground">
+                              Activa la ruta en el retorno de la API publica.
+                            </p>
+                          </div>
+                          <Switch
+                            checked={selectedVisibilityRoute.mostrarEnNavbarPublico === true}
+                            onCheckedChange={(checked) => {
+                              const index = navbarItems.findIndex((item) => item.route.iud === selectedVisibilityRoute.iud);
+                              if (index >= 0) {
+                                void saveNavbarItem(index, checked);
+                              } else if (checked) {
+                                toast.error('Esta ruta no puede activarse en navbar publico con el catalogo actual.');
+                              }
+                            }}
+                          />
+                        </div>
+
+                        <div className="flex items-center justify-between rounded-lg border px-3 py-3">
+                          <div className="space-y-1">
+                            <p className="text-sm font-medium">Sidebar privado</p>
+                            <p className="text-xs text-muted-foreground">
+                              Si ambos estados quedan activos, la ruta debe ser HYBRID.
+                            </p>
+                          </div>
+                          <Switch
+                            checked={selectedVisibilityRoute.mostrarEnSidebar === true}
+                            onCheckedChange={(checked) => void saveSidebarItem(selectedVisibilityRoute.iud, checked)}
+                          />
+                        </div>
+                      </div>
+
+                      {!isHybridPublicRoute(selectedVisibilityRoute) && (
+                        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                          Esta ruta no es HYBRID. Puedes activar solo uno de los dos estados al tiempo.
+                        </div>
+                      )}
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 }
+

@@ -1,3 +1,5 @@
+import { getGovernedLogoutPath } from '@/app/services/governedNavigation';
+
 export type ResponseType = 'raw' | string;
 export type ApiHeaders = Record<string, string>;
 
@@ -57,7 +59,7 @@ export const apiFetch = async (
         if (response.status === 401 && useAuth && logoutOn401) {
             localStorage.removeItem('user');
             localStorage.removeItem('token');
-            window.location.href = '/public/render/view/login';
+            window.location.href = getGovernedLogoutPath();
             throw new Error('Sesion expirada. Por favor inicia sesion nuevamente.');
         }
 
@@ -79,7 +81,16 @@ export const apiFetch = async (
         const data: any = await response.json();
 
         if (!response.ok) {
-            throw new Error(data.msg || data.message || 'Error desconocido de la API');
+            const backendMsg =
+                data?.msg ||
+                data?.message ||
+                data?.error ||
+                data?.detalle ||
+                (Array.isArray(data?.errors)
+                    ? data.errors.map((e: any) => e?.msg || e?.message || String(e)).join(' | ')
+                    : null) ||
+                (typeof data === 'object' ? JSON.stringify(data) : String(data));
+            throw new Error(`[${response.status}] ${backendMsg}`);
         }
 
         return data;

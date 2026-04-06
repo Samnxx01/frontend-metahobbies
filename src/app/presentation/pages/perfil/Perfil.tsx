@@ -6,6 +6,7 @@ import { toast } from 'react-toastify';
 import { useAuth } from '../../../providers/AuthProvider';
 import { uploadProfileImage, getProfileImageBlobUrl } from '../../../services/clientService';
 import { apiFetch } from '../../../services/api';
+import { getGovernedLoginPath } from '@/app/services/governedNavigation';
 import type { User, ClientProfile } from '../../../../types/common';
 import PerfilClienteForm from '../../components/perfil/PerfilClienteForm';
 import CuentaBancariaForm from '../../components/perfil/CuentaBancariaForm';
@@ -112,7 +113,7 @@ export default function Perfil(): React.ReactElement {
     }
 
     if (!user) {
-        navigate('/public/render/view/login');
+        navigate(getGovernedLoginPath());
         return <></>;
     }
 
@@ -245,7 +246,7 @@ export default function Perfil(): React.ReactElement {
         try {
             await logout();
             toast.success('Sesión cerrada exitosamente.');
-            setTimeout(() => navigate('/public/render/view/login'), 500);
+            setTimeout(() => navigate(getGovernedLoginPath()), 500);
         } catch (error) {
             toast.error((error as Error).message || 'Error al cerrar sesión.');
         }

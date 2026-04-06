@@ -17,6 +17,7 @@ import {
 interface Voucher {
     _id: string;
     referidoId: string;
+    referidoCorreo?: string | null;
     montoGanado: number;
     ciclo: number;
     fecha: string;
@@ -221,6 +222,7 @@ function GestionReferidos(): React.ReactElement {
             const response = await apiFetch(`${API_BASE_URL}/referido/listarSaldoRefere`, {
                 method: 'GET'
             });
+            console.log('Respuesta de referidos: ', response)
             setData(response);
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : 'Error al cargar datos de referidos';
@@ -299,7 +301,7 @@ function GestionReferidos(): React.ReactElement {
             const voucherDetail: VoucherDetail = {
                 ...voucher,
                 usuarioPropietario: propietario || { _id: usuarioPropietarioId, correo: usuarioPropietarioEmail },
-                usuarioReferido: referido || { _id: voucher.referidoId, correo: 'No disponible' }
+                usuarioReferido: referido || { _id: voucher.referidoId, correo: voucher.referidoCorreo || 'No disponible' }
             };
 
             setSelectedVoucher(voucherDetail);
@@ -311,14 +313,26 @@ function GestionReferidos(): React.ReactElement {
                     data.usuarios
                 );
 
-                const unresolvedIds = chain
+                // Enriquecer nodos del propietario y referido con datos ya fetcheados
+                const preEnrichedChain = chain.map((node) => {
+                    if (node.usuarioId === usuarioPropietarioId && propietario) {
+                        return { ...node, correo: propietario.correo, nombre: propietario.nombre || node.nombre };
+                    }
+                    if (node.usuarioId === voucher.referidoId && referido) {
+                        return { ...node, correo: referido.correo, nombre: referido.nombre || node.nombre };
+                    }
+                    return node;
+                });
+
+                // Para nodos intermedios aún sin correo (correo === usuarioId), buscar en cache
+                const unresolvedIds = preEnrichedChain
                     .filter((node) => node.correo === node.usuarioId)
                     .map((node) => node.usuarioId);
 
                 if (unresolvedIds.length > 0) {
                     const { fullCache } = await fetchUserDetails(unresolvedIds[0]);
 
-                    const enrichedChain = chain.map((node) => {
+                    const enrichedChain = preEnrichedChain.map((node) => {
                         if (node.correo !== node.usuarioId) return node;
                         const detail = fullCache.get(node.usuarioId) || latestCache.get(node.usuarioId);
                         if (!detail) return node;
@@ -330,7 +344,7 @@ function GestionReferidos(): React.ReactElement {
                     });
                     setReferralChain(enrichedChain);
                 } else {
-                    setReferralChain(chain);
+                    setReferralChain(preEnrichedChain);
                 }
             }
         } catch (error) {
@@ -547,11 +561,17 @@ function GestionReferidos(): React.ReactElement {
                                                                             {voucher.motivo}
                                                                         </Badge>
                                                                     </div>
-                                                                    <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                                                                    <div className="flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
                                                                         <div className="flex items-center gap-1">
                                                                             <Calendar className="h-3 w-3" />
                                                                             {formatDate(voucher.fecha)}
                                                                         </div>
+                                                                        {voucher.referidoCorreo && (
+                                                                            <div className="flex items-center gap-1">
+                                                                                <Mail className="h-3 w-3" />
+                                                                                <span className="font-mono truncate max-w-[160px]">{voucher.referidoCorreo}</span>
+                                                                            </div>
+                                                                        )}
                                                                     </div>
                                                                 </div>
                                                                 <div className="flex items-center gap-2">

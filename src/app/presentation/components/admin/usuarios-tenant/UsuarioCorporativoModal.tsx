@@ -16,7 +16,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import { Loader2, UserPlus } from 'lucide-react';
+import { Loader2, UserPlus, RefreshCw } from 'lucide-react';
 import type { CreateUsuarioCorporativoData, TenantCorporativoInfo } from '@/app/services/tenantUsuariosService';
 import { RH_OPTIONS, TIPO_CONTRATO_OPTIONS, NIVELES_ESTUDIO } from './catalogos';
 
@@ -30,6 +30,10 @@ interface UsuarioCorporativoModalProps {
     tenantCorporativo?: TenantCorporativoInfo | null;
     /** Scope del usuario autenticado */
     scope: 'SUPER_ADMIN' | 'TENANT_GLOBAL' | 'CORPORATIVO';
+    /** Función para sincronizar canReferir */
+    onSincronizarCanReferir?: (canReferir: boolean) => Promise<any>;
+    isSincronizando?: boolean;
+    sincronizarError?: Error | null;
 }
 
 interface FormState {
@@ -72,6 +76,9 @@ export const UsuarioCorporativoModal = ({
     submitError,
     tenantCorporativo,
     scope,
+    onSincronizarCanReferir,
+    isSincronizando = false,
+    sincronizarError,
 }: UsuarioCorporativoModalProps): React.ReactElement => {
     const [form, setForm] = useState<FormState>(EMPTY_FORM);
 
@@ -318,6 +325,53 @@ export const UsuarioCorporativoModal = ({
                                         ))}
                                     </SelectContent>
                                 </Select>
+                            </div>
+                        )}
+
+                        {/* Botones de sincronización */}
+                        {onSincronizarCanReferir && tenantCorporativo && (
+                            <div className="space-y-2">
+                                <Label className="text-sm font-medium">Sincronizar referidos</Label>
+                                <p className="text-xs text-muted-foreground">
+                                    Ajusta el estado de "puede referir" para todos los usuarios existentes en este tenant corporativo.
+                                </p>
+                                <div className="flex gap-2">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => onSincronizarCanReferir(true)}
+                                        disabled={isSincronizando}
+                                        className="flex-1"
+                                    >
+                                        {isSincronizando ? (
+                                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                        ) : (
+                                            <RefreshCw className="h-4 w-4 mr-2" />
+                                        )}
+                                        Habilitar todos
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => onSincronizarCanReferir(false)}
+                                        disabled={isSincronizando}
+                                        className="flex-1"
+                                    >
+                                        {isSincronizando ? (
+                                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                        ) : (
+                                            <RefreshCw className="h-4 w-4 mr-2" />
+                                        )}
+                                        Deshabilitar todos
+                                    </Button>
+                                </div>
+                                {sincronizarError && (
+                                    <p className="text-xs text-destructive">
+                                        Error al sincronizar: {sincronizarError.message}
+                                    </p>
+                                )}
                             </div>
                         )}
 

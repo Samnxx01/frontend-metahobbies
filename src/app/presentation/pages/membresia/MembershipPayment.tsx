@@ -16,7 +16,7 @@ import {
 import { Label } from '@/components/ui/label';
 import {
     Loader2, ArrowRight, ArrowLeft, CreditCard, Sparkles,
-    CheckCircle2, Clock, XCircle, Receipt, ArrowRightCircle,
+    CheckCircle2, Clock, XCircle, Receipt, ArrowRightCircle, RefreshCw,
 } from 'lucide-react';
 
 type EstadoTx = 'aprobada' | 'pendiente' | 'rechazada';
@@ -41,6 +41,8 @@ interface MembresiaPlan {
 interface ModalResultadoProps {
     resultado: ResultadoPago;
     onIrAMabs: () => void;
+    onRefresh?: () => Promise<void>;
+    isRefreshing?: boolean;
 }
 
 const MODAL_CONFIG: Record<EstadoTx, {
@@ -77,7 +79,7 @@ const MODAL_CONFIG: Record<EstadoTx, {
     },
 };
 
-function ModalResultado({ resultado, onIrAMabs }: ModalResultadoProps) {
+function ModalResultado({ resultado, onIrAMabs, onRefresh, isRefreshing = false }: ModalResultadoProps) {
     const cfg = MODAL_CONFIG[resultado.estado];
 
     const formatCurrency = (amount: number, moneda = 'COP') =>
@@ -145,7 +147,18 @@ function ModalResultado({ resultado, onIrAMabs }: ModalResultadoProps) {
                 )}
 
                 {/* Única salida del modal */}
-                <div className="px-8 pb-8">
+                <div className="px-8 pb-8 flex flex-col gap-3">
+                    {resultado.estado === 'pendiente' && onRefresh && (
+                        <Button
+                            variant="outline"
+                            onClick={onRefresh}
+                            disabled={isRefreshing}
+                            className="w-full gap-2"
+                        >
+                            <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+                            {isRefreshing ? 'Verificando...' : 'Verificar estado'}
+                        </Button>
+                    )}
                     <Button onClick={onIrAMabs} className="w-full gap-2 font-semibold" size="lg">
                         Ir a Mabs
                         <ArrowRightCircle className="w-4 h-4" />
@@ -174,6 +187,97 @@ export default function MembershipPayment(): React.ReactElement {
 
     // Modal de resultado post-pago
     const [resultado, setResultado] = useState<ResultadoPago | null>(null);
+
+    // Refresh manual del estado
+    const [isRefreshing, setIsRefreshing] = useState(false);
+
+    // Estado para polling mejorado del pago pendiente
+    const [pollingActive, setPollingActive] = useState(false);
+    const [pollCount, setPollCount] = useState(0);
+    const maxPolls = 60; // Máximo 60 consultas (10 minutos con intervalo progresivo)
+    const basePollInterval = 5000; // 5 segundos inicial
+    const maxPollInterval = 30000; // 30 segundos máximo
+
+    // Función para calcular intervalo progresivo (backoff exponencial)
+    const getPollInterval = (count: number): number => {
+        const interval = basePollInterval * Math.pow(1.2, Math.floor(count / 5));
+        return Math.min(interval, maxPollInterval);
+    };
+
+    // Polling mejorado para pagos pendientes
+    useEffect(() => {
+        if (!resultado || resultado.estado !== 'pendiente' || !pollingActive || pollCount >= maxPolls) {
+            if (pollingActive) {
+                setPollingActive(false);
+                console.log('Polling detenido:', { pollCount, maxPolls });
+                // Si se detuvo por timeout, mostrar mensaje
+                if (pollCount >= maxPolls) {
+                    toast.info('La verificación está tardando más de lo esperado. Te notificaremos por correo cuando se complete.');
+                }
+            }
+            return;
+        }
+
+        const interval = getPollInterval(pollCount);
+        console.log(`Próxima consulta en ${interval/1000}s (intento ${pollCount + 1}/${maxPolls})`);
+
+        const pollTimer = setTimeout(async () => {
+            try {
+                console.log(`Consultando estado del pago (intento ${pollCount + 1}/${maxPolls})...`);
+
+                // Consultar el estado actual del pago usando la referencia
+                const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api';
+                const response = await fetch(
+                    `${API_BASE_URL}/membresia/seguridad/consultar/estado/${resultado.referencia}`,
+                    {
+                        method: 'GET',
+                        headers: {
+                            'Authorization': `Bearer ${token}`,
+                        },
+                    }
+                );
+
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log('Estado actual del pago:', data);
+
+                    const nuevoEstado = wompiStatusToEstado(data.status || data.estado || 'PENDING');
+
+                    if (nuevoEstado !== 'pendiente') {
+                        // Estado cambió, actualizar el modal
+                        console.log('Estado cambió de pendiente a:', nuevoEstado);
+                        setResultado(prev => prev ? { ...prev, estado: nuevoEstado } : null);
+                        setPollingActive(false);
+
+                        if (nuevoEstado === 'aprobada') {
+                            toast.success('¡Pago confirmado! Tu membresía ha sido activada.');
+                        } else {
+                            toast.error('El pago fue rechazado. Por favor, intenta nuevamente.');
+                        }
+                    } else {
+                        // Aún pendiente, continuar polling
+                        setPollCount(prev => prev + 1);
+                    }
+                } else {
+                    console.warn('Error al consultar estado del pago:', response.status);
+                    setPollCount(prev => prev + 1);
+                }
+            } catch (error) {
+                console.error('Error en polling:', error);
+                setPollCount(prev => prev + 1);
+            }
+        }, interval);
+
+        return () => clearTimeout(pollTimer);
+    }, [resultado, pollingActive, pollCount, maxPolls, token]);
+
+    // Función helper para mapear status de Wompi
+    const wompiStatusToEstado = (status: string): 'aprobada' | 'pendiente' | 'rechazada' => {
+        const s = status?.toUpperCase();
+        if (s === 'APPROVED') return 'aprobada';
+        if (s === 'PENDING') return 'pendiente';
+        return 'rechazada';
+    };
 
     // Carga membresías con esPrecioDefault: true
     useEffect(() => {
@@ -215,7 +319,47 @@ export default function MembershipPayment(): React.ReactElement {
         await originalPurchaseMembership(paymentData, userToken);
     };
 
-    const handlePagoTerminado = (res: ResultadoPago) => setResultado(res);
+    const handleRefresh = async () => {
+        if (!resultado?.referencia || isRefreshing) return;
+        setIsRefreshing(true);
+        try {
+            const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api';
+            const response = await fetch(
+                `${API_BASE_URL}/membresia/seguridad/consultar/estado/${resultado.referencia}`,
+                { method: 'GET', headers: { 'Authorization': `Bearer ${token}` } }
+            );
+            if (response.ok) {
+                const data = await response.json();
+                const nuevoEstado = wompiStatusToEstado(data.status || data.estado || 'PENDING');
+                if (nuevoEstado !== 'pendiente') {
+                    setResultado(prev => prev ? { ...prev, estado: nuevoEstado } : null);
+                    setPollingActive(false);
+                    if (nuevoEstado === 'aprobada') {
+                        toast.success('¡Pago confirmado! Tu membresía ha sido activada.');
+                    } else {
+                        toast.error('El pago fue rechazado. Por favor, intenta nuevamente.');
+                    }
+                } else {
+                    toast.info('El pago aún está siendo procesado.');
+                }
+            }
+        } catch (error) {
+            toast.error('No se pudo consultar el estado del pago.');
+        } finally {
+            setIsRefreshing(false);
+        }
+    };
+
+    const handlePagoTerminado = (res: ResultadoPago) => {
+        setResultado(res);
+        setPollCount(0); // Resetear contador
+
+        // Activar polling si el pago está pendiente
+        if (res.estado === 'pendiente' && res.referencia) {
+            console.log('Activando polling para pago pendiente:', res.referencia);
+            setPollingActive(true);
+        }
+    };
 
     const {
         activeStep, loading, formData,
@@ -320,6 +464,8 @@ export default function MembershipPayment(): React.ReactElement {
                 <ModalResultado
                     resultado={resultado}
                     onIrAMabs={() => navigate('/membresia/dashboard')}
+                    onRefresh={handleRefresh}
+                    isRefreshing={isRefreshing}
                 />
             )}
 

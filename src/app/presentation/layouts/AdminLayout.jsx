@@ -4,8 +4,6 @@ import { useAuth } from '@/app/providers/AuthProvider'
 import AdminNavbar from '@/app/presentation/components/admin/AdminNavbar'
 import AdminSidebar from '@/app/presentation/components/admin/AdminSidebar'
 
-const drawerWidth = 260
-
 export default function AdminLayout() {
     const { user } = useAuth()
     const [mobileOpen, setMobileOpen] = useState(false)

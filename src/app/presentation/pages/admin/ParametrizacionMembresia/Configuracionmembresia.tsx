@@ -73,8 +73,13 @@ const INITIAL_EDITAR: EditarForm = {
 
 const TIPO_PAGOS = ['Único', 'Mensual', 'Anual'] as const;
 
+const normalizarPrecioDesdeCentavos = (valor: number | string | null | undefined) =>
+    Number(valor || 0) / 100;
+
 const fmt = (n: number) =>
-    new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(n);
+    new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(
+        normalizarPrecioDesdeCentavos(n)
+    );
 
 const fmtFecha = (iso: string) =>
     new Date(iso).toLocaleDateString('es-CO', { year: 'numeric', month: 'short', day: 'numeric' });
@@ -133,7 +138,7 @@ export default function ConfiguracionMembresia() {
         setFormEditar({
             nombreMembresia: m.nombreMembresia,
             descripcion: m.descripcion ?? '',
-            precioMembresia: String(m.precioMembresia),
+            precioMembresia: String(normalizarPrecioDesdeCentavos(m.precioMembresia)),
             tipoPagos: m.tipoPagos ?? '',
             monedasId: monedaId ?? '',
         });
@@ -320,7 +325,7 @@ export default function ConfiguracionMembresia() {
                             <FieldWrapper label="Precio" required>
                                 <Input
                                     type="number" min={1}
-                                    placeholder="200000"
+                                    placeholder="2000"
                                     value={formCrear.precioMembresia}
                                     onChange={e => updateCrear('precioMembresia', e.target.value)}
                                     className="h-9 text-sm"
@@ -554,7 +559,7 @@ export default function ConfiguracionMembresia() {
                             <FieldWrapper label="Precio" required>
                                 <Input
                                     type="number" min={1}
-                                    placeholder="250000"
+                                    placeholder="2500"
                                     value={formEditar.precioMembresia}
                                     onChange={e => updateEditar('precioMembresia', e.target.value)}
                                     className="h-9 text-sm"

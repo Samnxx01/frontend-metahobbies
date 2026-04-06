@@ -1,18 +1,18 @@
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTheme } from 'next-themes'
 import { useAuth } from '@/app/providers/AuthProvider'
 import { useMembership } from '@/app/hooks/useMembership'
 import { apiFetch } from '@/app/services/api'
-import { getPrivateHomeRoute, getUserShortcutRoutes } from '@/app/services/routeService'
-import { resolveCurrentRouteMenuTags, RouteMenuTag } from '@/app/services/routesService'
+import { getMenuUsuarioRoutes, getPrivateHomeRoute, getUserShortcutRoutes, type MenuUsuarioItem } from '@/app/services/routeService'
+import { getRouteMenuTags, resolveCurrentRouteMenuTags, type RouteMenuTag } from '@/app/services/routesService'
+import { getGovernedLogoutPath } from '@/app/services/governedNavigation'
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Crown, Home, Landmark, LayoutDashboard, LogOut, Menu, Moon, Settings, Sun, User as UserIcon } from 'lucide-react'
 import type { AdminNavbarProps } from '@/types/components'
 
-const DEFAULT_LOGO = "/assets/logo.png"
 const ADMIN_PROFILE_VIEW_PATH = '/admin/parametros/perfil/visualizacion'
 
 const MENU_ICON_MAP: Record<string, React.ElementType> = {
@@ -25,22 +25,50 @@ const MENU_ICON_MAP: Record<string, React.ElementType> = {
     CIRCLE: UserIcon,
 }
 
+const mergeMenuUsuarioItems = (...sources: Array<MenuUsuarioItem[] | RouteMenuTag[] | null | undefined>): MenuUsuarioItem[] => {
+    const items = new Map<string, MenuUsuarioItem>()
+
+    sources.forEach((source) => {
+        ;(Array.isArray(source) ? source : []).forEach((row: any) => {
+            const key = String(row?.key || row?.codigo || row?.iud || '').trim()
+            const path = String(row?.path || row?.routePath || row?.ruta?.path || '').trim()
+            const label = String(row?.label || row?.nombreTag || '').trim()
+
+            if (!key || !path || !label) return
+
+            items.set(key, {
+                key,
+                label,
+                path,
+                icon: row?.icon ?? row?.iconKey ?? null,
+                order: Number(row?.order ?? 0),
+            })
+        })
+    })
+
+    return Array.from(items.values()).sort(
+        (a, b) => Number(a.order ?? 0) - Number(b.order ?? 0) || String(a.label || '').localeCompare(String(b.label || ''))
+    )
+}
+
 export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarProps): React.ReactElement {
     const navigate = useNavigate()
     const { user, logout } = useAuth()
     const { theme, setTheme } = useTheme()
     const { hasActiveMembership } = useMembership()
-    const [logoUrl, setLogoUrl] = useState<string>(DEFAULT_LOGO)
-    const [logoError, setLogoError] = useState<boolean>(false)
+    const [logoUrl, setLogoUrl] = useState<string | null>(null)
+    const [logoLoading, setLogoLoading] = useState<boolean>(true)
     const [adminHomePath, setAdminHomePath] = useState<string>('/admin')
     const [profilePath, setProfilePath] = useState<string>(ADMIN_PROFILE_VIEW_PATH)
     const [membershipPath, setMembershipPath] = useState<string>('/membresia/dashboard')
-    const [dynamicMenuTags, setDynamicMenuTags] = useState<RouteMenuTag[]>([])
+    const [dynamicMenuItems, setDynamicMenuItems] = useState<MenuUsuarioItem[]>([])
+    const [menuOpen, setMenuOpen] = useState(false)
 
     useEffect(() => {
         let active = true
 
         const cargarLogoAdmin = async (): Promise<void> => {
+            setLogoLoading(true)
             try {
                 const resContextual = await apiFetch('/api/config/parametrizacion/listar/logos/coporativo/admin', {
                     method: 'GET',
@@ -50,9 +78,13 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
 
                 if (!active) return
 
+                if (resContextual?.ok && resContextual?.logo?.dataUrl) {
+                    setLogoUrl(resContextual.logo.dataUrl)
+                    return
+                }
+
                 if (resContextual?.ok && resContextual?.logo?.base64 && resContextual?.logo?.mimetype) {
                     setLogoUrl(`data:${resContextual.logo.mimetype};base64,${resContextual.logo.base64}`)
-                    setLogoError(false)
                     return
                 }
 
@@ -64,18 +96,22 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
 
                 if (!active) return
 
-                if (resPublico?.ok && resPublico?.logo?.base64 && resPublico?.logo?.mimetype) {
-                    setLogoUrl(`data:${resPublico.logo.mimetype};base64,${resPublico.logo.base64}`)
-                    setLogoError(false)
+                if (resPublico?.ok && resPublico?.logo?.dataUrl) {
+                    setLogoUrl(resPublico.logo.dataUrl)
                     return
                 }
 
-                setLogoUrl(DEFAULT_LOGO)
-                setLogoError(false)
+                if (resPublico?.ok && resPublico?.logo?.base64 && resPublico?.logo?.mimetype) {
+                    setLogoUrl(`data:${resPublico.logo.mimetype};base64,${resPublico.logo.base64}`)
+                    return
+                }
+
+                setLogoUrl(null)
             } catch (_error) {
                 if (!active) return
-                setLogoUrl(DEFAULT_LOGO)
-                setLogoError(true)
+                setLogoUrl(null)
+            } finally {
+                if (active) setLogoLoading(false)
             }
         }
 
@@ -113,28 +149,34 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
         }
     }, [user?.iud, user?._id, user?.correo])
 
+    const cargarMenuDinamico = useCallback(async (): Promise<void> => {
+        try {
+            const resolvedItems = await getMenuUsuarioRoutes()
+            console.log('[MABS][AdminNavbar][cargarMenuDinamico][resolvedItems]', resolvedItems)
+            setDynamicMenuItems(Array.isArray(resolvedItems) ? resolvedItems : [])
+        } catch (error) {
+            console.error('Error cargando menu dinamico del avatar:', error)
+            setDynamicMenuItems([])
+        }
+    }, [])
+
     useEffect(() => {
-        let active = true
+        void cargarMenuDinamico()
 
-        const cargarMenuDinamico = async (): Promise<void> => {
-            console.log('[MenuDinamico] Iniciando llamada...')
-            try {
-                const response = await resolveCurrentRouteMenuTags({ menuTipo: 'USER_DROPDOWN' })
-                console.log('[MenuDinamico] Respuesta:', response)
-                if (!active) return
-                setDynamicMenuTags(Array.isArray(response?.data) ? response.data.filter((item) => item.estado !== false) : [])
-            } catch (error) {
-                console.error('[MenuDinamico] Error:', error)
-                if (!active) return
-                setDynamicMenuTags([])
-            }
+        const handleMenuUpdated = (): void => {
+            void cargarMenuDinamico()
         }
 
-        cargarMenuDinamico()
+        window.addEventListener('user-menu-tags-updated', handleMenuUpdated)
         return () => {
-            active = false
+            window.removeEventListener('user-menu-tags-updated', handleMenuUpdated)
         }
-    }, [user?.iud, user?._id, user?.correo])
+    }, [cargarMenuDinamico, user?._id])
+
+    useEffect(() => {
+        if (!menuOpen) return
+        void cargarMenuDinamico()
+    }, [menuOpen, cargarMenuDinamico])
 
     const toggleTheme = (): void => {
         setTheme(theme === 'dark' ? 'light' : 'dark')
@@ -142,7 +184,7 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
 
     const handleLogout = (): void => {
         logout()
-        navigate('/public/render/view/login')
+        navigate(getGovernedLogoutPath())
     }
 
     const handleMenuToggle = (): void => {
@@ -169,18 +211,20 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
         return user?.correo || 'admin@example.com'
     }
 
-    const menuItems = dynamicMenuTags.map((tag) => ({
-        key: tag.iud,
-        label: tag.label,
-        path: tag.ruta?.path || tag.routePath,
-        Icon: MENU_ICON_MAP[String(tag.iconKey || '').toUpperCase()] || UserIcon,
-        visible: true,
-    }))
+    const menuItems = [...dynamicMenuItems]
+        .sort((a, b) => Number(a.order ?? 0) - Number(b.order ?? 0) || String(a.label || '').localeCompare(String(b.label || '')))
+        .map((item) => ({
+            key: item.key,
+            label: item.label,
+            path: item.path,
+            Icon: MENU_ICON_MAP[String(item.icon || '').toUpperCase()] || UserIcon,
+            visible: true,
+        }))
 
     const visibleMenuItems = menuItems.filter((item) => item.visible && item.path)
 
     const renderProfileDropdown = (
-        <DropdownMenu>
+        <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
             <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="icon" className="h-9 w-9 p-0 rounded-full hover:border-primary/40 transition-colors">
                     <Avatar className="h-full w-full">
@@ -190,63 +234,79 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
                     </Avatar>
                 </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-72 p-0 overflow-hidden rounded-2xl border border-border/40 shadow-2xl backdrop-blur-xl bg-background/95" align="end" sideOffset={8}>
-
-                {/* Header usuario */}
-                <div className="flex items-center gap-3 px-4 py-3 bg-primary/5 border-b border-border/30">
-                    <Avatar className="h-10 w-10 shrink-0">
-                        <AvatarFallback className="bg-primary text-primary-foreground text-sm font-bold">
-                            {getUserInitials()}
-                        </AvatarFallback>
-                    </Avatar>
-                    <div className="min-w-0">
-                        <p className="text-sm font-semibold text-foreground truncate">{getUserName()}</p>
-                        <p className="text-[11px] text-muted-foreground truncate">{getUserEmail()}</p>
+            <DropdownMenuContent
+                className="w-80 overflow-hidden rounded-3xl border border-primary/10 bg-background/95 p-0 shadow-2xl backdrop-blur-2xl"
+                align="end"
+                sideOffset={14}
+            >
+                <div className="border-b border-primary/10 bg-gradient-to-br from-primary/10 via-background to-amber-50/80 px-4 py-4">
+                    <div className="flex items-center gap-3">
+                        <Avatar className="h-11 w-11 ring-2 ring-primary/15">
+                            <AvatarFallback className="bg-primary text-primary-foreground text-sm font-semibold">
+                                {getUserInitials()}
+                            </AvatarFallback>
+                        </Avatar>
+                        <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-semibold leading-none text-foreground">{getUserName()}</p>
+                            <p className="mt-1 truncate text-xs text-muted-foreground">{getUserEmail()}</p>
+                            <div className="mt-2 flex flex-wrap items-center gap-2">
+                                <div className="inline-flex items-center rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-medium text-primary">
+                                    Panel privado
+                                </div>
+                                <div className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-medium text-amber-700">
+                                    {menuItems.length} accesos
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
-
-                {/* Grid de accesos rápidos */}
-                {visibleMenuItems.length > 0 && (
-                    <div className="p-3">
-                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest mb-2 px-1">
-                            Accesos rápidos
-                        </p>
-                        <div className="grid grid-cols-3 gap-2">
-                            {visibleMenuItems.map((item) => {
+                <div className="px-3 py-3">
+                    {menuItems.filter((item) => item.visible && item.path).length > 0 ? (
+                        <div className="space-y-1.5">
+                            <div className="px-2 pb-1 text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                                Navegacion dinamica
+                            </div>
+                            {menuItems.filter((item) => item.visible && item.path).map((item) => {
                                 const Icon = item.Icon
                                 return (
-                                    <button
+                                    <DropdownMenuItem
                                         key={item.key}
-                                        onClick={() => navigate(item.path)}
-                                        className="flex flex-col items-center gap-1.5 p-2.5 rounded-xl hover:bg-primary/8 hover:text-primary transition-all duration-150 group cursor-pointer"
+                                        asChild
+                                        className="cursor-pointer rounded-2xl px-3 py-0 focus:bg-transparent"
                                     >
-                                        <div className="w-9 h-9 rounded-xl bg-muted/60 group-hover:bg-primary/10 flex items-center justify-center transition-colors">
-                                            <Icon className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
-                                        </div>
-                                        <span className="text-[10px] font-medium text-muted-foreground group-hover:text-primary text-center leading-tight transition-colors line-clamp-2">
-                                            {item.label}
-                                        </span>
-                                    </button>
+                                        <a
+                                            href={item.path}
+                                            onClick={(e) => { e.preventDefault(); navigate(item.path) }}
+                                            className="group flex min-h-[56px] items-center gap-3 rounded-2xl border border-transparent bg-muted/35 px-3 py-3 transition-all hover:border-primary/15 hover:bg-primary/5"
+                                        >
+                                            <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary transition-transform group-hover:scale-105">
+                                                <Icon className="h-4.5 w-4.5" />
+                                            </span>
+                                            <span className="min-w-0 flex-1">
+                                                <span className="block truncate text-sm font-medium text-foreground">{item.label}</span>
+                                                <span className="block truncate text-xs text-muted-foreground">{item.path}</span>
+                                            </span>
+                                        </a>
+                                    </DropdownMenuItem>
                                 )
                             })}
                         </div>
-                    </div>
-                )}
-
-                {/* Logout */}
-                <div className={`px-3 pb-3 ${visibleMenuItems.length > 0 ? 'pt-0' : 'pt-3'}`}>
-                    {visibleMenuItems.length > 0 && <div className="border-t border-border/30 mb-3" />}
-                    <button
-                        onClick={handleLogout}
-                        className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-destructive hover:bg-destructive/8 transition-all duration-150 cursor-pointer"
-                    >
-                        <div className="w-8 h-8 rounded-lg bg-destructive/10 flex items-center justify-center shrink-0">
-                            <LogOut className="w-3.5 h-3.5 text-destructive" />
+                    ) : (
+                        <div className="rounded-2xl border border-dashed border-primary/15 bg-muted/20 px-4 py-5 text-center">
+                            <p className="text-sm font-medium text-foreground">Sin accesos visibles</p>
+                            <p className="mt-1 text-xs text-muted-foreground">Cuando parametrices los tags del avatar, apareceran aqui.</p>
                         </div>
-                        <span className="text-sm font-medium">Cerrar Sesión</span>
-                    </button>
+                    )}
                 </div>
-
+                <div className="border-t border-primary/10 bg-muted/15 p-3">
+                    <DropdownMenuItem
+                        onClick={handleLogout}
+                        className="cursor-pointer rounded-2xl px-3 py-3 text-destructive focus:bg-destructive/5 focus:text-destructive"
+                    >
+                        <LogOut className="mr-2 h-4 w-4" />
+                        Cerrar Sesion
+                    </DropdownMenuItem>
+                </div>
             </DropdownMenuContent>
         </DropdownMenu>
     )
@@ -260,17 +320,24 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
                         <span className="sr-only">Toggle sidebar</span>
                     </Button>
 
-                    <div className="dark:bg-white dark:rounded-lg dark:p-1.5 dark:shadow-sm">
-                        <img
-                            src={logoError ? DEFAULT_LOGO : logoUrl}
-                            alt="Mabs Logo"
-                            className="h-7 md:h-8 cursor-pointer flex-shrink-0 hover:opacity-80 transition-opacity"
-                            onClick={() => navigate(adminHomePath)}
-                            onError={() => {
-                                setLogoError(true)
-                                setLogoUrl(DEFAULT_LOGO)
-                            }}
-                        />
+                    <div
+                        className="cursor-pointer flex-shrink-0 hover:opacity-80 transition-opacity dark:bg-white dark:rounded-lg dark:p-1.5 dark:shadow-sm"
+                        onClick={() => navigate(adminHomePath)}
+                    >
+                        {logoLoading ? (
+                            <div className="h-7 md:h-8 w-20 rounded bg-muted animate-pulse" />
+                        ) : logoUrl ? (
+                            <img
+                                src={logoUrl}
+                                alt="Logo"
+                                className="h-7 md:h-8"
+                                onError={() => setLogoUrl(null)}
+                            />
+                        ) : (
+                            <span className="text-xs text-muted-foreground italic px-1">
+                                Sin logo guardado
+                            </span>
+                        )}
                     </div>
                 </div>
 

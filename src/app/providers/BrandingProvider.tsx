@@ -1,10 +1,14 @@
 import React, { useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { BrandingConfig, BrandingPalette, obtenerBrandingPublico } from '@/app/services/brandingWidget';
+import { aplicarPaletaEnApp, restaurarPaletaLocal, type ColoresPaleta } from '@/app/utils/ColorUtils';
+import { apiFetch } from '@/app/services/api';
 
 interface BrandingProviderProps {
   children: React.ReactNode;
 }
+
+// Helpers de CSS variables
 
 const paletteKeyToCssVar = (key: string): string =>
   key.replace(/[A-Z]/g, (m) => `-${m.toLowerCase()}`);
@@ -41,26 +45,13 @@ const applyBranding = (branding: BrandingConfig, appliedVars: Set<string>): void
   setVar('--button-radius', radius);
   setVar('--button-font-weight', fontWeight);
 
-  Object.entries(branding.tipografia?.extras || {}).forEach(([key, value]) => {
-    setVar(`--${key}`, value);
-  });
-
-  Object.entries(branding.botones?.extras || {}).forEach(([key, value]) => {
-    setVar(`--${key}`, value);
-  });
-
-  Object.entries(branding.paleta?.extras || {}).forEach(([key, value]) => {
-    setVar(`--${key}`, value);
-  });
-
-  Object.entries(branding.tokens || {}).forEach(([key, value]) => {
-    setVar(`--${key}`, value);
-  });
+  Object.entries(branding.tipografia?.extras || {}).forEach(([key, value]) => setVar(`--${key}`, value));
+  Object.entries(branding.botones?.extras || {}).forEach(([key, value]) => setVar(`--${key}`, value));
+  Object.entries(branding.paleta?.extras || {}).forEach(([key, value]) => setVar(`--${key}`, value));
+  Object.entries(branding.tokens || {}).forEach(([key, value]) => setVar(`--${key}`, value));
 
   appliedVars.forEach((cssVar) => {
-    if (!nextVars.has(cssVar)) {
-      root.style.removeProperty(cssVar);
-    }
+    if (!nextVars.has(cssVar)) root.style.removeProperty(cssVar);
   });
   appliedVars.clear();
   nextVars.forEach((cssVar) => appliedVars.add(cssVar));
@@ -80,12 +71,8 @@ const mergeDeep = <T extends Record<string, unknown>>(target: T, source: Record<
     const sourceValue = source[key];
     const targetValue = output[key];
     if (
-      sourceValue &&
-      typeof sourceValue === 'object' &&
-      !Array.isArray(sourceValue) &&
-      targetValue &&
-      typeof targetValue === 'object' &&
-      !Array.isArray(targetValue)
+      sourceValue && typeof sourceValue === 'object' && !Array.isArray(sourceValue) &&
+      targetValue && typeof targetValue === 'object' && !Array.isArray(targetValue)
     ) {
       output[key] = mergeDeep(targetValue as Record<string, unknown>, sourceValue as Record<string, unknown>);
     } else if (sourceValue !== undefined) {
@@ -117,14 +104,32 @@ const applyRouteOverrides = (branding: BrandingConfig, pathname: string): Brandi
   });
 
   if (!match) return branding;
-
   const overrides = (match.overrides || {}) as Record<string, unknown>;
   return mergeDeep(branding as Record<string, unknown>, overrides) as BrandingConfig;
+};
+
+// Carga y aplica la paleta activa del email-paleta endpoint
+// Se ejecuta una vez al montar. Si el usuario no está autenticado el fetch
+// falla silenciosamente y la paleta del localStorage (si existe) sigue activa.
+const cargarYAplicarPaletaActiva = async (): Promise<void> => {
+  try {
+    const res = await apiFetch('/api/email-paleta', { method: 'GET', logoutOn401: false });
+    const paletas: Array<{ activa: boolean; colores: ColoresPaleta }> = res?.paletas ?? [];
+    const activa = paletas.find(p => p.activa === true);
+    if (activa?.colores) {
+      aplicarPaletaEnApp(activa.colores);
+    }
+  } catch {
+    // Si falla (usuario no autenticado o error de red), restaurar desde
+    // localStorage para mantener el último color conocido
+    restaurarPaletaLocal();
+  }
 };
 
 export default function BrandingProvider({ children }: BrandingProviderProps): React.ReactElement {
   const location = useLocation();
   const appliedVarsRef = useRef<Set<string>>(new Set());
+  const paletaLoadedRef = useRef(false);
 
   useEffect(() => {
     let brandingSnapshot: BrandingConfig | null = null;
@@ -146,11 +151,26 @@ export default function BrandingProvider({ children }: BrandingProviderProps): R
       } catch (error) {
         console.warn('No se pudo aplicar branding dinamico:', error);
       }
+
+      // Aplicar la paleta activa DESPUÉS del branding en cada cambio de ruta.
+      // Esto es necesario porque applyBranding sobreescribe las CSS variables
+      // en cada navegación. La paleta debe aplicarse siempre al final para
+      // que sus colores tengan precedencia sobre el branding base.
+      // Paso 1: restaurar desde localStorage instantáneamente (sin fetch)
+      // para que el color correcto aparezca de inmediato sin esperar la red.
+      restaurarPaletaLocal();
+
+      // Paso 2: solo en la primera carga, confirmado con el backend.
+      // En navegaciones posteriores, localStorage es suficiente.
+      if (!paletaLoadedRef.current) {
+        paletaLoadedRef.current = true;
+        await cargarYAplicarPaletaActiva();
+      }
     };
 
     observer.observe(document.documentElement, {
       attributes: true,
-      attributeFilter: ['class']
+      attributeFilter: ['class'],
     });
 
     cargarBranding();

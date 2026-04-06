@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { toast } from 'react-toastify';
 import type { ResultadoPago } from '@/app/presentation/pages/membresia/MembershipPayment';
+import { getPrivateHomeRoute } from '@/app/services/routeService';
 
 interface PersonalInfo {
   email: string;
@@ -288,6 +289,7 @@ export function useMembershipPaymentForm({
         data?.transaccion?.reference ??
         data?.data?.reference ??
         data?.referencia ??
+        data?.reference ??
         '';
 
       const montoRaw: number =
@@ -314,7 +316,8 @@ export function useMembershipPaymentForm({
         });
       } else {
         // Fallback por si el hook se usa sin el modal
-        navigate('/membresia/dashboard');
+        const privateHome = await getPrivateHomeRoute();
+        navigate(privateHome || '/admin');
       }
 
     } catch (error: any) {

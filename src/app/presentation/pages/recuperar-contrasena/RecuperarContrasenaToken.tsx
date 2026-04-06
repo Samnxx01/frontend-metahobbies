@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, useSearchParams, Link } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams, Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Loader2, KeyRound, Eye, EyeOff, CheckCircle2, ArrowLeft, ShieldAlert } from 'lucide-react';
+import { getGovernedLoginPath } from '@/app/services/governedNavigation';
 const LOGO_URL = '/assets/logo.png';
 
 const schema = z.object({
@@ -26,11 +27,12 @@ type FormData = z.infer<typeof schema>;
 
 export default function RecuperarContrasenaToken() {
     const navigate = useNavigate();
+    const { token } = useParams();
     const [params] = useSearchParams();
 
     // El backend envía el enlace con el token en un query param, p.ej. ?token=84bca...
     // Si el backend usa otro nombre de param, se ajusta aquí.
-    const tokenUrl = params.get('token') ?? params.get('fantasma') ?? '';
+    const tokenUrl = token ?? params.get('token') ?? params.get('fantasma') ?? '';
 
     const [exito, setExito] = useState(false);
     const [loading, setLoading] = useState(false);
@@ -85,7 +87,7 @@ export default function RecuperarContrasenaToken() {
                             Tu contraseña fue cambiada correctamente. Ya puedes iniciar sesión.
                         </p>
                     </div>
-                    <Button onClick={() => navigate('/public/render/view/login')} className="gap-2 text-sm">
+                    <Button onClick={() => navigate(getGovernedLoginPath())} className="gap-2 text-sm">
                         Ir al inicio de sesión
                     </Button>
                 </div>
@@ -260,7 +262,7 @@ export default function RecuperarContrasenaToken() {
 
                 <div className="text-center">
                     <Link
-                        to="/public/render/view/login"
+                        to={getGovernedLoginPath()}
                         className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
                     >
                         <ArrowLeft className="w-3.5 h-3.5" />

@@ -12,6 +12,12 @@ export interface BackendCategoria {
   estado: boolean;
 }
 
+export interface CategoriaPayload {
+  nombre: string;
+  descripcion?: string;
+  padre?: string | null;
+}
+
 export interface BackendProducto {
   iud: string;
   sku?: string;
@@ -22,6 +28,10 @@ export interface BackendProducto {
   moneda: string;
   tipo: string;
   categoria?: BackendCategoria | string | null;
+  unidadMedida?: string;
+  stockMinimo?: number;
+  fechaVencimiento?: string | null;
+  peso?: number | null;
   imagenes?: string[];
   estadoCatalogo: string;
   estadoProducto: boolean;
@@ -54,12 +64,37 @@ export interface FiltrosProductos {
   estadoCatalogo?: string;
 }
 
+export interface AdminProductoPayload {
+  nombre: string;
+  sku?: string;
+  descripcion?: string;
+  descripcionCorta?: string;
+  precio: number;
+  moneda: string;
+  tipo: string;
+  categoria?: string | null;
+  unidadMedida?: string;
+  stockMinimo?: number;
+  fechaVencimiento?: string | null;
+  peso?: number | null;
+  imagenes?: string[];
+  estadoCatalogo?: string;
+}
+
 const productosService = {
 
   /** Lista categorías activas del catálogo */
   async listarCategorias(): Promise<BackendCategoria[]> {
     const resp = await apiFetchPublic('/api/productos/categorias');
     return (resp?.data ?? []) as BackendCategoria[];
+  },
+
+  async crearCategoria(payload: CategoriaPayload): Promise<BackendCategoria> {
+    const resp = await apiFetch('/api/productos/categorias', {
+      method: 'POST',
+      body: payload,
+    });
+    return resp?.data as BackendCategoria;
   },
 
   /** Lista productos con filtros opcionales */
@@ -72,6 +107,35 @@ const productosService = {
     const query = params.toString() ? `?${params.toString()}` : '';
     const resp = await apiFetchPublic(`/api/productos/listar${query}`);
     return (resp?.data ?? []) as BackendProducto[];
+  },
+
+  async listarProductosAdmin(filtros: FiltrosProductos = {}): Promise<BackendProducto[]> {
+    const params = new URLSearchParams();
+    if (filtros.categoria) params.set('categoria', filtros.categoria);
+    if (filtros.tipo) params.set('tipo', filtros.tipo);
+    if (filtros.estadoCatalogo) params.set('estadoCatalogo', filtros.estadoCatalogo);
+    const query = params.toString() ? `?${params.toString()}` : '';
+    const resp = await apiFetch(`/api/productos/listar${query}`, { method: 'GET' });
+    return (resp?.data ?? []) as BackendProducto[];
+  },
+
+  async obtenerProductoAdmin(id: string): Promise<BackendProducto> {
+    const resp = await apiFetch(`/api/productos/admin/${id}`, { method: 'GET' });
+    return resp?.data as BackendProducto;
+  },
+
+  async crearProductoAdmin(payload: AdminProductoPayload): Promise<BackendProducto> {
+    const resp = await apiFetch('/api/productos/admin/crear', { method: 'POST', body: payload });
+    return resp?.data as BackendProducto;
+  },
+
+  async actualizarProductoAdmin(id: string, payload: Partial<AdminProductoPayload>): Promise<BackendProducto> {
+    const resp = await apiFetch(`/api/productos/admin/${id}`, { method: 'PUT', body: payload });
+    return resp?.data as BackendProducto;
+  },
+
+  async desactivarProductoAdmin(id: string): Promise<void> {
+    await apiFetch(`/api/productos/admin/desactivar/${id}`, { method: 'DELETE' });
   },
 
   /** Lista productos mapeados directamente a ComponentProduct */

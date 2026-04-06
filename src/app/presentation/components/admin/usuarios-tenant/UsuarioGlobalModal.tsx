@@ -16,7 +16,8 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import { Loader2, UserPlus } from 'lucide-react';
+import { Info, Loader2, UserPlus, RefreshCw } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
 import type { CreateUsuarioGlobalData, TenantGlobalInfo } from '@/app/services/tenantUsuariosService';
 import { RH_OPTIONS } from './catalogos';
 
@@ -30,6 +31,10 @@ interface UsuarioGlobalModalProps {
     tenantsGlobales?: TenantGlobalInfo[];
     /** Scope del usuario autenticado */
     scope: 'SUPER_ADMIN' | 'TENANT_GLOBAL' | 'CORPORATIVO';
+    /** Función para sincronizar canReferir */
+    onSincronizarCanReferir?: (canReferir: boolean) => Promise<any>;
+    isSincronizando?: boolean;
+    sincronizarError?: Error | null;
 }
 
 interface FormState {
@@ -43,6 +48,7 @@ interface FormState {
     direccion: string;
     rh: string;
     fecha_nacimiento: string;
+    canReferir: boolean;
 }
 
 const EMPTY_FORM: FormState = {
@@ -56,6 +62,7 @@ const EMPTY_FORM: FormState = {
     direccion: '',
     rh: '',
     fecha_nacimiento: '',
+    canReferir: true,
 };
 
 export const UsuarioGlobalModal = ({
@@ -66,6 +73,9 @@ export const UsuarioGlobalModal = ({
     submitError,
     tenantsGlobales = [],
     scope,
+    onSincronizarCanReferir,
+    isSincronizando = false,
+    sincronizarError,
 }: UsuarioGlobalModalProps): React.ReactElement => {
     const [form, setForm] = useState<FormState>(EMPTY_FORM);
 
@@ -93,6 +103,7 @@ export const UsuarioGlobalModal = ({
             direccion: form.direccion,
             rh: form.rh,
             fecha_nacimiento: form.fecha_nacimiento,
+            canReferir: form.canReferir,
         };
         if (scope === 'SUPER_ADMIN' && form.tenantGlobalId) {
             payload.tenantGlobalId = form.tenantGlobalId;
@@ -262,6 +273,69 @@ export const UsuarioGlobalModal = ({
                                 />
                             </div>
                         </div>
+
+                        {/* Puede generar referidos */}
+                        <div className="flex items-center justify-between rounded-md border px-3 py-3">
+                            <div className="space-y-0.5">
+                                <Label className="text-sm font-medium">Puede generar referidos</Label>
+                                <p className="text-xs text-muted-foreground">
+                                    Permite que este usuario genere enlaces de referido en el sistema multinivel.
+                                </p>
+                            </div>
+                            <Switch
+                                checked={form.canReferir}
+                                onCheckedChange={(checked) =>
+                                    setForm(prev => ({ ...prev, canReferir: checked }))
+                                }
+                            />
+                        </div>
+
+                        {/* Botones de sincronización */}
+                        {scope === 'SUPER_ADMIN' && onSincronizarCanReferir && (
+                            <div className="space-y-2">
+                                <Label className="text-sm font-medium">Sincronizar referidos</Label>
+                                <p className="text-xs text-muted-foreground">
+                                    Ajusta el estado de "puede referir" para todos los usuarios existentes en este tenant.
+                                </p>
+                                <div className="flex gap-2">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => onSincronizarCanReferir(true)}
+                                        disabled={isSincronizando}
+                                        className="flex-1"
+                                    >
+                                        {isSincronizando ? (
+                                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                        ) : (
+                                            <RefreshCw className="h-4 w-4 mr-2" />
+                                        )}
+                                        Habilitar todos
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => onSincronizarCanReferir(false)}
+                                        disabled={isSincronizando}
+                                        className="flex-1"
+                                    >
+                                        {isSincronizando ? (
+                                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                        ) : (
+                                            <RefreshCw className="h-4 w-4 mr-2" />
+                                        )}
+                                        Deshabilitar todos
+                                    </Button>
+                                </div>
+                                {sincronizarError && (
+                                    <p className="text-xs text-destructive">
+                                        Error al sincronizar: {sincronizarError.message}
+                                    </p>
+                                )}
+                            </div>
+                        )}
 
                         {submitError && (
                             <p className="text-sm text-destructive">

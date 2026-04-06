@@ -3,6 +3,7 @@ import { apiFetch } from '@/app/services/api';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
 import { Loader2, Image as ImageIcon, Upload, ChevronLeft, ChevronRight, Eye, X, CheckCircle2, Trash2 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { format, isValid, parseISO } from 'date-fns';
@@ -11,21 +12,44 @@ import { useAuth } from '@/app/providers/AuthProvider';
 
 const ITEMS_PER_PAGE = 10;
 
-type TenantOption = { id: string; label: string };
+type TenantOption = {
+  id: string;
+  label: string;
+  razonSocial?: string;
+  estadoPerfilCorporativo?: string;
+};
+
+const getReadableErrorMessage = (error: unknown, fallback: string) => {
+  const rawMessage =
+    typeof error === 'string'
+      ? error
+      : error && typeof error === 'object' && 'message' in error
+        ? String((error as { message?: unknown }).message || '')
+        : '';
+
+  const cleaned = rawMessage.replace(/^\[\d+\]\s*/, '').trim();
+  return cleaned || fallback;
+};
 
 export default function LogosCorporativos() {
   const { user } = useAuth();
+  const tenantScope = user?.auth?.tenantScope || {};
   const normalizedRole = String(user?.role || user?.rol || '').toUpperCase();
-  const isTenantSuperAdmin = normalizedRole === 'DIOS';
+  const isTenantSuperAdmin =
+    (!!tenantScope?.tenantSuperAdminId && !tenantScope?.tenantGlobalId) ||
+    normalizedRole === 'DIOS' ||
+    normalizedRole === 'DESAROLLADOR';
+  const isTenantGlobal = !!tenantScope?.tenantGlobalId;
 
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [viewLoading, setViewLoading] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [updatingPublicoId, setUpdatingPublicoId] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
 
   const [tenantOptions, setTenantOptions] = useState<TenantOption[]>([]);
-  const [selectedTenantGlobalId, setSelectedTenantGlobalId] = useState<string>('');
+  const [selectedPerfilCorporativoId, setSelectedPerfilCorporativoId] = useState<string>('');
   const [loadingTenantOptions, setLoadingTenantOptions] = useState(false);
 
   const [isListModalOpen, setIsListModalOpen] = useState(false);
@@ -33,11 +57,14 @@ export default function LogosCorporativos() {
   const [currentPage, setCurrentPage] = useState(1);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const canDeactivateLogo = (logo: any) => !!logo?.estadoActivo && isTenantGlobal && !isTenantSuperAdmin;
+  const canDeleteLogo = () => isTenantSuperAdmin;
+
   const fetchLogos = async () => {
     setLoading(true);
     try {
-      const query = isTenantSuperAdmin && selectedTenantGlobalId
-        ? `?tenantGlobalId=${encodeURIComponent(selectedTenantGlobalId)}`
+      const query = isTenantSuperAdmin && selectedPerfilCorporativoId
+        ? `?perfilCorporativoId=${encodeURIComponent(selectedPerfilCorporativoId)}`
         : '';
       const res = await apiFetch(`/api/config/parametrizacion/listar/logos/coporativa${query}`, {
         method: 'GET',
@@ -46,7 +73,7 @@ export default function LogosCorporativos() {
       setData(res);
     } catch (err: any) {
       console.error('Error cargando logos:', err);
-      toast.error('Error cargando logos');
+      toast.error(getReadableErrorMessage(err, 'No pudimos cargar los logos. Intenta nuevamente.'));
     } finally {
       setLoading(false);
     }
@@ -55,7 +82,7 @@ export default function LogosCorporativos() {
   useEffect(() => {
     fetchLogos();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedTenantGlobalId, isTenantSuperAdmin]);
+  }, [selectedPerfilCorporativoId, isTenantSuperAdmin]);
 
   useEffect(() => {
     let active = true;
@@ -80,9 +107,11 @@ export default function LogosCorporativos() {
         const raw = Array.isArray(res?.data) ? res.data : [];
         const mapped: TenantOption[] = raw
           .map((item: any) => {
-            const id = String(item?.tenantGlobalId || item?.id || item?._id || '').trim();
-            const label = String(item?.label || item?.razonSocial || id).trim();
-            return id ? { id, label } : null;
+            const id = String(item?.perfilCorporativoId || item?.id || item?._id || '').trim();
+            const razonSocial = String(item?.razonSocial || '').trim();
+            const label = String(item?.label || razonSocial || id).trim();
+            const estadoPerfilCorporativo = String(item?.estadoPerfilCorporativo || '').trim();
+            return id ? { id, label, razonSocial, estadoPerfilCorporativo } : null;
           })
           .filter(Boolean) as TenantOption[];
 
@@ -115,14 +144,15 @@ export default function LogosCorporativos() {
           id: res.logo.id || id,
           url: dataUri,
           nombre: res.logo.nombre,
-          estadoActivo: !!res.logo.estadoActivo
+          estadoActivo: !!res.logo.estadoActivo,
+          estadoPublico: !!res.logo.estadoPublico
         });
       } else {
-        toast.error('No se pudo cargar la imagen.');
+        toast.error('No pudimos cargar la imagen del logo.');
       }
     } catch (error) {
       console.error('Error al visualizar logo:', error);
-      toast.error('Error al visualizar logo.');
+      toast.error(getReadableErrorMessage(error, 'No pudimos abrir el logo. Intenta nuevamente.'));
     } finally {
       setViewLoading(null);
     }
@@ -142,12 +172,12 @@ export default function LogosCorporativos() {
         return;
       }
 
-      toast.success('Logo activo actualizado');
+      toast.success('Logo activado correctamente.');
       setSelectedLogo((prev: any) => (prev ? { ...prev, estadoActivo: true } : prev));
       await fetchLogos();
     } catch (error) {
       console.error('Error al activar logo:', error);
-      toast.error('Error al activar logo');
+      toast.error(getReadableErrorMessage(error, 'No pudimos activar el logo. Intenta nuevamente.'));
     } finally {
       setSubmitting(false);
     }
@@ -167,14 +197,126 @@ export default function LogosCorporativos() {
         return;
       }
 
-      toast.success('Logo eliminado correctamente');
+      toast.success('Logo eliminado correctamente.');
       setSelectedLogo(null);
       await fetchLogos();
     } catch (error) {
       console.error('Error al eliminar logo:', error);
-      toast.error('Error al eliminar logo');
+      toast.error(getReadableErrorMessage(error, 'No pudimos eliminar el logo. Intenta nuevamente.'));
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleDeleteLogoById = async (logoId: string) => {
+    if (!logoId || !isTenantSuperAdmin) return;
+    setSubmitting(true);
+    try {
+      const res = await apiFetch(`/api/config/parametrizacion/eliminar/logos/coporativa/${logoId}`, {
+        method: 'DELETE',
+        useAuth: true
+      });
+
+      if (!res?.ok) {
+        toast.error(res?.msg || 'No se pudo eliminar el logo');
+        return;
+      }
+
+      toast.success('Logo eliminado correctamente.');
+      if (selectedLogo?.id === logoId) setSelectedLogo(null);
+      await fetchLogos();
+    } catch (error) {
+      console.error('Error al eliminar logo:', error);
+      toast.error(getReadableErrorMessage(error, 'No pudimos eliminar el logo. Intenta nuevamente.'));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDeactivateLogo = async () => {
+    if (!selectedLogo?.id || !isTenantGlobal || isTenantSuperAdmin) return;
+    setSubmitting(true);
+    try {
+      const res = await apiFetch(`/api/config/parametrizacion/desactivar/logos/coporativa/${selectedLogo.id}`, {
+        method: 'PUT',
+        useAuth: true
+      });
+
+      if (!res?.ok) {
+        toast.error(res?.msg || 'No se pudo desactivar el logo');
+        return;
+      }
+
+      toast.success('Logo desactivado correctamente.');
+      setSelectedLogo((prev: any) => (prev ? { ...prev, estadoActivo: false } : prev));
+      await fetchLogos();
+    } catch (error) {
+      console.error('Error al desactivar logo:', error);
+      toast.error(getReadableErrorMessage(error, 'No pudimos desactivar el logo. Intenta nuevamente.'));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDeactivateLogoById = async (logoId: string) => {
+    if (!logoId || !isTenantGlobal || isTenantSuperAdmin) return;
+    setSubmitting(true);
+    try {
+      const res = await apiFetch(`/api/config/parametrizacion/desactivar/logos/coporativa/${logoId}`, {
+        method: 'PUT',
+        useAuth: true
+      });
+
+      if (!res?.ok) {
+        toast.error(res?.msg || 'No se pudo desactivar el logo');
+        return;
+      }
+
+      toast.success('Logo desactivado correctamente.');
+      if (selectedLogo?.id === logoId) {
+        setSelectedLogo((prev: any) => (prev ? { ...prev, estadoActivo: false } : prev));
+      }
+      await fetchLogos();
+    } catch (error) {
+      console.error('Error al desactivar logo:', error);
+      toast.error(getReadableErrorMessage(error, 'No pudimos desactivar el logo. Intenta nuevamente.'));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleToggleEstadoPublico = async (logoId: string, nextValue: boolean) => {
+    setUpdatingPublicoId(logoId);
+    try {
+      const res = await apiFetch(`/api/config/parametrizacion/publico/logos/coporativa/${logoId}`, {
+        method: 'PUT',
+        useAuth: true,
+        body: { estadoPublico: nextValue }
+      });
+
+      if (!res?.ok) {
+        toast.error(res?.msg || 'No se pudo actualizar el estado publico');
+        return;
+      }
+
+      setData((prev: any) => ({
+        ...prev,
+        logos: Array.isArray(prev?.logos)
+          ? prev.logos.map((logo: any) => {
+              const currentId = logo._id || logo.id;
+              return currentId === logoId ? { ...logo, estadoPublico: nextValue } : logo;
+            })
+          : prev?.logos
+      }));
+      if (selectedLogo?.id === logoId) {
+        setSelectedLogo((prev: any) => (prev ? { ...prev, estadoPublico: nextValue } : prev));
+      }
+      toast.success(nextValue ? 'Logo publicado correctamente.' : 'Logo marcado como no publico.');
+    } catch (error) {
+      console.error('Error al actualizar estado publico:', error);
+      toast.error(getReadableErrorMessage(error, 'No pudimos cambiar el estado publico del logo.'));
+    } finally {
+      setUpdatingPublicoId(null);
     }
   };
 
@@ -195,8 +337,8 @@ export default function LogosCorporativos() {
     try {
       const formData = new FormData();
       formData.append('archivo', file);
-      if (isTenantSuperAdmin && selectedTenantGlobalId) {
-        formData.append('tenantGlobalId', selectedTenantGlobalId);
+      if (isTenantSuperAdmin && selectedPerfilCorporativoId) {
+        formData.append('perfilCorporativoId', selectedPerfilCorporativoId);
       }
 
       await apiFetch('/api/config/parametrizacion/guardar/logos/coporativa', {
@@ -210,7 +352,7 @@ export default function LogosCorporativos() {
       await fetchLogos();
     } catch (err: any) {
       console.error('Error al subir logo:', err);
-      toast.error(err.message || 'Error al subir imagen');
+      toast.error(getReadableErrorMessage(err, 'No pudimos subir el logo. Intenta nuevamente.'));
     } finally {
       setSubmitting(false);
     }
@@ -230,7 +372,7 @@ export default function LogosCorporativos() {
   const logosPaginados = logosList.slice(startIndex, startIndex + ITEMS_PER_PAGE);
 
   const renderRow = (logo: any) => {
-    const logoId = logo.iud || logo._id || logo.id;
+    const logoId = logo._id || logo.id;
     return (
       <tr key={logoId} className="border-t hover:bg-muted/20 transition-colors">
         <td className="px-4 py-3 truncate max-w-[220px]" title={logo.nombre_documento || logo.nombre}>
@@ -245,7 +387,16 @@ export default function LogosCorporativos() {
         </td>
         {isTenantSuperAdmin && (
           <td className="px-4 py-3 text-xs text-muted-foreground">
-            {logo.tenantGlobalLabel || 'TenantSuperAdmin'}
+            <div className="space-y-1">
+              {logo.tenantGlobalLabel && logo.tenantGlobalLabel !== 'Sin razon social' && (
+                <div>{logo.tenantGlobalLabel}</div>
+              )}
+              {logo.perfilCorporativoLabel && (
+                <div className="text-[11px] text-muted-foreground/80">
+                  Corporativo: {logo.perfilCorporativoLabel}
+                </div>
+              )}
+            </div>
           </td>
         )}
         <td className="px-4 py-3">
@@ -253,23 +404,65 @@ export default function LogosCorporativos() {
             {getFileExtension(logo.mimetype)}
           </span>
         </td>
+        <td className="px-4 py-3">
+          <div className="flex items-center gap-2">
+            <Switch
+              checked={!!logo.estadoPublico}
+              onCheckedChange={(checked) => handleToggleEstadoPublico(logoId, checked)}
+              disabled={updatingPublicoId === logoId}
+            />
+            <span
+              className={`px-2 py-1 rounded-full text-[10px] font-bold ${
+                logo.estadoPublico
+                  ? 'bg-sky-100 text-sky-700'
+                  : 'bg-slate-100 text-slate-600'
+              }`}
+            >
+              {logo.estadoPublico ? 'Publico' : 'Privado'}
+            </span>
+          </div>
+        </td>
         <td className="px-4 py-3 text-muted-foreground text-xs">
           {formatDate(logo.usuCreacion || logo.createdAt)}
         </td>
         <td className="px-4 py-3 text-center">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-8 w-8 p-0"
-            onClick={() => handleViewLogo(logoId)}
-            disabled={viewLoading === logoId}
-          >
-            {viewLoading === logoId ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Eye className="h-4 w-4 text-primary" />
+          <div className="flex items-center justify-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0"
+              onClick={() => handleViewLogo(logoId)}
+              disabled={viewLoading === logoId}
+            >
+              {viewLoading === logoId ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Eye className="h-4 w-4 text-primary" />
+              )}
+            </Button>
+            {canDeactivateLogo(logo) && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleDeactivateLogoById(logoId)}
+                disabled={submitting}
+                className="h-8 px-2 text-xs"
+              >
+                Desactivar
+              </Button>
             )}
-          </Button>
+            {canDeleteLogo() && (
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => handleDeleteLogoById(logoId)}
+                disabled={submitting}
+                className="h-8 px-2 text-xs"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            )}
+          </div>
         </td>
       </tr>
     );
@@ -299,6 +492,7 @@ export default function LogosCorporativos() {
                           <th className="px-4 py-3 text-left font-semibold">Nombre</th>
                           {isTenantSuperAdmin && <th className="px-4 py-3 text-left font-semibold">Tenant Global</th>}
                           <th className="px-4 py-3 text-left font-semibold">Extension</th>
+                          <th className="px-4 py-3 text-left font-semibold">Estado Publico</th>
                           <th className="px-4 py-3 text-left font-semibold">Fecha</th>
                           <th className="px-4 py-3 text-center font-semibold">Ver</th>
                         </tr>
@@ -333,12 +527,15 @@ export default function LogosCorporativos() {
             {isTenantSuperAdmin && tenantOptions.length > 0 && (
               <div className="mb-3">
                 <label className="block text-xs font-medium text-muted-foreground mb-1">
-                  Tenant global destino (opcional para tenantSuperAdmin)
+                  Perfil corporativo destino (opcional para tenantSuperAdmin)
                 </label>
+                <p className="mb-2 text-[11px] text-muted-foreground">
+                  Si lo dejas vacio, el logo se guarda sin relacion y solo lo visualiza el tenantSuperAdmin que lo sube.
+                </p>
                 <select
                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  value={selectedTenantGlobalId}
-                  onChange={(e) => setSelectedTenantGlobalId(e.target.value)}
+                  value={selectedPerfilCorporativoId}
+                  onChange={(e) => setSelectedPerfilCorporativoId(e.target.value)}
                   disabled={loadingTenantOptions || submitting}
                 >
                   <option value="">Ver todos / usar contexto actual</option>
@@ -388,6 +585,7 @@ export default function LogosCorporativos() {
                   <th className="px-4 py-3 text-left">Nombre</th>
                   {isTenantSuperAdmin && <th className="px-4 py-3 text-left">Tenant Global</th>}
                   <th className="px-4 py-3 text-left">Extension</th>
+                  <th className="px-4 py-3 text-left">Estado Publico</th>
                   <th className="px-4 py-3 text-left">Fecha</th>
                   <th className="px-4 py-3 text-center">Accion</th>
                 </tr>
@@ -444,15 +642,42 @@ export default function LogosCorporativos() {
           </div>
           <div className="p-4 bg-white text-center">
             <p className="font-medium text-sm">{selectedLogo?.nombre}</p>
+            {selectedLogo?.id && (
+              <div className="mt-3 flex items-center justify-center gap-3">
+                <span className="text-xs font-medium text-muted-foreground">Estado publico</span>
+                <Switch
+                  checked={!!selectedLogo?.estadoPublico}
+                  onCheckedChange={(checked) => handleToggleEstadoPublico(selectedLogo.id, checked)}
+                  disabled={updatingPublicoId === selectedLogo.id}
+                />
+                <span
+                  className={`px-2 py-1 rounded-full text-[10px] font-bold ${
+                    selectedLogo?.estadoPublico
+                      ? 'bg-sky-100 text-sky-700'
+                      : 'bg-slate-100 text-slate-600'
+                  }`}
+                >
+                  {selectedLogo?.estadoPublico ? 'Publico' : 'Privado'}
+                </span>
+              </div>
+            )}
             <div className="mt-3 flex items-center justify-center gap-3">
               {selectedLogo?.estadoActivo ? (
                 <>
                   <span className="inline-flex items-center gap-1 text-emerald-600 text-sm font-medium">
                     <CheckCircle2 className="h-4 w-4" /> Logo activo en navbar
                   </span>
-                  <Button variant="outline" disabled className="inline-flex items-center gap-2">
-                    Desactivar
-                  </Button>
+                  {isTenantGlobal && !isTenantSuperAdmin && (
+                    <Button
+                      variant="outline"
+                      onClick={handleDeactivateLogo}
+                      disabled={submitting}
+                      className="inline-flex items-center gap-2"
+                    >
+                      {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
+                      Desactivar
+                    </Button>
+                  )}
                 </>
               ) : (
                 <Button onClick={handleSetActiveLogo} disabled={submitting} className="inline-flex items-center gap-2">

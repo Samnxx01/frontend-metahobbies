@@ -38,6 +38,19 @@ interface DesignFormState {
   inputBorder: string;
   inputBackground: string;
   tokensJson: string;
+  loginPath: string;
+  loginEnabled: boolean;
+  postLoginPath: string;
+  postLoginEnabled: boolean;
+  logoutPath: string;
+  logoutEnabled: boolean;
+  registerPath: string;
+  registerEnabled: boolean;
+  forgotPasswordPath: string;
+  forgotPasswordEnabled: boolean;
+  publicHomePath: string;
+  publicHomeEnabled: boolean;
+  allowedPathsJson: string;
 }
 
 const DEFAULT_FORM: DesignFormState = {
@@ -57,7 +70,25 @@ const DEFAULT_FORM: DesignFormState = {
   inputRadius: '',
   inputBorder: '',
   inputBackground: '',
-  tokensJson: '{}'
+  tokensJson: '{}',
+  loginPath: '/public/render/login',
+  loginEnabled: true,
+  postLoginPath: '/admin',
+  postLoginEnabled: true,
+  logoutPath: '/admin',
+  logoutEnabled: true,
+  registerPath: '/admin',
+  registerEnabled: true,
+  forgotPasswordPath: '/admin',
+  forgotPasswordEnabled: true,
+  publicHomePath: '/public/render/home',
+  publicHomeEnabled: true,
+  allowedPathsJson: JSON.stringify([
+    '/public/render/login',
+    '/public/render/view/login',
+    '/admin',
+    '/public/render/home'
+  ], null, 2)
 };
 
 const parseJsonTokens = (value: string): Record<string, string> => {
@@ -66,6 +97,21 @@ const parseJsonTokens = (value: string): Record<string, string> => {
     return parsed && typeof parsed === 'object' ? parsed : {};
   } catch {
     throw new Error('El JSON de tokens no es válido');
+  }
+};
+
+const parseAllowedPaths = (value: string): string[] => {
+  try {
+    const parsed = JSON.parse(value || '[]');
+    if (!Array.isArray(parsed)) {
+      throw new Error('La whitelist de rutas debe ser un arreglo JSON');
+    }
+
+    return parsed
+      .map((item) => String(item || '').trim())
+      .filter((item) => item.startsWith('/'));
+  } catch {
+    throw new Error('El JSON de rutas permitidas no es valido');
   }
 };
 
@@ -128,6 +174,8 @@ export default function ParametrizacionDiseno({
     const activeRouteConfig = routeConfigs.find((item) => String(item.route) === selectedRoute);
     const overrides = (activeRouteConfig?.overrides || {}) as Record<string, any>;
     const tokens = (overrides?.tokens || {}) as Record<string, string>;
+    const navigation = (branding?.widgets?.navigation || {}) as Record<string, any>;
+    const allowedPaths = Array.isArray(navigation.allowedPaths) ? navigation.allowedPaths : [];
 
     setForm({
       fontFamilyBase: String(overrides?.tipografia?.fontFamilyBase || ''),
@@ -146,11 +194,32 @@ export default function ParametrizacionDiseno({
       inputRadius: String(tokens['input-radius'] || ''),
       inputBorder: String(tokens['input-border'] || ''),
       inputBackground: String(tokens['input-bg'] || ''),
-      tokensJson: JSON.stringify(tokens, null, 2)
+      tokensJson: JSON.stringify(tokens, null, 2),
+      loginPath: String(navigation.login?.path || DEFAULT_FORM.loginPath),
+      loginEnabled: navigation.login?.enabled !== false,
+      postLoginPath: String(navigation.postLogin?.path || DEFAULT_FORM.postLoginPath),
+      postLoginEnabled: navigation.postLogin?.enabled !== false,
+      logoutPath: String(navigation.logout?.path || DEFAULT_FORM.logoutPath),
+      logoutEnabled: navigation.logout?.enabled !== false,
+      registerPath: String(navigation.register?.path || DEFAULT_FORM.registerPath),
+      registerEnabled: navigation.register?.enabled !== false,
+      forgotPasswordPath: String(navigation.forgotPassword?.path || DEFAULT_FORM.forgotPasswordPath),
+      forgotPasswordEnabled: navigation.forgotPassword?.enabled !== false,
+      publicHomePath: String(navigation.publicHome?.path || DEFAULT_FORM.publicHomePath),
+      publicHomeEnabled: navigation.publicHome?.enabled !== false,
+      allowedPathsJson: JSON.stringify(
+        allowedPaths.length > 0 ? allowedPaths : JSON.parse(DEFAULT_FORM.allowedPathsJson),
+        null,
+        2
+      )
     });
   }, [branding, selectedRoute]);
 
   const updateForm = (key: keyof DesignFormState, value: string): void => {
+    setForm((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const updateToggle = (key: keyof DesignFormState, value: boolean): void => {
     setForm((prev) => ({ ...prev, [key]: value }));
   };
 
@@ -160,6 +229,7 @@ export default function ParametrizacionDiseno({
     try {
       setSaving(true);
       const tokens = parseJsonTokens(form.tokensJson);
+      const allowedPaths = parseAllowedPaths(form.allowedPathsJson);
 
       const routeConfigs = Array.isArray(branding.widgets?.routes)
         ? ([...branding.widgets?.routes] as Array<Record<string, unknown>>)
@@ -213,7 +283,34 @@ export default function ParametrizacionDiseno({
         ...branding,
         widgets: {
           ...(branding.widgets || {}),
-          routes: routeConfigs
+          routes: routeConfigs,
+          navigation: {
+            login: {
+              path: form.loginPath.trim(),
+              enabled: form.loginEnabled
+            },
+            postLogin: {
+              path: form.postLoginPath.trim(),
+              enabled: form.postLoginEnabled
+            },
+            logout: {
+              path: form.logoutPath.trim(),
+              enabled: form.logoutEnabled
+            },
+            register: {
+              path: form.registerPath.trim(),
+              enabled: form.registerEnabled
+            },
+            forgotPassword: {
+              path: form.forgotPasswordPath.trim(),
+              enabled: form.forgotPasswordEnabled
+            },
+            publicHome: {
+              path: form.publicHomePath.trim(),
+              enabled: form.publicHomeEnabled
+            },
+            allowedPaths
+          }
         }
       };
 
@@ -371,6 +468,57 @@ export default function ParametrizacionDiseno({
                 value={form.tokensJson}
                 onChange={(e) => updateForm('tokensJson', e.target.value)}
               />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Gobernanza de Navegacion</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Aqui parametrizas el helper gobernado que usa login, logout y redirecciones base del frontend.
+              </p>
+
+              {[
+                ['loginPath', 'loginEnabled', 'Ruta Login'],
+                ['postLoginPath', 'postLoginEnabled', 'Ruta Post Login'],
+                ['logoutPath', 'logoutEnabled', 'Ruta Logout'],
+                ['registerPath', 'registerEnabled', 'Ruta Registro'],
+                ['forgotPasswordPath', 'forgotPasswordEnabled', 'Ruta Recuperar Contrasena'],
+                ['publicHomePath', 'publicHomeEnabled', 'Ruta Home Publica']
+              ].map(([pathKey, enabledKey, label]) => (
+                <div key={pathKey} className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_auto] md:items-end">
+                  <div className="space-y-2">
+                    <Label>{label}</Label>
+                    <Input
+                      value={String(form[pathKey as keyof DesignFormState] || '')}
+                      onChange={(e) => updateForm(pathKey as keyof DesignFormState, e.target.value)}
+                      placeholder="/mi/ruta"
+                    />
+                  </div>
+                  <label className="flex items-center gap-2 text-sm text-foreground">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(form[enabledKey as keyof DesignFormState])}
+                      onChange={(e) => updateToggle(enabledKey as keyof DesignFormState, e.target.checked)}
+                    />
+                    Habilitada
+                  </label>
+                </div>
+              ))}
+
+              <div className="space-y-2">
+                <Label>Whitelist de rutas permitidas (JSON)</Label>
+                <Textarea
+                  rows={8}
+                  value={form.allowedPathsJson}
+                  onChange={(e) => updateForm('allowedPathsJson', e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Solo se aplican rutas internas presentes en esta whitelist; lo demas cae al fallback seguro.
+                </p>
+              </div>
             </CardContent>
           </Card>
 

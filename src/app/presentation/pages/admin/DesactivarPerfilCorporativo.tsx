@@ -3,6 +3,7 @@ import { apiFetch } from '@/app/services/api';
 import { Button } from '@/components/ui/button';
 import { Loader2, ShieldAlert } from 'lucide-react';
 import { toast } from 'react-toastify';
+import DesactivarRepresentante from './DesactivarRepresentante';
 
 interface PerfilItem {
   _id?: string;
@@ -11,11 +12,20 @@ interface PerfilItem {
   estado?: boolean;
 }
 
+interface RepresentanteItem {
+  _id?: string;
+  iud?: string;
+  nombre_representante_legal?: string;
+  cargo_representante_legal?: string;
+}
+
 export default function DesactivarPerfilCorporativo(): React.ReactElement {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [perfiles, setPerfiles] = useState<PerfilItem[]>([]);
   const [selectedPerfilId, setSelectedPerfilId] = useState<string>('');
+  const [loadingRepresentantes, setLoadingRepresentantes] = useState(true);
+  const [representantes, setRepresentantes] = useState<RepresentanteItem[]>([]);
 
   const cargarPerfiles = async (): Promise<void> => {
     setLoading(true);
@@ -36,6 +46,26 @@ export default function DesactivarPerfilCorporativo(): React.ReactElement {
 
   useEffect(() => {
     cargarPerfiles();
+  }, []);
+
+  const cargarRepresentantes = async (): Promise<void> => {
+    setLoadingRepresentantes(true);
+    try {
+      const res = await apiFetch('/api/config/listar/represente/empresarial', {
+        method: 'GET',
+        useAuth: true
+      });
+      setRepresentantes(Array.isArray(res?.representantes) ? res.representantes : []);
+    } catch (error) {
+      console.error('Error cargando representantes:', error);
+      toast.error('No se pudieron cargar los representantes');
+    } finally {
+      setLoadingRepresentantes(false);
+    }
+  };
+
+  useEffect(() => {
+    cargarRepresentantes();
   }, []);
 
   const perfilSeleccionado = useMemo(
@@ -125,6 +155,34 @@ export default function DesactivarPerfilCorporativo(): React.ReactElement {
             {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
             Desactivar perfil corporativo
           </Button>
+
+          <div className="border-t pt-4">
+            <h4 className="text-sm font-semibold text-foreground">Gestion de representante</h4>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Administra la baja logica o eliminacion del representante desde esta misma vista.
+            </p>
+
+            <div className="mt-3">
+              {loadingRepresentantes ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Cargando representantes...
+                </div>
+              ) : representantes.length > 0 ? (
+                <DesactivarRepresentante
+                  idRepresentante={String(representantes[0]?._id || representantes[0]?.iud || '')}
+                  representantes={representantes}
+                  onSuccess={() => {
+                    void cargarRepresentantes();
+                  }}
+                />
+              ) : (
+                <div className="rounded-md border border-dashed px-3 py-3 text-sm text-muted-foreground">
+                  No hay representantes activos para gestionar.
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>

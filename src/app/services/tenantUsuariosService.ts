@@ -31,6 +31,18 @@ export interface TenantGlobalInfo {
     titulo: string | null;
     nvlGeneracion: number | null;
     estado: boolean | string;
+    // Jerarquía (sub-TenantGlobals)
+    parent: string | null;
+    profundidad: number;
+}
+
+export interface SuperAdminInfo {
+    iud: string;
+    nombre: string | null;
+    estado: boolean | string;
+    // Jerarquía (sub-SuperAdmins)
+    parent: string | null;
+    profundidad: number;
 }
 
 export interface CorpNode {
@@ -44,12 +56,26 @@ export interface TenantGlobalNode {
     tenantGlobal: TenantGlobalInfo | null;
     usuarios: TenantUsuario[];
     corporativos: CorpNode[];
+    // Sub-TenantGlobals (jerarquía recursiva)
+    subTenantGlobales: TenantGlobalNode[];
+}
+
+export interface SuperAdminNode {
+    superAdmin: SuperAdminInfo;
+    usuarios: TenantUsuario[];
+    // Sub-SuperAdmins (jerarquía recursiva)
+    subSuperAdmins: SuperAdminNode[];
+    // TenantGlobals que pertenecen a este SuperAdmin
+    tenantsGlobales: TenantGlobalNode[];
 }
 
 export interface JerarquiaResponse {
     scope: 'SUPER_ADMIN' | 'TENANT_GLOBAL' | 'CORPORATIVO';
+    // Lista plana de usuarios sin tenant (compatibilidad)
     superAdmins: TenantUsuario[];
     tenantsGlobales: TenantGlobalNode[];
+    // Árbol jerárquico (nuevo — cuando el backend lo soporte)
+    superAdminTree?: SuperAdminNode[];
 }
 
 export interface CreateUsuarioGlobalData {
@@ -63,10 +89,11 @@ export interface CreateUsuarioGlobalData {
     direccion: string;
     rh: string;
     fecha_nacimiento: string;
+    canReferir?: boolean;
 }
 
-export interface CreateUsuarioCorporativoData {
-    tenantCorporativoId?: string;
+export interface CreateUsuarioSuperAdminData {
+    tenantSuperAdminId?: string;
     correo: string;
     password: string;
     nombre: string;
@@ -76,13 +103,21 @@ export interface CreateUsuarioCorporativoData {
     direccion: string;
     rh: string;
     fecha_nacimiento: string;
-    cargo?: string;
-    tieneEstudios: boolean;
-    estudios?: string;
-    tipoContrato: string;
+    canReferir?: boolean;
+}
+
+export interface SincronizarCanReferirData {
+    tenantId?: string;
+    tenantGlobalId?: string;
+    tenantCorporativoId?: string;
+    canReferir: boolean;
 }
 
 // ─── Service functions ────────────────────────────────────────────────────────
+
+export const getTenantsSuperAdmin = async (): Promise<{ tenants: any[] }> => {
+    return apiFetch('/api/registro/tenants/superadmin', { method: 'GET' });
+};
 
 export const getJerarquiaUsuarios = async (): Promise<JerarquiaResponse> => {
     return apiFetch('/api/registro/jerarquia/usuarios', { method: 'GET' });
@@ -99,5 +134,26 @@ export const createUsuarioCorporativo = async (data: CreateUsuarioCorporativoDat
     return apiFetch('/api/registro/usuario/corporativo', {
         method: 'POST',
         body: data,
+    });
+};
+
+export const createUsuarioSuperAdmin = async (data: CreateUsuarioSuperAdminData): Promise<any> => {
+    return apiFetch('/api/registro/usuario/superadmin', {
+        method: 'POST',
+        body: data,
+    });
+};
+
+export const sincronizarCanReferir = async (data: SincronizarCanReferirData): Promise<any> => {
+    return apiFetch('/api/registro/sincronizar/canReferir', {
+        method: 'POST',
+        body: data,
+    });
+};
+
+export const sincronizarCanReferirTodos = async (canReferir: boolean): Promise<any> => {
+    return apiFetch('/api/registro/sincronizar/canReferir', {
+        method: 'PUT',
+        body: { canReferir },
     });
 };
