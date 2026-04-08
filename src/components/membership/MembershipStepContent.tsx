@@ -189,21 +189,21 @@ export default function MembershipStepContent({
           name: 'Nequi',
           description: 'Pago rápido desde tu app',
           icon: Smartphone,
-          color: 'from-purple-500/10 to-pink-500/10',
+          color: 'from-primary/15 to-accent/10',
         },
         {
           id: 'card',
           name: 'Tarjeta',
           description: 'Crédito o débito',
           icon: CreditCard,
-          color: 'from-blue-500/10 to-cyan-500/10',
+          color: 'from-accent/15 to-secondary/10',
         },
         {
           id: 'pse',
           name: 'PSE',
           description: 'Desde tu banco',
           icon: Building2,
-          color: 'from-green-500/10 to-emerald-500/10',
+          color: 'from-secondary/15 to-primary/10',
         },
       ];
 
@@ -280,8 +280,8 @@ export default function MembershipStepContent({
                     }}
                     placeholder="3001234567"
                   />
-                  <div className="flex items-start gap-2 p-3 bg-blue-500/5 border border-blue-500/20 rounded-lg">
-                    <Shield className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
+                  <div className="flex items-start gap-2 p-3 bg-accent/10 border border-accent/25 rounded-lg">
+                    <Shield className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
                     <p className="text-xs text-muted-foreground">
                       Recibirás una notificación en tu app de Nequi para aprobar el pago de forma segura.
                     </p>
@@ -468,8 +468,8 @@ export default function MembershipStepContent({
                     </div>
                   </div>
 
-                  <div className="flex items-start gap-2 p-3 bg-green-500/5 border border-green-500/20 rounded-lg mt-4">
-                    <Shield className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" />
+                  <div className="flex items-start gap-2 p-3 bg-secondary/15 border border-secondary/30 rounded-lg mt-4">
+                    <Shield className="w-5 h-5 text-secondary-foreground flex-shrink-0 mt-0.5" />
                     <p className="text-xs text-muted-foreground">
                       Serás redirigido a la plataforma de tu banco para completar el pago de forma segura.
                     </p>

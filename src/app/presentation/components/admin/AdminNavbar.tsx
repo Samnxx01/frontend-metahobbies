@@ -9,7 +9,7 @@ import { getRouteMenuTags, resolveCurrentRouteMenuTags, type RouteMenuTag } from
 import { getGovernedLogoutPath } from '@/app/services/governedNavigation'
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Crown, Home, Landmark, LayoutDashboard, LogOut, Menu, Moon, Settings, Sun, User as UserIcon } from 'lucide-react'
 import type { AdminNavbarProps } from '@/types/components'
 
@@ -29,7 +29,7 @@ const mergeMenuUsuarioItems = (...sources: Array<MenuUsuarioItem[] | RouteMenuTa
     const items = new Map<string, MenuUsuarioItem>()
 
     sources.forEach((source) => {
-        ;(Array.isArray(source) ? source : []).forEach((row: any) => {
+        ; (Array.isArray(source) ? source : []).forEach((row: any) => {
             const key = String(row?.key || row?.codigo || row?.iud || '').trim()
             const path = String(row?.path || row?.routePath || row?.ruta?.path || '').trim()
             const label = String(row?.label || row?.nombreTag || '').trim()

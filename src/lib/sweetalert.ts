@@ -11,18 +11,18 @@ const getCurrentTheme = (): 'light' | 'dark' => {
  * Estilos personalizados para dark mode y light mode
  */
 const getThemeStyles = (): Partial<SweetAlertOptions> => {
-  const isDark = getCurrentTheme() === 'dark';
-  
+  const theme = getCurrentTheme();
+
   return {
-    background: isDark ? 'hsl(var(--card))' : '#fff',
-    color: isDark ? 'hsl(var(--foreground))' : '#545454',
+    background: 'hsl(var(--card))',
+    color: 'hsl(var(--foreground))',
     customClass: {
-      popup: isDark ? 'dark-swal-popup' : 'light-swal-popup',
-      title: isDark ? 'dark-swal-title' : 'light-swal-title',
-      htmlContainer: isDark ? 'dark-swal-text' : 'light-swal-text',
-      confirmButton: isDark ? 'dark-swal-confirm' : 'light-swal-confirm',
-      cancelButton: isDark ? 'dark-swal-cancel' : 'light-swal-cancel',
-      actions: isDark ? 'dark-swal-actions' : 'light-swal-actions',
+      popup: theme === 'dark' ? 'dark-swal-popup' : 'light-swal-popup',
+      title: theme === 'dark' ? 'dark-swal-title' : 'light-swal-title',
+      htmlContainer: theme === 'dark' ? 'dark-swal-text' : 'light-swal-text',
+      confirmButton: theme === 'dark' ? 'dark-swal-confirm' : 'light-swal-confirm',
+      cancelButton: theme === 'dark' ? 'dark-swal-cancel' : 'light-swal-cancel',
+      actions: theme === 'dark' ? 'dark-swal-actions' : 'light-swal-actions',
     },
   };
 };
@@ -36,8 +36,8 @@ export const swalFire = (options: SweetAlertOptions) => {
   const mergedOptions = {
     ...options,
     ...themeStyles,
-    confirmButtonColor: options.confirmButtonColor || '#3085d6',
-    cancelButtonColor: options.cancelButtonColor || '#d33',
+    confirmButtonColor: options.confirmButtonColor || 'hsl(var(--primary))',
+    cancelButtonColor: options.cancelButtonColor || 'hsl(var(--destructive))',
   } as SweetAlertOptions;
   
   return Swal.fire(mergedOptions);

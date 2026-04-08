@@ -77,10 +77,10 @@ export default function AffiliateBanner({
                         <Badge
                             className="
                                 mb-2 font-semibold 
-                                bg-primary/20 text-primary hover:bg-primary/30 
+                                border-primary/20 bg-primary/20 text-primary hover:bg-primary/30 
                                 transition-colors
                             "
-                            variant="default"
+                            variant="outline"
                         >
                             Programa de Afiliados
                         </Badge>

@@ -59,25 +59,25 @@ const BANNER_CONFIG: Record<EstadoTx, BannerConfig> = {
         icon: <CheckCircle2 className="w-6 h-6 shrink-0" />,
         titulo: '¡Membresía activada exitosamente!',
         descripcion: 'Tu pago fue procesado. Ya tienes acceso a todos los beneficios MABS. Revisa tu correo para los detalles.',
-        bg: 'bg-emerald-50 dark:bg-emerald-950/20',
-        border: 'border-emerald-200/60 dark:border-emerald-800/40',
-        iconColor: 'text-emerald-500',
-        titleColor: 'text-emerald-700 dark:text-emerald-400',
+        bg: 'bg-secondary/20',
+        border: 'border-secondary/40',
+        iconColor: 'text-secondary-foreground',
+        titleColor: 'text-secondary-foreground',
     },
     pendiente: {
         icon: <Clock className="w-6 h-6 shrink-0" />,
         titulo: 'Pago en verificación',
         descripcion: 'Tu transacción está siendo procesada. Te notificaremos por correo cuando tu membresía esté activa.',
-        bg: 'bg-amber-50 dark:bg-amber-950/20',
-        border: 'border-amber-200/60 dark:border-amber-800/40',
-        iconColor: 'text-amber-500',
-        titleColor: 'text-amber-700 dark:text-amber-400',
+        bg: 'bg-accent/15',
+        border: 'border-accent/30',
+        iconColor: 'text-accent-foreground',
+        titleColor: 'text-accent-foreground',
     },
     rechazada: {
         icon: <XCircle className="w-6 h-6 shrink-0" />,
         titulo: 'Pago no procesado',
         descripcion: 'No pudimos completar tu transacción. Verifica tu método de pago e inténtalo de nuevo.',
-        bg: 'bg-red-50 dark:bg-red-950/20',
+        bg: 'bg-destructive/10',
         border: 'border-destructive/25',
         iconColor: 'text-destructive',
         titleColor: 'text-destructive',
@@ -396,11 +396,11 @@ export default function MembershipDashboard(): React.ReactElement {
                                         <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
                                             <TrendingUp className="w-4 h-4" /> Total Pagado
                                         </div>
-                                        <span className="text-lg font-semibold text-emerald-600">{formatCurrency(totalPagado)}</span>
+                                        <span className="text-lg font-semibold text-primary">{formatCurrency(totalPagado)}</span>
                                     </div>
                                     <div className="flex justify-between items-center py-3">
                                         <span className="text-sm font-medium text-muted-foreground">Pendiente de Pago</span>
-                                        <span className="text-lg font-bold text-amber-600">{formatCurrency(totalPendiente)}</span>
+                                        <span className="text-lg font-bold text-accent-foreground">{formatCurrency(totalPendiente)}</span>
                                     </div>
                                 </div>
                             )}

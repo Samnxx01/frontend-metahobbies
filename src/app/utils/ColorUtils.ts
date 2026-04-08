@@ -73,7 +73,7 @@ export interface ColoresPaleta {
 export function aplicarPaletaEnApp(colores: ColoresPaleta): void {
     const root = document.documentElement;
 
-    const hsl = (key: PaletaColorKey) => hexToHsl(colores[key]);
+    const hsl: any = (key: PaletaColorKey) => hexToHsl(colores[key]);
 
     // COLOR_PRIMARY → color dominante de la app
     root.style.setProperty('--primary', hsl('COLOR_PRIMARY'));

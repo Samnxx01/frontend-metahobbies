@@ -12,36 +12,25 @@ export default function LatestOrdersCard({ orders, title = "Últimos Pedidos", o
         }
     };
 
-    const getStatusVariant = (status: string) => {
-        switch (status.toLowerCase()) {
-            case 'pendiente':
-                return 'secondary';
-            case 'completado':
-                return 'default';
-            default:
-                return 'outline';
-        }
-    };
-
     const getStatusColor = (status: string): string => {
         switch (status.toLowerCase()) {
             case 'pendiente':
-                return 'bg-muted text-foreground';
+                return 'bg-secondary/20 text-secondary-foreground';
             case 'completado':
                 return 'bg-primary/10 text-primary';
             default:
-                return 'bg-muted text-foreground';
+                return 'bg-muted text-muted-foreground';
         }
     };
 
     return (
         <Card className="rounded-xl p-6 shadow-sm border-0 bg-card h-full flex flex-col" style={{ boxShadow: '0 2px 12px rgba(0,0,0,0.04)' }}>
             <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-bold text-pink-600">{title}</h3>
+                <h3 className="text-lg font-bold text-primary">{title}</h3>
                 <Button 
                     onClick={handleViewAll}
-                    className="bg-pink-100 text-pink-600 hover:bg-pink-200 font-bold rounded-lg text-sm shadow-none"
-                    variant="secondary"
+                    className="bg-primary/10 text-primary hover:bg-primary/20 font-bold rounded-lg text-sm shadow-none"
+                    variant="ghost"
                 >
                     Ir a Pedidos
                 </Button>
@@ -50,7 +39,7 @@ export default function LatestOrdersCard({ orders, title = "Últimos Pedidos", o
             <div className="flex-1 overflow-auto">
                 <Table>
                     <TableHeader>
-                        <TableRow className="bg-slate-50">
+                        <TableRow className="bg-muted/40">
                             <TableHead className="font-semibold">ID PEDIDO</TableHead>
                             <TableHead className="font-semibold">CLIENTE</TableHead>
                             <TableHead className="font-semibold">TOTAL</TableHead>
@@ -65,7 +54,7 @@ export default function LatestOrdersCard({ orders, title = "Últimos Pedidos", o
                                 <TableCell>${order.amount.toLocaleString()}</TableCell>
                                 <TableCell>
                                     <Badge 
-                                        variant={getStatusVariant(order.status)}
+                                        variant="outline"
                                         className={`font-semibold rounded-sm ${getStatusColor(order.status)}`}
                                     >
                                         {order.status}

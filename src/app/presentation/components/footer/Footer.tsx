@@ -140,7 +140,7 @@ export default function Footer({ variant = 'default' }: FooterProps = {}): React
 
     if (loading) {
         return (
-            <footer className="bg-pink-100 dark:bg-card py-8 md:py-12">
+            <footer className="bg-muted/50 py-8 md:py-12">
                 <div className="container mx-auto px-4 flex justify-center items-center py-12">
                     <Loader2 className="h-8 w-8 animate-spin text-primary" />
                 </div>
@@ -149,7 +149,7 @@ export default function Footer({ variant = 'default' }: FooterProps = {}): React
     }
 
     return (
-        <footer className="bg-pink-100 dark:bg-card py-8 md:py-12">
+        <footer className="bg-muted/50 py-8 md:py-12">
             <div className="container mx-auto px-4 sm:px-6 lg:px-8">
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 md:gap-8">
                     <div className="col-span-1 sm:col-span-2 lg:col-span-1">

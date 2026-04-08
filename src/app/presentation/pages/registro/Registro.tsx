@@ -187,8 +187,8 @@ export default function Registro(): React.ReactElement {
                     </div>
 
                     {/* Icono decorativo */}
-                    <div className="mb-4 p-3 rounded-full bg-green-100 dark:bg-green-900/30">
-                        <UserPlus className="w-6 h-6 text-green-600 dark:text-green-400" />
+                    <div className="mb-4 p-3 rounded-full bg-secondary/25">
+                        <UserPlus className="w-6 h-6 text-secondary-foreground" />
                     </div>
 
                     <h1 className="text-2xl font-semibold mb-1 text-center text-foreground">
