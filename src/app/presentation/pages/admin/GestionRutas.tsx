@@ -1028,21 +1028,10 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
       );
 
       const resolvedLayout = (() => {
-        if (editingRoute && (isFormularioType || isSubFormularioType)) {
-          const selectedAtIds = Array.isArray(formData.accessType) ? formData.accessType : [];
-          const firstAt = accessTypes.find((a) => selectedAtIds.includes(String(a._id || '')));
-          if (firstAt?.layout) return firstAt.layout;
-          return formData.layout || '';
-        }
-        if (editingRoute) return formData.layout;
-        if (isFormularioType) {
-          // Formulario: el layout se deriva del primer accessType seleccionado
-          const selectedAtIds = Array.isArray(formData.accessType) ? formData.accessType : [];
-          const firstAt = accessTypes.find((a) => selectedAtIds.includes(String(a._id || '')));
-          if (firstAt?.layout) return firstAt.layout;
-          return parentRoute?.layout || formData.layout || '';
-        }
-        return formData.layout || '';
+        const selectedAtIds = Array.isArray(formData.accessType) ? formData.accessType : [];
+        const firstAt = accessTypes.find((a) => selectedAtIds.includes(String(a._id || '')));
+        if (firstAt?.layout) return firstAt.layout;
+        return parentRoute?.layout || formData.layout || '';
       })();
 
       const payload: CreateRouteDto = {
@@ -2005,53 +1994,27 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
                   </p>
                 </div>
               )}
-              {(editingRoute || !isFormularioType) && !isSubFormularioType ? (
-                <div className="space-y-2 md:col-span-2">
-                  <Label htmlFor="layout">Layout *</Label>
-                  <Select
-                    value={formData.layout}
-                    onValueChange={(value) => setFormData({ ...formData, layout: value })}
-                  >
-                    <SelectTrigger id="layout">
-                      <SelectValue placeholder="Selecciona layout" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {Array.from(
-                        new Set(
-                          accessTypes
-                            .filter((a) => a.estadoAcces !== false && a.layout)
-                            .map((a) => a.layout as string)
-                        )
-                      ).map((layout) => (
-                        <SelectItem key={layout} value={layout}>
-                          {layout}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              ) : (
-                <div className="space-y-2 md:col-span-2">
-                  <Label>Layout</Label>
-                  <Input
-                    value={(() => {
-                      const selectedAtIds = Array.isArray(formData.accessType) ? formData.accessType : [];
-                      const firstAt = accessTypes.find((a) => selectedAtIds.includes(String(a._id || '')));
-                      if (firstAt?.layout) return firstAt.layout;
-                      return routes.find((r) => resolveRouteId(r) === String(formData.padreId || ''))?.layout
-                        || 'Se heredara del accessType seleccionado';
-                    })()}
-                    disabled
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Para formularios, el layout es opcional y se hereda del modulo padre.
-                  </p>
-                </div>
-              )}
+              <div className="space-y-2 md:col-span-2">
+                <Label>Layout</Label>
+                <Input
+                  value={(() => {
+                    const selectedAtIds = Array.isArray(formData.accessType) ? formData.accessType : [];
+                    const layouts = accessTypes
+                      .filter((a) => selectedAtIds.includes(String(a._id || '')) && a.layout)
+                      .map((a) => String(a.layout));
+                    if (layouts.length > 0) return layouts.join(', ');
+                    return 'Se derivara de los tipos de acceso seleccionados';
+                  })()}
+                  disabled
+                />
+                <p className="text-xs text-muted-foreground">
+                  El layout se resuelve automaticamente desde los tipos de acceso seleccionados.
+                </p>
+              </div>
 
-              {(isFormularioType || isSubFormularioType) && (
+              {(
                 <div className="space-y-2 md:col-span-2">
-                  <Label>Tipo de acceso {isFormularioType ? '*' : ''}</Label>
+                  <Label>Tipo de acceso {(isFormularioType || isSubFormularioType) ? '*' : ''}</Label>
                   <div className="rounded-md border p-3 flex flex-wrap gap-6">
                     {accessTypes
                       .filter((item) => item.estadoAcces !== false)

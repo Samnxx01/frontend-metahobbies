@@ -13,7 +13,15 @@ export interface SyncColeccion {
 
 export interface TenantDbConfig {
   iud: string;
-  tenantGlobal: string | { iud: string; coporativo?: string };
+  tenantGlobal?: string;
+  corporativo: string | { iud: string; razon_social?: string };
+  contenedorId?: string | { iud?: string; _id?: string; nombre?: string } | null;
+  parentTenantDbConfig?: string | { iud?: string; _id?: string; poolName?: string; secuenciaHijoLabel?: string } | null;
+  rootTenantDbConfig?: string | { iud?: string; _id?: string; poolName?: string; secuenciaHijoLabel?: string } | null;
+  nivelJerarquico?: number;
+  secuenciaHijo?: number[];
+  secuenciaHijoLabel?: string | null;
+  poolName: string;
   dbName: string;
   urlBase: string | null;
   estado: boolean;
@@ -25,8 +33,16 @@ export interface TenantDbConfig {
   updatedAt: string;
 }
 
+export interface TenantDbConfigEditable extends TenantDbConfig {
+  mongoUri: string;
+}
+
 export interface GuardarConexionPayload {
-  tenantGlobalId: string;
+  configId?: string;
+  corporativoId: string;
+  contenedorId: string;
+  parentTenantDbConfigId?: string | null;
+  poolName: string;
   mongoUri: string;
   dbName: string;
   urlBase?: string | null;
@@ -71,11 +87,22 @@ export interface ApiDominio {
 
 export interface ContenedorParametrizacion {
   iud: string;
-  tenantGlobal: string;
+  tenantGlobal: string | { iud: string };
   corporativo: { iud: string; razon_social: string; nit_ruc_rtn: string } | null;
   nombre: string;
+  slug?: string | null;
+  parentContenedor?: { iud: string; nombre: string; secuencia?: number; nivel?: number } | null;
+  rootContenedor?: { iud: string; nombre: string; secuencia?: number; nivel?: number } | null;
+  parentContenedorId?: string | null;
+  rootContenedorId?: string | null;
+  nivel?: number;
+  esRaiz?: boolean;
+  pathLabels?: string[];
+  displayLabel?: string;
+  secuenciaJerarquica?: string;
   secuencia: number;
   apisDominios: ApiDominio | null;
+  dominioFrontend?: string;
   descripcion: string;
   estado: boolean;
   creadoEl: string;
@@ -86,12 +113,15 @@ export interface ContenedorParametrizacion {
 export interface CrearContenedorPayload {
   nombre: string;
   apisDominios: string;
+  parentContenedorId?: string;
+  dominioFrontend?: string;
   descripcion?: string;
 }
 
 export interface ActualizarContenedorPayload {
   nombre?: string;
   apisDominios?: string;
+  dominioFrontend?: string;
   descripcion?: string;
   estado?: boolean;
 }
@@ -104,9 +134,8 @@ export interface TenantConContenedores {
 
 export interface TenantDisponible {
   iud: string;
-  corporativo: any;
+  corporativo: { iud: string; razon_social: string; nit_ruc_rtn?: string; titulo?: string } | null;
   estado: boolean;
-  tenantGlobalAdmin?: string | null;
 }
 
 // ─── Servicio ─────────────────────────────────────────────────────────────────
@@ -116,42 +145,64 @@ export const tenantDbService = {
   listarActivos: (): Promise<{ ok: boolean; total: number; data: TenantDbConfig[] }> =>
     apiFetch('/api/tenant-db/config', { method: 'GET' }),
 
-  /** Obtiene la config de BD de un tenant específico */
-  obtenerConfig: (tenantGlobalId: string): Promise<{ ok: boolean; data: TenantDbConfig }> =>
-    apiFetch(`/api/tenant-db/config/${tenantGlobalId}`, { method: 'GET' }),
+  /** Obtiene la config de BD de un corporativo específico */
+  obtenerConfig: (corporativoId: string): Promise<{ ok: boolean; data: TenantDbConfig }> =>
+    apiFetch(`/api/tenant-db/config/${corporativoId}`, { method: 'GET' }),
 
-  /** Guarda/actualiza la URI de BD para un tenant y migra schemas */
+  obtenerConfigEditable: (
+    configId: string
+  ): Promise<{ ok: boolean; data: TenantDbConfigEditable }> =>
+    apiFetch(`/api/tenant-db/config/id/${configId}/editable`, { method: 'GET' }),
+
+  /** Guarda/actualiza la URI de BD para un corporativo */
   guardarConexion: (
     payload: GuardarConexionPayload
-  ): Promise<{ ok: boolean; msg: string; data: TenantDbConfig; migracionFallida?: boolean }> =>
+  ): Promise<{ ok: boolean; msg: string; data: TenantDbConfig }> =>
     apiFetch('/api/tenant-db/config', { method: 'POST', body: payload }),
 
-  /** Desactiva la config y cierra la conexión del tenant */
-  desactivar: (tenantGlobalId: string): Promise<{ ok: boolean; msg: string }> =>
-    apiFetch(`/api/tenant-db/config/${tenantGlobalId}`, { method: 'DELETE' }),
+  /** Actualiza solo la URL parametrizada del tenant */
+  actualizarUrlBase: (
+    configId: string,
+    urlBase?: string | null
+  ): Promise<{ ok: boolean; msg: string; data: TenantDbConfig }> =>
+    apiFetch(`/api/tenant-db/config/id/${configId}/url-base`, {
+      method: 'PUT',
+      body: { urlBase: urlBase || null },
+    }),
+
+  /** Desactiva la config y cierra la conexión del corporativo */
+  desactivar: (configId: string): Promise<{ ok: boolean; msg: string }> =>
+    apiFetch(`/api/tenant-db/config/id/${configId}`, { method: 'DELETE' }),
 
   /** Configura o actualiza una colección para sync */
   configurarSync: (
-    tenantGlobalId: string,
+    configId: string,
     payload: ConfigurarSyncPayload
   ): Promise<{ ok: boolean; msg: string; data: TenantDbConfig }> =>
-    apiFetch(`/api/tenant-db/sync/${tenantGlobalId}/coleccion`, { method: 'POST', body: payload }),
+    apiFetch(`/api/tenant-db/sync/id/${configId}/coleccion`, { method: 'POST', body: payload }),
 
   /** Ejecuta sincronización manual de una colección */
   ejecutarSync: (
-    tenantGlobalId: string,
+    configId: string,
     payload: EjecutarSyncPayload
   ): Promise<{ ok: boolean; msg: string; data: SyncResult }> =>
-    apiFetch(`/api/tenant-db/sync/${tenantGlobalId}/ejecutar`, { method: 'POST', body: payload }),
+    apiFetch(`/api/tenant-db/sync/id/${configId}/ejecutar`, { method: 'POST', body: payload }),
 
   /** Elimina una colección del sync y detiene su watcher */
   removerSync: (
-    tenantGlobalId: string,
+    configId: string,
     coleccion: string
   ): Promise<{ ok: boolean; msg: string; data: TenantDbConfig }> =>
-    apiFetch(`/api/tenant-db/sync/${tenantGlobalId}/coleccion/${encodeURIComponent(coleccion)}`, {
+    apiFetch(`/api/tenant-db/sync/id/${configId}/coleccion/${encodeURIComponent(coleccion)}`, {
       method: 'DELETE',
     }),
+
+  /** Lista bases de datos disponibles. Reutiliza pool si corporativoId tiene conexión activa. */
+  listarBasesDatos: (
+    mongoUri: string,
+    corporativoId?: string
+  ): Promise<{ ok: boolean; databases: string[]; poolName: string | null; fuentePool: boolean }> =>
+    apiFetch('/api/tenant-db/listar-bases', { method: 'POST', body: { mongoUri, corporativoId } }),
 
   /** Estado del pool de conexiones y watchers activos */
   estadoPool: (): Promise<{ ok: boolean } & PoolEstado> =>
@@ -159,7 +210,7 @@ export const tenantDbService = {
 
   // ─── CONTENEDOR PARAMETRIZACION ─────────────────────────────────────────────
 
-  /** Lista todos los tenantGlobals disponibles para parametrización */
+  /** Lista todos los perfilesCorporativos disponibles para el select Empresa */
   listarTenantDisponibles: (): Promise<{ ok: boolean; total: number; data: TenantDisponible[] }> =>
     apiFetch('/api/tenant-db/tenants-disponibles', { method: 'GET' }),
 
@@ -168,6 +219,14 @@ export const tenantDbService = {
     tenantGlobalId: string
   ): Promise<{ ok: boolean; data: TenantConContenedores }> =>
     apiFetch(`/api/tenant-db/contenedores/tenant/${tenantGlobalId}/preview`, { method: 'GET' }),
+
+  obtenerCorporativoConContenedores: (
+    corporativoId: string
+  ): Promise<{ ok: boolean; data: TenantConContenedores }> =>
+    apiFetch(`/api/tenant-db/contenedores/corporativo/${corporativoId}/preview`, { method: 'GET' }),
+
+  listarContenedoresVisibles: (): Promise<{ ok: boolean; total: number; data: ContenedorParametrizacion[] }> =>
+    apiFetch('/api/tenant-db/contenedores-visibles', { method: 'GET' }),
 
   /** Crea un nuevo contenedor parametrizado */
   crearContenedor: (
@@ -189,7 +248,7 @@ export const tenantDbService = {
 
   /** Obtiene un contenedor por ID */
   obtenerContenedor: (contenedorId: string): Promise<{ ok: boolean; data: ContenedorParametrizacion }> =>
-    apiFetch(`/api/tenant-db/contenedores/${contenedorId}`, { method: 'GET' }),
+    apiFetch(`/api/tenant-db/contenedores/id/${contenedorId}`, { method: 'GET' }),
 
   /** Actualiza un contenedor */
   actualizarContenedor: (

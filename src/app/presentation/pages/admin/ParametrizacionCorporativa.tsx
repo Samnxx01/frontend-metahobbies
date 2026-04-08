@@ -144,7 +144,9 @@ export default function ParametrizacionCorporativa() {
 
         const nextTabs = uniqueTabs.length
           ? uniqueTabs
-          : TAB_DEFINITIONS.filter((tab) => tab.value !== 'desactivar-perfil');
+          : parentNode
+            ? []
+            : TAB_DEFINITIONS.filter((tab) => tab.value !== 'desactivar-perfil');
 
         if (active) {
           setParentRoutePath(String(parentNode?.path || '').trim());
@@ -180,6 +182,14 @@ export default function ParametrizacionCorporativa() {
     [activeTab, visibleTabs]
   );
 
+  const handleTabChange = (value: string) => {
+    const selectedTab = visibleTabs.find((tab) => tab.value === value);
+    setActiveTab(value);
+    if (selectedTab?.path) {
+      window.history.replaceState(window.history.state, '', selectedTab.path);
+    }
+  };
+
   useEffect(() => {
     if (!visibleTabs.length) return;
 
@@ -210,8 +220,12 @@ export default function ParametrizacionCorporativa() {
     return <div className="p-4 text-sm text-muted-foreground">Cargando parametrizacion dinamica...</div>;
   }
 
+  if (!visibleTabs.length) {
+    return <div className="p-4 text-sm text-muted-foreground">No tienes rutas autorizadas para esta parametrización con el alcance actual del JWT.</div>;
+  }
+
   return (
-    <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+    <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
       <div className="flex w-full flex-col items-center">
         <TabsList className="mb-4 flex min-h-[88px] w-full max-w-[80vw] flex-wrap justify-center gap-2 md:min-h-[44px] md:max-w-[80%]">
           {visibleTabs.map((tab) => (

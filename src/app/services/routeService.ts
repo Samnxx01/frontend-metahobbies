@@ -140,12 +140,13 @@ const getHerenciaAdminPermitida = async (): Promise<{
 }> => {
     try {
         const token = localStorage.getItem("token");
+        console.log('[DEBUG getHerenciaAdminPermitida] token present=', Boolean(token));
         if (!token) {
             return { idsPermitidos: new Set(), pathsPermitidos: new Set() };
         }
 
         const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "/api";
-        const result = await apiFetch(`${API_BASE_URL}/config/permisos/listar/usu/tenant/libres`, {
+        const result = await apiFetch(`${API_BASE_URL}/config/permisos/listar/usu/tenant/libres?soloMios=false&includeOrphans=true`, {
             method: "GET",
             useAuth: true
         }) as HerenciaUsuarioResponse | null;
@@ -169,6 +170,11 @@ const getHerenciaAdminPermitida = async (): Promise<{
             });
         });
 
+        console.log('[DEBUG getHerenciaAdminPermitida] herencias resolved', {
+            idsCount: idsPermitidos.size,
+            pathsCount: pathsPermitidos.size,
+            paths: Array.from(pathsPermitidos).slice(0, 20),
+        });
         return { idsPermitidos, pathsPermitidos };
     } catch (error) {
         console.error("Error al resolver herencias de vistas admin:", error);
@@ -258,6 +264,44 @@ const isFormularioNode = (node: { tipoNodo?: string | null; children?: any[] }):
 const filterRootsByActorTipo = (roots: AdminNavTreeItem[], actorTipo: AdminActorTipo): AdminNavTreeItem[] => {
     if (actorTipo === 'SUPERADMIN') return roots;
     return roots.filter((node) => !isFormularioNode(node) || (Array.isArray(node.children) && node.children.length > 0));
+};
+
+const buildAllowedRouteLookup = (routes: RouteResponse['data'] | null | undefined): { ids: Set<string>; paths: Set<string> } => {
+    const ids = new Set<string>();
+    const paths = new Set<string>();
+
+    if (!Array.isArray(routes)) {
+        return { ids, paths };
+    }
+
+    routes.forEach((route) => {
+        const routeId = String(route._id || route.iud || '').trim();
+        if (routeId) ids.add(routeId);
+        const routePath = normalizeRoutePath(String(route.path || '').trim());
+        if (routePath) paths.add(routePath);
+    });
+
+    return { ids, paths };
+};
+
+const filterTreeByAllowedRoutes = (
+    nodes: AdminNavTreeItem[],
+    allowedIds: Set<string>,
+    allowedPaths: Set<string>
+): AdminNavTreeItem[] => {
+    return nodes.reduce<AdminNavTreeItem[]>((filtered, node) => {
+        const children = filterTreeByAllowedRoutes(node.children || [], allowedIds, allowedPaths);
+        const nodeId = String(node.id || '').trim();
+        const nodePath = normalizeRoutePath(node.path);
+        const allowed = (nodeId && allowedIds.has(nodeId)) || (nodePath && allowedPaths.has(nodePath));
+
+        if (!allowed && children.length === 0) {
+            return filtered;
+        }
+
+        filtered.push({ ...node, children });
+        return filtered;
+    }, []);
 };
 
 const resolveSidebarSourceCollection = (actorTipo: AdminActorTipo): string | null => {
@@ -427,9 +471,11 @@ const findCatalogRoute = (
 
 export const getUserShortcutRoutes = async (): Promise<UserShortcutRoutes> => {
     try {
-        const { tree } = await getAdminSidebarTreeWithContext();
+        const [{ tree }, catalog] = await Promise.all([
+            getAdminSidebarTreeWithContext(),
+            getRouteCatalog(),
+        ]);
         const firstAdminPath = findFirstAuthorizedAdminPath(tree);
-        const catalog = await getRouteCatalog();
 
         const adminByMenu = catalog.find((route) => route.mostrarEnMenuUsuario && route.tiquetaNavb === 'PANEL_ADMIN');
         const perfilByMenu = catalog.find((route) => route.mostrarEnMenuUsuario && route.tiquetaNavb === 'MI_PERFIL');
@@ -874,24 +920,51 @@ export const getAdminSidebarFallbackTree = async (actorTipo: AdminActorTipo): Pr
     }
 };
 
-export const getAdminSidebarTreeWithContext = async (): Promise<AdminSidebarTreeContext> => {
+// ─── Caché singleton del árbol del sidebar ───────────────────────────────────
+// Todas las llamadas concurrentes comparten el mismo Promise en vuelo.
+// TTL de 30s: suficiente para deduplicar la carga inicial, corto para no
+// bloquear cambios hechos desde el panel de gestión de rutas.
+// Los errores NO se cachean: si el fetch falla, la próxima llamada reintenta.
+const SIDEBAR_CACHE_TTL_MS = 30_000;
+let _sidebarCache: { promise: Promise<AdminSidebarTreeContext>; at: number } | null = null;
+
+export const invalidateSidebarCache = (): void => {
+    _sidebarCache = null;
+};
+
+const _fetchSidebarTreeWithContext = async (): Promise<AdminSidebarTreeContext> => {
     try {
         const token = localStorage.getItem('token');
         if (!token) return { actorTipo: 'UNKNOWN', sourceCollection: null, tree: [] };
         const actorTipoJwt = resolveAdminActorTipoFromToken();
 
         const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api';
-        const treeResult: RouteTreeResponse = await apiFetch(`${API_BASE_URL}/seguridad/rutas/listarRutas/arbol/admin`, {
-            method: 'GET',
-            useAuth: true,
-            logoutOn401: true
-        });
+        const [treeResult, securityRoutesResult] = await Promise.all([
+            apiFetch(`${API_BASE_URL}/seguridad/rutas/listarRutas/arbol/admin`, {
+                method: 'GET',
+                useAuth: true,
+                logoutOn401: true
+            }),
+            fetchAllSecurityRoutes(true)
+        ]);
 
         if (treeResult?.success && Array.isArray(treeResult?.data)) {
             const actorTipoBackend = String(treeResult?.actorTipo || '').trim().toUpperCase() as AdminActorTipo;
             const actorTipo = actorTipoJwt === 'UNKNOWN' ? resolveEffectiveAdminActorTipo(actorTipoBackend) : actorTipoJwt;
             const sourceCollection = resolveSidebarSourceCollection(actorTipo);
-            const filteredTree = filterRootsByActorTipo(mapTreeNodes(treeResult.data), actorTipo);
+            const securityLookup = buildAllowedRouteLookup(securityRoutesResult?.data);
+            let filteredTree = filterRootsByActorTipo(mapTreeNodes(treeResult.data), actorTipo);
+
+            if (actorTipo === 'SUPERADMIN') {
+                filteredTree = filterTreeByAllowedRoutes(filteredTree, securityLookup.ids, securityLookup.paths);
+            }
+
+            if (actorTipo === 'GLOBAL' || actorTipo === 'CORPORATIVO') {
+                const herencia = await getHerenciaAdminPermitida();
+                filteredTree = filterTreeByAllowedRoutes(filteredTree, herencia.idsPermitidos, herencia.pathsPermitidos);
+                filteredTree = filterTreeByAllowedRoutes(filteredTree, securityLookup.ids, securityLookup.paths);
+            }
+
             console.log('[MABS][routeService][getAdminSidebarTreeWithContext]', {
                 actorTipoJwt,
                 actorTipoBackend,
@@ -899,35 +972,33 @@ export const getAdminSidebarTreeWithContext = async (): Promise<AdminSidebarTree
                 sourceCollection,
                 treeResultTotal: treeResult.total ?? null,
                 rawDataLength: treeResult.data.length,
-                rawData: treeResult.data,
                 rootCount: filteredTree.length,
                 flatPaths: flattenTreePaths(filteredTree),
             });
-            return {
-                actorTipo,
-                sourceCollection,
-                tree: filteredTree
-            };
+            return { actorTipo, sourceCollection, tree: filteredTree };
         }
+
         const actorTipo = actorTipoJwt;
-        console.log('[MABS][routeService][getAdminSidebarTreeWithContext][empty]', {
-            actorTipoJwt,
-            actorTipo,
-        });
-        return {
-            actorTipo,
-            sourceCollection: resolveSidebarSourceCollection(actorTipo),
-            tree: []
-        };
+        console.log('[MABS][routeService][getAdminSidebarTreeWithContext][empty]', { actorTipoJwt, actorTipo });
+        return { actorTipo, sourceCollection: resolveSidebarSourceCollection(actorTipo), tree: [] };
     } catch (error) {
         console.error('Error al obtener arbol admin por contexto:', error);
         const actorTipo = resolveAdminActorTipoFromToken();
-        return {
-            actorTipo,
-            sourceCollection: resolveSidebarSourceCollection(actorTipo),
-            tree: []
-        };
+        return { actorTipo, sourceCollection: resolveSidebarSourceCollection(actorTipo), tree: [] };
     }
+};
+
+export const getAdminSidebarTreeWithContext = async (): Promise<AdminSidebarTreeContext> => {
+    const now = Date.now();
+    if (_sidebarCache && now - _sidebarCache.at < SIDEBAR_CACHE_TTL_MS) {
+        return _sidebarCache.promise;
+    }
+    const promise = _fetchSidebarTreeWithContext().catch((err) => {
+        _sidebarCache = null; // no cachear errores
+        throw err;
+    });
+    _sidebarCache = { promise, at: now };
+    return promise;
 };
 
 export const getPrivateHomeRoute = async (): Promise<string> => {

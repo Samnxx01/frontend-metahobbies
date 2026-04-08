@@ -19,7 +19,6 @@ import RecuperarContrasena from '@/app/presentation/pages/recuperar-contrasena/R
 import RecuperarContrasenaToken from '@/app/presentation/pages/recuperar-contrasena/RecuperarContrasenaToken';
 import NotFound from '@/app/presentation/pages/not-found/NotFound';
 import Home from '@/app/presentation/pages/home/Home';
-import Login from '@/app/presentation/pages/login/Login';
 import Carrito from '@/app/presentation/pages/carrito/Carrito';
 import DynamicRouteFallback from '@/app/presentation/pages/admin/DynamicRouteFallback';
 
@@ -377,8 +376,6 @@ export default function LayoutRoutes(): ReactElement {
             </Route>
 
             <Route element={<AuthLayout />}>
-                <Route path="public/render/login" element={<Login />} />
-                <Route path="public/render/view/login" element={<Login />} />
                 {authorizedRoutes.authRoutes && renderRoutes(authorizedRoutes.authRoutes)}
             </Route>
 

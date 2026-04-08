@@ -15,7 +15,7 @@ import {
     RefreshCw, Code, Eye, Hash, Flag, Folder, UserCog, Handshake,
 } from 'lucide-react';
 
-import { getAdminSidebarFallbackTree, getAdminSidebarTreeWithContext, type AdminNavTreeItem } from '@/app/services/routeService';
+import { getAdminSidebarFallbackTree, getAdminSidebarTreeWithContext, invalidateSidebarCache, type AdminNavTreeItem } from '@/app/services/routeService';
 import { normalizeRoutePath } from '@/app/services/routePathNormalizer';
 import type { AdminSidebarProps } from '@/types/components';
 
@@ -200,7 +200,10 @@ export default function AdminSidebar({ mobileOpen, setMobileOpen }: AdminSidebar
             }
         };
 
-        const onRoutesUpdated = (): void => { void loadDynamicMenu(); };
+        const onRoutesUpdated = (): void => {
+            invalidateSidebarCache();
+            void loadDynamicMenu();
+        };
         void loadDynamicMenu();
         window.addEventListener('admin-routes-updated', onRoutesUpdated);
         return () => {

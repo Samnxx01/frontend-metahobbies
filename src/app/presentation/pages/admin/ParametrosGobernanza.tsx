@@ -289,7 +289,7 @@ const ENDPOINTS: EndpointSpec[] = [
       { name: 'tipo_tenant', label: 'Tipo tenant', type: 'id', required: true },
       { name: 'coporativo', label: 'Corporativo (empresa)', type: 'id' },
       { name: 'tenantGlobalRef', label: 'Tenant global ref', type: 'id' },
-      { name: 'apisDominios', label: 'Apis dominios', type: 'id', required: true },
+      { name: 'apis', label: 'Apis dominios', type: 'id', required: true },
       { name: 'accionesUsu', label: 'Accion usuario', type: 'id', required: true },
       { name: 'rolesMabs', label: 'Rol mabs', type: 'id', required: true },
     ],
@@ -872,6 +872,49 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
   const actorTieneScopeTenantSuperAdmin = Boolean(String(tenantGlobalActor?.tenantSuperAdminId || '').trim());
   const actorTieneGlobal = Boolean(String(tenantGlobalActor?.tenantGlobalId || '').trim());
   const actorTieneScopeTenantGlobal = actorTieneGlobal && !actorTieneScopeTenantSuperAdmin;
+  const tenantGlobalSelectsLoaded = useMemo(
+    () => Object.keys(tenantGlobalSelects || {}).length > 0,
+    [tenantGlobalSelects]
+  );
+  const tenantUpdateTargets = useMemo(() => {
+    const actorTenantGlobalId = String(tenantGlobalActor?.tenantGlobalId || '').trim();
+    const actorTenantSuperAdminId = String(tenantGlobalActor?.tenantSuperAdminId || '').trim();
+    const esSuperAdmin = !!actorTenantSuperAdminId;
+    const esTenantGlobal = !!actorTenantGlobalId && !esSuperAdmin;
+
+    const classifyScope = (tenant: TenantGlobal): 'tenantSuperAdmin' | 'tenantGlobal' | 'tenantCorporativo' => {
+      const parentTenantGlobalId = String(tenant?.tenantGlobalAdmin || '').trim();
+      const superAdminRef = String(tenant?.tenantSuperAdmin || '').trim();
+
+      if (actorTenantGlobalId && tenant.id === actorTenantGlobalId) return 'tenantGlobal';
+      if (parentTenantGlobalId) return 'tenantCorporativo';
+      if (superAdminRef) return 'tenantSuperAdmin';
+      return 'tenantGlobal';
+    };
+
+    return tenantGlobales
+      .filter((tenant) => {
+        if (esSuperAdmin) return true;
+        if (!esTenantGlobal) return false;
+        const parentTenantGlobalId = String(tenant?.tenantGlobalAdmin || '').trim();
+        return tenant.id === actorTenantGlobalId || parentTenantGlobalId === actorTenantGlobalId;
+      })
+      .map((tenant) => {
+        const scope = classifyScope(tenant);
+        const scopeLabel =
+          scope === 'tenantSuperAdmin'
+            ? 'tenantSuperAdmin'
+            : scope === 'tenantCorporativo'
+            ? 'tenantCorporativo'
+            : 'tenantGlobal';
+        const corporativo = String(tenant?.corporativo || '').trim();
+        return {
+          id: tenant.id,
+          label: `${scopeLabel} | ${tenant.label}${corporativo ? ` | ${corporativo}` : ''}`,
+          meta: { scope },
+        };
+      });
+  }, [tenantGlobalActor, tenantGlobales]);
 
   const endpointDisponibleParaScope = (endpoint: EndpointSpec) => {
     if (endpoint.actor === 'ambos') return true;
@@ -1399,6 +1442,13 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
       return changed ? next : prev;
     });
   }, [tenantGlobalActor, tenantGlobalSelects.coporativo, tenantGlobalSelects.nvlGeneracionTenant]);
+  useEffect(() => {
+    const endpointId = 'tenant-actualizar-global';
+    const selectedId = String(formData?.[endpointId]?.id || '').trim();
+    if (!selectedId) return;
+    if (tenantUpdateTargets.some((opt) => opt.id === selectedId)) return;
+    setFieldValue(endpointId, 'id', '');
+  }, [formData, tenantUpdateTargets]);
   const getCatalogSelection = (endpointId: string): CatalogSelection =>
     catalogSelection[endpointId] ?? { vistas: [], acciones: [] };
   const setCatalogSelectionFor = (endpointId: string, next: CatalogSelection) => {
@@ -2678,14 +2728,20 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
       endpointModal.id === 'tenant-crear-global-admin' ||
       endpointModal.id === 'tenant-actualizar-global';
     if (needsTenantGlobalSelects && !loadingData) {
-      hydrateData();
+      const needsBootstrap =
+        !tenantGlobalSelectsLoaded ||
+        tenantGlobales.length === 0 ||
+        (endpointModal.id === 'tenant-actualizar-global' && tenantUpdateTargets.length === 0);
+      if (needsBootstrap) {
+        hydrateData();
+      }
       return;
     }
     if (!needsTenantGlobal) return;
     if (tenantGlobales.length === 0 && !loadingData) {
       hydrateData();
     }
-  }, [endpointModal, tenantGlobales.length, loadingData]);
+  }, [endpointModal, tenantGlobales.length, loadingData, tenantGlobalSelectsLoaded, tenantUpdateTargets.length]);
 
   useEffect(() => {
     if (!endpointModal) return;
@@ -2956,6 +3012,15 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
       let payload: any = { method: endpoint.method, headers };
       if (endpoint.method !== 'GET' && endpoint.method !== 'DELETE') payload.body = body;
 
+      // ── Modo "quitar solo esa vista": cambia DELETE /:id → PATCH /:id/vista
+      if (endpoint.id === 'perm-admin-tenant-global-desactivar') {
+        const vistaObjetivo = getFieldValue(endpoint.id, 'vistaObjetivoId').trim();
+        const herenciaId = getFieldValue(endpoint.id, 'herenciaAsociada').trim() || getFieldValue(endpoint.id, 'id').trim();
+        if (vistaObjetivo && herenciaId) {
+          resolvedPath = `/api/config/permisos/creacion/admin/tenant/global/${encodeURIComponent(herenciaId)}/vista`;
+          payload = { method: 'PATCH', headers, body: { vistaId: vistaObjetivo } };
+        }
+      }
 
       if (endpoint.id === 'perm-usuario-tenant-global') {
         const esSA = actorEsTenantSuperAdmin();
@@ -4706,6 +4771,39 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
             </div>
           );
         }
+        if (endpoint.id === 'tenant-actualizar-global' && field.name === 'id') {
+          const actorEsTenantSuperAdminScope = actorEsTenantSuperAdmin();
+          const actorEsTenantGlobal = actorEsTenantGlobalScope();
+          return (
+            <div key={field.name}>
+              <Label>{field.label} {field.required ? '*' : ''}</Label>
+              <select
+                className="mt-1 h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm shadow-sm"
+                value={getFieldValue(endpoint.id, field.name)}
+                onChange={(e) => setFieldValue(endpoint.id, field.name, e.target.value)}
+              >
+                <option value="">
+                  {loadingData ? 'Cargando opciones...' : 'Selecciona tenant a actualizar'}
+                </option>
+                {tenantUpdateTargets.map((opt) => (
+                  <option key={opt.id} value={opt.id}>{opt.label}</option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-slate-500">
+                {actorEsTenantSuperAdminScope
+                  ? 'Scope tenantSuperAdmin: puedes seleccionar nodos tenantSuperAdmin, tenantGlobal y tenantCorporativo visibles.'
+                  : actorEsTenantGlobal
+                  ? 'Scope tenantGlobal: solo puedes seleccionar tu tenantGlobal y sus nodos corporativos descendientes.'
+                  : 'El listado se resuelve desde tu scope actual.'}
+              </p>
+              {!loadingData && !tenantUpdateTargets.length ? (
+                <p className="mt-1 text-xs text-amber-700">
+                  No hay tenants disponibles para actualizar con tu scope actual.
+                </p>
+              ) : null}
+            </div>
+          );
+        }
         const usesTenantGlobalSelects =
           (
             endpoint.id === 'tenant-crear-global-usuario' ||
@@ -4733,6 +4831,10 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
           const optionsRoles = field.name === 'rolesMabs'
             ? opcionesRolesPorNivel.filter((opt) => !nvlBloqueaRolDios || String(opt.rol || '').toUpperCase() !== 'DIOS')
             : opcionesRolesPorNivel;
+          const ownerTypeBloqueadoPorScope =
+            endpoint.id === 'tenant-actualizar-global' &&
+            field.name === 'ownerType' &&
+            !actorEsTenantSuperAdmin();
           const optionsNivelPorScope = field.name === 'nvlGeneracionTenant'
             ? options.filter((opt) => {
                 const nvl = String((opt as any)?.meta?.nvl || '').trim();
@@ -4757,6 +4859,8 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
               ? !selectedNvl || !nvlPermiteCorporativo
               : field.name === 'tenantGlobalRef'
               ? !selectedNvl || !nvlEsTenantCorporativo || actorEsTenantGlobalPuro
+              : ownerTypeBloqueadoPorScope
+              ? true
               : false;
           const isAccionUsuarioMulti =
             field.name === 'accionesUsu' &&
@@ -4863,6 +4967,11 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
                   {field.name === 'coporativo' && nvlEsLibre
                     ? 'Para NVL LIBRE no se requiere corporativo.'
                     : 'Sin opciones para este campo. Verifica rol `tenantSuperAdmin` o la configuracion del nivel.'}
+                </p>
+              ) : null}
+              {ownerTypeBloqueadoPorScope ? (
+                <p className="mt-1 text-xs text-slate-500">
+                  `ownerType` solo puede ajustarlo un usuario con scope `tenantSuperAdmin`.
                 </p>
               ) : null}
               {field.name === 'tenantGlobalRef' && actorEsTenantGlobalPuro ? (

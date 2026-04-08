@@ -26,7 +26,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import { Loader2, AlertTriangle } from 'lucide-react';
 import { apiFetch } from '@/app/services/api';
 import { getAdminHomeRoute } from '@/app/services/routeService';
-import { getGovernedPostLoginPath } from '@/app/services/governedNavigation';
+import { getGovernedPostLoginPath, getGovernedRegisterPath, getGovernedForgotPasswordPath } from '@/app/services/governedNavigation';
 
 // --- Interfaces ---
 interface LoginFormData {
@@ -288,8 +288,8 @@ export default function Login(): React.ReactElement {
 
                             {/* Enlace Olvidé mi contraseña */}
                             <div className="flex justify-end pt-1 pb-3">
-                                <Link 
-                                    to="/recuperar-contrasena" 
+                                <Link
+                                    to={getGovernedForgotPasswordPath()}
                                     className="text-sm text-primary hover:underline font-medium transition-colors"
                                 >
                                     ¿Olvidaste tu contraseña?
@@ -315,8 +315,8 @@ export default function Login(): React.ReactElement {
                             {/* Enlace a Registro */}
                             <p className="text-sm text-center text-muted-foreground pt-2">
                                 ¿Aún no tienes cuenta?{' '}
-                                <Link 
-                                    to="/registro" 
+                                <Link
+                                    to={getGovernedRegisterPath()}
                                     className="text-primary font-semibold hover:underline transition-colors"
                                 >
                                     Regístrate aquí
