@@ -25,6 +25,7 @@ import {
   type TenantDbConfig,
   type TenantDbConfigEditable,
   type SyncColeccion,
+  type SyncPreview,
   type TenantDisponible,
   type ContenedorParametrizacion,
 } from '../../../services/tenantDbService';
@@ -100,6 +101,19 @@ const resolveContenedorId = (
 const getConfigJerarquiaLabel = (config: TenantDbConfig) => {
   return config.secuenciaHijoLabel || config.secuenciaHijo?.join('.') || 'sin-secuencia';
 };
+
+const resolveConfigRefId = (
+  value: TenantDbConfig['parentTenantDbConfig'] | TenantDbConfig['rootTenantDbConfig'] | string | null | undefined
+) => {
+  if (!value) return '';
+  if (typeof value === 'string') return value;
+  return String(value.iud || value._id || '');
+};
+
+const getPreviewEntries = (doc: Record<string, unknown>) =>
+  Object.entries(doc || {})
+    .filter(([key]) => !['__v'].includes(key))
+    .slice(0, 6);
 
 function MigrationBadge({ status }: { status: TenantDbConfig['migrationStatus'] }) {
   const map: Record<TenantDbConfig['migrationStatus'], { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
@@ -219,11 +233,36 @@ export default function TenantDbManager() {
 
   // ── Dialog sync ──
   const [dlgSync, setDlgSync] = useState(false);
-  const [syncForm, setSyncForm] = useState({ coleccion: '', autoSync: true, modo: 'full' as 'full' | 'incremental' });
+  const [syncForm, setSyncForm] = useState({
+    sourceConfigId: '',
+    coleccion: '',
+    colecciones: [] as string[],
+    autoSync: true,
+    modo: 'full' as 'full' | 'incremental',
+    filtroTexto: '',
+  });
   const [syncSaving, setSyncSaving] = useState(false);
+  const [syncCollections, setSyncCollections] = useState<string[]>([]);
+  const [syncCollectionsLoading, setSyncCollectionsLoading] = useState(false);
 
   // ── Sync manual ──
   const [syncManualLoading, setSyncManualLoading] = useState<string | null>(null); // "tenantId:coleccion"
+  const [dlgSyncDatos, setDlgSyncDatos] = useState(false);
+  const [syncDataTarget, setSyncDataTarget] = useState<{ config: TenantDbConfig; col: SyncColeccion } | null>(null);
+  const [syncDataForm, setSyncDataForm] = useState({
+    modo: 'incremental' as 'full' | 'incremental',
+    filtroTexto: '',
+    selectedIds: [] as string[],
+  });
+  const [syncPreview, setSyncPreview] = useState<SyncPreview | null>(null);
+  const [syncPreviewLoading, setSyncPreviewLoading] = useState(false);
+  const [dlgSyncManual, setDlgSyncManual] = useState(false);
+  const [dlgEstadoSync, setDlgEstadoSync] = useState(false);
+  const [estadoSyncConfig, setEstadoSyncConfig] = useState<TenantDbConfig | null>(null);
+  const [dlgRemoverSync, setDlgRemoverSync] = useState(false);
+  const [removerSyncTarget, setRemoverSyncTarget] = useState<{ config: TenantDbConfig; coleccion: string } | null>(null);
+  const [removerSyncDropCollection, setRemoverSyncDropCollection] = useState(true);
+  const [removerSyncLoading, setRemoverSyncLoading] = useState(false);
 
   // ── Pool ──
   const [pool, setPool] = useState<{ pool: Record<string, { readyState: number; nombre: string }>; watchersActivos: string[] } | null>(null);
@@ -710,7 +749,7 @@ export default function TenantDbManager() {
 
     setParametrizacionLoading(true);
     try {
-      await tenantDbService.crearContenedor(tenantParaParametrizar.iud, {
+      await tenantDbService.crearContenedor(tenantParaParametrizar.corporativo?.iud || '', {
         nombre: formContenedor.nombre,
         apisDominios: formContenedor.apisDominios,
         parentContenedorId: formContenedor.parentContenedorId || undefined,
@@ -791,6 +830,25 @@ export default function TenantDbManager() {
     || Array.from(contenedoresPorTenant.values()).flat().find((item) => item.iud === form.contenedorId)
     || null;
 
+  const syncAutoSourceCandidates = tenantSeleccionado
+    ? (() => {
+        const currentId = resolverConfigId(tenantSeleccionado);
+        const ids = new Set<string>();
+        const parentId = resolveConfigRefId(tenantSeleccionado.parentTenantDbConfig);
+        const rootId = resolveConfigRefId(tenantSeleccionado.rootTenantDbConfig);
+        if (parentId && parentId !== currentId) ids.add(parentId);
+        if (rootId && rootId !== currentId) ids.add(rootId);
+
+        return Array.from(ids)
+          .map((id) => configs.find((cfg) => resolverConfigId(cfg) === id))
+          .filter((cfg): cfg is TenantDbConfig => Boolean(cfg));
+      })()
+    : [];
+
+  const syncSourceCandidates = tenantSeleccionado
+    ? configs.filter((cfg) => resolverConfigId(cfg) !== resolverConfigId(tenantSeleccionado) && cfg.estado)
+    : [];
+
   useEffect(() => {
     if (!form.contenedorId) {
       if (form.parentTenantDbConfigId) {
@@ -856,47 +914,101 @@ export default function TenantDbManager() {
 
   // ─── Sync ─────────────────────────────────────────────────────────────────
 
-  const resolverConfigId = (config: TenantDbConfig): string => config.iud;
+  function resolverConfigId(config: TenantDbConfig): string {
+    return config.iud;
+  }
 
-  const notificarEstadoSync = async (config: TenantDbConfig) => {
-    try {
-      const estado = await tenantDbService.estadoPool();
-      const poolActual = config.poolName ? estado.pool?.[config.poolName] : undefined;
-      const autoSyncActivos = config.coleccionesSync?.filter((item) => item.estado && item.autoSync).length ?? 0;
-      const watchersDetectados = (estado.watchersActivos ?? []).filter((watcher) =>
-        [config.poolName, config.dbName].filter(Boolean).some((valor) =>
-          String(watcher).toLowerCase().includes(String(valor).toLowerCase())
-        )
-      ).length;
-
-      toast.info(
-        `Pool ${config.poolName || config.dbName}: ${READY_STATE_LABEL[poolActual?.readyState ?? 0]}. Auto-sync activos: ${autoSyncActivos}. Watchers detectados: ${watchersDetectados}.`
-      );
-    } catch {
-      toast.info(
-        `Sincronización disponible para ${config.poolName || config.dbName}. Revisa colecciones y watchers al abrir el modal.`
-      );
-    }
+  const abrirEstadoSync = async (config: TenantDbConfig) => {
+    setEstadoSyncConfig(config);
+    setDlgEstadoSync(true);
+    await cargarPool();
   };
 
   const abrirDlgSync = (config: TenantDbConfig) => {
+    const sourcePreferido =
+      resolveConfigRefId(config.parentTenantDbConfig)
+      || resolveConfigRefId(config.rootTenantDbConfig)
+      || '';
     setTenantSeleccionado(config);
-    setSyncForm({ coleccion: '', autoSync: true, modo: 'full' });
+    setSyncCollections([]);
+    setSyncPreview(null);
+    setSyncForm({
+      sourceConfigId: String(sourcePreferido || ''),
+      coleccion: '',
+      colecciones: [],
+      autoSync: true,
+      modo: 'full',
+      filtroTexto: '',
+    });
     setDlgSync(true);
   };
 
+  const parseSyncFiltro = (rawInput: string) => {
+    const raw = String(rawInput || '').trim();
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw);
+    } catch {
+      throw new Error('El filtro JSON no es valido');
+    }
+  };
+
+  const cargarColeccionesSync = useCallback(async (targetConfigId: string, sourceConfigId: string) => {
+    if (!targetConfigId || !sourceConfigId) {
+      setSyncCollections([]);
+      return;
+    }
+    setSyncCollectionsLoading(true);
+    try {
+      const res = await tenantDbService.listarColeccionesSyncDisponibles(targetConfigId, sourceConfigId);
+      setSyncCollections(Array.isArray(res.data) ? res.data : []);
+    } catch (err: any) {
+      setSyncCollections([]);
+      toast.error(err?.message ?? 'No se pudieron cargar las colecciones del padre');
+    } finally {
+      setSyncCollectionsLoading(false);
+    }
+  }, []);
+
+  const handlePreviewSync = async () => {
+    if (!tenantSeleccionado || !syncForm.sourceConfigId || !syncForm.coleccion) {
+      toast.warning('Selecciona conexión padre y colección');
+      return;
+    }
+
+    setSyncPreviewLoading(true);
+    try {
+      const filtro = parseSyncFiltro(syncForm.filtroTexto);
+      const res = await tenantDbService.previewSync(resolverConfigId(tenantSeleccionado), {
+        sourceConfigId: syncForm.sourceConfigId,
+        coleccion: syncForm.coleccion,
+        modo: syncForm.modo,
+        filtro,
+      });
+      setSyncPreview(res.data);
+      toast.success('Preview generado');
+    } catch (err: any) {
+      toast.error(err?.message ?? 'No se pudo generar el preview');
+    } finally {
+      setSyncPreviewLoading(false);
+    }
+  };
+
   const handleGuardarSync = async () => {
-    if (!tenantSeleccionado || !syncForm.coleccion) {
+    if (!tenantSeleccionado || !syncForm.sourceConfigId || !syncForm.coleccion) {
       toast.warning('Nombre de colección obligatorio');
       return;
     }
     setSyncSaving(true);
     const id = resolverConfigId(tenantSeleccionado);
     try {
+      const filtro = parseSyncFiltro(syncForm.filtroTexto);
       const res = await tenantDbService.configurarSync(id, {
+        sourceConfigId: syncForm.sourceConfigId,
         coleccion: syncForm.coleccion,
         autoSync: syncForm.autoSync,
         modo: syncForm.modo,
+        filtro,
       });
       toast.success(res.msg ?? 'Sync configurado');
       setDlgSync(false);
@@ -913,9 +1025,14 @@ export default function TenantDbManager() {
     const key = `${id}:${col.coleccion}`;
     setSyncManualLoading(key);
     try {
+      const sourceConfigId = typeof col.sourceConfigId === 'string'
+        ? col.sourceConfigId
+        : col.sourceConfigId?.iud || col.sourceConfigId?._id || '';
       const res = await tenantDbService.ejecutarSync(id, {
+        sourceConfigId,
         coleccion: col.coleccion,
         modo: col.modo,
+        filtro: col.filtro,
       });
       toast.success(`Sync completado: ${res.data?.copiados ?? 0} documentos copiados`);
       void cargarConfigs();
@@ -926,7 +1043,7 @@ export default function TenantDbManager() {
     }
   };
 
-  const handleRemoverSync = async (config: TenantDbConfig, coleccion: string) => {
+  const handleRemoverSyncLegacy = async (config: TenantDbConfig, coleccion: string) => {
     if (!window.confirm(`¿Remover "${coleccion}" del sync?`)) return;
     const id = resolverConfigId(config);
     try {
@@ -938,6 +1055,175 @@ export default function TenantDbManager() {
     }
   };
 
+  const handleRemoverSync = (config: TenantDbConfig, coleccion: string) => {
+    setRemoverSyncTarget({ config, coleccion });
+    setRemoverSyncDropCollection(true);
+    setDlgRemoverSync(true);
+  };
+
+  const confirmarRemoverSync = async () => {
+    if (!removerSyncTarget) return;
+    const id = resolverConfigId(removerSyncTarget.config);
+    setRemoverSyncLoading(true);
+    try {
+      await tenantDbService.removerSync(id, removerSyncTarget.coleccion, {
+        dropCollection: removerSyncDropCollection,
+      });
+      toast.success(
+        removerSyncDropCollection
+          ? 'Sync removida y coleccion destino eliminada'
+          : 'Coleccion removida del sync'
+      );
+      setDlgRemoverSync(false);
+      setRemoverSyncTarget(null);
+      void cargarConfigs();
+    } catch (err: any) {
+      toast.error(err?.message ?? 'Error removiendo sync');
+    } finally {
+      setRemoverSyncLoading(false);
+    }
+  };
+
+  const resolveSourceConfigIdFromCol = (col: SyncColeccion): string => {
+    if (typeof col.sourceConfigId === 'string') return col.sourceConfigId;
+    return col.sourceConfigId?.iud || col.sourceConfigId?._id || '';
+  };
+
+  const handleGuardarSyncConfig = async () => {
+    if (!tenantSeleccionado || !syncForm.sourceConfigId) {
+      toast.warning('Selecciona la conexion padre');
+      return;
+    }
+
+    const targetConfigId = resolverConfigId(tenantSeleccionado);
+    let coleccionesObjetivo = [...syncForm.colecciones];
+
+    setSyncSaving(true);
+    try {
+      if (syncForm.modo === 'full') {
+        let disponibles = syncCollections;
+        if (!disponibles.length) {
+          const res = await tenantDbService.listarColeccionesSyncDisponibles(targetConfigId, syncForm.sourceConfigId);
+          disponibles = Array.isArray(res.data) ? res.data : [];
+          setSyncCollections(disponibles);
+        }
+        coleccionesObjetivo = disponibles;
+      }
+
+      coleccionesObjetivo = Array.from(new Set(coleccionesObjetivo.filter(Boolean)));
+      if (!coleccionesObjetivo.length) {
+        toast.warning(
+          syncForm.modo === 'full'
+            ? 'No se encontraron colecciones en la BD padre'
+            : 'Selecciona una o varias colecciones'
+        );
+        return;
+      }
+
+      for (const coleccion of coleccionesObjetivo) {
+        await tenantDbService.configurarSync(targetConfigId, {
+          sourceConfigId: syncForm.sourceConfigId,
+          coleccion,
+          autoSync: syncForm.autoSync,
+          modo: syncForm.modo,
+          filtro: null,
+        });
+      }
+
+      toast.success(
+        syncForm.modo === 'full'
+          ? `Se configuraron ${coleccionesObjetivo.length} colecciones del padre`
+          : `Se guardaron ${coleccionesObjetivo.length} sincronizaciones selectivas`
+      );
+      setDlgSync(false);
+      setSyncCollections([]);
+      setSyncPreview(null);
+      void cargarConfigs();
+    } catch (err: any) {
+      toast.error(err?.message ?? 'Error configurando sincronizacion');
+    } finally {
+      setSyncSaving(false);
+    }
+  };
+
+  const handleAbrirSyncDatos = (config: TenantDbConfig, col: SyncColeccion) => {
+    setSyncDataTarget({ config, col });
+    setSyncDataForm({
+      modo: (col.modo || 'incremental') as 'full' | 'incremental',
+      filtroTexto: col.filtro ? JSON.stringify(col.filtro, null, 2) : '',
+      selectedIds: [],
+    });
+    setSyncPreview(null);
+    setDlgSyncDatos(true);
+  };
+
+  const handlePreviewSyncDatos = async () => {
+    if (!syncDataTarget) {
+      toast.warning('Selecciona una sincronizacion');
+      return;
+    }
+
+    const targetConfigId = resolverConfigId(syncDataTarget.config);
+    const sourceConfigId = resolveSourceConfigIdFromCol(syncDataTarget.col);
+    if (!sourceConfigId) {
+      toast.warning('No se pudo resolver la conexion padre');
+      return;
+    }
+
+    setSyncPreviewLoading(true);
+    try {
+      const filtro = parseSyncFiltro(syncDataForm.filtroTexto);
+      const res = await tenantDbService.previewSync(targetConfigId, {
+        sourceConfigId,
+        coleccion: syncDataTarget.col.coleccion,
+        modo: syncDataForm.modo,
+        filtro,
+        selectedIds: syncDataForm.modo === 'incremental' ? syncDataForm.selectedIds : null,
+      });
+      setSyncPreview(res.data);
+      toast.success('Preview generado');
+    } catch (err: any) {
+      toast.error(err?.message ?? 'No se pudo generar el preview');
+    } finally {
+      setSyncPreviewLoading(false);
+    }
+  };
+
+  const handleEjecutarSyncDatos = async () => {
+    if (!syncDataTarget) {
+      toast.warning('Selecciona una sincronizacion');
+      return;
+    }
+
+    const targetConfigId = resolverConfigId(syncDataTarget.config);
+    const sourceConfigId = resolveSourceConfigIdFromCol(syncDataTarget.col);
+    if (!sourceConfigId) {
+      toast.warning('No se pudo resolver la conexion padre');
+      return;
+    }
+
+    const key = `${targetConfigId}:${syncDataTarget.col.coleccion}`;
+    setSyncManualLoading(key);
+    try {
+      const filtro = parseSyncFiltro(syncDataForm.filtroTexto);
+      const res = await tenantDbService.ejecutarSync(targetConfigId, {
+        sourceConfigId,
+        coleccion: syncDataTarget.col.coleccion,
+        modo: syncDataForm.modo,
+        filtro,
+        selectedIds: syncDataForm.modo === 'incremental' ? syncDataForm.selectedIds : null,
+      });
+      toast.success(`Sync completado: ${res.data?.copiados ?? 0} documentos copiados`);
+      setDlgSyncDatos(false);
+      setSyncPreview(null);
+      void cargarConfigs();
+    } catch (err: any) {
+      toast.error(err?.message ?? 'Error ejecutando sincronizacion');
+    } finally {
+      setSyncManualLoading(null);
+    }
+  };
+
   const toggleExpand = (id: string) => {
     setExpandedRows(prev => {
       const next = new Set(prev);
@@ -945,6 +1231,20 @@ export default function TenantDbManager() {
       return next;
     });
   };
+
+  useEffect(() => {
+    if (!dlgSync || !tenantSeleccionado) return;
+    void cargarColeccionesSync(resolverConfigId(tenantSeleccionado), syncForm.sourceConfigId);
+  }, [dlgSync, tenantSeleccionado, syncForm.sourceConfigId, cargarColeccionesSync]);
+
+  useEffect(() => {
+    if (!dlgSync || !tenantSeleccionado) return;
+    if (syncForm.sourceConfigId) return;
+    if (syncAutoSourceCandidates.length !== 1) return;
+
+    const unicoOrigen = resolverConfigId(syncAutoSourceCandidates[0]);
+    setSyncForm((prev) => ({ ...prev, sourceConfigId: unicoOrigen }));
+  }, [dlgSync, tenantSeleccionado, syncForm.sourceConfigId, syncAutoSourceCandidates]);
 
   // ─── Render ───────────────────────────────────────────────────────────────
 
@@ -1086,7 +1386,7 @@ export default function TenantDbManager() {
                               variant="outline"
                               size="icon"
                               title="Configurar sync de colecciones"
-                              onClick={() => void notificarEstadoSync(cfg)}
+                              onClick={() => void abrirEstadoSync(cfg)}
                             >
                               <Radio className="w-4 h-4" />
                             </Button>
@@ -1137,7 +1437,28 @@ export default function TenantDbManager() {
                           <p className="font-semibold text-sm">{cfg.poolName || cfg.dbName}</p>
                           <p className="text-xs text-muted-foreground">{cfg.dbName}</p>
                         </div>
-                        <Badge variant="outline">{colsActivas.length} colecciones</Badge>
+                        <Badge variant="outline">{colsActivas.length} sync guardadas</Badge>
+                      </div>
+                      <div className="hidden flex-1 px-4 lg:block">
+                        {colsActivas.length > 0 ? (
+                          <div className="space-y-1">
+                            <p className="text-xs font-medium text-muted-foreground">Sincronizaciones de datos</p>
+                            <div className="flex flex-wrap gap-2">
+                              {colsActivas.slice(0, 4).map((col) => (
+                                <Badge key={`${cfg.iud}:${col.coleccion}`} variant="secondary" className="text-[11px]">
+                                  {col.coleccion}
+                                </Badge>
+                              ))}
+                              {colsActivas.length > 4 && (
+                                <Badge variant="outline" className="text-[11px]">
+                                  +{colsActivas.length - 4} mas
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">Sin sincronizaciones de datos guardadas.</p>
+                        )}
                       </div>
                       <div className="flex items-center gap-2">
                         <Button
@@ -1146,7 +1467,7 @@ export default function TenantDbManager() {
                           onClick={e => { e.stopPropagation(); abrirDlgSync(cfg); }}
                         >
                           <Plus className="w-3 h-3 mr-1" />
-                          Agregar colección
+                          Explorar padre / agregar sync
                         </Button>
                         {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                       </div>
@@ -1157,9 +1478,9 @@ export default function TenantDbManager() {
                     <CardContent className="pt-0">
                       <Separator className="mb-4" />
                       {colsActivas.length === 0 ? (
-                        <p className="text-sm text-muted-foreground py-4 text-center">
-                          No hay colecciones configuradas para este tenant.
-                        </p>
+                          <p className="text-sm text-muted-foreground py-4 text-center">
+                            No hay sincronizaciones guardadas para esta conexión. Usa el botón de arriba para traer las colecciones reales del padre.
+                          </p>
                       ) : (
                         <Table>
                           <TableHeader>
@@ -1203,14 +1524,14 @@ export default function TenantDbManager() {
                                       variant="outline"
                                       size="sm"
                                       disabled={isSyncing}
-                                      onClick={() => handleSyncManual(cfg, col)}
-                                      title="Ejecutar sync manual ahora"
+                                      onClick={() => handleAbrirSyncDatos(cfg, col)}
+                                      title="Abrir sincronizacion de datos"
                                     >
                                       {isSyncing
                                         ? <Loader2 className="w-3 h-3 animate-spin" />
                                         : <Play className="w-3 h-3" />
                                       }
-                                      <span className="ml-1">Sincronizar</span>
+                                      <span className="ml-1">Sincronizar datos</span>
                                     </Button>
                                     <Button
                                       variant="ghost"
@@ -1599,7 +1920,758 @@ export default function TenantDbManager() {
 
       {/* ── DIALOG: Configurar sync de colección ── */}
       <Dialog open={dlgSync} onOpenChange={setDlgSync}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Radio className="w-5 h-5" />
+              Configurar sincronizaciÃ³n
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="grid gap-4 py-2 lg:grid-cols-2">
+            <div className="rounded-md bg-muted px-3 py-2 text-xs lg:col-span-2">
+              <p className="font-mono truncate">{tenantSeleccionado?.poolName || tenantSeleccionado?.dbName}</p>
+              <p className="mt-1 text-muted-foreground">Destino cliente: {tenantSeleccionado?.dbName}</p>
+            </div>
+
+            <div className="space-y-1">
+              <Label htmlFor="source-config">ConexiÃ³n padre <span className="text-destructive">*</span></Label>
+              {syncAutoSourceCandidates.length === 1 ? (
+                <div className="rounded-md border bg-muted px-3 py-2 text-sm">
+                  <p className="font-medium">
+                    {syncAutoSourceCandidates[0].poolName || syncAutoSourceCandidates[0].dbName}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Padre detectado automÃ¡ticamente: {getConfigJerarquiaLabel(syncAutoSourceCandidates[0])}
+                  </p>
+                </div>
+              ) : (
+                <select
+                  id="source-config"
+                  className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 w-full"
+                  value={syncForm.sourceConfigId}
+                    onChange={e => {
+                      const sourceConfigId = e.target.value;
+                      setSyncForm(f => ({ ...f, sourceConfigId, coleccion: '', colecciones: [] }));
+                      setSyncPreview(null);
+                    }}
+                >
+                  <option value="">Selecciona la BD padre...</option>
+                  {syncSourceCandidates.map(cfg => (
+                    <option key={cfg.iud} value={cfg.iud}>
+                      {cfg.poolName || cfg.dbName} | {getConfigJerarquiaLabel(cfg)} | {cfg.dbName}
+                    </option>
+                  ))}
+                </select>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Esta conexiÃ³n serÃ¡ el origen maestro desde donde se migran y sincronizan los datos.
+              </p>
+            </div>
+
+            <div className="space-y-1">
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor="coleccion-sync">Colecciones del padre <span className="text-destructive">*</span></Label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={!tenantSeleccionado || !syncForm.sourceConfigId || syncCollectionsLoading}
+                  onClick={() => {
+                    if (!tenantSeleccionado || !syncForm.sourceConfigId) return;
+                    void cargarColeccionesSync(resolverConfigId(tenantSeleccionado), syncForm.sourceConfigId);
+                  }}
+                >
+                  {syncCollectionsLoading ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <RefreshCw className="w-3 h-3 mr-1" />}
+                  Traer colecciones
+                </Button>
+              </div>
+              {syncForm.modo === 'full' ? (
+                <div className="rounded-md border bg-muted px-3 py-3 text-sm space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-medium">Full migrara todas las colecciones detectadas en la BD padre.</p>
+                    <Badge variant="secondary">
+                      {syncCollectionsLoading ? 'Cargando...' : `${syncCollections.length} colecciones`}
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {syncCollectionsLoading
+                      ? 'Consultando cuantas colecciones existen en la BD padre...'
+                      : syncCollections.length > 0
+                        ? `En este momento se sincronizaran ${syncCollections.length} colecciones del padre.`
+                        : 'Aun no se ha detectado ninguna coleccion para sincronizar.'}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {syncCollectionsLoading
+                      ? 'Cargando colecciones del padre...'
+                      : 'Solo se mostrara la cantidad total a sincronizar en modo Full.'}
+                  </p>
+                </div>
+              ) : (
+                <div className="rounded-md border p-3 space-y-3">
+                  <p className="text-xs text-muted-foreground">
+                    Selecciona una o varias colecciones especificas para esta sincronizacion.
+                  </p>
+                  <div className="max-h-48 overflow-auto">
+                    {syncCollections.length > 0 ? (
+                      <div className="flex flex-wrap gap-2">
+                        {syncCollections.map((coleccion) => {
+                          const checked = syncForm.colecciones.includes(coleccion);
+                          return (
+                            <label
+                              key={coleccion}
+                              className={`inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1.5 text-sm transition-colors ${
+                                checked
+                                  ? 'border-primary bg-primary/10 text-foreground'
+                                  : 'border-border bg-background text-muted-foreground hover:border-primary/50'
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                className="sr-only"
+                                checked={checked}
+                                onChange={(e) => {
+                                  const marcado = e.target.checked;
+                                  setSyncForm((prev) => ({
+                                    ...prev,
+                                    colecciones: marcado
+                                      ? Array.from(new Set([...prev.colecciones, coleccion]))
+                                      : prev.colecciones.filter((item) => item !== coleccion),
+                                    coleccion: marcado ? coleccion : prev.coleccion === coleccion ? '' : prev.coleccion,
+                                  }));
+                                }}
+                              />
+                              <span>{coleccion}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        {syncCollectionsLoading ? 'Cargando colecciones del padre...' : 'No hay colecciones disponibles'}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Se listan directamente desde la BD padre para que puedas guardar una o varias y sincronizar sus datos despues.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Modo de sincronizaciÃ³n</Label>
+              <div className="flex gap-3">
+                {(['full', 'incremental'] as const).map(m => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => {
+                      setSyncForm(f => ({ ...f, modo: m }));
+                      setSyncPreview(null);
+                    }}
+                    className={`flex-1 rounded-md border px-3 py-2 text-sm transition-colors
+                      ${syncForm.modo === m
+                        ? 'border-primary bg-primary/10 font-semibold'
+                        : 'border-border bg-background text-muted-foreground hover:border-primary/50'}`}
+                  >
+                    {m === 'full' ? 'Full (todas las colecciones)' : 'Selectiva (una o varias)'}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Full guarda todas las colecciones detectadas del padre. Selectiva te deja elegir exactamente cuales quieres trabajar.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div>
+                <Label className="text-sm">Auto-Sync (Change Stream)</Label>
+                <p className="text-xs text-muted-foreground">
+                  Replica cambios del master en tiempo real
+                </p>
+              </div>
+              <Switch
+                checked={syncForm.autoSync}
+                onCheckedChange={v => setSyncForm(f => ({ ...f, autoSync: v }))}
+              />
+            </div>
+            <div className="rounded-md border p-3 text-xs text-muted-foreground lg:col-span-2">
+              El filtro, el preview y la ejecucion manual de datos se manejan en el modal "Sincronizar datos" de cada coleccion guardada.
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDlgSync(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleGuardarSyncConfig} disabled={syncSaving}>
+              {syncSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
+              Guardar sync
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={dlgSyncDatos} onOpenChange={setDlgSyncDatos}>
+        <DialogContent className="max-w-6xl max-h-[90vh] overflow-hidden p-0">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 px-6 pt-6">
+              <Play className="w-5 h-5" />
+              Sincronizacion de datos
+            </DialogTitle>
+          </DialogHeader>
+
+          {syncDataTarget && (
+            <div className="flex max-h-[calc(90vh-80px)] flex-col">
+              <div className="overflow-y-auto px-6 py-2">
+            <div className="grid gap-4 lg:grid-cols-2 pb-4">
+              <div className="rounded-md bg-muted px-3 py-2 text-sm space-y-1 lg:col-span-2">
+                <p className="font-medium">
+                  {syncDataTarget.col.coleccion}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Origen: {configs.find((cfg) => resolverConfigId(cfg) === resolveSourceConfigIdFromCol(syncDataTarget.col))?.poolName || 'BD padre'}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Destino: {syncDataTarget.config.poolName || syncDataTarget.config.dbName}
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Modo de sincronizacion de datos</Label>
+                <div className="flex gap-3">
+                  {(['full', 'incremental'] as const).map((modo) => (
+                    <button
+                      key={modo}
+                      type="button"
+                      onClick={() => setSyncDataForm((prev) => ({ ...prev, modo, selectedIds: modo === 'full' ? [] : prev.selectedIds }))}
+                      className={`flex-1 rounded-md border px-3 py-2 text-sm transition-colors
+                        ${syncDataForm.modo === modo
+                          ? 'border-primary bg-primary/10 font-semibold'
+                          : 'border-border bg-background text-muted-foreground hover:border-primary/50'}`}
+                    >
+                      {modo === 'full' ? 'Full (todos los registros del padre)' : 'Incremental (seleccionar registros)'}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {syncDataForm.modo === 'full'
+                    ? 'Full sincroniza todos los registros existentes del padre para esta coleccion.'
+                    : 'Incremental te permite revisar los registros del padre y escoger exactamente cuales quieres sincronizar.'}
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Filtro manual</Label>
+                <div className="rounded-md border p-3 space-y-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-xs text-muted-foreground">
+                      El JSON solo aparece si lo solicitas manualmente.
+                    </p>
+                    <Button type="button" variant="outline" size="sm" onClick={() => setDlgSyncManual(true)}>
+                      <Pencil className="w-3 h-3 mr-1" />
+                      Configurar JSON manual
+                    </Button>
+                  </div>
+                  {syncDataForm.filtroTexto.trim() ? (
+                    <pre className="max-h-24 overflow-auto rounded-md bg-muted p-2 text-[11px] leading-relaxed">
+                      {syncDataForm.filtroTexto}
+                    </pre>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      Sin filtro manual. Se usaran todos los registros del padre segun el modo seleccionado.
+                    </p>
+                  )}
+                </div>
+              </div>
+
+                <div className="rounded-md border p-3 space-y-3 lg:col-span-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-medium">Preview de datos</p>
+                      <p className="text-xs text-muted-foreground">
+                        Consulta cuantos registros existen en el padre, en el cliente y cuantos quedan pendientes.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handlePreviewSyncDatos}
+                    disabled={syncPreviewLoading}
+                  >
+                    {syncPreviewLoading ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Eye className="w-4 h-4 mr-1" />}
+                    Ver datos
+                  </Button>
+                </div>
+
+                {syncPreview && (
+                  <div className="space-y-4">
+                    <div className="flex flex-wrap gap-2">
+                      <Badge variant="outline">Origen: {syncPreview.totalOrigen}</Badge>
+                      <Badge variant="outline">Destino: {syncPreview.totalDestino}</Badge>
+                      <Badge variant="secondary">Pendientes: {syncPreview.pendientes}</Badge>
+                    </div>
+
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      <div className="rounded-lg border bg-muted/30 p-3">
+                        <p className="text-xs text-muted-foreground">Registros en padre</p>
+                        <p className="mt-1 text-2xl font-semibold">{syncPreview.totalOrigen}</p>
+                      </div>
+                      <div className="rounded-lg border bg-muted/30 p-3">
+                        <p className="text-xs text-muted-foreground">Registros en destino</p>
+                        <p className="mt-1 text-2xl font-semibold">{syncPreview.totalDestino}</p>
+                      </div>
+                      <div className="rounded-lg border bg-muted/30 p-3">
+                        <p className="text-xs text-muted-foreground">Pendientes</p>
+                        <p className="mt-1 text-2xl font-semibold">{syncPreview.pendientes}</p>
+                      </div>
+                    </div>
+
+                    <div className={`grid gap-3 ${syncDataForm.modo === 'full' ? 'lg:grid-cols-3' : 'lg:grid-cols-2'}`}>
+                      <div className="space-y-2">
+                        <p className="text-xs font-medium">
+                          {syncDataForm.modo === 'full' ? 'Muestra origen' : 'Registros del padre disponibles'}
+                        </p>
+                        <div className="grid gap-2">
+                          {syncPreview.muestraOrigen.slice(0, syncDataForm.modo === 'full' ? 6 : 8).map((doc, index) => {
+                            const rawId = String(doc?._id || '');
+                            const checked = syncDataForm.selectedIds.includes(rawId);
+                            const interactive = syncDataForm.modo === 'incremental';
+                            const Tag = interactive ? 'button' : 'div';
+                            return (
+                              <Tag
+                                key={rawId || `origen-${index}`}
+                                type={interactive ? 'button' : undefined}
+                                onClick={interactive ? () => {
+                                  if (!rawId) return;
+                                  setSyncDataForm((prev) => ({
+                                    ...prev,
+                                    selectedIds: checked
+                                      ? prev.selectedIds.filter((id) => id !== rawId)
+                                      : Array.from(new Set([...prev.selectedIds, rawId])),
+                                  }));
+                                } : undefined}
+                                className={`rounded-md border p-3 text-left text-xs ${interactive ? 'transition-colors' : ''} ${
+                                  interactive && checked
+                                    ? 'border-primary bg-primary/10'
+                                    : 'bg-muted/40 hover:border-primary/50'
+                                }`}
+                              >
+                                <div className="mb-2 flex items-center justify-between gap-2">
+                                  <p className="break-all font-mono text-[11px] text-muted-foreground">
+                                    {rawId || `registro-${index + 1}`}
+                                  </p>
+                                  {interactive ? (
+                                    <Badge variant={checked ? 'default' : 'outline'}>
+                                      {checked ? 'Seleccionado' : 'Disponible'}
+                                    </Badge>
+                                  ) : null}
+                                </div>
+                                <div className="space-y-1">
+                                  {getPreviewEntries(doc as Record<string, unknown>).map(([key, value]) => (
+                                    <div key={key} className="flex items-start justify-between gap-3">
+                                      <span className="font-medium">{key}</span>
+                                      <span className="break-all text-right text-muted-foreground">
+                                        {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </Tag>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <p className="text-xs font-medium">Registros actuales en destino</p>
+                        <div className="grid gap-2">
+                          {syncPreview.muestraDestino.slice(0, syncDataForm.modo === 'full' ? 6 : 8).map((doc, index) => (
+                            <div key={`${String(doc?._id || index)}:destino`} className="rounded-md border bg-muted/40 p-3 text-xs">
+                              <p className="mb-2 break-all font-mono text-[11px] text-muted-foreground">
+                                {String((doc as Record<string, unknown>)?._id || `destino-${index + 1}`)}
+                              </p>
+                              <div className="space-y-1">
+                                {getPreviewEntries(doc as Record<string, unknown>).map(([key, value]) => (
+                                  <div key={key} className="flex items-start justify-between gap-3">
+                                    <span className="font-medium">{key}</span>
+                                    <span className="break-all text-right text-muted-foreground">
+                                      {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {syncDataForm.modo === 'full' ? (
+                        <div className="space-y-2">
+                          <p className="text-xs font-medium">Pendientes de sincronizar</p>
+                          <div className="grid gap-2">
+                            {syncPreview.muestraPendientes.slice(0, 6).map((doc, index) => (
+                              <div key={`${String((doc as Record<string, unknown>)?._id || index)}:pendiente`} className="rounded-md border bg-amber-50 p-3 text-xs">
+                                <p className="mb-2 break-all font-mono text-[11px] text-muted-foreground">
+                                  {String((doc as Record<string, unknown>)?._id || `pendiente-${index + 1}`)}
+                                </p>
+                                <div className="space-y-1">
+                                  {getPreviewEntries(doc as Record<string, unknown>).map(([key, value]) => (
+                                    <div key={key} className="flex items-start justify-between gap-3">
+                                      <span className="font-medium">{key}</span>
+                                      <span className="break-all text-right text-muted-foreground">
+                                        {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+
+                    {syncDataForm.modo === 'incremental' && syncPreview.muestraOrigen.length > 0 ? (
+                      <div className="rounded-md border p-3 space-y-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-medium">Seleccion de registros del padre</p>
+                            <p className="text-xs text-muted-foreground">
+                              En incremental puedes escoger registros especificos del padre para sincronizar.
+                            </p>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setSyncDataForm((prev) => ({
+                                ...prev,
+                                selectedIds: syncPreview.muestraOrigen
+                                  .map((doc) => String(doc?._id || '').trim())
+                                  .filter(Boolean),
+                              }))}
+                            >
+                              Seleccionar todos
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setSyncDataForm((prev) => ({ ...prev, selectedIds: [] }))}
+                            >
+                              Limpiar
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Badge variant="outline">Registros listados: {syncPreview.muestraOrigen.length}</Badge>
+                          <Badge variant="secondary">Seleccionados: {syncDataForm.selectedIds.length}</Badge>
+                        </div>
+                        <div className="max-h-56 overflow-auto rounded-md border bg-muted/20 p-3">
+                          <div className="flex flex-wrap gap-2">
+                            {syncPreview.muestraOrigen.map((doc) => {
+                              const rawId = String(doc?._id || '');
+                              const checked = syncDataForm.selectedIds.includes(rawId);
+                              return (
+                                <label
+                                  key={rawId}
+                                  className={`inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1.5 text-xs transition-colors ${
+                                    checked
+                                      ? 'border-primary bg-primary/10 text-foreground'
+                                      : 'border-border bg-background text-muted-foreground hover:border-primary/50'
+                                  }`}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    className="sr-only"
+                                    checked={checked}
+                                    onChange={(e) => {
+                                      const marcado = e.target.checked;
+                                      setSyncDataForm((prev) => ({
+                                        ...prev,
+                                        selectedIds: marcado
+                                          ? Array.from(new Set([...prev.selectedIds, rawId]))
+                                          : prev.selectedIds.filter((id) => id !== rawId),
+                                      }));
+                                    }}
+                                  />
+                                  <span className="font-mono">{rawId.slice(-12)}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Si no marcas ninguno, incremental tomara todos los pendientes del padre segun el filtro.
+                        </p>
+                      </div>
+                    ) : null}
+                  </div>
+                )}
+              </div>
+              </div>
+              </div>
+              <DialogFooter className="border-t bg-background px-6 py-4">
+                <Button variant="outline" onClick={() => setDlgSyncDatos(false)}>
+                  Cancelar
+                </Button>
+                <Button onClick={handleEjecutarSyncDatos} disabled={syncPreviewLoading || !syncDataTarget}>
+                  {syncManualLoading && syncDataTarget ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Play className="w-4 h-4 mr-2" />}
+                  Sincronizar ahora
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={dlgEstadoSync} onOpenChange={setDlgEstadoSync}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Radio className="w-5 h-5" />
+              Estado de sincronizacion
+            </DialogTitle>
+          </DialogHeader>
+
+          {estadoSyncConfig && (
+            <div className="grid gap-4 py-2 lg:grid-cols-2">
+              <div className="rounded-md bg-muted px-3 py-3 text-sm space-y-1 lg:col-span-2">
+                <p className="font-medium">{estadoSyncConfig.poolName || estadoSyncConfig.dbName}</p>
+                <p className="text-xs text-muted-foreground">Base de datos: {estadoSyncConfig.dbName}</p>
+                <p className="text-xs text-muted-foreground">
+                  Jerarquia: {getConfigJerarquiaLabel(estadoSyncConfig)} | Nivel {estadoSyncConfig.nivelJerarquico || 1}
+                </p>
+              </div>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Database className="w-4 h-4" />
+                    Conexion actual
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2 text-sm">
+                  {(() => {
+                    const configId = resolverConfigId(estadoSyncConfig);
+                    const poolActual = pool?.pool?.[configId];
+                    const watchersDetectados = (pool?.watchersActivos ?? []).filter((watcher) =>
+                      String(watcher).startsWith(`${configId}:`)
+                    );
+                    return (
+                      <>
+                        <div className="flex items-center justify-between">
+                          <span className="text-muted-foreground">Estado pool</span>
+                          <span className={`text-xs font-medium ${READY_STATE_COLOR[poolActual?.readyState ?? 0] ?? 'text-muted-foreground'}`}>
+                            {READY_STATE_LABEL[poolActual?.readyState ?? 0]}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-muted-foreground">Nombre conexion</span>
+                          <span className="font-mono text-xs">{poolActual?.nombre || 'Sin abrir en pool'}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-muted-foreground">Watchers activos</span>
+                          <Badge variant="outline">{watchersDetectados.length}</Badge>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Activity className="w-4 h-4" />
+                    Resumen de sincronizacion
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Sync activas</span>
+                    <Badge variant="secondary">
+                      {estadoSyncConfig.coleccionesSync?.filter((item) => item.estado).length ?? 0}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Auto-sync activas</span>
+                    <Badge variant="outline">
+                      {estadoSyncConfig.coleccionesSync?.filter((item) => item.estado && item.autoSync).length ?? 0}
+                    </Badge>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <div className="lg:col-span-2">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-sm">Colecciones sincronizadas</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {(estadoSyncConfig.coleccionesSync?.filter((item) => item.estado).length ?? 0) === 0 ? (
+                      <p className="text-sm text-muted-foreground text-center py-6">
+                        Esta conexion aun no tiene colecciones sincronizadas.
+                      </p>
+                    ) : (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Coleccion</TableHead>
+                            <TableHead>Origen</TableHead>
+                            <TableHead>Modo</TableHead>
+                            <TableHead>Ultimo preview</TableHead>
+                            <TableHead>Ultimo sync</TableHead>
+                            <TableHead className="text-right">Acciones</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {(estadoSyncConfig.coleccionesSync || []).filter((item) => item.estado).map((col) => {
+                            const sourceId = resolveSourceConfigIdFromCol(col);
+                            const origen = configs.find((cfg) => resolverConfigId(cfg) === sourceId);
+                            return (
+                              <TableRow key={`${estadoSyncConfig.iud}:${col.coleccion}`}>
+                                <TableCell className="font-mono text-sm">{col.coleccion}</TableCell>
+                                <TableCell className="text-xs text-muted-foreground">
+                                  {origen?.poolName || origen?.dbName || 'BD padre'}
+                                </TableCell>
+                                <TableCell>
+                                  <Badge variant="secondary" className="text-xs">{col.modo}</Badge>
+                                </TableCell>
+                                <TableCell className="text-xs text-muted-foreground">
+                                  <div>Origen: {col.previewTotalOrigen ?? 0}</div>
+                                  <div>Destino: {col.previewTotalDestino ?? 0}</div>
+                                  <div>Pendientes: {col.previewPendientes ?? 0}</div>
+                                </TableCell>
+                                <TableCell className="text-xs text-muted-foreground">
+                                  {col.ultimoSyncAt ? new Date(col.ultimoSyncAt).toLocaleString('es-CO') : '—'}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                      handleAbrirSyncDatos(estadoSyncConfig, col);
+                                      setDlgEstadoSync(false);
+                                    }}
+                                  >
+                                    <Play className="w-3 h-3 mr-1" />
+                                    Sincronizar datos
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDlgEstadoSync(false)}>
+              Cerrar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={dlgSyncManual} onOpenChange={setDlgSyncManual}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Filtro manual JSON</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="space-y-1">
+              <Label htmlFor="sync-data-filtro-manual">JSON de insercion / filtro</Label>
+              <textarea
+                id="sync-data-filtro-manual"
+                className="flex min-h-[220px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                placeholder='Ej: { "estado": true }'
+                value={syncDataForm.filtroTexto}
+                onChange={(e) => setSyncDataForm((prev) => ({ ...prev, filtroTexto: e.target.value }))}
+              />
+              <p className="text-xs text-muted-foreground">
+                Usa este modal solo cuando necesites definir manualmente el JSON para filtrar o acotar la sincronizacion.
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDlgSyncManual(false)}>
+              Cerrar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={dlgRemoverSync}
+        onOpenChange={(open) => {
+          setDlgRemoverSync(open);
+          if (!open) {
+            setRemoverSyncTarget(null);
+            setRemoverSyncLoading(false);
+          }
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Trash2 className="h-5 w-5" />
+              Confirmar eliminación de sincronización
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="rounded-md bg-muted px-4 py-3 text-sm">
+              <p className="font-medium">{removerSyncTarget?.coleccion || 'Colección'}</p>
+              <p className="text-xs text-muted-foreground">
+                Se removerá la configuración de sync guardada para esta colección en la conexión destino.
+              </p>
+            </div>
+
+            <div className="flex items-start justify-between gap-4 rounded-md border px-4 py-3">
+              <div className="space-y-1">
+                <Label className="text-sm font-medium">Eliminar también la colección física en la BD destino</Label>
+                <p className="text-xs text-muted-foreground">
+                  Si lo dejas activo, además de quitar la sync se hará drop de la colección en la base de datos hija.
+                </p>
+              </div>
+              <Switch
+                checked={removerSyncDropCollection}
+                onCheckedChange={setRemoverSyncDropCollection}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setDlgRemoverSync(false);
+                setRemoverSyncTarget(null);
+              }}
+              disabled={removerSyncLoading}
+            >
+              Cancelar
+            </Button>
+            <Button onClick={confirmarRemoverSync} disabled={removerSyncLoading}>
+              {removerSyncLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+              Eliminar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={false && dlgSync} onOpenChange={setDlgSync}>
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Radio className="w-5 h-5" />

@@ -77,9 +77,9 @@ const DEFAULT_FORM: DesignFormState = {
   postLoginEnabled: true,
   logoutPath: '/admin',
   logoutEnabled: true,
-  registerPath: '/admin',
+  registerPath: '/public/render/registro-cliente',
   registerEnabled: true,
-  forgotPasswordPath: '/admin',
+  forgotPasswordPath: '/recuperar-contrasena',
   forgotPasswordEnabled: true,
   publicHomePath: '/public/render/home',
   publicHomeEnabled: true,
@@ -87,6 +87,8 @@ const DEFAULT_FORM: DesignFormState = {
     '/public/render/login',
     '/public/render/view/login',
     '/admin',
+    '/public/render/registro-cliente',
+    '/recuperar-contrasena',
     '/public/render/home'
   ], null, 2)
 };

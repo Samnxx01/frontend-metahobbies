@@ -38,6 +38,12 @@ interface MembresiaPlan {
     monedasId?: { monedas: string };
 }
 
+const normalizeMembershipPriceFromApi = (value: number | string | null | undefined): number => {
+    const numericValue = Number(value);
+    if (!Number.isFinite(numericValue) || numericValue <= 0) return 0;
+    return numericValue / 100;
+};
+
 interface ModalResultadoProps {
     resultado: ResultadoPago;
     onIrAMabs: () => void;
@@ -242,11 +248,18 @@ export default function MembershipPayment(): React.ReactElement {
                     console.log('Estado actual del pago:', data);
 
                     const nuevoEstado = wompiStatusToEstado(data.status || data.estado || 'PENDING');
+                    const montoNormalizado = normalizeMembershipPriceFromApi(data.monto);
 
                     if (nuevoEstado !== 'pendiente') {
                         // Estado cambió, actualizar el modal
                         console.log('Estado cambió de pendiente a:', nuevoEstado);
-                        setResultado(prev => prev ? { ...prev, estado: nuevoEstado } : null);
+                        setResultado(prev => prev ? {
+                            ...prev,
+                            estado: nuevoEstado,
+                            monto: montoNormalizado > 0 ? montoNormalizado : prev.monto,
+                            moneda: data.moneda || prev.moneda,
+                            email: data.email || prev.email,
+                        } : null);
                         setPollingActive(false);
 
                         if (nuevoEstado === 'aprobada') {
@@ -296,7 +309,12 @@ export default function MembershipPayment(): React.ReactElement {
 
                 // Filtrar solo las que tienen esPrecioDefault: true
                 const lista: MembresiaPlan[] = Array.isArray(json?.data)
-                    ? json.data.filter((m: MembresiaPlan) => m.esPrecioDefault === true)
+                    ? json.data
+                        .filter((m: MembresiaPlan) => m.esPrecioDefault === true)
+                        .map((m: MembresiaPlan) => ({
+                            ...m,
+                            precioMembresia: normalizeMembershipPriceFromApi(m.precioMembresia),
+                        }))
                     : [];
 
                 setPlanes(lista);
@@ -331,8 +349,15 @@ export default function MembershipPayment(): React.ReactElement {
             if (response.ok) {
                 const data = await response.json();
                 const nuevoEstado = wompiStatusToEstado(data.status || data.estado || 'PENDING');
+                const montoNormalizado = normalizeMembershipPriceFromApi(data.monto);
                 if (nuevoEstado !== 'pendiente') {
-                    setResultado(prev => prev ? { ...prev, estado: nuevoEstado } : null);
+                    setResultado(prev => prev ? {
+                        ...prev,
+                        estado: nuevoEstado,
+                        monto: montoNormalizado > 0 ? montoNormalizado : prev.monto,
+                        moneda: data.moneda || prev.moneda,
+                        email: data.email || prev.email,
+                    } : null);
                     setPollingActive(false);
                     if (nuevoEstado === 'aprobada') {
                         toast.success('¡Pago confirmado! Tu membresía ha sido activada.');

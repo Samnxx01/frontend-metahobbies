@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { apiFetch } from '@/app/services/api';
 import { getGovernedLoginPath } from '@/app/services/governedNavigation';
 
 // Lucide icons
@@ -47,7 +48,6 @@ interface RegisterError {
 }
 
 // --- Constantes y Esquemas ---
-const LOGO_URL = '/assets/logo.png';
 const EMPTY_FIELDS_MESSAGE = 'Por favor, completa todos los campos requeridos.';
 const CRITICAL_ERROR_TITLE = 'Error del Servidor';
 
@@ -68,6 +68,7 @@ export default function Registro(): React.ReactElement {
 
     // --- ESTADO DE CONTROL DE LA UI ---
     const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+    const [logoUrl, setLogoUrl] = useState<string | null>(null);
 
     // Estado para el Dialog (Errores críticos)
     const [dialogOpen, setDialogOpen] = useState<boolean>(false);
@@ -82,6 +83,33 @@ export default function Registro(): React.ReactElement {
             confirmPassword: '',
         }
     });
+
+    useEffect(() => {
+        const fetchPublicLogo = async (): Promise<void> => {
+            try {
+                const logoRes = await apiFetch('/api/config/parametrizacion/listar/logos/coporativo', {
+                    method: 'GET',
+                    useAuth: false,
+                    logoutOn401: false
+                });
+
+                if (logoRes?.ok && logoRes?.logo) {
+                    const { base64, mimetype } = logoRes.logo;
+                    if (base64 && mimetype) {
+                        setLogoUrl(`data:${mimetype};base64,${base64}`);
+                        return;
+                    }
+                }
+
+                setLogoUrl(null);
+            } catch (error) {
+                console.warn('No se pudo cargar el logo publico para registro:', error);
+                setLogoUrl(null);
+            }
+        };
+
+        void fetchPublicLogo();
+    }, []);
 
     const handleCloseDialog = (): void => {
         setDialogOpen(false);
@@ -178,13 +206,16 @@ export default function Registro(): React.ReactElement {
                 <CardContent className="p-6 sm:p-8 flex flex-col items-center">
 
                     {/* Logo con adaptación dark/light */}
-                    <div className="mb-4 p-4 rounded-full bg-primary/10 dark:bg-primary/20">
-                        <img 
-                            src={LOGO_URL} 
-                            alt="Mabs Logo" 
-                            className="h-16 w-auto filter dark:brightness-110" 
-                        />
-                    </div>
+                    {logoUrl ? (
+                        <div className="mb-4 p-4 rounded-full bg-primary/10 dark:bg-primary/20">
+                            <img
+                                src={logoUrl}
+                                alt="Logo"
+                                className="h-16 w-auto object-contain"
+                                onError={() => setLogoUrl(null)}
+                            />
+                        </div>
+                    ) : null}
 
                     {/* Icono decorativo */}
                     <div className="mb-4 p-3 rounded-full bg-secondary/25">

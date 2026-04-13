@@ -4,9 +4,13 @@ import { apiFetch } from './api';
 
 export interface SyncColeccion {
   coleccion: string;
+  sourceConfigId?: string | { iud?: string; _id?: string; poolName?: string; dbName?: string } | null;
   autoSync: boolean;
   modo: 'full' | 'incremental';
   filtro: Record<string, unknown> | null;
+  previewTotalOrigen?: number;
+  previewTotalDestino?: number;
+  previewPendientes?: number;
   ultimoSyncAt: string | null;
   estado: boolean;
 }
@@ -49,6 +53,7 @@ export interface GuardarConexionPayload {
 }
 
 export interface ConfigurarSyncPayload {
+  sourceConfigId: string;
   coleccion: string;
   autoSync: boolean;
   modo: 'full' | 'incremental';
@@ -56,15 +61,30 @@ export interface ConfigurarSyncPayload {
 }
 
 export interface EjecutarSyncPayload {
+  sourceConfigId: string;
   coleccion: string;
   modo?: 'full' | 'incremental';
   filtro?: Record<string, unknown> | null;
+  selectedIds?: string[] | null;
 }
 
 export interface SyncResult {
+  sourceConfigId?: string;
   coleccion: string;
   copiados: number;
+  pendientes?: number;
   modo: string;
+}
+
+export interface SyncPreview {
+  sourceConfigId: string;
+  coleccion: string;
+  totalOrigen: number;
+  totalDestino: number;
+  pendientes: number;
+  muestraOrigen: Array<Record<string, unknown> & { _id?: string }>;
+  muestraDestino: Array<Record<string, unknown> & { _id?: string }>;
+  muestraPendientes: Record<string, unknown>[];
 }
 
 export interface PoolConexion {
@@ -87,7 +107,7 @@ export interface ApiDominio {
 
 export interface ContenedorParametrizacion {
   iud: string;
-  tenantGlobal: string | { iud: string };
+  tenantGlobal?: string | { iud: string } | null;
   corporativo: { iud: string; razon_social: string; nit_ruc_rtn: string } | null;
   nombre: string;
   slug?: string | null;
@@ -188,12 +208,25 @@ export const tenantDbService = {
   ): Promise<{ ok: boolean; msg: string; data: SyncResult }> =>
     apiFetch(`/api/tenant-db/sync/id/${configId}/ejecutar`, { method: 'POST', body: payload }),
 
+  listarColeccionesSyncDisponibles: (
+    configId: string,
+    sourceConfigId: string
+  ): Promise<{ ok: boolean; total: number; data: string[] }> =>
+    apiFetch(`/api/tenant-db/sync/id/${configId}/colecciones-disponibles?sourceConfigId=${encodeURIComponent(sourceConfigId)}`, { method: 'GET' }),
+
+  previewSync: (
+    configId: string,
+    payload: EjecutarSyncPayload
+  ): Promise<{ ok: boolean; data: SyncPreview }> =>
+    apiFetch(`/api/tenant-db/sync/id/${configId}/preview`, { method: 'POST', body: payload }),
+
   /** Elimina una colección del sync y detiene su watcher */
   removerSync: (
     configId: string,
-    coleccion: string
+    coleccion: string,
+    options?: { dropCollection?: boolean }
   ): Promise<{ ok: boolean; msg: string; data: TenantDbConfig }> =>
-    apiFetch(`/api/tenant-db/sync/id/${configId}/coleccion/${encodeURIComponent(coleccion)}`, {
+    apiFetch(`/api/tenant-db/sync/id/${configId}/coleccion/${encodeURIComponent(coleccion)}?dropCollection=${options?.dropCollection ? 'true' : 'false'}`, {
       method: 'DELETE',
     }),
 
@@ -230,10 +263,10 @@ export const tenantDbService = {
 
   /** Crea un nuevo contenedor parametrizado */
   crearContenedor: (
-    tenantGlobalId: string,
+    corporativoId: string,
     payload: CrearContenedorPayload
   ): Promise<{ ok: boolean; msg: string; data: ContenedorParametrizacion }> =>
-    apiFetch(`/api/tenant-db/contenedores/${tenantGlobalId}`, { method: 'POST', body: payload }),
+    apiFetch(`/api/tenant-db/contenedores/corporativo/${corporativoId}`, { method: 'POST', body: payload }),
 
   /** Lista todos los dominios registrados en apisDominios */
   listarApisDominios: (): Promise<{ ok: boolean; total: number; data: ApiDominio[] }> =>

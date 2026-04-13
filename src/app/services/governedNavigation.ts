@@ -29,8 +29,8 @@ const DEFAULT_PATHS: Record<GovernedNavigationAction, string> = {
   login: '/public/render/login',
   postLogin: '/admin',
   logout: '/admin',
-  register: '/admin',
-  forgotPassword: '/admin',
+  register: '/public/render/registro-cliente',
+  forgotPassword: '/recuperar-contrasena',
   publicHome: '/public/render/home',
 };
 

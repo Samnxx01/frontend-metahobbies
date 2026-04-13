@@ -39,17 +39,24 @@ type EndpointSpec = {
 
 interface ParametrosGobernanzaProps {
   mode?: 'full' | 'rules' | 'superAdmin' | 'superAdminRules';
+  initialSection?: EndpointSection;
+  lockedSection?: EndpointSection | null;
 }
 
 const SUPERADMIN_RULES_ENDPOINT_IDS = new Set([
-  'tenant-crear-regla-dios',
-  'tenant-actualizar-regla-dios',
+  'tenant-crear-global-reglas',
+  'tenant-listar-reglas',
+  'tenant-actualizar-global-reglas',
+  'tenant-desactivar-global-reglas',
+  'tenant-eliminar-global-reglas',
 ]);
 
 const RULES_ENDPOINT_IDS = new Set([
   'tenant-crear-global-reglas',
   'tenant-listar-reglas',
   'tenant-actualizar-global-reglas',
+  'tenant-desactivar-global-reglas',
+  'tenant-eliminar-global-reglas',
 ]);
 
 type Vista = { id: string; label: string; path: string };
@@ -362,24 +369,28 @@ const ENDPOINTS: EndpointSpec[] = [
     ],
   },
   {
-    id: 'tenant-crear-regla-dios',
+    id: 'tenant-desactivar-global-reglas',
     section: 'tenant',
-    actor: 'tenantSuperAdmin',
-    method: 'POST',
-    path: '/api/config/tenant/tipo/crear/dios/reglas/jerarquia/roles',
-    title: 'Crear regla DIOS',
-    description: 'Crea la regla DIOS usando el contexto del JWT (sin payload manual).',
-    fields: [],
+    actor: 'ambos',
+    method: 'DELETE',
+    path: '/api/config/tenant/tipo/desactivar/globales/reglas/jerarquia',
+    title: 'Desactivar regla global',
+    description: 'Desactiva una regla global usando header x-regla-id.',
+    fields: [
+      { name: 'x-regla-id', label: 'x-regla-id', type: 'id', required: true, header: true },
+    ],
   },
   {
-    id: 'tenant-actualizar-regla-dios',
+    id: 'tenant-eliminar-global-reglas',
     section: 'tenant',
-    actor: 'tenantSuperAdmin',
-    method: 'PUT',
-    path: '/api/config/tenant/tipo/actualizar/dios/reglas/jerarquia/roles',
-    title: 'Actualizar regla DIOS',
-    description: 'Sincroniza la regla DIOS vigente usando el contexto del JWT.',
-    fields: [],
+    actor: 'ambos',
+    method: 'DELETE',
+    path: '/api/config/tenant/tipo/eliminar/globales/reglas/jerarquia',
+    title: 'Eliminar regla global',
+    description: 'Elimina una regla global usando header x-regla-id.',
+    fields: [
+      { name: 'x-regla-id', label: 'x-regla-id', type: 'id', required: true, header: true },
+    ],
   },
   { id: 'perm-listar-herencias', section: 'permisos', actor: 'ambos', method: 'GET', path: '/api/config/permisos/listar/usu/tenant/libres', title: 'Listar herencias', description: 'Lista permisos heredados del usuario autenticado.', fields: [] },
   {
@@ -763,11 +774,18 @@ const buildTenantGlobalContextLabel = (row: any, id: string): string => {
 const isTenantSuperAdminScopeOption = (value: string): boolean =>
   String(value || '').trim().startsWith(TENANT_SUPERADMIN_SCOPE_PREFIX);
 
-const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'full' }) => {
+const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
+  mode = 'full',
+  initialSection = 'tenant',
+  lockedSection = null,
+}) => {
   const isRulesMode = mode === 'rules' || mode === 'superAdminRules';
-  const [activeSection, setActiveSection] = useState<EndpointSection>('tenant');
+  const initialResolvedSection = lockedSection ?? initialSection;
+  const [activeSection, setActiveSection] = useState<EndpointSection>(initialResolvedSection);
   const [endpointModal, setEndpointModal] = useState<EndpointSpec | null>(null);
   const [endpointSearch, setEndpointSearch] = useState('');
+  const [reglasSearch, setReglasSearch] = useState('');
+  const [reglasTenantFilter, setReglasTenantFilter] = useState('');
   const [loadingData, setLoadingData] = useState(false);
   const [running, setRunning] = useState<Record<string, boolean>>({});
   const [result, setResult] = useState<Record<string, string>>({});
@@ -1388,6 +1406,14 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
       setActiveSection('tenant');
     }
   }, [isRulesMode, activeSection]);
+  useEffect(() => {
+    if (isRulesMode) return;
+    if (lockedSection) {
+      setActiveSection(lockedSection);
+      return;
+    }
+    setActiveSection(initialSection);
+  }, [initialSection, isRulesMode, lockedSection]);
 
   useEffect(() => {
     if (endpointModal?.id === 'corp-crear-catalogo') {
@@ -3203,15 +3229,88 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
       return <pre className="max-h-48 overflow-auto rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-800">{result['tenant-listar-reglas'] || 'Aun sin respuesta'}</pre>;
     }
 
+    const resolveRuleUserLabel = (row: any): string => {
+      const tenant = Array.isArray(row?.generacionGlovallNvlRoles) ? row.generacionGlovallNvlRoles[0] : null;
+      const usuarioRol = tenant?.rolesMabs?.usuarioId;
+      return String(
+        usuarioRol?.nombre ||
+        usuarioRol?.name ||
+        usuarioRol?.correo ||
+        usuarioRol?.email ||
+        '-'
+      ).trim() || '-';
+    };
+
+    const q = reglasSearch.trim().toLowerCase();
+    const tenantFilter = reglasTenantFilter.trim();
+    const tenantOptions = Array.from(
+      new Map(
+        rows.map((row: any) => {
+          const tenant = Array.isArray(row?.generacionGlovallNvlRoles) ? row.generacionGlovallNvlRoles[0] : null;
+          const tenantId = String(tenant?._id || tenant || '').trim();
+          const corp = tenant?.coporativo;
+          const tenantLabel = String(
+            resolveRuleUserLabel(row) !== '-' ? resolveRuleUserLabel(row) : (
+              corp?.razon_social ||
+              corp?.titulo ||
+              tenantId ||
+              '-'
+            )
+          ).trim();
+          return [tenantId, { id: tenantId, label: tenantLabel }];
+        }).filter(([id]) => Boolean(id))
+      ).values()
+    );
+
+    const filteredRows = rows.filter((row: any) => {
+      const tenant = Array.isArray(row?.generacionGlovallNvlRoles) ? row.generacionGlovallNvlRoles[0] : null;
+      const tenantId = String(tenant?._id || tenant || '').trim();
+      if (tenantFilter && tenantId !== tenantFilter) return false;
+      if (!q) return true;
+      const corp = tenant?.coporativo;
+      const userLabel = resolveRuleUserLabel(row).toLowerCase();
+      const contexto = Array.isArray(row?.contextoDefi) ? row.contextoDefi.map((c: any) => c?.contexto || c?._id || c).join(', ').toLowerCase() : '';
+      const vistas = Array.isArray(row?.recurso) ? row.recurso.map((v: any) => v?.name || v?.path || v?._id || v).join(', ').toLowerCase() : '';
+      const acciones = Array.isArray(row?.accionesUsu) ? row.accionesUsu.map((a: any) => a?.etiquetas || a?.method || a?._id || a).join(', ').toLowerCase() : '';
+      const corpLabel = String(corp?.razon_social || corp?.titulo || '').toLowerCase();
+      const dominio = String(row?.dominioTenatGlobales || '').toLowerCase();
+      const tipo = String(row?.securityPlatform === true ? 'DIOS' : 'TENANT').toLowerCase();
+
+      return [userLabel, contexto, vistas, acciones, corpLabel, dominio, tipo].some((value) => value.includes(q));
+    });
+
     return (
-      <div className="overflow-auto rounded-lg border border-slate-200 bg-white">
+      <div className="space-y-3">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center">
+            <Input
+              value={reglasSearch}
+              onChange={(e) => setReglasSearch(e.target.value)}
+              placeholder="Buscar regla por usuario, contexto, corporativo, vista o accion"
+              className="md:w-[420px]"
+            />
+            <select
+              className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-700 md:w-[320px]"
+              value={reglasTenantFilter}
+              onChange={(e) => setReglasTenantFilter(e.target.value)}
+            >
+              <option value="">Todos los tenants</option>
+              {tenantOptions.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <p className="text-xs text-slate-500">Resultados: {filteredRows.length}</p>
+        </div>
+        <div className="overflow-auto rounded-lg border border-slate-200 bg-white">
         <table className="w-full min-w-[980px] text-left text-xs">
           <thead className="bg-slate-100 text-slate-700">
             <tr>
-              <th className="px-3 py-2">x-regla-id</th>
               <th className="px-3 py-2">Tipo</th>
               <th className="px-3 py-2">Dominio</th>
-              <th className="px-3 py-2">Tenant Global</th>
+              <th className="px-3 py-2">Usuario</th>
               <th className="px-3 py-2">Corporativo</th>
               <th className="px-3 py-2">Contexto</th>
               <th className="px-3 py-2">Vistas</th>
@@ -3219,19 +3318,19 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
             </tr>
           </thead>
           <tbody>
-            {rows.map((row: any, idx: number) => {
+            {filteredRows.map((row: any, idx: number) => {
               const reglaId = String(row?.['x-regla-id'] || row?.reglaIdEncrypted || row?.iud || row?.rid || row?._id || '');
               const tenant = Array.isArray(row?.generacionGlovallNvlRoles) ? row.generacionGlovallNvlRoles[0] : null;
               const corp = tenant?.coporativo;
+              const userLabel = resolveRuleUserLabel(row);
               const contexto = Array.isArray(row?.contextoDefi) ? row.contextoDefi.map((c: any) => c?.contexto || c?._id || c).join(', ') : '-';
               const vistas = Array.isArray(row?.recurso) ? row.recurso.map((v: any) => v?.name || v?.path || v?._id || v).join(', ') : '-';
               const acciones = Array.isArray(row?.accionesUsu) ? row.accionesUsu.map((a: any) => a?.etiquetas || a?.method || a?._id || a).join(', ') : '-';
               return (
                 <tr key={reglaId || idx} className="border-t border-slate-100">
-                  <td className="px-3 py-2 font-mono">{reglaId || '-'}</td>
                   <td className="px-3 py-2">{row?.securityPlatform === true ? 'DIOS' : 'TENANT'}</td>
                   <td className="px-3 py-2">{row?.dominioTenatGlobales || '-'}</td>
-                  <td className="px-3 py-2">{String(tenant?._id || tenant || '-')}</td>
+                  <td className="px-3 py-2">{userLabel}</td>
                   <td className="px-3 py-2">{corp?.razon_social || corp?.titulo || '-'}</td>
                   <td className="px-3 py-2">{contexto || '-'}</td>
                   <td className="px-3 py-2">{vistas || '-'}</td>
@@ -3241,6 +3340,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
             })}
           </tbody>
         </table>
+      </div>
       </div>
     );
   };
@@ -5344,7 +5444,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
           </CardContent>
         </Card>
 
-        {!isRulesMode && (
+        {!isRulesMode && !lockedSection && (
         <div className="grid gap-4 md:grid-cols-3">
           <button type="button" onClick={() => setActiveSection('tenant')} className={`rounded-2xl border p-5 text-left transition-all duration-300 ${activeSection === 'tenant' ? 'border-rose-400 bg-rose-50 shadow-lg' : 'border-slate-200 bg-white/70 hover:-translate-y-0.5 hover:shadow-md'}`}>
             <h3 className="text-2xl font-bold text-slate-900">Gobernanza Tenant</h3>
@@ -5366,7 +5466,13 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div className="flex items-center gap-2 text-slate-700">
                 <Wand2 className="h-4 w-4 text-rose-500" />
-                <span className="text-sm">{isRulesMode ? 'Flujo guiado solo para reglas de tenant' : 'Flujo guiado por endpoint con datos reales de API'}</span>
+                <span className="text-sm">
+                  {isRulesMode
+                    ? 'Flujo guiado solo para reglas de tenant'
+                    : lockedSection === 'permisos'
+                    ? 'Flujo guiado solo para gobernanza de permisos'
+                    : 'Flujo guiado por endpoint con datos reales de API'}
+                </span>
               </div>
               <div className="w-full md:max-w-md">
                 <Input

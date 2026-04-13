@@ -87,25 +87,6 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
                     setLogoUrl(`data:${resContextual.logo.mimetype};base64,${resContextual.logo.base64}`)
                     return
                 }
-
-                const resPublico = await apiFetch('/api/config/parametrizacion/listar/logos/coporativo', {
-                    method: 'GET',
-                    useAuth: false,
-                    logoutOn401: false
-                })
-
-                if (!active) return
-
-                if (resPublico?.ok && resPublico?.logo?.dataUrl) {
-                    setLogoUrl(resPublico.logo.dataUrl)
-                    return
-                }
-
-                if (resPublico?.ok && resPublico?.logo?.base64 && resPublico?.logo?.mimetype) {
-                    setLogoUrl(`data:${resPublico.logo.mimetype};base64,${resPublico.logo.base64}`)
-                    return
-                }
-
                 setLogoUrl(null)
             } catch (_error) {
                 if (!active) return

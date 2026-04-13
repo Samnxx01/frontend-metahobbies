@@ -20,21 +20,21 @@ export interface EmailPaleta {
 }
 
 export const DEFAULT_COLORS: PaletaColores = {
-  COLOR_PRIMARY:   '#C43670',
-  COLOR_ACCENT:    '#F283AF',
-  COLOR_LIGHT:     '#FBDCE5',
-  COLOR_BG:        '#FBD9E5',
+  COLOR_PRIMARY: '#C43670',
+  COLOR_ACCENT: '#F283AF',
+  COLOR_LIGHT: '#FBDCE5',
+  COLOR_BG: '#FBD9E5',
   COLOR_CHAMPAGNE: '#FBF4EB',
-  COLOR_SUNSET:    '#F3CC97',
+  COLOR_SUNSET: '#F3CC97',
 };
 
 export const COLOR_LABELS: Record<keyof PaletaColores, string> = {
-  COLOR_PRIMARY:   'Principal (botones, títulos)',
-  COLOR_ACCENT:    'Acento (badges, pasos)',
-  COLOR_LIGHT:     'Claro (fondo de íconos)',
-  COLOR_BG:        'Fondo exterior',
+  COLOR_PRIMARY: 'Principal (botones, titulos)',
+  COLOR_ACCENT: 'Acento (badges, pasos)',
+  COLOR_LIGHT: 'Claro (fondo de iconos)',
+  COLOR_BG: 'Fondo exterior',
   COLOR_CHAMPAGNE: 'Champagne (header/footer)',
-  COLOR_SUNSET:    'Sunset (bordes internos)',
+  COLOR_SUNSET: 'Sunset (bordes internos)',
 };
 
 export const listarPaletas = (): Promise<{ ok: boolean; paletas: EmailPaleta[] }> =>
@@ -64,11 +64,11 @@ export type TipoCorreo =
   | 'pago-cancelado';
 
 export const TIPOS_CORREO: { value: TipoCorreo; label: string }[] = [
-  { value: 'activacion-membresia',  label: 'Activación de membresía' },
-  { value: 'verificacion-cuenta',   label: 'Verificación de cuenta' },
-  { value: 'recuperar-contrasena',  label: 'Recuperar contraseña' },
-  { value: 'cambio-contrasena',     label: 'Cambio de contraseña' },
-  { value: 'pago-cancelado',        label: 'Pago cancelado' },
+  { value: 'activacion-membresia', label: 'Activacion de membresia' },
+  { value: 'verificacion-cuenta', label: 'Verificacion de cuenta' },
+  { value: 'recuperar-contrasena', label: 'Recuperar contrasena' },
+  { value: 'cambio-contrasena', label: 'Cambio de contrasena' },
+  { value: 'pago-cancelado', label: 'Pago cancelado' },
 ];
 
 export type ContenidoCorreo = Record<string, string>;
@@ -82,23 +82,23 @@ export interface CampoContenido {
 
 export const CAMPOS_CONTENIDO: Record<TipoCorreo, CampoContenido[]> = {
   'activacion-membresia': [
-    { key: 'contrasenaTemporal', label: 'Contraseña temporal (ejemplo)', placeholder: 'Ab3$xR7m' },
+    { key: 'contrasenaTemporal', label: 'Contrasena temporal (ejemplo)', placeholder: 'Ab3$xR7m' },
   ],
   'verificacion-cuenta': [
-    { key: 'contrasenaTemporal', label: 'Contraseña temporal (ejemplo)', placeholder: 'Ab3$xR7m' },
+    { key: 'contrasenaTemporal', label: 'Contrasena temporal (ejemplo)', placeholder: 'Ab3$xR7m' },
   ],
   'recuperar-contrasena': [],
   'cambio-contrasena': [
-    { key: 'fechaExpiracion', label: 'Tiempo de expiración del enlace', placeholder: '15 minutos' },
+    { key: 'fechaExpiracion', label: 'Tiempo de expiracion del enlace', placeholder: '15 minutos' },
   ],
   'referido-vencimiento': [
-    { key: 'nombrePadre',     label: 'Nombre del remitente (ejemplo)',   placeholder: 'Carlos Pérez' },
-    { key: 'codigoReferido',  label: 'Código de referido (ejemplo)',     placeholder: 'MABS-XXXXX' },
-    { key: 'horasRestantes',  label: 'Horas restantes (ejemplo)',        placeholder: '12', type: 'number' },
+    { key: 'nombrePadre', label: 'Nombre del remitente (ejemplo)', placeholder: 'Carlos Perez' },
+    { key: 'enlaceReferido', label: 'Enlace de referido (ejemplo)', placeholder: 'https://mabs.com/membresia/pago/token-demo' },
+    { key: 'horasRestantes', label: 'Horas restantes (ejemplo)', placeholder: '12', type: 'number' },
   ],
   'pago-cancelado': [
-    { key: 'emailCliente',    label: 'Correo del cliente (ejemplo)',     placeholder: 'cliente@ejemplo.com' },
-    { key: 'referencia',      label: 'Referencia de pago (ejemplo)',     placeholder: 'MABS-0001-000042' },
+    { key: 'emailCliente', label: 'Correo del cliente (ejemplo)', placeholder: 'cliente@ejemplo.com' },
+    { key: 'referencia', label: 'Referencia de pago (ejemplo)', placeholder: 'MABS-0001-000042' },
     { key: 'enlaceReintento', label: 'Enlace para reintentar (ejemplo)', placeholder: 'https://mabs.com/membresia' },
   ],
 };
