@@ -11,7 +11,7 @@ interface UsuarioRowProps {
 }
 
 const UsuarioRow = ({ usuario, tipo, onEdit }: UsuarioRowProps) => (
-    <div className="flex items-center justify-between py-1.5 px-3 text-sm rounded hover:bg-muted/50">
+    <div className="flex items-center justify-between py-1.5 px-3 text-sm rounded transition-colors hover:bg-muted/50">
         <div className="flex items-center gap-2 min-w-0">
             <div className={`h-2 w-2 rounded-full flex-shrink-0 ${
                 usuario.estado === true || usuario.estado === 'activo' ? 'bg-green-500' : 'bg-gray-400'
@@ -28,7 +28,7 @@ const UsuarioRow = ({ usuario, tipo, onEdit }: UsuarioRowProps) => (
                 {tipo === 'cliente' ? 'Cliente' : 'Admin'}
             </Badge>
             {onEdit && (
-                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onEdit}>
+                <Button variant="ghost" size="icon" className="h-7 w-7 text-foreground/70 hover:bg-primary/10 hover:text-primary" onClick={onEdit}>
                     <Edit className="h-3.5 w-3.5" />
                 </Button>
             )}
@@ -59,7 +59,7 @@ export const NodoCorpCard = ({
 
     return (
         <div
-            className="border rounded-lg overflow-hidden"
+            className="overflow-hidden rounded-lg border border-border bg-card text-card-foreground shadow-sm"
             style={{ marginLeft: nivel > 0 ? `${nivel * 16}px` : undefined }}
         >
             {/* Cabecera */}
@@ -119,7 +119,7 @@ export const NodoCorpCard = ({
 
             {/* Cuerpo */}
             {expanded && (
-                <div className="border-t bg-background">
+                <div className="border-t border-border bg-background/60">
                     {usuarios.length > 0 && (
                         <div className="p-3">
                             <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1 mb-1.5">
@@ -140,7 +140,7 @@ export const NodoCorpCard = ({
                     )}
 
                     {clientes.length > 0 && (
-                        <div className={`p-3 ${usuarios.length > 0 ? 'border-t' : ''}`}>
+                        <div className={`p-3 ${usuarios.length > 0 ? 'border-t border-border' : ''}`}>
                             <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1 mb-1.5">
                                 <Users className="h-3.5 w-3.5" />
                                 Clientes ({clientes.length})
@@ -163,7 +163,7 @@ export const NodoCorpCard = ({
                     )}
 
                     {tieneHijos && (
-                        <div className={`p-3 space-y-2 ${totalUsuarios > 0 ? 'border-t' : ''}`}>
+                        <div className={`p-3 space-y-2 ${totalUsuarios > 0 ? 'border-t border-border' : ''}`}>
                             <p className="text-xs font-semibold text-muted-foreground mb-1.5">Sub-corporativos</p>
                             {hijos.map(hijo => (
                                 <NodoCorpCard
