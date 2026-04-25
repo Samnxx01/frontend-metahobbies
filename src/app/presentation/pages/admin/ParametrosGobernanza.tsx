@@ -3,12 +3,23 @@ import { toast } from 'react-toastify';
 import { apiFetch } from '@/app/services/api';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, Play, RefreshCw, Settings2, Shield, ShieldCheck, Sparkles, Wand2, X } from 'lucide-react';
+import {
+  Building2,
+  KeyRound,
+  Loader2,
+  Play,
+  RefreshCw,
+  Search,
+  Settings2,
+  Shield,
+  ShieldCheck,
+  X,
+} from 'lucide-react';
 
 type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE';
 type EndpointSection = 'tenant' | 'permisos' | 'corporativo';
@@ -239,6 +250,27 @@ const METHOD_STYLE: Record<HttpMethod, string> = {
   POST: 'bg-emerald-100 text-emerald-700 border-emerald-200',
   PUT: 'bg-amber-100 text-amber-700 border-amber-200',
   DELETE: 'bg-red-100 text-red-700 border-red-200',
+};
+
+const SECTION_META: Record<
+  EndpointSection,
+  { label: string; description: string; icon: React.ElementType }
+> = {
+  tenant: {
+    label: 'Gobernanza Tenant',
+    description: 'Tenants, reglas y jerarquia visible.',
+    icon: ShieldCheck,
+  },
+  permisos: {
+    label: 'Gobernanza Permisos',
+    description: 'Herencias, vistas y acciones por alcance.',
+    icon: KeyRound,
+  },
+  corporativo: {
+    label: 'Gobernanza Corporativo',
+    description: 'Catalogos, roles y niveles corporativos.',
+    icon: Building2,
+  },
 };
 
 const HIDDEN_ENDPOINT_IDS = new Set([
@@ -5771,66 +5803,133 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
     </div>
   );
 
+  const pageTitle = isRulesMode ? 'Reglas Tenant' : 'Parametros Gobernanza';
+  const pageDescription = isRulesMode
+    ? 'Gestiona reglas globales y sincronizacion de permisos desde un flujo enfocado.'
+    : 'Administra tenants, permisos y parametros corporativos desde un panel guiado.';
+  const activeSectionMeta = SECTION_META[activeSection];
+  const ActiveSectionIcon = activeSectionMeta.icon;
+  const stats = [
+    { label: 'Vistas', value: vistas.length },
+    { label: 'Acciones', value: acciones.length },
+    { label: 'Tenants', value: tenantGlobales.length },
+    { label: 'Contextos', value: contextos.length },
+    ...(isRulesMode ? [{ label: 'Reglas', value: availableEndpoints.length }] : []),
+  ];
+
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,#ffe4f2,transparent_40%),radial-gradient(circle_at_bottom_right,#dbfff0,transparent_45%),#f8fafc] p-4 md:p-8">
-      <div className="mx-auto max-w-7xl space-y-5">
-        <Card className="border-rose-200 bg-white/90 shadow-md backdrop-blur">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-3xl font-black tracking-tight text-slate-900">
-              <ShieldCheck className="h-8 w-8 text-rose-500" /> {isRulesMode ? 'Reglas Tenant' : 'Parametros Gobernanza'}
-            </CardTitle>
-            <p className="flex items-center gap-2 text-rose-600">
-              <Sparkles className="h-4 w-4" />
-              {isRulesMode
-                ? 'Vista enfocada en la parametrizacion de reglas globales y sincronizacion DIOS.'
-                : 'Formularios guiados con datos reales de tus endpoints.'}
-            </p>
-          </CardHeader>
-          <CardContent className="flex flex-wrap gap-3">
-            <Badge variant="outline">Vistas activas: {vistas.length}</Badge>
-            <Badge variant="outline">Acciones activas: {acciones.length}</Badge>
-            <Badge variant="outline">TenantGlobal + corporativo: {tenantGlobales.length}</Badge>
-            <Badge variant="outline">Contextos: {contextos.length}</Badge>
-            {isRulesMode && <Badge variant="outline">Endpoints reglas: {availableEndpoints.length}</Badge>}
-            <Button variant="outline" onClick={hydrateData} disabled={loadingData}>{loadingData ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />} Recargar datos API</Button>
-          </CardContent>
-        </Card>
+    <div className="min-h-screen bg-slate-50 p-4 md:p-6">
+      <div className="mx-auto max-w-7xl space-y-6">
+        <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+            <div className="max-w-2xl space-y-3">
+              <div className="flex items-center gap-3">
+                <span className="flex h-10 w-10 items-center justify-center rounded-md border border-slate-200 bg-slate-50 text-slate-700">
+                  <ShieldCheck className="h-5 w-5" />
+                </span>
+                <div>
+                  <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                    Panel administrativo
+                  </p>
+                  <h1 className="text-2xl font-semibold tracking-tight text-slate-950">
+                    {pageTitle}
+                  </h1>
+                </div>
+              </div>
+              <p className="text-sm leading-6 text-slate-600">{pageDescription}</p>
+            </div>
+
+            <div className="flex w-full flex-col gap-3 lg:max-w-xl">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {stats.map((item) => (
+                  <div key={item.label} className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                    <p className="text-xs text-slate-500">{item.label}</p>
+                    <p className="text-lg font-semibold text-slate-950">{item.value}</p>
+                  </div>
+                ))}
+              </div>
+              <Button
+                variant="outline"
+                onClick={hydrateData}
+                disabled={loadingData}
+                className="w-full justify-center sm:w-auto sm:self-end"
+              >
+                {loadingData ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                )}
+                Recargar datos API
+              </Button>
+            </div>
+          </div>
+        </section>
 
         {!isRulesMode && !lockedSection && (
-        <div className="grid gap-4 md:grid-cols-3">
-          <button type="button" onClick={() => setActiveSection('tenant')} className={`rounded-2xl border p-5 text-left transition-all duration-300 ${activeSection === 'tenant' ? 'border-rose-400 bg-rose-50 shadow-lg' : 'border-slate-200 bg-white/70 hover:-translate-y-0.5 hover:shadow-md'}`}>
-            <h3 className="text-2xl font-bold text-slate-900">Gobernanza Tenant</h3>
-            <p className="text-rose-600">{sectionCounts.tenant} endpoints</p>
-          </button>
-          <button type="button" onClick={() => setActiveSection('permisos')} className={`rounded-2xl border p-5 text-left transition-all duration-300 ${activeSection === 'permisos' ? 'border-emerald-400 bg-emerald-50 shadow-lg' : 'border-slate-200 bg-white/70 hover:-translate-y-0.5 hover:shadow-md'}`}>
-            <h3 className="text-2xl font-bold text-slate-900">Gobernanza Permisos</h3>
-            <p className="text-emerald-700">{sectionCounts.permisos} endpoints</p>
-          </button>
-          <button type="button" onClick={() => setActiveSection('corporativo')} className={`rounded-2xl border p-5 text-left transition-all duration-300 ${activeSection === 'corporativo' ? 'border-violet-400 bg-violet-50 shadow-lg' : 'border-slate-200 bg-white/70 hover:-translate-y-0.5 hover:shadow-md'}`}>
-            <h3 className="text-2xl font-bold text-slate-900">Gobernanza Corporativo</h3>
-            <p className="text-violet-700">{sectionCounts.corporativo} endpoints</p>
-          </button>
-        </div>
+          <div className="grid gap-3 md:grid-cols-3">
+            {(['tenant', 'permisos', 'corporativo'] as EndpointSection[]).map((section) => {
+              const meta = SECTION_META[section];
+              const Icon = meta.icon;
+              const selected = activeSection === section;
+
+              return (
+                <button
+                  key={section}
+                  type="button"
+                  onClick={() => setActiveSection(section)}
+                  className={`rounded-lg border p-4 text-left transition-colors ${
+                    selected
+                      ? 'border-primary/35 bg-primary/5 text-slate-950 shadow-sm'
+                      : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-3">
+                      <span className={`mt-0.5 rounded-md border p-2 ${selected ? 'border-primary/20 bg-white text-primary' : 'border-slate-200 bg-slate-50 text-slate-500'}`}>
+                        <Icon className="h-4 w-4" />
+                      </span>
+                      <div>
+                        <h2 className="text-sm font-semibold">{meta.label}</h2>
+                        <p className="mt-1 text-xs text-slate-500">{meta.description}</p>
+                      </div>
+                    </div>
+                    <Badge variant={selected ? 'default' : 'outline'} className="shrink-0 rounded-md">
+                      {sectionCounts[section]}
+                    </Badge>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
         )}
 
-        <Card className="border-slate-200 bg-white/90">
-          <CardContent className="pt-6">
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <div className="flex items-center gap-2 text-slate-700">
-                <Wand2 className="h-4 w-4 text-rose-500" />
-                <span className="text-sm">
-                  {isRulesMode
-                    ? 'Flujo guiado solo para reglas de tenant'
-                    : lockedSection === 'permisos'
-                    ? 'Flujo guiado solo para gobernanza de permisos'
-                    : 'Flujo guiado por endpoint con datos reales de API'}
+        <Card className="border-slate-200 bg-white shadow-sm">
+          <CardContent className="p-4">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex min-w-0 items-center gap-3">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-slate-50 text-slate-600">
+                  <ActiveSectionIcon className="h-4 w-4" />
                 </span>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-slate-900">
+                    {isRulesMode ? 'Flujo de reglas' : activeSectionMeta.label}
+                  </p>
+                  <p className="text-sm text-slate-500">
+                    {isRulesMode
+                      ? 'Flujo guiado solo para reglas de tenant'
+                      : lockedSection === 'permisos'
+                      ? 'Flujo guiado solo para gobernanza de permisos'
+                      : `${activeSectionMeta.description} ${endpointsBySection.length} endpoints visibles.`}
+                  </p>
+                </div>
               </div>
-              <div className="w-full md:max-w-md">
+              <div className="relative w-full lg:max-w-md">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <Input
                   value={endpointSearch}
                   onChange={(e) => setEndpointSearch(e.target.value)}
                   placeholder="Buscar endpoint por nombre, ruta o metodo"
+                  className="pl-9"
                 />
               </div>
             </div>
@@ -5842,90 +5941,105 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
             {visibleTenantPrimaryForms.map((tenantForm) => {
               const esFlujoSA = tenantForm.id === 'tenant-crear-global-admin';
               const disponible = endpointDisponibleParaScope(tenantForm);
-              const accentClass = esFlujoSA
-                ? 'border-fuchsia-200 bg-gradient-to-br from-white via-fuchsia-50/50 to-rose-50/60'
-                : 'border-sky-200 bg-gradient-to-br from-white via-sky-50/50 to-cyan-50/60';
               const badgeClass = esFlujoSA
-                ? 'border-fuchsia-200 bg-fuchsia-100 text-fuchsia-700'
-                : 'border-sky-200 bg-sky-100 text-sky-700';
+                ? 'border-slate-200 bg-slate-100 text-slate-700'
+                : 'border-sky-200 bg-sky-50 text-sky-700';
               const helper = esFlujoSA
-                ? 'Parametrizas de tenantSuperAdmin hacia tenantGlobales visibles dentro de tu Ã¡rbol.'
+                ? 'Parametrizas de tenantSuperAdmin hacia tenantGlobales visibles dentro de tu arbol.'
                 : 'Flujo puro tenantGlobal: el subnodo queda amarrado a tu propio tenantGlobal y solo afecta descendencia.';
 
               return (
-                <Card key={tenantForm.id} className={`${accentClass} shadow-lg ${disponible ? '' : 'opacity-75'}`}>
-                  <CardHeader>
-                    <div className="flex flex-wrap items-center gap-3">
-                      <CardTitle className="text-xl font-bold text-slate-900">
+                <Card key={tenantForm.id} className={`border-slate-200 bg-white shadow-sm ${disponible ? '' : 'opacity-75'}`}>
+                  <CardHeader className="border-b border-slate-100 p-5">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <CardTitle className="text-lg font-semibold text-slate-950">
                         {isRulesMode ? 'Formulario principal recomendado' : esFlujoSA ? 'Flujo tenantSuperAdmin -> tenantGlobal' : 'Flujo puro tenantGlobal'}
                       </CardTitle>
                       <Badge className={`border ${METHOD_STYLE[tenantForm.method]}`}>{tenantForm.method}</Badge>
                       {!isRulesMode ? <Badge className={`border ${badgeClass}`}>{esFlujoSA ? 'Owner' : 'Descendencia'}</Badge> : null}
                       {!disponible ? <Badge variant="outline">Solo visible</Badge> : null}
                     </div>
-                    <p className={esFlujoSA ? 'text-fuchsia-700' : 'text-sky-700'}>{tenantForm.title}</p>
+                    <CardDescription>{tenantForm.title}</CardDescription>
                     {!isRulesMode ? <p className="text-sm text-slate-600">{helper}</p> : null}
                     {!isRulesMode && !disponible ? (
                       <p className="text-xs font-medium text-amber-600">
                         Tu sesi&oacute;n actual no ejecuta este formulario, pero lo dejamos visible para separar claramente el flujo tenantSuperAdmin del flujo tenantGlobal.
                       </p>
                     ) : null}
-                    <p className="rounded bg-white/80 p-2 font-mono text-xs text-slate-700">{tenantForm.path}</p>
+                    <p className="rounded-md border border-slate-200 bg-slate-50 p-2 font-mono text-xs text-slate-600">{tenantForm.path}</p>
                   </CardHeader>
-                  <CardContent>{renderForm(tenantForm)}</CardContent>
+                  <CardContent className="p-5">{renderForm(tenantForm)}</CardContent>
                 </Card>
               );
             })}
           </div>
         )}
 
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {endpointsBySection.map((endpoint) => (
-            <Card
-              key={endpoint.id}
-              className={`group border-slate-200 bg-white/90 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl ${endpoint.method === 'GET' ? 'md:col-span-2 xl:col-span-3' : ''} ${endpointDisponibleParaScope(endpoint) ? '' : 'opacity-75'}`}
-            >
-              <CardHeader>
-                <div className="mb-2 flex items-center justify-between gap-3">
-                  <Badge className={`border ${METHOD_STYLE[endpoint.method]}`}>{endpoint.method}</Badge>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline">{actorBadge(endpoint.actor)}</Badge>
-                    {!endpointDisponibleParaScope(endpoint) ? <Badge variant="outline">Solo visible</Badge> : null}
-                  </div>
-                </div>
-                <CardTitle className="text-lg text-slate-900">{endpoint.title}</CardTitle>
-                <p className="text-sm text-slate-600">{endpoint.description}</p>
-                {!endpointDisponibleParaScope(endpoint) ? (
-                  <p className="text-xs font-medium text-amber-600">
-                    Este bloque corresponde al otro scope y queda visible para diferenciar tenantSuperAdmin de tenantGlobal.
-                  </p>
-                ) : null}
-              </CardHeader>
-              <CardContent>
-                <p className={`mb-3 rounded bg-slate-100 p-2 font-mono text-xs ${endpoint.method === 'GET' ? '' : 'line-clamp-2'}`}>{endpoint.path}</p>
-                <div className="flex gap-2">
-                  <Button className="flex-1" variant="outline" onClick={() => setEndpointModal(endpoint)}>
-                    <Settings2 className="mr-2 h-4 w-4" />
-                    Configurar
-                  </Button>
-                  <Button className="flex-1" onClick={() => endpoint.fields.length === 0 ? runEndpoint(endpoint) : setEndpointModal(endpoint)} disabled={!!running[endpoint.id] || !endpointDisponibleParaScope(endpoint)}>
-                    {running[endpoint.id] ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
-                    Ejecutar
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+        {endpointsBySection.length === 0 ? (
+          <Card className="border-dashed border-slate-300 bg-white shadow-sm">
+            <CardContent className="flex min-h-40 flex-col items-center justify-center gap-2 p-6 text-center">
+              <Search className="h-5 w-5 text-slate-400" />
+              <p className="text-sm font-medium text-slate-900">Sin endpoints para mostrar</p>
+              <p className="max-w-md text-sm text-slate-500">
+                Ajusta la busqueda o cambia de seccion para ver mas opciones.
+              </p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {endpointsBySection.map((endpoint) => {
+              const disponible = endpointDisponibleParaScope(endpoint);
+
+              return (
+                <Card
+                  key={endpoint.id}
+                  className={`border-slate-200 bg-white shadow-sm transition-colors hover:border-primary/30 ${endpoint.method === 'GET' ? 'md:col-span-2 xl:col-span-3' : ''} ${disponible ? '' : 'opacity-75'}`}
+                >
+                  <CardHeader className="space-y-3 p-5">
+                    <div className="flex items-center justify-between gap-3">
+                      <Badge className={`border ${METHOD_STYLE[endpoint.method]}`}>{endpoint.method}</Badge>
+                      <div className="flex flex-wrap justify-end gap-2">
+                        <Badge variant="outline" className="rounded-md">{actorBadge(endpoint.actor)}</Badge>
+                        {!disponible ? <Badge variant="outline" className="rounded-md">Solo visible</Badge> : null}
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <CardTitle className="text-base leading-snug text-slate-950">{endpoint.title}</CardTitle>
+                      <CardDescription className="line-clamp-2">{endpoint.description}</CardDescription>
+                    </div>
+                    {!disponible ? (
+                      <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700">
+                        Este bloque pertenece a otro scope y queda disponible solo como referencia.
+                      </p>
+                    ) : null}
+                  </CardHeader>
+                  <CardContent className="space-y-4 p-5 pt-0">
+                    <p className={`rounded-md border border-slate-200 bg-slate-50 p-2 font-mono text-xs text-slate-600 ${endpoint.method === 'GET' ? '' : 'line-clamp-2'}`}>{endpoint.path}</p>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <Button variant="outline" onClick={() => setEndpointModal(endpoint)}>
+                        <Settings2 className="mr-2 h-4 w-4" />
+                        Configurar
+                      </Button>
+                      <Button onClick={() => endpoint.fields.length === 0 ? runEndpoint(endpoint) : setEndpointModal(endpoint)} disabled={!!running[endpoint.id] || !disponible}>
+                        {running[endpoint.id] ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
+                        Ejecutar
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <Dialog open={!!herenciaDetalle} onOpenChange={(open) => !open && setHerenciaDetalle(null)}>
-        <DialogContent className="max-h-[90vh] overflow-auto sm:max-w-5xl">
-          <DialogHeader>
-            <DialogTitle>Detalle de herencias por usuario/tenant</DialogTitle>
+        <DialogContent className="max-h-[92vh] overflow-hidden p-0 sm:max-w-5xl">
+          <DialogHeader className="border-b border-slate-200 px-6 py-4 pr-12">
+            <DialogTitle className="text-base text-slate-950">Detalle de herencias por usuario/tenant</DialogTitle>
           </DialogHeader>
           {herenciaDetalle ? (
-            <div className="space-y-3 text-xs">
+            <div className="max-h-[calc(92vh-72px)] space-y-3 overflow-auto px-6 py-5 text-xs">
               <div className="grid gap-2 md:grid-cols-3">
                 <div className="rounded border border-slate-200 bg-slate-50 p-2">Usuario: <span className="font-semibold">{String(herenciaDetalle?.usuario || herenciaDetalle?.usuarioId || '-')}</span></div>
                 <div className="rounded border border-slate-200 bg-slate-50 p-2">Total herencias: <span className="font-semibold">{Number(herenciaDetalle?.totalHerencias || herenciaDetalle?.total || 0)}</span></div>
@@ -5985,6 +6099,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
           ) : null}
         </DialogContent>
       </Dialog>
+<<<<<<< HEAD
       <Dialog open={!!endpointModal} onOpenChange={(open) => {
         if (!open) {
           if (endpointModal?.id === 'tenant-actualizar-global-reglas') {
@@ -5995,14 +6110,21 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
         }
       }}>
         <DialogContent className="max-h-[90vh] overflow-auto sm:max-w-4xl">
+=======
+      <Dialog open={!!endpointModal} onOpenChange={(open) => !open && setEndpointModal(null)}>
+        <DialogContent className="max-h-[92vh] overflow-hidden p-0 sm:max-w-4xl">
+>>>>>>> 835a77d78a60e89e90880472aa5f469cb548da5d
           {endpointModal && (
             <>
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-2">
-                  <Shield className="h-5 w-5 text-rose-500" /> {endpointModal.title}
+              <DialogHeader className="border-b border-slate-200 px-6 py-4 pr-12">
+                <DialogTitle className="flex items-center gap-2 text-base text-slate-950">
+                  <Shield className="h-5 w-5 text-slate-600" /> {endpointModal.title}
                 </DialogTitle>
+                <p className="font-mono text-xs text-slate-500">{endpointModal.path}</p>
               </DialogHeader>
-              {renderForm(endpointModal)}
+              <div className="max-h-[calc(92vh-92px)] overflow-auto px-6 py-5">
+                {renderForm(endpointModal)}
+              </div>
             </>
           )}
         </DialogContent>
