@@ -4,7 +4,7 @@ import { useTheme } from 'next-themes'
 import { useAuth } from '@/app/providers/AuthProvider'
 import { useMembership } from '@/app/hooks/useMembership'
 import { apiFetch } from '@/app/services/api'
-import { getMenuUsuarioRoutes, getPrivateHomeRoute, getUserShortcutRoutes, type MenuUsuarioItem } from '@/app/services/routeService'
+import { getMenuUsuarioRoutes, getPrivateHomeRoute, getUserShortcutRoutes, readCachedPrivateHomeRoute, type MenuUsuarioItem } from '@/app/services/routeService'
 import { getRouteMenuTags, resolveCurrentRouteMenuTags, type RouteMenuTag } from '@/app/services/routesService'
 import { getGovernedLogoutPath } from '@/app/services/governedNavigation'
 import { Button } from "@/components/ui/button"
@@ -113,12 +113,12 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
                 ])
 
                 if (!active) return
-                setAdminHomePath(privateHome || '/admin')
+                setAdminHomePath(privateHome || readCachedPrivateHomeRoute() || '/public/render/home')
                 setProfilePath(ADMIN_PROFILE_VIEW_PATH)
                 setMembershipPath(shortcuts.membresia || '/membresia/dashboard')
             } catch (_error) {
                 if (!active) return
-                setAdminHomePath('/admin')
+                setAdminHomePath(readCachedPrivateHomeRoute() || '/public/render/home')
                 setProfilePath(ADMIN_PROFILE_VIEW_PATH)
                 setMembershipPath('/membresia/dashboard')
             }

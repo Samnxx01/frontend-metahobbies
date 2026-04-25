@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 
 // Lucide icons
 import {
@@ -34,6 +35,20 @@ interface UsuarioReferido {
     totalPagado: number;
     totalPendiente: number;
     vouchers: Voucher[];
+    referidos?: ReferidoRelacion[];
+}
+
+interface ReferidoRelacion {
+    relacionId: string;
+    usuarioId: string | null;
+    correo: string;
+    nombre?: string | null;
+    telefono?: string | null;
+    verificado: boolean;
+    fechaRelacion: string;
+    nivel?: number | null;
+    nivelNombre?: string | null;
+    porcentaje?: number | null;
 }
 
 interface ReferidosResponse {
@@ -215,11 +230,12 @@ export default function MembershipDashboard(): React.ReactElement {
         });
 
     const misDatos = referidosData?.usuarios?.[0];
-    const totalReferrals = misDatos?.vouchers?.length || 0;
+    const totalReferrals = misDatos?.referidos?.length || 0;
     const totalEarnings = misDatos?.saldoActual || 0;
     const totalPagado = misDatos?.totalPagado || 0;
     const totalPendiente = misDatos?.totalPendiente || 0;
     const visibleVouchers = misDatos?.vouchers ?? [];
+    const visibleReferidos = misDatos?.referidos ?? [];
 
     const handleCopy = (text: string, type: string): void => {
         navigator.clipboard.writeText(text).catch(() => {
@@ -259,8 +275,13 @@ export default function MembershipDashboard(): React.ReactElement {
     };
 
     const handleGenerateLink = async (): Promise<void> => {
-        await refetch();
-        toast.success('Enlace de referido generado correctamente');
+        try {
+            await refetch();
+            toast.success('Enlace de referido generado correctamente con sesion de atribucion activa.');
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'No fue posible generar el enlace de referido.';
+            toast.error(message);
+        }
     };
 
     return (
@@ -407,6 +428,88 @@ export default function MembershipDashboard(): React.ReactElement {
                         </CardContent>
                     </Card>
                 </div>
+
+                <Card className="shadow-sm border-0 bg-card">
+                    <CardHeader>
+                        <CardTitle className="text-lg font-semibold flex items-center gap-2">
+                            <Users className="w-5 h-5 text-primary" /> Mi red de referidos
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        {loadingReferidos ? (
+                            <div className="flex justify-center items-center py-10">
+                                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                            </div>
+                        ) : visibleReferidos.length === 0 ? (
+                            <div className="rounded-xl border border-dashed border-border/60 bg-muted/20 px-4 py-8 text-center">
+                                <p className="text-sm font-medium text-foreground">Aun no tienes referidos activos</p>
+                                <p className="mt-1 text-sm text-muted-foreground">
+                                    Cuando alguien compre con tu enlace, lo veras listado aqui.
+                                </p>
+                            </div>
+                        ) : (
+                            <Accordion type="single" collapsible className="w-full space-y-3">
+                                {visibleReferidos.map((referido, index) => (
+                                    <AccordionItem
+                                        key={referido.relacionId}
+                                        value={referido.relacionId}
+                                        className="overflow-hidden rounded-xl border border-border/50 bg-muted/15 px-4"
+                                    >
+                                        <AccordionTrigger className="py-4 hover:no-underline">
+                                            <div className="flex w-full items-center justify-between gap-4 text-left">
+                                                <div className="flex items-center gap-3 min-w-0">
+                                                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
+                                                        #{index + 1}
+                                                    </div>
+                                                    <div className="min-w-0">
+                                                        <p className="truncate text-sm font-semibold text-foreground">
+                                                            {referido.nombre || referido.correo}
+                                                        </p>
+                                                        <p className="truncate text-xs text-muted-foreground">
+                                                            {referido.correo}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                <div className="hidden sm:flex items-center gap-3 text-xs text-muted-foreground">
+                                                    <span>
+                                                        {referido.nivelNombre || (referido.nivel ? `Nivel ${referido.nivel}` : 'Sin nivel')}
+                                                    </span>
+                                                    <span>
+                                                        {formatDate(referido.fechaRelacion)}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </AccordionTrigger>
+                                        <AccordionContent className="pb-4">
+                                            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+                                                <div className="rounded-lg bg-background/80 p-3">
+                                                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Correo</p>
+                                                    <p className="mt-1 text-sm font-medium text-foreground break-all">{referido.correo}</p>
+                                                </div>
+                                                <div className="rounded-lg bg-background/80 p-3">
+                                                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Fecha de ingreso</p>
+                                                    <p className="mt-1 text-sm font-medium text-foreground">{formatDate(referido.fechaRelacion)}</p>
+                                                </div>
+                                                <div className="rounded-lg bg-background/80 p-3">
+                                                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Generacion</p>
+                                                    <p className="mt-1 text-sm font-medium text-foreground">
+                                                        {referido.nivelNombre || (referido.nivel ? `Nivel ${referido.nivel}` : 'No asignado')}
+                                                    </p>
+                                                </div>
+                                                <div className="rounded-lg bg-background/80 p-3">
+                                                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Estado</p>
+                                                    <p className="mt-1 text-sm font-medium text-foreground">
+                                                        {referido.verificado ? 'Verificado' : 'Pendiente de verificar'}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </AccordionContent>
+                                    </AccordionItem>
+                                ))}
+                            </Accordion>
+                        )}
+                    </CardContent>
+                </Card>
 
                 {/* Tabla de vouchers */}
                 <Card className="shadow-sm border-0 bg-card">

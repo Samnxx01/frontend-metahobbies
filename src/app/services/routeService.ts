@@ -1,6 +1,23 @@
 import { apiFetch, apiFetchPublic } from './api';
 import { normalizeRoutePath, toRelativeRoutePath } from './routePathNormalizer';
 
+const PRIVATE_HOME_ROUTE_CACHE_KEY = 'mabs_private_home_route';
+
+export const readCachedPrivateHomeRoute = (): string | null => {
+    if (typeof window === 'undefined') return null;
+    const raw = window.localStorage.getItem(PRIVATE_HOME_ROUTE_CACHE_KEY);
+    if (!raw) return null;
+    const normalized = normalizeRoutePath(raw);
+    return normalized && normalized !== '/admin' ? normalized : null;
+};
+
+const writeCachedPrivateHomeRoute = (path: string | null | undefined): void => {
+    if (typeof window === 'undefined') return;
+    const normalized = path ? normalizeRoutePath(path) : '';
+    if (!normalized || normalized === '/admin') return;
+    window.localStorage.setItem(PRIVATE_HOME_ROUTE_CACHE_KEY, normalized);
+};
+
 interface RouteResponse {
     success: boolean;
     message: string;
@@ -504,15 +521,19 @@ export const getUserShortcutRoutes = async (): Promise<UserShortcutRoutes> => {
             membresiaRoute: membresiaRoute?.path ?? null,
         });
 
+        const resolvedAdmin = firstAdminPath || (adminRoute ? toAppRoutePath(adminRoute) : '') || readCachedPrivateHomeRoute() || '';
+        writeCachedPrivateHomeRoute(resolvedAdmin);
+
         return {
-            admin: firstAdminPath || (adminRoute ? toAppRoutePath(adminRoute) : '/admin'),
+            admin: resolvedAdmin,
             perfil: perfilRoute ? toAppRoutePath(perfilRoute) : '/perfil',
             membresia: membresiaRoute ? toAppRoutePath(membresiaRoute) : '/membresia/dashboard',
         };
     } catch (error) {
         console.error('Error al resolver shortcuts de usuario:', error);
+        const cachedAdmin = readCachedPrivateHomeRoute() || '';
         return {
-            admin: '/admin',
+            admin: cachedAdmin,
             perfil: '/perfil',
             membresia: '/membresia/dashboard',
         };
@@ -932,6 +953,16 @@ export const invalidateSidebarCache = (): void => {
     _sidebarCache = null;
 };
 
+// Limpia todos los caches de sesión al hacer logout.
+// Llama esto antes de navegar a la ruta de logout para evitar que
+// rutas stale del usuario anterior aparezcan en la siguiente sesión.
+export const clearSessionCaches = (): void => {
+    if (typeof window !== 'undefined') {
+        window.localStorage.removeItem(PRIVATE_HOME_ROUTE_CACHE_KEY);
+    }
+    _sidebarCache = null;
+};
+
 const _fetchSidebarTreeWithContext = async (): Promise<AdminSidebarTreeContext> => {
     try {
         const token = localStorage.getItem('token');
@@ -1005,20 +1036,23 @@ export const getPrivateHomeRoute = async (): Promise<string> => {
     try {
         const shortcuts = await getUserShortcutRoutes();
         if (shortcuts.admin?.trim()) {
+            writeCachedPrivateHomeRoute(shortcuts.admin);
             console.log('[MABS][routeService][getPrivateHomeRoute]', {
                 resolved: shortcuts.admin,
             });
             return shortcuts.admin;
         }
+        const cached = readCachedPrivateHomeRoute();
         console.log('[MABS][routeService][getPrivateHomeRoute][fallback]', {
-            resolved: '/admin',
+            resolved: cached || '',
         });
-        return "/admin";
+        return cached || "";
     } catch (_error) {
+        const cached = readCachedPrivateHomeRoute();
         console.log('[MABS][routeService][getPrivateHomeRoute][catch]', {
-            resolved: '/admin',
+            resolved: cached || '',
         });
-        return "/admin";
+        return cached || "";
     }
 };
 
@@ -1032,6 +1066,7 @@ export const getAdminHomeRoute = async (): Promise<string | null> => {
         const { tree } = await getAdminSidebarTreeWithContext();
         const treeHome = findFirstAuthorizedAdminPath(tree);
         if (treeHome) {
+            writeCachedPrivateHomeRoute(treeHome);
             console.log('[MABS][routeService][getAdminHomeRoute][tree]', {
                 resolved: treeHome,
             });
@@ -1046,6 +1081,7 @@ export const getAdminHomeRoute = async (): Promise<string | null> => {
             catalog.find((r) => isAdminLayout(r.layout));
 
         const resolved = adminEntry ? toAppRoutePath(adminEntry) : null;
+        writeCachedPrivateHomeRoute(resolved);
         console.log('[MABS][routeService][getAdminHomeRoute][catalog]', {
             resolved,
             adminEntry: adminEntry?.path ?? null,

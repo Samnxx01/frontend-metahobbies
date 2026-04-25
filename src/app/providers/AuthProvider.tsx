@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import * as authService from '../services/authService';
 import { desconectadoUsu } from '../socket';
+import { clearSessionCaches } from '../services/routeService';
 import type { User } from '../../types/common';
 
 // Interfaces para los tipos de datos
@@ -100,12 +101,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         try {
             localStorage.removeItem("token");
             localStorage.removeItem("user");
+            clearSessionCaches();
             desconectadoUsu();
             setToken(null);
             setUser(null);
         } catch (error) {
             console.error("Error durante logout:", error);
-            throw error; // <-- Esto es lo que dispara tu toast rojo
+            throw error;
         }
     };
 

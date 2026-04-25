@@ -1,7 +1,7 @@
 import { Routes, Route, useLocation, Navigate, Outlet } from 'react-router-dom';
 import { useState, useEffect, ReactElement, lazy, Suspense } from 'react';
 import { useAuth } from '@/app/providers/AuthProvider';
-import { getAuthorizedRoutes, getPrivateHomeRoute } from '@/app/services/routeService';
+import { getAuthorizedRoutes, getPrivateHomeRoute, readCachedPrivateHomeRoute } from '@/app/services/routeService';
 import { resolveCurrentRouteMenuTags } from '@/app/services/routesService';
 import { useLoading } from '@/app/providers/LoadingProvider';
 import { getGovernedPublicHomePath } from '@/app/services/governedNavigation';
@@ -72,6 +72,10 @@ const buildComponentMap = (): ComponentMapType => {
         ProductosPublic:               'ProductosPublico',
         ProductosPublicos:             'ProductosPublico',
         CatalogoProductos:             'ProductosPublico',
+        InventarioAdmin:               'Inventario',
+        GestionInventario:             'Inventario',
+        KardexInventario:              'Inventario',
+        InventarioKardex:              'Inventario',
     };
 
     for (const [alias, target] of Object.entries(aliases)) {
@@ -135,15 +139,15 @@ function RootRedirect({ user }: { user: any }): ReactElement {
                 if (!active) return;
                 console.log('[MABS][LayoutRoutes][RootRedirect][private]', {
                     nextPath,
-                    fallback: '/admin',
+                    fallback: readCachedPrivateHomeRoute() || getGovernedPublicHomePath(),
                 });
-                setTargetPath(nextPath?.trim() || '/admin');
+                setTargetPath(nextPath?.trim() || readCachedPrivateHomeRoute() || getGovernedPublicHomePath());
             } catch {
                 if (!active) return;
                 console.log('[MABS][LayoutRoutes][RootRedirect][catch]', {
-                    fallback: '/admin',
+                    fallback: readCachedPrivateHomeRoute() || getGovernedPublicHomePath(),
                 });
-                setTargetPath('/admin');
+                setTargetPath(readCachedPrivateHomeRoute() || getGovernedPublicHomePath());
             }
         };
 
@@ -172,15 +176,15 @@ function AdminEntryRedirect(): ReactElement {
                 if (!active) return;
                 console.log('[MABS][LayoutRoutes][AdminEntryRedirect]', {
                     nextPath,
-                    fallback: '/admin',
+                    fallback: readCachedPrivateHomeRoute() || getGovernedPublicHomePath(),
                 });
-                setTargetPath(nextPath?.trim() || '/admin');
+                setTargetPath(nextPath?.trim() || readCachedPrivateHomeRoute() || getGovernedPublicHomePath());
             } catch (_error) {
                 if (!active) return;
                 console.log('[MABS][LayoutRoutes][AdminEntryRedirect][catch]', {
-                    fallback: '/admin',
+                    fallback: readCachedPrivateHomeRoute() || getGovernedPublicHomePath(),
                 });
-                setTargetPath('/admin');
+                setTargetPath(readCachedPrivateHomeRoute() || getGovernedPublicHomePath());
             }
         };
 

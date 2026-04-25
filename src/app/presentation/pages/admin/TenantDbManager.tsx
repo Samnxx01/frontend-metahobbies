@@ -214,6 +214,7 @@ export default function TenantDbManager() {
   const [configs, setConfigs] = useState<TenantDbConfig[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [connectivityLoadingId, setConnectivityLoadingId] = useState<string | null>(null);
 
   // ── Dialog conexión ──
   const [dlgConexion, setDlgConexion] = useState(false);
@@ -914,6 +915,20 @@ export default function TenantDbManager() {
 
   // ─── Sync ─────────────────────────────────────────────────────────────────
 
+  const handleProbarConectividad = async (config: TenantDbConfig) => {
+    const configId = resolverConfigId(config);
+    setConnectivityLoadingId(configId);
+    try {
+      const res = await tenantDbService.migrarSchemas(configId);
+      toast.success(res?.msg ?? 'Conectividad validada correctamente');
+      await Promise.all([cargarConfigs(), cargarPool()]);
+    } catch (err: any) {
+      toast.error(err?.message ?? 'No se pudo validar la conectividad de la BD');
+    } finally {
+      setConnectivityLoadingId(null);
+    }
+  };
+
   function resolverConfigId(config: TenantDbConfig): string {
     return config.iud;
   }
@@ -925,15 +940,19 @@ export default function TenantDbManager() {
   };
 
   const abrirDlgSync = (config: TenantDbConfig) => {
+    const currentId = resolverConfigId(config);
+    const sourceCandidates = configs.filter((cfg) => resolverConfigId(cfg) !== currentId && cfg.estado);
+    const sourceCandidateIds = new Set(sourceCandidates.map((cfg) => resolverConfigId(cfg)));
     const sourcePreferido =
       resolveConfigRefId(config.parentTenantDbConfig)
       || resolveConfigRefId(config.rootTenantDbConfig)
       || '';
+    const sourceInicial = sourceCandidateIds.has(sourcePreferido) ? sourcePreferido : '';
     setTenantSeleccionado(config);
     setSyncCollections([]);
     setSyncPreview(null);
     setSyncForm({
-      sourceConfigId: String(sourcePreferido || ''),
+      sourceConfigId: String(sourceInicial || ''),
       coleccion: '',
       colecciones: [],
       autoSync: true,
@@ -1246,6 +1265,21 @@ export default function TenantDbManager() {
     setSyncForm((prev) => ({ ...prev, sourceConfigId: unicoOrigen }));
   }, [dlgSync, tenantSeleccionado, syncForm.sourceConfigId, syncAutoSourceCandidates]);
 
+  useEffect(() => {
+    if (!dlgSync || !tenantSeleccionado) return;
+    if (!syncForm.sourceConfigId) return;
+
+    const sourceValido = syncSourceCandidates.some(
+      (cfg) => resolverConfigId(cfg) === syncForm.sourceConfigId
+    );
+
+    if (!sourceValido) {
+      setSyncForm((prev) => ({ ...prev, sourceConfigId: '', coleccion: '', colecciones: [] }));
+      setSyncCollections([]);
+      setSyncPreview(null);
+    }
+  }, [dlgSync, tenantSeleccionado, syncForm.sourceConfigId, syncSourceCandidates]);
+
   // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
@@ -1330,6 +1364,7 @@ export default function TenantDbManager() {
                   <TableBody>
                     {configs.map(cfg => {
                       const id = resolverConfigId(cfg);
+                      const isCheckingConnectivity = connectivityLoadingId === id;
                       return (
                         <TableRow key={cfg.iud}>
                           <TableCell className="font-medium text-sm max-w-[160px] truncate" title={cfg.poolName}>
@@ -1385,10 +1420,14 @@ export default function TenantDbManager() {
                             <Button
                               variant="outline"
                               size="icon"
-                              title="Configurar sync de colecciones"
-                              onClick={() => void abrirEstadoSync(cfg)}
+                              title="Probar conectividad de la BD"
+                              onClick={() => void handleProbarConectividad(cfg)}
+                              disabled={isCheckingConnectivity}
                             >
-                              <Radio className="w-4 h-4" />
+                              {isCheckingConnectivity
+                                ? <Loader2 className="w-4 h-4 animate-spin" />
+                                : <Radio className="w-4 h-4" />
+                              }
                             </Button>
                             <Button
                               variant="outline"
@@ -1423,6 +1462,7 @@ export default function TenantDbManager() {
               const id = resolverConfigId(cfg);
               const expanded = expandedRows.has(cfg.iud);
               const colsActivas = cfg.coleccionesSync?.filter(c => c.estado) ?? [];
+              const isCheckingConnectivity = connectivityLoadingId === id;
 
               return (
                 <Card key={cfg.iud}>

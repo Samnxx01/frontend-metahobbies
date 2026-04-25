@@ -241,6 +241,11 @@ export const tenantDbService = {
   estadoPool: (): Promise<{ ok: boolean } & PoolEstado> =>
     apiFetch('/api/tenant-db/pool', { method: 'GET' }),
 
+  migrarSchemas: (
+    configId: string
+  ): Promise<{ ok: boolean; msg: string; data: TenantDbConfig }> =>
+    apiFetch(`/api/tenant-db/config/id/${configId}/migrar`, { method: 'POST' }),
+
   // ─── CONTENEDOR PARAMETRIZACION ─────────────────────────────────────────────
 
   /** Lista todos los perfilesCorporativos disponibles para el select Empresa */

@@ -2,7 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { BrandingConfig, BrandingPalette, obtenerBrandingPublico } from '@/app/services/brandingWidget';
 import { aplicarPaletaEnApp, restaurarPaletaLocal, type ColoresPaleta } from '@/app/utils/ColorUtils';
-import { apiFetch } from '@/app/services/api';
+import { obtenerColoresPublico } from '@/app/services/coloresAppService';
 
 interface BrandingProviderProps {
   children: React.ReactNode;
@@ -108,20 +108,16 @@ const applyRouteOverrides = (branding: BrandingConfig, pathname: string): Brandi
   return mergeDeep(branding as Record<string, unknown>, overrides) as BrandingConfig;
 };
 
-// Carga y aplica la paleta activa del email-paleta endpoint
-// Se ejecuta una vez al montar. Si el usuario no está autenticado el fetch
-// falla silenciosamente y la paleta del localStorage (si existe) sigue activa.
+// Carga y aplica la paleta activa desde el endpoint público (sin JWT).
+// Funciona para vistas públicas y privadas por igual.
 const cargarYAplicarPaletaActiva = async (): Promise<void> => {
   try {
-    const res = await apiFetch('/api/email-paleta', { method: 'GET', logoutOn401: false });
-    const paletas: Array<{ activa: boolean; colores: ColoresPaleta }> = res?.paletas ?? [];
-    const activa = paletas.find(p => p.activa === true);
-    if (activa?.colores) {
-      aplicarPaletaEnApp(activa.colores);
+    const res = await obtenerColoresPublico();
+    const colores = res?.colores as ColoresPaleta | null;
+    if (colores) {
+      aplicarPaletaEnApp(colores);
     }
   } catch {
-    // Si falla (usuario no autenticado o error de red), restaurar desde
-    // localStorage para mantener el último color conocido
     restaurarPaletaLocal();
   }
 };

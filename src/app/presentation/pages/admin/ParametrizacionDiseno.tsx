@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { getRouteCatalog, RouteCatalogItem } from '@/app/services/routeService';
+import { getRouteCatalog, RouteCatalogItem, readCachedPrivateHomeRoute } from '@/app/services/routeService';
 import {
   AccionBackend,
   BrandingConfig,
@@ -53,6 +53,8 @@ interface DesignFormState {
   allowedPathsJson: string;
 }
 
+const getDefaultPrivatePath = (): string => readCachedPrivateHomeRoute() || '/public/render/home';
+
 const DEFAULT_FORM: DesignFormState = {
   fontFamilyBase: '',
   fontFamilyHeading: '',
@@ -73,9 +75,9 @@ const DEFAULT_FORM: DesignFormState = {
   tokensJson: '{}',
   loginPath: '/public/render/login',
   loginEnabled: true,
-  postLoginPath: '/admin',
+  postLoginPath: getDefaultPrivatePath(),
   postLoginEnabled: true,
-  logoutPath: '/admin',
+  logoutPath: getDefaultPrivatePath(),
   logoutEnabled: true,
   registerPath: '/public/render/registro-cliente',
   registerEnabled: true,
@@ -86,11 +88,11 @@ const DEFAULT_FORM: DesignFormState = {
   allowedPathsJson: JSON.stringify([
     '/public/render/login',
     '/public/render/view/login',
-    '/admin',
+    getDefaultPrivatePath(),
     '/public/render/registro-cliente',
     '/recuperar-contrasena',
     '/public/render/home'
-  ], null, 2)
+  ].filter((value, index, array) => value && array.indexOf(value) === index), null, 2)
 };
 
 const parseJsonTokens = (value: string): Record<string, string> => {

@@ -26,7 +26,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import { Loader2, AlertTriangle } from 'lucide-react';
 import { apiFetch } from '@/app/services/api';
 import { getAdminHomeRoute } from '@/app/services/routeService';
-import { getGovernedPostLoginPath, getGovernedRegisterPath, getGovernedForgotPasswordPath } from '@/app/services/governedNavigation';
+import { getGovernedPostLoginPath, getGovernedRegisterPath, getGovernedForgotPasswordPath, isGovernedPathConfigured } from '@/app/services/governedNavigation';
 
 // --- Interfaces ---
 interface LoginFormData {
@@ -140,12 +140,20 @@ export default function Login(): React.ReactElement {
                 toast.success('¡Acceso exitoso! Redirigiendo...');
 
                 setTimeout(async () => {
-                    const adminPath = await getAdminHomeRoute();
                     const governedPath = getGovernedPostLoginPath();
-                    const targetPath = adminPath ?? governedPath;
+                    const governedConfigured = isGovernedPathConfigured('postLogin');
+                    // El governed path del backend tiene prioridad cuando está explícitamente configurado.
+                    // Solo se usa getAdminHomeRoute() como fallback cuando no hay config de gobernanza.
+                    let targetPath: string;
+                    if (governedConfigured) {
+                        targetPath = governedPath;
+                    } else {
+                        const adminPath = await getAdminHomeRoute();
+                        targetPath = adminPath ?? governedPath;
+                    }
                     console.log('[MABS][Login][post-auth-redirect]', {
-                        adminPath,
                         governedPath,
+                        governedConfigured,
                         targetPath,
                         userId: response?.usuario?._id ?? null,
                         correo: response?.usuario?.correo ?? null,
