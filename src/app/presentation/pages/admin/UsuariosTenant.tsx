@@ -55,7 +55,7 @@ export default function UsuariosTenant(): React.ReactElement {
     const [modalRolesGlobales, setModalRolesGlobales] = useState(false);
     const [modalRolesCorporativos, setModalRolesCorporativos] = useState(false);
 
-    const scope = jerarquia?.scope ?? 'TENANT_GLOBAL';
+    const scope = jerarquia?.scope ?? null;
 
     // Lista de TenantGlobales para el selector del SUPER_ADMIN
     const tenantsGlobalesInfo: TenantGlobalInfo[] = (jerarquia?.tenantsGlobales ?? [])
@@ -294,6 +294,82 @@ export default function UsuariosTenant(): React.ReactElement {
         );
     }
 
+    if (!scope) {
+        const publicChecks = jerarquia?.publicChecks;
+        const todosConfigurados = publicChecks?.diosRolExists && publicChecks?.diosUserExists;
+
+        return (
+            <div className="min-h-full p-4 md:p-6 lg:p-8 bg-background text-foreground">
+                <div className="flex flex-col items-center justify-center min-h-[60vh] gap-8">
+                    <div className="text-center space-y-2">
+                        <h1 className="text-2xl font-bold">Configuración inicial</h1>
+                        <p className="text-sm text-muted-foreground max-w-sm">
+                            {todosConfigurados
+                                ? 'El sistema ya tiene un administrador configurado. Inicia sesión para continuar.'
+                                : 'Para comenzar, crea el rol DIOS y luego el primer administrador del sistema.'}
+                        </p>
+                    </div>
+
+                    <div className="flex flex-wrap gap-4 justify-center">
+                        {/* Rol Global */}
+                        <div className="flex flex-col items-center gap-1.5">
+                            {publicChecks?.diosRolExists ? (
+                                <Button size="sm" variant="outline" disabled className="opacity-60">
+                                    <Globe className="h-4 w-4 mr-2" />
+                                    Rol Global
+                                </Button>
+                            ) : (
+                                <Button size="sm" variant="outline" onClick={() => setModalRolesGlobales(true)}>
+                                    <Globe className="h-4 w-4 mr-2" />
+                                    Rol Global
+                                </Button>
+                            )}
+                            {publicChecks?.diosRolExists && (
+                                <span className="text-xs text-muted-foreground">Rol DIOS ya existe</span>
+                            )}
+                        </div>
+
+                        {/* Usuario SuperAdmin */}
+                        <div className="flex flex-col items-center gap-1.5">
+                            {publicChecks?.diosUserExists ? (
+                                <Button size="sm" disabled className="opacity-60">
+                                    <Shield className="h-4 w-4 mr-2" />
+                                    Usuario SuperAdmin
+                                </Button>
+                            ) : (
+                                <Button size="sm" onClick={() => setModalSuperAdmin(true)}>
+                                    <Shield className="h-4 w-4 mr-2" />
+                                    Usuario SuperAdmin
+                                </Button>
+                            )}
+                            {publicChecks?.diosUserExists && (
+                                <span className="text-xs text-muted-foreground">Usuario DIOS ya existe</span>
+                            )}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Modales bootstrap */}
+                <RolesGlobalesModal
+                    open={modalRolesGlobales}
+                    onClose={() => { setModalRolesGlobales(false); refetch(); }}
+                    scope="SUPER_ADMIN"
+                />
+                <UsuarioSuperAdminModal
+                    open={modalSuperAdmin}
+                    onClose={() => setModalSuperAdmin(false)}
+                    onSubmit={crearUsuarioSuperAdmin}
+                    isSubmitting={isCreatingSuperAdmin}
+                    submitError={errorCrearSuperAdmin}
+                    scope={'SUPER_ADMIN'}
+                    onSincronizarGlobalCanReferir={sincronizarGlobalCanReferirUsuarios}
+                    isSincronizandoGlobal={isSincronizandoGlobalCanReferir}
+                    sincronizarGlobalError={errorSincronizarGlobalCanReferir}
+                />
+            </div>
+        );
+    }
+
     return (
         <div className="min-h-full p-4 md:p-6 lg:p-8 space-y-6 bg-background text-foreground">
             {/* Encabezado */}
@@ -305,15 +381,18 @@ export default function UsuariosTenant(): React.ReactElement {
                     </p>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
-                    <Badge variant="outline" className="gap-1 border-primary/30 bg-primary/5 text-primary">
-                        <Shield className="h-3.5 w-3.5" />
-                        {scope}
-                    </Badge>
-                    <Button variant="outline" size="sm" onClick={refetch}>
-                        <RefreshCw className="h-4 w-4 mr-2" />
-                        Actualizar
-                    </Button>
-                    {/* Agregar usuario SuperAdmin solo para SUPER_ADMIN */}
+                    {scope && (
+                        <Badge variant="outline" className="gap-1 border-primary/30 bg-primary/5 text-primary">
+                            <Shield className="h-3.5 w-3.5" />
+                            {scope}
+                        </Badge>
+                    )}
+                    {scope && (
+                        <Button variant="outline" size="sm" onClick={refetch}>
+                            <RefreshCw className="h-4 w-4 mr-2" />
+                            Actualizar
+                        </Button>
+                    )}
                     {scope === 'SUPER_ADMIN' && (
                         <Button size="sm" onClick={() => setModalSuperAdmin(true)}>
                             <Shield className="h-4 w-4 mr-2" />
@@ -326,16 +405,18 @@ export default function UsuariosTenant(): React.ReactElement {
                             Dominios
                         </Button>
                     )}
-                    {/* Gestión de roles */}
-                    <Button size="sm" variant="outline" onClick={() => setModalRolesGlobales(true)}>
-                        <Globe className="h-4 w-4 mr-2" />
-                        Rol Global
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={() => setModalRolesCorporativos(true)}>
-                        <Building2 className="h-4 w-4 mr-2" />
-                        Rol Corporativo
-                    </Button>
-                    {/* Agregar usuario global solo para SA y TG */}
+                    {scope && (
+                        <Button size="sm" variant="outline" onClick={() => setModalRolesGlobales(true)}>
+                            <Globe className="h-4 w-4 mr-2" />
+                            Rol Global
+                        </Button>
+                    )}
+                    {scope && (
+                        <Button size="sm" variant="outline" onClick={() => setModalRolesCorporativos(true)}>
+                            <Building2 className="h-4 w-4 mr-2" />
+                            Rol Corporativo
+                        </Button>
+                    )}
                     {(scope === 'SUPER_ADMIN' || scope === 'TENANT_GLOBAL') && (
                         <Button size="sm" onClick={() => setModalGlobal(true)}>
                             <UserPlus className="h-4 w-4 mr-2" />

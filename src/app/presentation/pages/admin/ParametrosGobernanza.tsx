@@ -6099,7 +6099,6 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
           ) : null}
         </DialogContent>
       </Dialog>
-<<<<<<< HEAD
       <Dialog open={!!endpointModal} onOpenChange={(open) => {
         if (!open) {
           if (endpointModal?.id === 'tenant-actualizar-global-reglas') {
@@ -6110,10 +6109,6 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
         }
       }}>
         <DialogContent className="max-h-[90vh] overflow-auto sm:max-w-4xl">
-=======
-      <Dialog open={!!endpointModal} onOpenChange={(open) => !open && setEndpointModal(null)}>
-        <DialogContent className="max-h-[92vh] overflow-hidden p-0 sm:max-w-4xl">
->>>>>>> 835a77d78a60e89e90880472aa5f469cb548da5d
           {endpointModal && (
             <>
               <DialogHeader className="border-b border-slate-200 px-6 py-4 pr-12">

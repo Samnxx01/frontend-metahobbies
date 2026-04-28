@@ -30,6 +30,17 @@ import {
     DEFAULT_COLORES_APP,
 } from '@/app/services/coloresAppService';
 import type { ColoresApp } from '@/app/services/coloresAppService';
+import {
+    listarPaletas,
+    actualizarPaleta,
+    obtenerPorId,
+    listarRutasConPaleta,
+    listarRutasSinPaleta,
+    type PaletaRuta,
+    type RutaInfo,
+} from '@/app/services/paletaRutaService';
+import PaletaRutaForm from '@/app/presentation/components/admin/paleta-rutas/PaletaRutaForm';
+import type { FormPayload } from '@/app/presentation/components/admin/paleta-rutas/PaletaRutaForm';
 
 type PaletaColores = ColoresApp;
 
@@ -155,6 +166,13 @@ export default function Dashboard(): React.ReactElement {
     const [paletaLoading, setPaletaLoading] = useState(false);
     const [paletaSaving, setPaletaSaving] = useState(false);
 
+    // ── Paletas por ruta ──────────────────────────────────────────────────────
+    const [paletasRuta, setPaletasRuta] = useState<PaletaRuta[]>([]);
+    const [paletasRutaCargando, setPaletasRutaCargando] = useState(false);
+    const [editarPaletaModal, setEditarPaletaModal] = useState<{ abierto: boolean; paleta?: PaletaRuta }>({ abierto: false });
+    const [guardandoPaleta, setGuardandoPaleta] = useState(false);
+    const [rutasParaEdicion, setRutasParaEdicion] = useState<RutaInfo[]>([]);
+
     // ── Roles y scope ─────────────────────────────────────────────────────────
     const tenantScope = user?.auth?.tenantScope || {};
     const actorScope = {
@@ -189,6 +207,9 @@ export default function Dashboard(): React.ReactElement {
 
     // ── Efectos: usuarios ─────────────────────────────────────────────────────
     useEffect(() => { void loadUsuarios(); }, []);
+
+    // ── Efectos: paletas por ruta ─────────────────────────────────────────────
+    useEffect(() => { void cargarPaletasRuta(); }, []);
 
     // ── Efectos: tenants ──────────────────────────────────────────────────────
     useEffect(() => {
@@ -314,6 +335,50 @@ export default function Dashboard(): React.ReactElement {
         finally { setPaletaSaving(false); }
     };
 
+    // ── Paletas por ruta: cargar ──────────────────────────────────────────────
+    const cargarPaletasRuta = async (): Promise<void> => {
+        setPaletasRutaCargando(true);
+        try {
+            const res = await listarPaletas(1, 50);
+            setPaletasRuta(res.paletas ?? []);
+        } catch { /* silencioso */ }
+        finally { setPaletasRutaCargando(false); }
+    };
+
+    // ── Paletas por ruta: abrir edición ───────────────────────────────────────
+    const abrirEditarPaleta = async (paleta: PaletaRuta): Promise<void> => {
+        try {
+            const [res, resSin, resCon] = await Promise.all([
+                obtenerPorId(paleta.iud),
+                listarRutasSinPaleta(),
+                listarRutasConPaleta(),
+            ]);
+            const todas = [...(resSin.rutas ?? []), ...(resCon.rutas ?? [])].filter(
+                (r, i, arr) => arr.findIndex((x) => x._id === r._id) === i
+            );
+            setRutasParaEdicion(todas);
+            setEditarPaletaModal({ abierto: true, paleta: res.paleta });
+        } catch {
+            setEditarPaletaModal({ abierto: true, paleta });
+        }
+    };
+
+    // ── Paletas por ruta: guardar ─────────────────────────────────────────────
+    const handleGuardarPaleta = async (data: FormPayload): Promise<void> => {
+        if (!editarPaletaModal.paleta) return;
+        setGuardandoPaleta(true);
+        try {
+            await actualizarPaleta(editarPaletaModal.paleta.iud, data as unknown as Partial<PaletaRuta>);
+            toast.success('Paleta actualizada correctamente');
+            setEditarPaletaModal({ abierto: false });
+            await cargarPaletasRuta();
+        } catch (error: any) {
+            toast.error(error?.message || 'Error al actualizar la paleta');
+        } finally {
+            setGuardandoPaleta(false);
+        }
+    };
+
     // ── Render ────────────────────────────────────────────────────────────────
     return (
         <div className="p-4 md:p-6 lg:p-8 flex-1 space-y-8">
@@ -360,6 +425,57 @@ export default function Dashboard(): React.ReactElement {
                             </div>
                         ))}
                     </div>
+                </CardContent>
+            </Card>
+
+            {/* ── Paletas por ruta ──────────────────────────────────────────── */}
+            <Card className="shadow-lg border-border">
+                <CardHeader className="pb-3">
+                    <div className="flex items-center gap-2">
+                        <Palette className="h-5 w-5 text-primary" />
+                        <CardTitle>Parametrización de Paletas por Ruta</CardTitle>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                        Edita colores, imágenes de fondo y estilos de botones por vista de la aplicación.
+                    </p>
+                </CardHeader>
+                <CardContent>
+                    {paletasRutaCargando ? (
+                        <div className="flex justify-center py-6">
+                            <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                        </div>
+                    ) : paletasRuta.length === 0 ? (
+                        <div className="text-center py-8 text-muted-foreground text-sm">
+                            <Palette className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                            <p>No hay paletas configuradas aún.</p>
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                            {paletasRuta.map((p) => (
+                                <div key={p.iud} className="flex items-center justify-between gap-3 p-3 rounded-lg border border-border bg-card">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                        <span
+                                            className="inline-block w-4 h-4 rounded-sm flex-shrink-0 border border-black/10"
+                                            style={{ backgroundColor: p.colores.colorPrimario }}
+                                        />
+                                        <div className="min-w-0">
+                                            <p className="text-sm font-medium truncate">{p.nombre}</p>
+                                            <p className="text-xs text-muted-foreground font-mono truncate">{p.rutaId?.path ?? '—'}</p>
+                                        </div>
+                                    </div>
+                                    <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => void abrirEditarPaleta(p)}
+                                        className="flex-shrink-0 h-7 text-xs"
+                                    >
+                                        <Edit className="h-3 w-3 mr-1" />
+                                        Editar
+                                    </Button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </CardContent>
             </Card>
 
@@ -739,6 +855,30 @@ export default function Dashboard(): React.ReactElement {
                             Ir a configurar colores
                         </Button>
                     </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* ═══════════════════════════════════════════════════════════════
+                MODAL: Editar paleta por ruta
+            ════════════════════════════════════════════════════════════════ */}
+            <Dialog
+                open={editarPaletaModal.abierto}
+                onOpenChange={(open) => { if (!open) setEditarPaletaModal({ abierto: false }); }}
+            >
+                <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <Palette className="h-5 w-5 text-primary" />
+                            Editar paleta
+                        </DialogTitle>
+                    </DialogHeader>
+                    <PaletaRutaForm
+                        paletaInicial={editarPaletaModal.paleta}
+                        rutasDisponibles={rutasParaEdicion}
+                        onGuardar={handleGuardarPaleta}
+                        onCancelar={() => setEditarPaletaModal({ abierto: false })}
+                        cargando={guardandoPaleta}
+                    />
                 </DialogContent>
             </Dialog>
         </div>

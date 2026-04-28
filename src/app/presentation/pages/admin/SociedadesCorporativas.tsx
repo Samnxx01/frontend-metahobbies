@@ -108,7 +108,7 @@ export default function SociedadesCorporativas() {
       </Card>
 
       {/* --- PARTE 2: FORMULARIO DE REGISTRO --- */}
-      <Card>
+      <Card className="bg-muted/20">
         <CardHeader>
           <CardTitle>Configurar Nueva Sociedad</CardTitle>
         </CardHeader>

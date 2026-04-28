@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
 import {
     Dialog,
     DialogContent,
@@ -16,11 +17,11 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import { Info, Loader2, RefreshCw, Shield } from 'lucide-react';
+import { Loader2, RefreshCw, Shield } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import type { CreateUsuarioSuperAdminData } from '@/app/services/tenantUsuariosService';
-import { getTenantsSuperAdmin } from '@/app/services/tenantUsuariosService';
 import { RH_OPTIONS } from './catalogos';
+import { useAuth } from '@/app/providers/AuthProvider';
 
 interface UsuarioSuperAdminModalProps {
     open: boolean;
@@ -37,7 +38,6 @@ interface UsuarioSuperAdminModalProps {
 }
 
 interface FormState {
-    tenantSuperAdminId: string;
     correo: string;
     password: string;
     nombre: string;
@@ -51,7 +51,6 @@ interface FormState {
 }
 
 const EMPTY_FORM: FormState = {
-    tenantSuperAdminId: '',
     correo: '',
     password: '',
     nombre: '',
@@ -75,19 +74,38 @@ export const UsuarioSuperAdminModal = ({
     isSincronizandoGlobal = false,
     sincronizarGlobalError,
 }: UsuarioSuperAdminModalProps): React.ReactElement => {
+    const { token, user } = useAuth();
     const [form, setForm] = useState<FormState>(EMPTY_FORM);
-    const [tenantsSA, setTenantsSA] = useState<any[]>([]);
-    const [loadingTenants, setLoadingTenants] = useState(false);
 
     useEffect(() => {
         if (!open) { setForm(EMPTY_FORM); return; }
-        if (scope !== 'SUPER_ADMIN') return;
-        setLoadingTenants(true);
-        getTenantsSuperAdmin()
-            .then(res => setTenantsSA(res.tenants ?? []))
-            .catch(() => setTenantsSA([]))
-            .finally(() => setLoadingTenants(false));
-    }, [open, scope]);
+    }, [open]);
+
+    const tenantSuperAdminIdFromJwt = useMemo(() => {
+        const fromUser = String(
+            user?.tenantSuperAdminId ||
+            user?.auth?.tenantScope?.tenantSuperAdminId ||
+            ''
+        ).trim();
+
+        if (fromUser) return fromUser;
+        if (!token) return '';
+
+        try {
+            const [, payloadBase64] = token.split('.');
+            if (!payloadBase64) return '';
+            const normalized = payloadBase64.replace(/-/g, '+').replace(/_/g, '/');
+            const padded = normalized.padEnd(normalized.length + (4 - normalized.length % 4) % 4, '=');
+            const payload = JSON.parse(globalThis.atob(padded));
+            return String(
+                payload?.auth?.tenantScope?.tenantSuperAdminId ||
+                payload?.tenantScope?.tenantSuperAdminId ||
+                ''
+            ).trim();
+        } catch {
+            return '';
+        }
+    }, [token, user]);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         setForm(prev => ({ ...prev, [e.target.name]: e.target.value }));
@@ -111,8 +129,8 @@ export const UsuarioSuperAdminModal = ({
             fecha_nacimiento: form.fecha_nacimiento,
             canReferir: form.canReferir,
         };
-        if (scope === 'SUPER_ADMIN' && form.tenantSuperAdminId) {
-            payload.tenantSuperAdminId = form.tenantSuperAdminId;
+        if (scope === 'SUPER_ADMIN' && tenantSuperAdminIdFromJwt) {
+            payload.tenantSuperAdminId = tenantSuperAdminIdFromJwt;
         }
         try {
             await onSubmit(payload);
@@ -143,31 +161,23 @@ export const UsuarioSuperAdminModal = ({
 
                 <form onSubmit={handleSubmit}>
                     <div className="py-4 space-y-4">
-
+                        {/* Tenant SuperAdmin resuelto desde el JWT */}
                         {/* Selector de Tenant SuperAdmin — solo visible para SUPER_ADMIN */}
                         {scope === 'SUPER_ADMIN' && (
                             <div className="space-y-2">
                                 <Label>Tenant SuperAdmin</Label>
-                                <Select
-                                    value={form.tenantSuperAdminId}
-                                    onValueChange={handleSelect('tenantSuperAdminId')}
-                                    disabled={loadingTenants}
-                                >
-                                    <SelectTrigger>
-                                        <SelectValue placeholder={loadingTenants ? 'Cargando...' : 'Seleccionar tenant (opcional)'} />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {tenantsSA.map((t: any) => {
-                                            const id = String(t?.iud || t?._id || '');
-                                            const nombre = t?.coporativo?.razon_social || t?.coporativo?.titulo || id;
-                                            const nvl = t?.nvlGeneracionTenant?.nvl;
-                                            const label = nvl ? `${nombre} — ${nvl}` : nombre;
-                                            return <SelectItem key={id} value={id}>{label}</SelectItem>;
-                                        })}
-                                    </SelectContent>
-                                </Select>
+                                <div className="flex min-h-10 items-center rounded-md border border-input bg-muted/40 px-3">
+                                    {tenantSuperAdminIdFromJwt ? (
+                                        <Badge variant="outline" className="max-w-full border-primary/30 bg-primary/10 text-primary">
+                                            <span className="mr-1 font-semibold">tenantSuperAdmin</span>
+                                            <span className="truncate font-mono">{tenantSuperAdminIdFromJwt}</span>
+                                        </Badge>
+                                    ) : (
+                                        <span className="text-sm text-muted-foreground">No se encontro tenantSuperAdminId en el JWT.</span>
+                                    )}
+                                </div>
                                 <p className="text-xs text-muted-foreground">
-                                    Si no se especifica, se usará el tenant del usuario autenticado.
+                                    Se toma automaticamente desde el scope del usuario autenticado.
                                 </p>
                             </div>
                         )}
