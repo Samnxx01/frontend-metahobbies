@@ -18,6 +18,7 @@ import {
   EyeOff,
   Activity,
   Pencil,
+  Timer,
 } from 'lucide-react';
 
 import {
@@ -29,6 +30,8 @@ import {
   type TenantDisponible,
   type ContenedorParametrizacion,
 } from '../../../services/tenantDbService';
+
+import CronosSyncHijosTab from './tenant-db-cronos-sync-hijos/CronosSyncHijosTab';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -202,9 +205,20 @@ interface FormConexion {
   mongoUri: string;
   dbName: string;
   urlBase: string;
+  backupReplicaDbName?: string;
 }
 
-const FORM_VACIO: FormConexion = { configId: '', corporativoId: '', contenedorId: '', parentTenantDbConfigId: '', poolName: '', mongoUri: '', dbName: '', urlBase: '' };
+const FORM_VACIO: FormConexion = {
+  configId: '',
+  corporativoId: '',
+  contenedorId: '',
+  parentTenantDbConfigId: '',
+  poolName: '',
+  mongoUri: '',
+  dbName: '',
+  urlBase: '',
+  backupReplicaDbName: '',
+};
 type DialogoConexionModo = 'crear' | 'editar';
 
 // ─── Componente principal ─────────────────────────────────────────────────────
@@ -541,6 +555,7 @@ export default function TenantDbManager() {
         mongoUri:      form.mongoUri,
         dbName:        form.dbName,
         urlBase:       form.urlBase || null,
+        backupReplicaDbName: form.parentTenantDbConfigId ? (form.backupReplicaDbName?.trim() || null) : null,
       });
       toast.success(res.msg ?? 'Conexión guardada');
       setDlgConexion(false);
@@ -614,6 +629,7 @@ export default function TenantDbManager() {
       mongoUri: '',
       dbName: config.dbName || '',
       urlBase: config.urlBase || '',
+      backupReplicaDbName: config.backupReplicaDbName?.trim() || '',
     });
     setDlgConexion(true);
   };
@@ -655,6 +671,7 @@ export default function TenantDbManager() {
         mongoUri: editable.mongoUri || '',
         dbName: editable.dbName || '',
         urlBase: editable.urlBase || '',
+        backupReplicaDbName: editable.backupReplicaDbName?.trim() || '',
       });
       setDlgConexion(true);
       toast.info(`Conexión temporal cargada para edición: ${editable.poolName || editable.dbName}`);
@@ -773,7 +790,7 @@ export default function TenantDbManager() {
   };
 
   const handleSeleccionarEmpresa = (corporativoId: string) => {
-    setForm(f => ({ ...f, corporativoId, contenedorId: '', parentTenantDbConfigId: '', urlBase: '', poolName: '', dbName: '' }));
+    setForm(f => ({ ...f, corporativoId, contenedorId: '', parentTenantDbConfigId: '', urlBase: '', poolName: '', dbName: '', backupReplicaDbName: '' }));
     setDbOptions([]);
     setDbModoNueva(false);
     if (!corporativoId) return;
@@ -853,7 +870,7 @@ export default function TenantDbManager() {
   useEffect(() => {
     if (!form.contenedorId) {
       if (form.parentTenantDbConfigId) {
-        setForm((prev) => ({ ...prev, parentTenantDbConfigId: '' }));
+        setForm((prev) => ({ ...prev, parentTenantDbConfigId: '', backupReplicaDbName: '' }));
       }
       return;
     }
@@ -868,7 +885,7 @@ export default function TenantDbManager() {
 
     const padreSigueSiendoValido = configsPadreDelContenedor.some((cfg) => cfg.iud === form.parentTenantDbConfigId);
     if (form.parentTenantDbConfigId && !padreSigueSiendoValido) {
-      setForm((prev) => ({ ...prev, parentTenantDbConfigId: '' }));
+      setForm((prev) => ({ ...prev, parentTenantDbConfigId: '', backupReplicaDbName: '' }));
     }
   }, [form.contenedorId, form.parentTenantDbConfigId, configsPadreDelContenedor]);
 
@@ -1090,8 +1107,8 @@ export default function TenantDbManager() {
       });
       toast.success(
         removerSyncDropCollection
-          ? 'Sync removida y coleccion destino eliminada'
-          : 'Coleccion removida del sync'
+          ? 'Sync removida en master; datos borrados en la BD hija (coleccion eliminada o vaciada)'
+          : 'Solo se quito la sync en master; los datos siguen en la BD hija'
       );
       setDlgRemoverSync(false);
       setRemoverSyncTarget(null);
@@ -1176,7 +1193,7 @@ export default function TenantDbManager() {
     setDlgSyncDatos(true);
   };
 
-  const handlePreviewSyncDatos = async () => {
+  const handlePreviewSyncDatos = async (modoOverride?: 'full' | 'incremental') => {
     if (!syncDataTarget) {
       toast.warning('Selecciona una sincronizacion');
       return;
@@ -1189,15 +1206,16 @@ export default function TenantDbManager() {
       return;
     }
 
+    const modoActual = modoOverride ?? syncDataForm.modo;
     setSyncPreviewLoading(true);
     try {
       const filtro = parseSyncFiltro(syncDataForm.filtroTexto);
       const res = await tenantDbService.previewSync(targetConfigId, {
         sourceConfigId,
         coleccion: syncDataTarget.col.coleccion,
-        modo: syncDataForm.modo,
+        modo: modoActual,
         filtro,
-        selectedIds: syncDataForm.modo === 'incremental' ? syncDataForm.selectedIds : null,
+        selectedIds: modoActual === 'incremental' ? syncDataForm.selectedIds : null,
       });
       setSyncPreview(res.data);
       toast.success('Preview generado');
@@ -1322,6 +1340,10 @@ export default function TenantDbManager() {
             <Radio className="w-4 h-4 mr-2" />
             Sincronización
           </TabsTrigger>
+          <TabsTrigger value="cronos-sync-hijos">
+            <Timer className="w-4 h-4 mr-2" />
+            Cronos / jerarquía
+          </TabsTrigger>
           <TabsTrigger value="pool" onClick={cargarPool}>
             <Activity className="w-4 h-4 mr-2" />
             Pool / Watchers
@@ -1376,7 +1398,14 @@ export default function TenantDbManager() {
                               <p className="text-muted-foreground">Nvl {cfg.nivelJerarquico ?? 1}</p>
                             </div>
                           </TableCell>
-                          <TableCell className="font-medium">{cfg.dbName}</TableCell>
+                          <TableCell className="font-medium">
+                            <div>{cfg.dbName}</div>
+                            {cfg.backupReplicaDbName ? (
+                              <p className="text-[11px] font-mono text-muted-foreground mt-0.5" title="Réplica en cluster padre">
+                                backup: {cfg.backupReplicaDbName}
+                              </p>
+                            ) : null}
+                          </TableCell>
                           <TableCell className="text-xs text-muted-foreground max-w-[160px] truncate" title={cfg.urlBase ?? '—'}>
                             {cfg.urlBase
                               ? <a href={cfg.urlBase} target="_blank" rel="noreferrer" className="text-primary underline underline-offset-2">{cfg.urlBase}</a>
@@ -1596,6 +1625,11 @@ export default function TenantDbManager() {
           )}
         </TabsContent>
 
+        {/* ── TAB: CRONOS SYNC HIJOS ── */}
+        <TabsContent value="cronos-sync-hijos" className="mt-4">
+          <CronosSyncHijosTab esSuperAdmin={esSuperAdmin} />
+        </TabsContent>
+
         {/* ── TAB: POOL / WATCHERS ── */}
         <TabsContent value="pool" className="mt-4 space-y-4">
           <div className="flex justify-end">
@@ -1784,6 +1818,23 @@ export default function TenantDbManager() {
               </div>
             )}
 
+            {form.corporativoId && form.parentTenantDbConfigId && (
+              <div className="space-y-2 rounded-md border border-dashed px-3 py-2">
+                <Label htmlFor="backupReplicaDbName">BD backup / réplica (cluster del padre)</Label>
+                <Input
+                  id="backupReplicaDbName"
+                  placeholder="ej: backup-hijo-empresa-x"
+                  value={form.backupReplicaDbName ?? ''}
+                  onChange={(e) => setForm((f) => ({ ...f, backupReplicaDbName: e.target.value }))}
+                  className="font-mono text-sm"
+                  disabled={false}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Misma URI Mongo que la conexión <strong>padre</strong>, pero <strong>otro nombre de base</strong>. Ahí el cron y la API copian los datos del hijo sin modificar la BD operativa del padre.
+                </p>
+              </div>
+            )}
+
             {/* Nombre del pool */}
             <div className="space-y-1">
               <Label htmlFor="poolName">Nombre del pool <span className="text-destructive">*</span></Label>
@@ -1964,7 +2015,7 @@ export default function TenantDbManager() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Radio className="w-5 h-5" />
-              Configurar sincronizaciÃ³n
+              Configurar sincronización
             </DialogTitle>
           </DialogHeader>
 
@@ -1975,14 +2026,14 @@ export default function TenantDbManager() {
             </div>
 
             <div className="space-y-1">
-              <Label htmlFor="source-config">ConexiÃ³n padre <span className="text-destructive">*</span></Label>
+              <Label htmlFor="source-config">Conexión padre <span className="text-destructive">*</span></Label>
               {syncAutoSourceCandidates.length === 1 ? (
                 <div className="rounded-md border bg-muted px-3 py-2 text-sm">
                   <p className="font-medium">
                     {syncAutoSourceCandidates[0].poolName || syncAutoSourceCandidates[0].dbName}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Padre detectado automÃ¡ticamente: {getConfigJerarquiaLabel(syncAutoSourceCandidates[0])}
+                    Padre detectado automáticamente: {getConfigJerarquiaLabel(syncAutoSourceCandidates[0])}
                   </p>
                 </div>
               ) : (
@@ -2005,7 +2056,7 @@ export default function TenantDbManager() {
                 </select>
               )}
               <p className="text-xs text-muted-foreground">
-                Esta conexiÃ³n serÃ¡ el origen maestro desde donde se migran y sincronizan los datos.
+                Esta conexión será el origen maestro desde donde se migran y sincronizan los datos.
               </p>
             </div>
 
@@ -2100,7 +2151,7 @@ export default function TenantDbManager() {
             </div>
 
             <div className="space-y-2">
-              <Label>Modo de sincronizaciÃ³n</Label>
+              <Label>Modo de sincronización</Label>
               <div className="flex gap-3">
                 {(['full', 'incremental'] as const).map(m => (
                   <button
@@ -2185,7 +2236,10 @@ export default function TenantDbManager() {
                     <button
                       key={modo}
                       type="button"
-                      onClick={() => setSyncDataForm((prev) => ({ ...prev, modo, selectedIds: modo === 'full' ? [] : prev.selectedIds }))}
+                      onClick={() => {
+                        setSyncDataForm((prev) => ({ ...prev, modo, selectedIds: modo === 'full' ? [] : prev.selectedIds }));
+                        if (modo === 'incremental') void handlePreviewSyncDatos('incremental');
+                      }}
                       className={`flex-1 rounded-md border px-3 py-2 text-sm transition-colors
                         ${syncDataForm.modo === modo
                           ? 'border-primary bg-primary/10 font-semibold'
@@ -2673,15 +2727,15 @@ export default function TenantDbManager() {
             <div className="rounded-md bg-muted px-4 py-3 text-sm">
               <p className="font-medium">{removerSyncTarget?.coleccion || 'Colección'}</p>
               <p className="text-xs text-muted-foreground">
-                Se removerá la configuración de sync guardada para esta colección en la conexión destino.
+                La base del padre no se modifica. Solo se actualiza la parametrización en master y, si eliges la opción de abajo, los datos en la BD hija.
               </p>
             </div>
 
             <div className="flex items-start justify-between gap-4 rounded-md border px-4 py-3">
               <div className="space-y-1">
-                <Label className="text-sm font-medium">Eliminar también la colección física en la BD destino</Label>
+                <Label className="text-sm font-medium">Borrar en la BD hija los datos sincronizados de esta colección</Label>
                 <p className="text-xs text-muted-foreground">
-                  Si lo dejas activo, además de quitar la sync se hará drop de la colección en la base de datos hija.
+                  Activado por defecto: elimina la colección en el hijo (o vacía sus documentos si el usuario de BD no tiene permiso de drop). Si lo desactivas, solo se quita la sync guardada y los documentos copiados siguen en la BD hija.
                 </p>
               </div>
               <Switch

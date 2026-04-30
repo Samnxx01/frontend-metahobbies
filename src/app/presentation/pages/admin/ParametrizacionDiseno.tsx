@@ -6,13 +6,15 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import { ImageIcon, Upload, X } from 'lucide-react';
 import { getRouteCatalog, RouteCatalogItem, readCachedPrivateHomeRoute } from '@/app/services/routeService';
 import {
   AccionBackend,
   BrandingConfig,
   guardarBrandingPrivado,
   obtenerAccionesWidgetPrivado,
-  obtenerBrandingPrivado
+  obtenerBrandingPrivado,
+  subirImagenFondoLogin
 } from '@/app/services/brandingWidget';
 
 interface ParametrizacionDisenoProps {
@@ -50,6 +52,8 @@ interface DesignFormState {
   forgotPasswordEnabled: boolean;
   publicHomePath: string;
   publicHomeEnabled: boolean;
+  loginBackgroundUrl: string;
+  loginBackgroundEnabled: boolean;
   allowedPathsJson: string;
 }
 
@@ -85,6 +89,8 @@ const DEFAULT_FORM: DesignFormState = {
   forgotPasswordEnabled: true,
   publicHomePath: '/public/render/home',
   publicHomeEnabled: true,
+  loginBackgroundUrl: '',
+  loginBackgroundEnabled: true,
   allowedPathsJson: JSON.stringify([
     '/public/render/login',
     '/public/render/view/login',
@@ -131,6 +137,7 @@ export default function ParametrizacionDiseno({
   const [form, setForm] = useState<DesignFormState>(DEFAULT_FORM);
   const [accionesTenant, setAccionesTenant] = useState<AccionBackend[]>([]);
   const [accionesSistema, setAccionesSistema] = useState<AccionBackend[]>([]);
+  const [uploadingLoginBackground, setUploadingLoginBackground] = useState<boolean>(false);
 
   useEffect(() => {
     const loadData = async (): Promise<void> => {
@@ -179,6 +186,7 @@ export default function ParametrizacionDiseno({
     const overrides = (activeRouteConfig?.overrides || {}) as Record<string, any>;
     const tokens = (overrides?.tokens || {}) as Record<string, string>;
     const navigation = (branding?.widgets?.navigation || {}) as Record<string, any>;
+    const loginBackground = (branding?.widgets?.loginBackground || {}) as Record<string, any>;
     const allowedPaths = Array.isArray(navigation.allowedPaths) ? navigation.allowedPaths : [];
 
     setForm({
@@ -211,6 +219,8 @@ export default function ParametrizacionDiseno({
       forgotPasswordEnabled: navigation.forgotPassword?.enabled !== false,
       publicHomePath: String(navigation.publicHome?.path || DEFAULT_FORM.publicHomePath),
       publicHomeEnabled: navigation.publicHome?.enabled !== false,
+      loginBackgroundUrl: String(loginBackground.imageUrl || DEFAULT_FORM.loginBackgroundUrl),
+      loginBackgroundEnabled: loginBackground.enabled !== false,
       allowedPathsJson: JSON.stringify(
         allowedPaths.length > 0 ? allowedPaths : JSON.parse(DEFAULT_FORM.allowedPathsJson),
         null,
@@ -225,6 +235,30 @@ export default function ParametrizacionDiseno({
 
   const updateToggle = (key: keyof DesignFormState, value: boolean): void => {
     setForm((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handleUploadLoginBackground = async (file?: File): Promise<void> => {
+    if (!file) return;
+
+    try {
+      setUploadingLoginBackground(true);
+      const uploaded = await subirImagenFondoLogin(file);
+      if (!uploaded?.url) {
+        throw new Error('No se recibio la URL de la imagen subida');
+      }
+
+      setForm((prev) => ({
+        ...prev,
+        loginBackgroundUrl: uploaded.url,
+        loginBackgroundEnabled: true
+      }));
+      toast.success('Imagen de fondo subida. Guarda el diseno para publicarla en login.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'No se pudo subir la imagen de fondo';
+      toast.error(message);
+    } finally {
+      setUploadingLoginBackground(false);
+    }
   };
 
   const handleSave = async (): Promise<void> => {
@@ -288,6 +322,10 @@ export default function ParametrizacionDiseno({
         widgets: {
           ...(branding.widgets || {}),
           routes: routeConfigs,
+          loginBackground: {
+            imageUrl: form.loginBackgroundUrl.trim(),
+            enabled: form.loginBackgroundEnabled
+          },
           navigation: {
             login: {
               path: form.loginPath.trim(),
@@ -457,6 +495,80 @@ export default function ParametrizacionDiseno({
               <div className="space-y-2">
                 <Label>Fondo input</Label>
                 <Input placeholder="0 0% 100%" value={form.inputBackground} onChange={(e) => updateForm('inputBackground', e.target.value)} />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Fondo del Login</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-[260px_1fr]">
+                <div
+                  className="flex h-40 items-center justify-center overflow-hidden rounded-md border bg-muted"
+                  style={{
+                    backgroundImage: form.loginBackgroundUrl ? `url("${form.loginBackgroundUrl}")` : undefined,
+                    backgroundSize: 'cover',
+                    backgroundPosition: 'center'
+                  }}
+                >
+                  {!form.loginBackgroundUrl && (
+                    <div className="flex flex-col items-center gap-2 text-sm text-muted-foreground">
+                      <ImageIcon className="h-8 w-8" />
+                      Sin imagen
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-3">
+                  <div className="space-y-2">
+                    <Label>URL publica de la imagen</Label>
+                    <Input
+                      value={form.loginBackgroundUrl}
+                      onChange={(e) => updateForm('loginBackgroundUrl', e.target.value)}
+                      placeholder="/api/front/imgFondo/ver/id"
+                    />
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button asChild type="button" variant="outline" disabled={uploadingLoginBackground}>
+                      <label className="cursor-pointer">
+                        <Upload className="mr-2 h-4 w-4" />
+                        {uploadingLoginBackground ? 'Subiendo...' : 'Subir imagen'}
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg,image/jpg"
+                          className="hidden"
+                          onChange={(event) => {
+                            const file = event.target.files?.[0];
+                            event.target.value = '';
+                            handleUploadLoginBackground(file);
+                          }}
+                        />
+                      </label>
+                    </Button>
+
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => updateForm('loginBackgroundUrl', '')}
+                      disabled={!form.loginBackgroundUrl}
+                    >
+                      <X className="mr-2 h-4 w-4" />
+                      Quitar
+                    </Button>
+
+                    <label className="flex items-center gap-2 text-sm text-foreground">
+                      <input
+                        type="checkbox"
+                        checked={form.loginBackgroundEnabled}
+                        onChange={(e) => updateToggle('loginBackgroundEnabled', e.target.checked)}
+                      />
+                      Habilitada
+                    </label>
+                  </div>
+                </div>
               </div>
             </CardContent>
           </Card>

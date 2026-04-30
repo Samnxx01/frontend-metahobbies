@@ -5,6 +5,7 @@ import { getAuthorizedRoutes, getPrivateHomeRoute, readCachedPrivateHomeRoute } 
 import { resolveCurrentRouteMenuTags } from '@/app/services/routesService';
 import { useLoading } from '@/app/providers/LoadingProvider';
 import { getGovernedPublicHomePath } from '@/app/services/governedNavigation';
+import { obtenerBrandingPublico } from '@/app/services/brandingWidget';
 
 import PublicLayout from '@/app/presentation/layouts/PublicLayout';
 import AuthLayout from '@/app/presentation/layouts/AuthLayout';
@@ -210,9 +211,25 @@ export default function LayoutRoutes(): ReactElement {
     const [authorizedRoutes, setAuthorizedRoutes] = useState<AuthorizedRoutes | null>(null);
     const [menuTagRoutes, setMenuTagRoutes] = useState<RouteConfig[]>([]);
     const [routeLoadError, setRouteLoadError] = useState<RouteLoadError | null>(null);
+    const [loadingBackgroundUrl, setLoadingBackgroundUrl] = useState<string>('');
     const { user } = useAuth();
     const { showLoading, hideLoading } = useLoading();
     const location = useLocation();
+
+    useEffect(() => {
+        const cargarFondoLoading = async (): Promise<void> => {
+            try {
+                const branding = await obtenerBrandingPublico();
+                const loadingBackground = branding?.widgets?.loadingBackground;
+                const nextBackgroundUrl = String(loadingBackground?.imageUrl || '').trim();
+                setLoadingBackgroundUrl(loadingBackground?.enabled !== false ? nextBackgroundUrl : '');
+            } catch {
+                setLoadingBackgroundUrl('');
+            }
+        };
+
+        void cargarFondoLoading();
+    }, []);
 
     useEffect(() => {
         showLoading();
@@ -311,11 +328,19 @@ export default function LayoutRoutes(): ReactElement {
 
     if (!authorizedRoutes) {
         return (
-            <div className="fixed inset-0 flex flex-col items-center justify-center bg-background gap-4">
-                <div className="relative w-16 h-16 flex items-center justify-center">
+            <div
+                className="fixed inset-0 flex flex-col items-center justify-center bg-background bg-center bg-cover gap-4"
+                style={{
+                    backgroundImage: loadingBackgroundUrl
+                        ? `linear-gradient(rgba(255,255,255,.18), rgba(255,255,255,.18)), url("${loadingBackgroundUrl}")`
+                        : undefined
+                }}
+            >
+                {loadingBackgroundUrl && <div className="absolute inset-0 bg-background/20 backdrop-blur-[1px]" />}
+                <div className="relative z-10 w-16 h-16 flex items-center justify-center">
                     <div className="absolute inset-0 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
                 </div>
-                <div className="text-center space-y-1">
+                <div className="relative z-10 text-center space-y-1">
                     <p className="text-sm font-medium text-foreground">Validando tu autenticación</p>
                     <p className="text-xs text-muted-foreground">Verificando permisos y contexto de sesión...</p>
                 </div>

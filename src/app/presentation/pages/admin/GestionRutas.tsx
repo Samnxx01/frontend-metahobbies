@@ -138,6 +138,8 @@ export default function GestionRutas(): React.ReactElement {
   const [expandedTableNodes, setExpandedTableNodes] = useState<Record<string, boolean>>({});
   const [nameFilter, setNameFilter] = useState<string>('');
   const [nodeTypeFilter, setNodeTypeFilter] = useState<string>('ALL');
+  const [parentSelectSearch, setParentSelectSearch] = useState<string>('');
+  const [subFormParentSearch, setSubFormParentSearch] = useState<string>('');
   const [routesActorTipo, setRoutesActorTipo] = useState<string>('UNKNOWN');
   const [routesSourceCollection, setRoutesSourceCollection] = useState<string>('');
   const [formularioPadreId, setFormularioPadreId] = useState<string>('');
@@ -468,6 +470,24 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
     return hierarchyNames.join(' > ');
   };
 
+  const matchesRouteSearch = (route: Route, search: string): boolean => {
+    const normalizedSearch = String(search || '').trim().toLowerCase();
+    if (!normalizedSearch) return true;
+
+    const searchableText = [
+      getRouteHierarchyLabel(route),
+      route.name,
+      route.path,
+      route.component,
+      route.layout,
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+
+    return searchableText.includes(normalizedSearch);
+  };
+
   const resolveInheritedRouteId = (route: Route): string | null => {
     const inherited = route?.heredaDeRuta as any;
     if (!inherited) return null;
@@ -608,6 +628,31 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
       return true;
     }),
     [routes, selectedSuiteIdForForm, nodeTypes, editingRoute]
+  );
+
+  const parentOptionsForSelectedType = useMemo(() => {
+    if (isFormularioType) return moduloOptionsBySuite;
+    if (isSubFormularioType) return subFormParentOptions;
+    return getParentOptions(String(formData.tipoNodoId || ''));
+  }, [
+    formData.tipoNodoId,
+    isFormularioType,
+    isSubFormularioType,
+    moduloOptionsBySuite,
+    subFormParentOptions,
+    routes,
+    nodeTypes,
+    editingRoute,
+  ]);
+
+  const filteredParentOptionsForSelectedType = useMemo(
+    () => parentOptionsForSelectedType.filter((route) => matchesRouteSearch(route, parentSelectSearch)),
+    [parentOptionsForSelectedType, parentSelectSearch]
+  );
+
+  const filteredSubFormParentOptions = useMemo(
+    () => subFormParentOptions.filter((route) => matchesRouteSearch(route, subFormParentSearch)),
+    [subFormParentOptions, subFormParentSearch]
   );
 
   const treeNodes = useMemo(() => {
@@ -919,6 +964,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
   };
 
   const openRouteModal = (route?: Route, forceTypeId?: string): void => {
+    setParentSelectSearch('');
     if (route) {
       const routeTypeId = resolveTypeIdForRoute(route);
       const routeTypeOrder = Number(getTypeById(routeTypeId)?.order ?? 0);
@@ -969,6 +1015,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
     setEditingRoute(null);
     setSelectedSuiteIdForForm('');
     setFormularioPadreId('');
+    setParentSelectSearch('');
     resetRouteForm();
   };
 
@@ -1476,6 +1523,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
   };
 
   const openSubFormModal = (): void => {
+    setSubFormParentSearch('');
     const onlyParent = subFormParentOptions.length === 1 ? resolveRouteId(subFormParentOptions[0]) : '';
     const defaultTipoNodoId = orderFourNodeTypes.length === 1 ? resolveNodeTypeId(orderFourNodeTypes[0]) : '';
     const prefixPath = onlyParent
@@ -1487,6 +1535,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
 
   const closeSubFormModal = (): void => {
     setIsSubFormModalOpen(false);
+    setSubFormParentSearch('');
     resetSubFormData();
   };
 
@@ -1789,6 +1838,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
                   <Select
                     value={formData.tipoNodoId || undefined}
                     onValueChange={(value) => {
+                      setParentSelectSearch('');
                       const nextType = getTypeById(value);
                       const nextOrder = Number(nextType?.order ?? 0);
                       setFormData((prev) => ({
@@ -1833,6 +1883,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
                   <Select
                     value={selectedSuiteIdForForm || undefined}
                     onValueChange={(value) => {
+                      setParentSelectSearch('');
                       setSelectedSuiteIdForForm(value);
                       setFormData((prev) => ({
                         ...prev,
@@ -1866,13 +1917,14 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
                   </Label>
                   <Select
                     value={formData.padreId ? String(formData.padreId) : undefined}
-                    onValueChange={(value) =>
+                    onValueChange={(value) => {
+                      setParentSelectSearch('');
                       setFormData((prev) => ({
                         ...prev,
                         padreId: value,
                         path: resolveHierarchyPathForDraft(prev.name, value, selectedTypeOrder, prev.path),
-                      }))
-                    }
+                      }));
+                    }}
                     disabled={isFormularioType && !selectedSuiteIdForForm}
                   >
                     <SelectTrigger id="padreId">
@@ -1881,27 +1933,36 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
                           ? 'Selecciona suite'
                           : isSubFormularioType
                             ? 'Selecciona formulario'
-                            : 'Selecciona modulo'
+                          : 'Selecciona modulo'
                       } />
                     </SelectTrigger>
-                    <SelectContent>
-                      {isFormularioType
-                        ? moduloOptionsBySuite.map((parent) => (
-                            <SelectItem key={resolveRouteId(parent)} value={resolveRouteId(parent)}>
-                              {getRouteHierarchyLabel(parent)}
-                            </SelectItem>
-                          ))
-                        : isSubFormularioType
-                          ? subFormParentOptions.map((parent) => (
-                              <SelectItem key={resolveRouteId(parent)} value={resolveRouteId(parent)}>
-                                {getRouteHierarchyLabel(parent)}
-                              </SelectItem>
-                            ))
-                        : getParentOptions(String(formData.tipoNodoId || '')).map((parent) => (
-                            <SelectItem key={resolveRouteId(parent)} value={resolveRouteId(parent)}>
-                              {getRouteHierarchyLabel(parent)}
-                            </SelectItem>
-                          ))}
+                    <SelectContent className="max-h-72 border-border bg-popover text-popover-foreground">
+                      <div className="sticky top-0 z-10 border-b border-border bg-popover p-2">
+                        <Input
+                          value={parentSelectSearch}
+                          onChange={(e) => setParentSelectSearch(e.target.value)}
+                          onKeyDown={(e) => e.stopPropagation()}
+                          placeholder={
+                            isModuloType
+                              ? 'Buscar suite...'
+                              : isSubFormularioType
+                                ? 'Buscar formulario...'
+                                : 'Buscar modulo...'
+                          }
+                          className="h-9 border-input bg-background text-foreground placeholder:text-muted-foreground"
+                        />
+                      </div>
+                      {filteredParentOptionsForSelectedType.length > 0 ? (
+                        filteredParentOptionsForSelectedType.map((parent) => (
+                          <SelectItem key={resolveRouteId(parent)} value={resolveRouteId(parent)}>
+                            {getRouteHierarchyLabel(parent)}
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <div className="px-3 py-2 text-sm text-muted-foreground">
+                          No hay resultados para la busqueda.
+                        </div>
+                      )}
                     </SelectContent>
                   </Select>
                   {!editingRoute && isModuloType && getParentOptions(String(formData.tipoNodoId || '')).length === 0 && (
@@ -2261,6 +2322,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
                   <Select
                     value={subFormData.padreId || undefined}
                     onValueChange={(value) => {
+                      setSubFormParentSearch('');
                       const padre = routes.find((r) => resolveRouteId(r) === value);
                       const prefix = padre?.path ? normalizePath(padre.path) + '/' : '';
                       setSubFormData((prev) => ({
@@ -2273,12 +2335,27 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
                     <SelectTrigger id="sf-padreId">
                       <SelectValue placeholder="Selecciona el formulario padre" />
                     </SelectTrigger>
-                    <SelectContent>
-                      {subFormParentOptions.map((r) => (
-                        <SelectItem key={resolveRouteId(r)} value={resolveRouteId(r)}>
-                          {getRouteHierarchyLabel(r)}
-                        </SelectItem>
-                      ))}
+                    <SelectContent className="max-h-72 border-border bg-popover text-popover-foreground">
+                      <div className="sticky top-0 z-10 border-b border-border bg-popover p-2">
+                        <Input
+                          value={subFormParentSearch}
+                          onChange={(e) => setSubFormParentSearch(e.target.value)}
+                          onKeyDown={(e) => e.stopPropagation()}
+                          placeholder="Buscar formulario..."
+                          className="h-9 border-input bg-background text-foreground placeholder:text-muted-foreground"
+                        />
+                      </div>
+                      {filteredSubFormParentOptions.length > 0 ? (
+                        filteredSubFormParentOptions.map((r) => (
+                          <SelectItem key={resolveRouteId(r)} value={resolveRouteId(r)}>
+                            {getRouteHierarchyLabel(r)}
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <div className="px-3 py-2 text-sm text-muted-foreground">
+                          No hay resultados para la busqueda.
+                        </div>
+                      )}
                     </SelectContent>
                   </Select>
                 ) : subFormParentOptions.length === 1 ? (

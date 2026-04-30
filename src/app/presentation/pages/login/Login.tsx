@@ -25,6 +25,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 // Lucide icons
 import { Loader2, AlertTriangle } from 'lucide-react';
 import { apiFetch } from '@/app/services/api';
+import { obtenerBrandingPublico } from '@/app/services/brandingWidget';
 import { getAdminHomeRoute } from '@/app/services/routeService';
 import { getGovernedPostLoginPath, getGovernedRegisterPath, getGovernedForgotPasswordPath, isGovernedPathConfigured } from '@/app/services/governedNavigation';
 
@@ -70,6 +71,7 @@ export default function Login(): React.ReactElement {
     const [dialogOpen, setDialogOpen] = useState<boolean>(false);
     const [dialogMessage, setDialogMessage] = useState<string>('');
     const [logoUrl, setLogoUrl] = useState<string | null>(null);
+    const [backgroundUrl, setBackgroundUrl] = useState<string | null>(null);
 
     // 1. Inicializar useForm
     const form = useForm<LoginFormData>({
@@ -102,6 +104,25 @@ export default function Login(): React.ReactElement {
         };
 
         fetchPublicLogo();
+    }, []);
+
+    useEffect(() => {
+        const fetchLoginBackground = async (): Promise<void> => {
+            try {
+                const branding = await obtenerBrandingPublico();
+                const loginBackground = branding?.widgets?.loginBackground;
+                const nextBackgroundUrl = String(loginBackground?.imageUrl || '').trim();
+
+                if (loginBackground?.enabled !== false && nextBackgroundUrl) {
+                    setBackgroundUrl(nextBackgroundUrl);
+                }
+            } catch (error) {
+                console.warn('No se pudo cargar el fondo publico para login:', error);
+                setBackgroundUrl(null);
+            }
+        };
+
+        fetchLoginBackground();
     }, []);
 
     // Función para cerrar el diálogo
@@ -191,7 +212,15 @@ export default function Login(): React.ReactElement {
 
 
     return (
-        <div className="flex justify-center items-center min-h-screen bg-gradient-to-br from-background via-muted/20 to-background p-4 sm:p-6">
+        <div
+            className="relative flex justify-center items-center min-h-screen bg-background bg-center bg-cover p-4 sm:p-6"
+            style={{
+                backgroundImage: backgroundUrl
+                    ? `linear-gradient(rgba(0,0,0,.18), rgba(0,0,0,.18)), url("${backgroundUrl}")`
+                    : undefined
+            }}
+        >
+            {backgroundUrl && <div className="absolute inset-0 bg-background/20 backdrop-blur-[1px]" />}
 
             {/* --- DIALOG DE ERROR CRÍTICO --- */}
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -222,7 +251,7 @@ export default function Login(): React.ReactElement {
             </Dialog>
 
             {/* Contenedor del Formulario con adaptación dark/light */}
-            <Card className="w-full max-w-md shadow-2xl border-border bg-card">
+            <Card className="relative z-10 w-full max-w-md shadow-2xl border-border bg-card/95 backdrop-blur">
                 <CardContent className="p-6 sm:p-8 flex flex-col items-center">
 
                     {/* Logo y Títulos */}

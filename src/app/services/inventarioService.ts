@@ -19,11 +19,81 @@ export interface DocumentoRelacionado {
   idExterno?: string | null;
 }
 
+export interface InventarioTipoMovimiento {
+  _id: string;
+  codigo: string;
+  nombre: string;
+  descripcion?: string;
+  naturaleza: 'ENTRADA' | 'SALIDA';
+  estado: boolean;
+}
+
+export interface InventarioUnidadMedida {
+  _id: string;
+  codigo: string;
+  nombre: string;
+  descripcion?: string;
+  estado: boolean;
+}
+
+export interface InventarioProveedor {
+  _id: string;
+  nombre: string;
+  nit: string;
+  correo?: string;
+  telefono?: string;
+  direccion?: string;
+  tipoProveedorId?: InventarioTipoProveedor | string | null;
+  tipoProveedorNombre?: string;
+  paisId?: string;
+  paisNombre?: string;
+  departamentoId?: string;
+  departamentoNombre?: string;
+  ciudadId?: string;
+  ciudadNombre?: string;
+  estado?: boolean;
+}
+
+export interface InventarioTipoProveedor {
+  _id: string;
+  iud?: string;
+  codigo: string;
+  nombre: string;
+  descripcion?: string;
+  estado: boolean;
+}
+
 export interface UbicacionInventario {
   pasillo?: string | null;
   estante?: string | null;
   nivel?: string | null;
   descripcion?: string;
+}
+
+export interface OrdenCompraItemLinea {
+  sku: string;
+  nombreProducto?: string;
+  descripcion?: string;
+  cantidadOrdenada: number;
+  costoUnitario: number;
+  descuento?: number;
+  impuestos?: number;
+  subtotal?: number;
+  bodega: string;
+  ubicacion?: UbicacionInventario;
+}
+
+export interface InventarioOrdenCompra {
+  _id: string;
+  numeroOrden: string;
+  numeroRemision?: string;
+  fechaOrden?: string;
+  proveedor: { nombre: string; nit: string };
+  documentoLegalCompra: { tipo: string; numero: string; fecha: string };
+  estado: string;
+  items: Array<OrdenCompraItemLinea & { cantidadRecibida?: number }>;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface InventarioSaldo {
@@ -45,6 +115,7 @@ export interface InventarioMovimiento {
   _id: string;
   sku: string;
   tipoMovimiento: TipoMovimiento;
+  tipoMovimientoConfigId?: InventarioTipoMovimiento | string | null;
   motivo: MotivoMovimiento;
   cantidad: number;
   costoUnitario: number;
@@ -62,6 +133,7 @@ export interface InventarioMovimiento {
 
 export interface MovimientoPayload {
   sku: string;
+  tipoMovimientoConfigId?: string | null;
   bodega: string;
   cantidad: number;
   costoUnitario?: number;
@@ -76,6 +148,11 @@ export interface BodegaInventario {
   descripcion?: string;
   estado: boolean;
   ubicaciones?: Array<UbicacionInventario & { _id?: string }>;
+  departamentoId?: string;
+  ciudadId?: string;
+  departamentoNombre?: string;
+  ciudadNombre?: string;
+  municipiosSubnodo?: Array<{ ciudadId: string; nombre: string }>;
 }
 
 export interface AjusteInventario {
@@ -173,14 +250,152 @@ const inventarioService = {
     return resp?.data as InventarioMovimiento;
   },
 
+  async listarTiposMovimiento(params: { naturaleza?: 'ENTRADA' | 'SALIDA' } = {}): Promise<InventarioTipoMovimiento[]> {
+    const resp = await apiFetch(`/api/inventario/tipos-movimiento${buildQuery(params)}`, { method: 'GET' });
+    return (resp?.data ?? []) as InventarioTipoMovimiento[];
+  },
+
+  async listarTiposMovimientoAdmin(): Promise<InventarioTipoMovimiento[]> {
+    const resp = await apiFetch('/api/inventario/tipos-movimiento/admin', { method: 'GET' });
+    return (resp?.data ?? []) as InventarioTipoMovimiento[];
+  },
+
+  async crearTipoMovimiento(payload: Omit<InventarioTipoMovimiento, '_id'>): Promise<InventarioTipoMovimiento> {
+    const resp = await apiFetch('/api/inventario/tipos-movimiento', { method: 'POST', body: payload });
+    return resp?.data as InventarioTipoMovimiento;
+  },
+
+  async actualizarTipoMovimiento(
+    id: string,
+    payload: Partial<Omit<InventarioTipoMovimiento, '_id'>>
+  ): Promise<InventarioTipoMovimiento> {
+    const resp = await apiFetch(`/api/inventario/tipos-movimiento/${id}`, { method: 'PUT', body: payload });
+    return resp?.data as InventarioTipoMovimiento;
+  },
+
+  async listarUnidadesMedida(): Promise<InventarioUnidadMedida[]> {
+    const resp = await apiFetch('/api/inventario/unidades-medida', { method: 'GET' });
+    return (resp?.data ?? []) as InventarioUnidadMedida[];
+  },
+
+  async listarUnidadesMedidaAdmin(): Promise<InventarioUnidadMedida[]> {
+    const resp = await apiFetch('/api/inventario/unidades-medida/admin', { method: 'GET' });
+    return (resp?.data ?? []) as InventarioUnidadMedida[];
+  },
+
+  async crearUnidadMedida(payload: Omit<InventarioUnidadMedida, '_id'>): Promise<InventarioUnidadMedida> {
+    const resp = await apiFetch('/api/inventario/unidades-medida', { method: 'POST', body: payload });
+    return resp?.data as InventarioUnidadMedida;
+  },
+
+  async actualizarUnidadMedida(
+    id: string,
+    payload: Partial<Omit<InventarioUnidadMedida, '_id'>>
+  ): Promise<InventarioUnidadMedida> {
+    const resp = await apiFetch(`/api/inventario/unidades-medida/${id}`, { method: 'PUT', body: payload });
+    return resp?.data as InventarioUnidadMedida;
+  },
+
+  async eliminarUnidadMedida(id: string): Promise<void> {
+    await apiFetch(`/api/inventario/unidades-medida/${id}`, { method: 'DELETE' });
+  },
+
+  async listarProveedoresCompra(): Promise<InventarioProveedor[]> {
+    const resp = await apiFetch('/api/inventario/compras/proveedores', { method: 'GET' });
+    return (resp?.data ?? []) as InventarioProveedor[];
+  },
+
+  async listarTiposProveedor(): Promise<InventarioTipoProveedor[]> {
+    const resp = await apiFetch('/api/inventario/compras/proveedores/tipos', { method: 'GET' });
+    return (resp?.data ?? []) as InventarioTipoProveedor[];
+  },
+
+  async crearTipoProveedor(payload: {
+    codigo?: string;
+    nombre: string;
+    descripcion?: string;
+  }): Promise<InventarioTipoProveedor> {
+    const resp = await apiFetch('/api/inventario/compras/proveedores/tipos', { method: 'POST', body: payload });
+    return resp?.data as InventarioTipoProveedor;
+  },
+
+  async actualizarTipoProveedor(
+    id: string,
+    payload: Partial<Pick<InventarioTipoProveedor, 'codigo' | 'nombre' | 'descripcion' | 'estado'>>
+  ): Promise<InventarioTipoProveedor> {
+    const resp = await apiFetch(`/api/inventario/compras/proveedores/tipos/${id}`, { method: 'PUT', body: payload });
+    return resp?.data as InventarioTipoProveedor;
+  },
+
+  async eliminarTipoProveedor(id: string): Promise<void> {
+    await apiFetch(`/api/inventario/compras/proveedores/tipos/${id}`, { method: 'DELETE' });
+  },
+
+  async listarOrdenesCompra(params: { limit?: number } = {}): Promise<InventarioOrdenCompra[]> {
+    const resp = await apiFetch(`/api/inventario/compras/ordenes${buildQuery(params)}`, { method: 'GET' });
+    return (resp?.data ?? []) as InventarioOrdenCompra[];
+  },
+
+  async crearOrdenCompra(payload: {
+    numeroOrden: string;
+    numeroRemision?: string;
+    fechaOrden?: string;
+    proveedor: { nombre: string; nit: string };
+    documentoLegalCompra: { tipo: string; numero: string; fecha: string };
+    items: OrdenCompraItemLinea[];
+  }): Promise<InventarioOrdenCompra> {
+    const resp = await apiFetch('/api/inventario/compras/ordenes', { method: 'POST', body: payload });
+    return resp?.data as InventarioOrdenCompra;
+  },
+
+  async crearProveedorCompra(payload: {
+    nombre: string;
+    nit: string;
+    correo?: string;
+    telefono?: string;
+    direccion?: string;
+    tipoProveedorId?: string;
+    paisId?: string;
+    departamentoId?: string;
+    ciudadId?: string;
+  }): Promise<InventarioProveedor> {
+    const resp = await apiFetch('/api/inventario/compras/proveedores', { method: 'POST', body: payload });
+    return resp?.data as InventarioProveedor;
+  },
+
   async listarBodegas(): Promise<BodegaInventario[]> {
     const resp = await apiFetch('/api/inventario/bodegas', { method: 'GET' });
     return (resp?.data ?? []) as BodegaInventario[];
   },
 
-  async crearBodega(payload: { nombre: string; descripcion?: string }): Promise<BodegaInventario> {
+  async crearBodega(payload: {
+    nombre: string;
+    descripcion?: string;
+    departamentoId?: string;
+    ciudadId?: string;
+    municipiosSubnodo?: Array<{ ciudadId: string; nombre: string }>;
+  }): Promise<BodegaInventario> {
     const resp = await apiFetch('/api/inventario/bodegas', { method: 'POST', body: payload });
     return resp?.data as BodegaInventario;
+  },
+
+  async actualizarBodega(
+    id: string,
+    payload: {
+      nombre?: string;
+      descripcion?: string;
+      departamentoId?: string;
+      ciudadId?: string;
+      municipiosSubnodo?: Array<{ ciudadId: string; nombre: string }>;
+      estado?: boolean;
+    }
+  ): Promise<BodegaInventario> {
+    const resp = await apiFetch(`/api/inventario/bodegas/${id}`, { method: 'PUT', body: payload });
+    return resp?.data as BodegaInventario;
+  },
+
+  async eliminarBodega(id: string): Promise<void> {
+    await apiFetch(`/api/inventario/bodegas/${id}`, { method: 'DELETE' });
   },
 
   async listarAjustes(params: { estado?: EstadoAjuste | ''; sku?: string } = {}): Promise<AjusteInventario[]> {

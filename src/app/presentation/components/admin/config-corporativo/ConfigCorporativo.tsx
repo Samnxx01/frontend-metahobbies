@@ -4,15 +4,27 @@ import {
   BadgeCheck,
   BriefcaseBusiness,
   Building2,
+  Check,
+  Pencil,
   Loader2,
+  Settings2,
   RefreshCw,
   ShieldCheck,
+  Trash2,
+  X,
   UserPlus,
   Users,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -33,13 +45,22 @@ import {
 } from '@/components/ui/table';
 import {
   createEmpleadoGlobal,
+  createParametrizacionEmpleado,
+  createRolCorporativo,
+  deleteParametrizacionEmpleado,
+  deleteRolCorporativo,
   getEmpleadoGlobalContext,
+  getParametrizacionEmpleado,
   getRolesCorporativos,
   getTenantCorporativos,
   listEmpleadosGlobal,
+  updateParametrizacionEmpleado,
+  updateRolCorporativo,
   type ActorScope,
   type CrearEmpleadoGlobalPayload,
   type EmpleadoGlobal,
+  type ParametrizacionEmpleadoOption,
+  type ParametrizacionEmpleadoTipo,
   type RolCorporativoOption,
   type TenantCorporativoOption,
   type TenantGlobalOption,
@@ -61,7 +82,6 @@ type EmpleadoFormState = {
   cargo: string;
   tipoEmpleado: string;
   estadoLaboral: string;
-  jefeDirectoId: string;
 };
 
 const EMPTY_FORM: EmpleadoFormState = {
@@ -80,12 +100,16 @@ const EMPTY_FORM: EmpleadoFormState = {
   cargo: '',
   tipoEmpleado: 'INTERNO',
   estadoLaboral: 'ACTIVO',
-  jefeDirectoId: 'none',
 };
 
 const RH_OPTIONS = ['O+', 'O-', 'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-'];
 const TIPO_EMPLEADO_OPTIONS = ['INTERNO', 'EXTERNO', 'TEMPORAL', 'CONTRATISTA'];
 const ESTADO_LABORAL_OPTIONS = ['ACTIVO', 'INACTIVO', 'SUSPENDIDO', 'VACACIONES'];
+const PARAM_TIPOS: Array<{ value: ParametrizacionEmpleadoTipo; label: string }> = [
+  { value: 'RH', label: 'RH' },
+  { value: 'TIPO_EMPLEADO', label: 'Tipo de empleado' },
+  { value: 'ESTADO_LABORAL', label: 'Estado laboral' },
+];
 
 const formatActorBadge = (actor: ActorScope | null) => {
   if (!actor) return null;
@@ -106,12 +130,6 @@ const resolveRolName = (value: EmpleadoGlobal['rolCorporativoId']) => {
   return value.rol || value._id || '-';
 };
 
-const resolveJefeName = (value: EmpleadoGlobal['jefeDirectoId']) => {
-  if (!value) return 'Sin jefe asignado';
-  if (typeof value === 'string') return value;
-  return value.correo || value._id || 'Sin jefe asignado';
-};
-
 export default function ConfigCorporativo() {
   const [actor, setActor] = useState<ActorScope | null>(null);
   const [tenantGlobales, setTenantGlobales] = useState<TenantGlobalOption[]>([]);
@@ -123,6 +141,18 @@ export default function ConfigCorporativo() {
   const [loading, setLoading] = useState(true);
   const [loadingTable, setLoadingTable] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [rolNombre, setRolNombre] = useState('');
+  const [rolEditandoId, setRolEditandoId] = useState<string | null>(null);
+  const [rolModalOpen, setRolModalOpen] = useState(false);
+  const [savingRol, setSavingRol] = useState(false);
+  const [deletingRolId, setDeletingRolId] = useState<string | null>(null);
+  const [parametrosEmpleado, setParametrosEmpleado] = useState<ParametrizacionEmpleadoOption[]>([]);
+  const [paramModalOpen, setParamModalOpen] = useState(false);
+  const [paramTipo, setParamTipo] = useState<ParametrizacionEmpleadoTipo>('RH');
+  const [paramValor, setParamValor] = useState('');
+  const [paramEditandoId, setParamEditandoId] = useState<string | null>(null);
+  const [savingParametro, setSavingParametro] = useState(false);
+  const [deletingParametroId, setDeletingParametroId] = useState<string | null>(null);
 
   const actorBadge = useMemo(() => formatActorBadge(actor), [actor]);
 
@@ -136,13 +166,27 @@ export default function ConfigCorporativo() {
     [rolesCorporativos, form.tenantCorporativoId]
   );
 
-  const jefeOptions = useMemo(
-    () =>
-      empleados.map((empleado) => ({
-        id: String(empleado.usuarioId?._id || ''),
-        label: `${empleado.usuarioId?.correo || 'Sin correo'}${empleado.cargo ? ` · ${empleado.cargo}` : ''}`,
-      })).filter((item) => item.id),
-    [empleados]
+  const parametrosPorTipo = useMemo(() => {
+    const grouped: Record<ParametrizacionEmpleadoTipo, string[]> = {
+      RH: [],
+      TIPO_EMPLEADO: [],
+      ESTADO_LABORAL: [],
+    };
+
+    parametrosEmpleado.forEach((item) => {
+      grouped[item.tipo].push(item.valor);
+    });
+
+    return {
+      RH: grouped.RH.length ? grouped.RH : RH_OPTIONS,
+      TIPO_EMPLEADO: grouped.TIPO_EMPLEADO.length ? grouped.TIPO_EMPLEADO : TIPO_EMPLEADO_OPTIONS,
+      ESTADO_LABORAL: grouped.ESTADO_LABORAL.length ? grouped.ESTADO_LABORAL : ESTADO_LABORAL_OPTIONS,
+    };
+  }, [parametrosEmpleado]);
+
+  const parametrosModalList = useMemo(
+    () => parametrosEmpleado.filter((item) => item.tipo === paramTipo),
+    [parametrosEmpleado, paramTipo]
   );
 
   const empleadosFiltrados = useMemo(() => {
@@ -184,22 +228,49 @@ export default function ConfigCorporativo() {
     }
   };
 
+  const refreshRolesCorporativos = async (tenantCorporativoId?: string) => {
+    const roles = await getRolesCorporativos(tenantCorporativoId ? { tenantCorporativoId } : undefined);
+    setRolesCorporativos((prev) => {
+      if (!tenantCorporativoId) return roles;
+      const externos = prev.filter((item) => item.tenantCorporativoId !== tenantCorporativoId);
+      return [...externos, ...roles];
+    });
+  };
+
+  const refreshParametrizacionEmpleado = async (tenantCorporativoId?: string) => {
+    if (!tenantCorporativoId) {
+      setParametrosEmpleado([]);
+      return;
+    }
+
+    try {
+      const data = await getParametrizacionEmpleado(tenantCorporativoId);
+      setParametrosEmpleado(data);
+    } catch (error: any) {
+      setParametrosEmpleado([]);
+      toast.error(error?.message || 'No fue posible cargar la parametrizacion de empleados');
+    }
+  };
+
   useEffect(() => {
     let active = true;
 
     const bootstrap = async () => {
       setLoading(true);
       try {
-        const [contexto, corporativos, roles] = await Promise.all([
-          getEmpleadoGlobalContext(),
-          getTenantCorporativos(),
-          getRolesCorporativos(),
-        ]);
-
+        const contexto = await getEmpleadoGlobalContext();
         if (!active) return;
 
         const actorContext = contexto.actor;
         const tenantGlobalId = actorContext.tenantGlobalId || contexto.tenantGlobales[0]?.id || '';
+        const tenantCorporativoId = actorContext.tenantCorporativoId || '';
+
+        const [corporativos, roles] = await Promise.all([
+          getTenantCorporativos(tenantGlobalId ? { tenantGlobal: tenantGlobalId } : undefined),
+          getRolesCorporativos(tenantCorporativoId ? { tenantCorporativoId } : undefined),
+        ]);
+
+        if (!active) return;
 
         setActor(actorContext);
         setTenantGlobales(contexto.tenantGlobales);
@@ -208,15 +279,18 @@ export default function ConfigCorporativo() {
         setForm((prev) => ({
           ...prev,
           tenantGlobalId,
-          tenantCorporativoId: actorContext.tenantCorporativoId || '',
+          tenantCorporativoId,
         }));
 
         if (tenantGlobalId) {
-          await refreshEmpleados(tenantGlobalId, actorContext.tenantCorporativoId || undefined);
+          await refreshEmpleados(tenantGlobalId, tenantCorporativoId || undefined);
+        }
+        if (tenantCorporativoId) {
+          await refreshParametrizacionEmpleado(tenantCorporativoId);
         }
       } catch (error: any) {
         if (!active) return;
-        toast.error(error?.message || 'No fue posible cargar la parametrizacion de empleados');
+        toast.error(error?.message || 'No fue posible cargar la configuracion de empleados');
       } finally {
         if (active) setLoading(false);
       }
@@ -232,19 +306,40 @@ export default function ConfigCorporativo() {
   useEffect(() => {
     if (!form.tenantGlobalId) return;
     void refreshEmpleados(form.tenantGlobalId, form.tenantCorporativoId || undefined);
+    void refreshParametrizacionEmpleado(form.tenantCorporativoId || undefined);
   }, [form.tenantGlobalId, form.tenantCorporativoId]);
 
+  // Para SuperAdmin / TenantGlobal: cuando no hay tenantCorporativoId en scope,
+  // auto-selecciona el primero disponible al cambiar el tenant global.
   useEffect(() => {
-    if (!form.tenantCorporativoId) {
-      setForm((prev) => ({ ...prev, rolCorporativoId: '', jefeDirectoId: 'none' }));
-      return;
-    }
+    if (actor?.tenantCorporativoId) return;
+    if (form.tenantCorporativoId) return;
+    const primero = corporativosDisponibles[0];
+    if (!primero) return;
+    void refreshRolesCorporativos(primero.id);
+    setForm((prev) => ({ ...prev, tenantCorporativoId: primero.id, rolCorporativoId: '' }));
+  }, [corporativosDisponibles, actor?.tenantCorporativoId]);
 
-    const validRole = rolesDisponibles.some((role) => role.id === form.rolCorporativoId);
+  useEffect(() => {
+    if (!form.rolCorporativoId) return;
+    const validRole = rolesCorporativos.some((role) => role.id === form.rolCorporativoId);
     if (!validRole) {
       setForm((prev) => ({ ...prev, rolCorporativoId: '' }));
     }
-  }, [form.rolCorporativoId, form.tenantCorporativoId, rolesDisponibles]);
+  }, [form.rolCorporativoId, rolesCorporativos]);
+
+  useEffect(() => {
+    setForm((prev) => ({
+      ...prev,
+      rh: parametrosPorTipo.RH.includes(prev.rh) ? prev.rh : parametrosPorTipo.RH[0] || '',
+      tipoEmpleado: parametrosPorTipo.TIPO_EMPLEADO.includes(prev.tipoEmpleado)
+        ? prev.tipoEmpleado
+        : parametrosPorTipo.TIPO_EMPLEADO[0] || '',
+      estadoLaboral: parametrosPorTipo.ESTADO_LABORAL.includes(prev.estadoLaboral)
+        ? prev.estadoLaboral
+        : parametrosPorTipo.ESTADO_LABORAL[0] || '',
+    }));
+  }, [parametrosPorTipo]);
 
   const handleField = (key: keyof EmpleadoFormState, value: string) => {
     setForm((prev) => {
@@ -254,16 +349,15 @@ export default function ConfigCorporativo() {
           tenantGlobalId: value,
           tenantCorporativoId: '',
           rolCorporativoId: '',
-          jefeDirectoId: 'none',
         };
       }
 
       if (key === 'tenantCorporativoId') {
+        void refreshRolesCorporativos(value);
         return {
           ...prev,
           tenantCorporativoId: value,
           rolCorporativoId: '',
-          jefeDirectoId: 'none',
         };
       }
 
@@ -317,7 +411,6 @@ export default function ConfigCorporativo() {
       cargo: form.cargo.trim() || undefined,
       tipoEmpleado: form.tipoEmpleado,
       estadoLaboral: form.estadoLaboral,
-      jefeDirectoId: form.jefeDirectoId !== 'none' ? form.jefeDirectoId : undefined,
     };
 
     setSubmitting(true);
@@ -330,6 +423,130 @@ export default function ConfigCorporativo() {
       toast.error(error?.message || 'No se pudo crear el empleado');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const resetRolForm = () => {
+    setRolNombre('');
+    setRolEditandoId(null);
+  };
+
+  const resetParametroForm = () => {
+    setParamValor('');
+    setParamEditandoId(null);
+  };
+
+  const handleSaveRol = async () => {
+    const nombre = rolNombre.trim();
+    if (!form.tenantCorporativoId) {
+      toast.error('Selecciona un tenant corporativo para gestionar sus roles');
+      return;
+    }
+    if (!nombre) {
+      toast.error('Escribe el nombre del rol corporativo');
+      return;
+    }
+
+    setSavingRol(true);
+    try {
+      if (rolEditandoId) {
+        await updateRolCorporativo(rolEditandoId, { rol: nombre });
+        toast.success('Rol corporativo actualizado');
+      } else {
+        await createRolCorporativo({
+          rol: nombre,
+          tenantCorporativoId: form.tenantCorporativoId,
+        });
+        toast.success('Rol corporativo creado');
+      }
+      resetRolForm();
+      await refreshRolesCorporativos(form.tenantCorporativoId);
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo guardar el rol corporativo');
+    } finally {
+      setSavingRol(false);
+    }
+  };
+
+  const handleEditRol = (role: RolCorporativoOption) => {
+    setRolEditandoId(role.id);
+    setRolNombre(role.label);
+  };
+
+  const handleDeleteRol = async (role: RolCorporativoOption) => {
+    if (!window.confirm(`Deseas eliminar el rol ${role.label}?`)) return;
+
+    setDeletingRolId(role.id);
+    try {
+      await deleteRolCorporativo(role.id);
+      toast.success('Rol corporativo eliminado');
+      if (form.rolCorporativoId === role.id) {
+        setForm((prev) => ({ ...prev, rolCorporativoId: '' }));
+      }
+      if (rolEditandoId === role.id) {
+        resetRolForm();
+      }
+      await refreshRolesCorporativos(form.tenantCorporativoId || undefined);
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo eliminar el rol corporativo');
+    } finally {
+      setDeletingRolId(null);
+    }
+  };
+
+  const handleSaveParametro = async () => {
+    const valor = paramValor.trim();
+    if (!form.tenantCorporativoId) {
+      toast.error('Selecciona un tenant corporativo para parametrizar empleados');
+      return;
+    }
+    if (!valor) {
+      toast.error('Escribe el valor de la opcion');
+      return;
+    }
+
+    setSavingParametro(true);
+    try {
+      if (paramEditandoId) {
+        await updateParametrizacionEmpleado(paramEditandoId, valor);
+        toast.success('Parametro actualizado');
+      } else {
+        await createParametrizacionEmpleado({
+          tenantCorporativoId: form.tenantCorporativoId,
+          tipo: paramTipo,
+          valor,
+        });
+        toast.success('Parametro creado');
+      }
+      resetParametroForm();
+      await refreshParametrizacionEmpleado(form.tenantCorporativoId);
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo guardar el parametro');
+    } finally {
+      setSavingParametro(false);
+    }
+  };
+
+  const handleEditParametro = (item: ParametrizacionEmpleadoOption) => {
+    setParamTipo(item.tipo);
+    setParamValor(item.valor);
+    setParamEditandoId(item.id);
+  };
+
+  const handleDeleteParametro = async (item: ParametrizacionEmpleadoOption) => {
+    if (item.isDefault) return;
+    if (!window.confirm(`Deseas eliminar ${item.valor}?`)) return;
+
+    setDeletingParametroId(item.id);
+    try {
+      await deleteParametrizacionEmpleado(item.id);
+      toast.success('Parametro eliminado');
+      if (paramEditandoId === item.id) resetParametroForm();
+      await refreshParametrizacionEmpleado(form.tenantCorporativoId || undefined);
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo eliminar el parametro');
+    } finally {
+      setDeletingParametroId(null);
     }
   };
 
@@ -360,7 +577,7 @@ export default function ConfigCorporativo() {
               <h1 className="text-2xl font-semibold tracking-tight">Parametrizacion intuitiva de empleados</h1>
               <p className="mt-2 text-sm text-slate-200">
                 Esta ruta debe gobernar personas, no repetir la parametrizacion corporativa vieja. Desde aqui puedes
-                elegir el tenant, definir el rol corporativo, asignar jefe directo y revisar el equipo activo.
+                elegir el tenant global, definir el corporativo, configurar el rol corporativo y revisar el equipo activo.
               </p>
             </div>
           </div>
@@ -407,7 +624,7 @@ export default function ConfigCorporativo() {
                   Alta guiada de empleado
                 </CardTitle>
                 <CardDescription>
-                  Crea un empleado con tenant corporativo, rol corporativo y linea de reporte desde una sola vista.
+                  Crea un empleado con tenant global, tenant corporativo y rol corporativo desde una sola vista.
                 </CardDescription>
               </div>
               <Button
@@ -418,6 +635,16 @@ export default function ConfigCorporativo() {
               >
                 <RefreshCw className="h-4 w-4" />
                 Recargar
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="gap-2"
+                onClick={() => setParamModalOpen(true)}
+                disabled={!form.tenantCorporativoId}
+              >
+                <Settings2 className="h-4 w-4" />
+                Parametrizar
               </Button>
             </div>
           </CardHeader>
@@ -445,37 +672,17 @@ export default function ConfigCorporativo() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Tenant corporativo</Label>
-                  <Select
-                    value={form.tenantCorporativoId}
-                    onValueChange={(value) => handleField('tenantCorporativoId', value)}
-                    disabled={!form.tenantGlobalId || Boolean(actor?.tenantCorporativoId)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecciona corporativo" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {corporativosDisponibles.map((item) => (
-                        <SelectItem key={item.id} value={item.id}>
-                          {item.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
                   <Label>Rol corporativo</Label>
                   <Select
                     value={form.rolCorporativoId}
                     onValueChange={(value) => handleField('rolCorporativoId', value)}
-                    disabled={!form.tenantCorporativoId}
+                    disabled={rolesCorporativos.length === 0}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Selecciona rol" />
+                      <SelectValue placeholder={rolesCorporativos.length === 0 ? 'Sin roles configurados' : 'Selecciona rol'} />
                     </SelectTrigger>
                     <SelectContent>
-                      {rolesDisponibles.map((item) => (
+                      {rolesCorporativos.map((item) => (
                         <SelectItem key={item.id} value={item.id}>
                           {item.label}
                         </SelectItem>
@@ -484,22 +691,6 @@ export default function ConfigCorporativo() {
                   </Select>
                 </div>
 
-                <div className="space-y-2">
-                  <Label>Jefe directo</Label>
-                  <Select value={form.jefeDirectoId} onValueChange={(value) => handleField('jefeDirectoId', value)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Sin jefe directo" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Sin jefe directo</SelectItem>
-                      {jefeOptions.map((item) => (
-                        <SelectItem key={item.id} value={item.id}>
-                          {item.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
               </div>
 
               <Separator />
@@ -544,7 +735,7 @@ export default function ConfigCorporativo() {
                       <SelectValue placeholder="RH" />
                     </SelectTrigger>
                     <SelectContent>
-                      {RH_OPTIONS.map((item) => (
+                      {parametrosPorTipo.RH.map((item) => (
                         <SelectItem key={item} value={item}>
                           {item}
                         </SelectItem>
@@ -563,7 +754,7 @@ export default function ConfigCorporativo() {
                       <SelectValue placeholder="Tipo de empleado" />
                     </SelectTrigger>
                     <SelectContent>
-                      {TIPO_EMPLEADO_OPTIONS.map((item) => (
+                      {parametrosPorTipo.TIPO_EMPLEADO.map((item) => (
                         <SelectItem key={item} value={item}>
                           {item}
                         </SelectItem>
@@ -578,7 +769,7 @@ export default function ConfigCorporativo() {
                       <SelectValue placeholder="Estado laboral" />
                     </SelectTrigger>
                     <SelectContent>
-                      {ESTADO_LABORAL_OPTIONS.map((item) => (
+                      {parametrosPorTipo.ESTADO_LABORAL.map((item) => (
                         <SelectItem key={item} value={item}>
                           {item}
                         </SelectItem>
@@ -603,30 +794,38 @@ export default function ConfigCorporativo() {
 
         <div className="space-y-6">
           <Card className="border-slate-200 shadow-sm">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-slate-900">
-                <BriefcaseBusiness className="h-5 w-5 text-fuchsia-600" />
-                Contexto operativo
-              </CardTitle>
-              <CardDescription>Resumen rapido del alcance con el que estas parametrizando empleados.</CardDescription>
+            <CardHeader className="space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-slate-900">
+                    <BriefcaseBusiness className="h-5 w-5 text-fuchsia-600" />
+                    Parametrizacion
+                  </CardTitle>
+                  <CardDescription>Configura los catalogos que usa esta alta guiada.</CardDescription>
+                </div>
+              </div>
             </CardHeader>
-            <CardContent className="space-y-3 text-sm text-slate-600">
-              <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                <span>Rol del actor</span>
-                <span className="font-medium text-slate-900">{actor?.rol || 'Sin rol'}</span>
-              </div>
-              <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                <span>Tenant global activo</span>
-                <span className="font-medium text-slate-900">{form.tenantGlobalId || 'No seleccionado'}</span>
-              </div>
-              <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                <span>Corporativo activo</span>
-                <span className="font-medium text-slate-900">{form.tenantCorporativoId || 'Todos'}</span>
-              </div>
-              <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-emerald-800">
-                La duplicacion ocurria porque `ConfigCorporativo` seguia montando las tabs antiguas de
-                `ParametrizacionCorporativa`. Ahora esta vista queda especializada en empleados.
-              </div>
+            <CardContent className="grid gap-3 sm:grid-cols-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="justify-start gap-2"
+                onClick={() => setParamModalOpen(true)}
+                disabled={!form.tenantCorporativoId}
+              >
+                <Settings2 className="h-4 w-4" />
+                Campos empleado
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="justify-start gap-2"
+                onClick={() => setRolModalOpen(true)}
+                disabled={!form.tenantCorporativoId}
+              >
+                <BriefcaseBusiness className="h-4 w-4" />
+                Roles corporativos
+              </Button>
             </CardContent>
           </Card>
 
@@ -669,7 +868,6 @@ export default function ConfigCorporativo() {
                           <TableCell>
                             <div className="space-y-1">
                               <p className="font-medium text-slate-900">{empleado.usuarioId?.correo || '-'}</p>
-                              <p className="text-xs text-slate-500">{resolveJefeName(empleado.jefeDirectoId)}</p>
                             </div>
                           </TableCell>
                           <TableCell>{resolveCorporativoName(empleado.tenantCorporativoId)}</TableCell>
@@ -694,6 +892,189 @@ export default function ConfigCorporativo() {
           </Card>
         </div>
       </div>
+
+      <Dialog open={rolModalOpen} onOpenChange={setRolModalOpen}>
+        <DialogContent className="max-h-[90vh] overflow-auto sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <BriefcaseBusiness className="h-5 w-5 text-fuchsia-600" />
+              Roles corporativos
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-5">
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Input
+                value={rolNombre}
+                onChange={(event) => setRolNombre(event.target.value)}
+                placeholder="Nombre del rol"
+                disabled={!form.tenantCorporativoId || savingRol}
+              />
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  className="gap-2"
+                  onClick={() => void handleSaveRol()}
+                  disabled={!form.tenantCorporativoId || savingRol}
+                >
+                  {savingRol ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                  {rolEditandoId ? 'Actualizar' : 'Guardar'}
+                </Button>
+                {rolEditandoId ? (
+                  <Button type="button" variant="outline" onClick={resetRolForm} disabled={savingRol}>
+                    <X className="h-4 w-4" />
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+
+            {!form.tenantCorporativoId ? (
+              <div className="rounded-xl border border-dashed border-slate-200 px-4 py-5 text-sm text-slate-500">
+                Selecciona un tenant corporativo para listar y administrar sus roles.
+              </div>
+            ) : rolesDisponibles.length ? (
+              <div className="space-y-2">
+                {rolesDisponibles.map((role) => (
+                  <div
+                    key={role.id}
+                    className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 px-3 py-2"
+                  >
+                    <span className="min-w-0 truncate text-sm font-medium text-slate-900">{role.label}</span>
+                    <div className="flex shrink-0 gap-1">
+                      <Button type="button" variant="ghost" size="icon" onClick={() => handleEditRol(role)}>
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => void handleDeleteRol(role)}
+                        disabled={deletingRolId === role.id}
+                      >
+                        {deletingRolId === role.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-xl border border-dashed border-slate-200 px-4 py-5 text-sm text-slate-500">
+                No hay roles corporativos para este tenant.
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setRolModalOpen(false)}>
+              Cerrar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={paramModalOpen} onOpenChange={setParamModalOpen}>
+        <DialogContent className="max-h-[90vh] overflow-auto sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Settings2 className="h-5 w-5 text-fuchsia-600" />
+              Parametrizacion de empleado
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-5">
+            <div className="grid gap-3 md:grid-cols-[0.8fr_1fr_auto]">
+              <div className="space-y-2">
+                <Label>Campo</Label>
+                <Select
+                  value={paramTipo}
+                  onValueChange={(value) => {
+                    setParamTipo(value as ParametrizacionEmpleadoTipo);
+                    resetParametroForm();
+                  }}
+                  disabled={Boolean(paramEditandoId)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Campo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PARAM_TIPOS.map((item) => (
+                      <SelectItem key={item.value} value={item.value}>
+                        {item.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Valor</Label>
+                <Input
+                  value={paramValor}
+                  onChange={(event) => setParamValor(event.target.value)}
+                  placeholder="Ej: ACTIVO"
+                />
+              </div>
+
+              <div className="flex items-end gap-2">
+                <Button type="button" className="gap-2" onClick={() => void handleSaveParametro()} disabled={savingParametro}>
+                  {savingParametro ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                  {paramEditandoId ? 'Actualizar' : 'Guardar'}
+                </Button>
+                {paramEditandoId ? (
+                  <Button type="button" variant="outline" onClick={resetParametroForm} disabled={savingParametro}>
+                    <X className="h-4 w-4" />
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              {parametrosModalList.map((item) => (
+                <div key={item.id} className="flex items-center justify-between gap-3 rounded-xl border px-3 py-2">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{item.valor}</p>
+                    {item.isDefault ? <p className="text-xs text-slate-500">Default inicial</p> : null}
+                  </div>
+                  <div className="flex shrink-0 gap-1">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleEditParametro(item)}
+                      disabled={item.isDefault}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => void handleDeleteParametro(item)}
+                      disabled={item.isDefault || deletingParametroId === item.id}
+                    >
+                      {deletingParametroId === item.id ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setParamModalOpen(false)}>
+              Cerrar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }

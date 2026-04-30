@@ -23,6 +23,14 @@ export interface BrandingConfig {
   };
   widgets?: {
     routes?: Array<Record<string, unknown>>;
+    loginBackground?: {
+      imageUrl?: string;
+      enabled?: boolean;
+    };
+    loadingBackground?: {
+      imageUrl?: string;
+      enabled?: boolean;
+    };
     navigation?: {
       login?: { path?: string; enabled?: boolean };
       postLogin?: { path?: string; enabled?: boolean };
@@ -110,6 +118,66 @@ export const guardarBrandingPrivado = async (
 
   persistBrandingCache(response.branding);
   return response.branding;
+};
+
+export const subirImagenFondoLogin = async (file: File): Promise<{ id: string; url: string } | null> => {
+  const formData = new FormData();
+  formData.append('img', file);
+
+  const response = await apiFetch('/api/front/imgFondo', {
+    method: 'POST',
+    useAuth: true,
+    body: formData
+  }) as { id?: string; url?: string } | null;
+
+  if (!response?.id) {
+    return null;
+  }
+
+  return {
+    id: response.id,
+    url: response.url || `/api/front/imgFondo/ver/${response.id}`
+  };
+};
+
+export interface ImagenFondo {
+  id: string;
+  nombre: string;
+  mimetype: string;
+  size: number;
+  fecha?: string;
+  usuario?: string;
+  url: string;
+}
+
+export const listarImagenesFondo = async (): Promise<ImagenFondo[]> => {
+  const response = await apiFetch('/api/front/imgFondo', {
+    method: 'GET',
+    useAuth: true
+  }) as { imagenes?: ImagenFondo[] } | null;
+
+  return Array.isArray(response?.imagenes) ? response.imagenes : [];
+};
+
+export const reemplazarImagenFondo = async (id: string, file: File): Promise<{ id: string; url: string } | null> => {
+  const formData = new FormData();
+  formData.append('img', file);
+
+  const response = await apiFetch(`/api/front/imgFondo/${id}`, {
+    method: 'PUT',
+    useAuth: true,
+    body: formData
+  }) as { id?: string; url?: string } | null;
+
+  if (!response?.id) return null;
+  return { id: response.id, url: response.url || `/api/front/imgFondo/ver/${response.id}` };
+};
+
+export const eliminarImagenFondo = async (id: string): Promise<void> => {
+  await apiFetch(`/api/front/imgFondo/${id}`, {
+    method: 'DELETE',
+    useAuth: true
+  });
 };
 
 export const obtenerAccionesWidgetPublico = async (): Promise<AccionBackend[]> => {

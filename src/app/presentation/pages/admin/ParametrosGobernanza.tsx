@@ -81,6 +81,7 @@ type TenantGlobal = {
   id: string;
   label: string;
   corporativo: string;
+  correo?: string;
   tenantSuperAdmin?: string;
   tenantGlobalAdmin?: string;
 };
@@ -833,6 +834,21 @@ const buildTenantGlobalContextLabel = (row: any, id: string): string => {
     id
   );
 };
+
+const pickTenantCorreo = (row: any): string => {
+  const usuariosAsociados = Array.isArray(row?.usuariosAsociados) ? row.usuariosAsociados : [];
+  return String(
+    row?.correo ||
+    row?.email ||
+    row?.usuarioId?.correo ||
+    row?.usuarioId?.email ||
+    row?.rolesMabs?.usuarioId?.correo ||
+    row?.rolesMabs?.usuarioId?.email ||
+    usuariosAsociados.find((usuario: any) => usuario?.correo || usuario?.email)?.correo ||
+    usuariosAsociados.find((usuario: any) => usuario?.correo || usuario?.email)?.email ||
+    ''
+  ).trim();
+};
 const isTenantSuperAdminScopeOption = (value: string): boolean =>
   String(value || '').trim().startsWith(TENANT_SUPERADMIN_SCOPE_PREFIX);
 
@@ -848,6 +864,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
   const [endpointModal, setEndpointModal] = useState<EndpointSpec | null>(null);
   const [endpointSearch, setEndpointSearch] = useState('');
   const [reglasSearch, setReglasSearch] = useState('');
+  const [vistaSearchByEndpoint, setVistaSearchByEndpoint] = useState<Record<string, string>>({});
   const [reglasTenantFilter, setReglasTenantFilter] = useState('');
   const [loadingData, setLoadingData] = useState(false);
   const [running, setRunning] = useState<Record<string, boolean>>({});
@@ -1218,6 +1235,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
               id,
               label,
               corporativo: pickTenantCorporate(row),
+              correo: pickTenantCorreo(row),
               tenantSuperAdmin: String(row?.tenantSuperAdmin || '').trim() || undefined,
               tenantGlobalAdmin: String(row?.tenantGlobalAdmin || '').trim() || undefined,
             });
@@ -1242,6 +1260,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
               id,
               label,
               corporativo: pickTenantCorporate(row),
+              correo: pickTenantCorreo(row),
               tenantSuperAdmin: String(row?.tenantSuperAdmin || '').trim() || undefined,
               tenantGlobalAdmin: String(row?.tenantGlobalAdmin || '').trim() || undefined,
             });
@@ -1563,28 +1582,59 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
   // Opciones de tenant derivadas del catálogo de reglas (para el filtro de tenant-actualizar-global-reglas)
   const tenantOptionsFromRuleCatalog = useMemo(() => {
     const seen = new Map<string, string>();
+    const tenantInfoById = new Map(tenantGlobales.map((tenant) => [String(tenant.id), tenant]));
     Object.values(ruleCatalog).forEach((r: any) => {
       if (r?.securityPlatform === true) return; // Excluir reglas DIOS
       const tenantRef = Array.isArray(r?.generacionGlovallNvlRoles) ? r.generacionGlovallNvlRoles[0] : null;
       const tenantId = String(tenantRef?._id || tenantRef || '').trim();
       if (!tenantId || seen.has(tenantId)) return;
+      const tenantInfo = tenantInfoById.get(tenantId);
       const rolMabs = String(
         tenantRef?.rolesMabs?.rol ||
         (Array.isArray(tenantRef?.rolesMabs) ? tenantRef.rolesMabs[0]?.rol : '') ||
+        tenantInfo?.label?.split('|')?.[0] ||
         ''
       ).trim();
-      const label = rolMabs ? `${rolMabs} | ${tenantId}` : tenantId;
+      const correo = String(pickTenantCorreo(tenantRef) || tenantInfo?.correo || '').trim();
+      const label = [rolMabs || 'TENANT', correo, tenantId].filter(Boolean).join(' | ');
       seen.set(tenantId, label);
     });
     return Array.from(seen.entries()).map(([id, label]) => ({ id, label }));
-  }, [ruleCatalog]);
+  }, [ruleCatalog, tenantGlobales]);
 
   const getCatalogSelection = (endpointId: string): CatalogSelection =>
     catalogSelection[endpointId] ?? { vistas: [], acciones: [] };
   const setCatalogSelectionFor = (endpointId: string, next: CatalogSelection) => {
     setCatalogSelection((prev) => ({ ...prev, [endpointId]: next }));
   };
+  const getReglasFiltradasPorTenant = (endpointId: string): ReglaOption[] => {
+    const tenantFiltro = tenantFilterByEndpoint[endpointId] || '';
+    if (!tenantFiltro) return reglas;
+
+    return reglas.filter((r) => {
+      const rule = ruleCatalog[r.id];
+      const tenantRef = Array.isArray(rule?.generacionGlovallNvlRoles)
+        ? rule.generacionGlovallNvlRoles[0]
+        : null;
+      const tenantId = String(tenantRef?._id || tenantRef || '').trim();
+      return tenantId === tenantFiltro;
+    });
+  };
+  const ensureReglaSeleccionadaParaVista = (endpointId: string): void => {
+    if (endpointId !== 'tenant-actualizar-global-reglas') return;
+    if (getFieldValue(endpointId, 'x-regla-id').trim()) return;
+
+    const firstRule = getReglasFiltradasPorTenant(endpointId)[0];
+    if (!firstRule?.id) return;
+
+    setFieldValue(endpointId, 'x-regla-id', firstRule.id);
+    applyRuleToForm(endpointId, firstRule.id);
+  };
   const toggleCatalogItem = (endpointId: string, key: 'vistas' | 'acciones', id: string, checked: boolean) => {
+    if (checked && key === 'vistas') {
+      ensureReglaSeleccionadaParaVista(endpointId);
+    }
+
     const current = getCatalogSelection(endpointId);
     const set = new Set(current[key]);
     if (checked) set.add(id); else set.delete(id);
@@ -4270,11 +4320,29 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
     const { vistasCatalogo, accionesCatalogo } = getPermisosCatalog(endpoint.id);
     const heredaSelVal = getFieldValue(endpoint.id, 'heredaGlobal').trim();
     const esReglaSeleccionada = !!heredaSelVal && !!ruleCatalog[heredaSelVal];
+    const vistaSearch = String(vistaSearchByEndpoint[endpoint.id] || '').trim().toLowerCase();
+    const matchesVistaSearch = (vista: any): boolean => {
+      if (!vistaSearch) return true;
+      return [
+        vista?.id,
+        vista?._id,
+        vista?.label,
+        vista?.name,
+        vista?.path,
+        vista?.component,
+      ].some((value) => String(value || '').toLowerCase().includes(vistaSearch));
+    };
     return (
       <div className="rounded-xl border border-emerald-100 bg-white/80 p-3">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs font-medium text-emerald-700">Elige la vista que quieres cambiarle los permisos</p>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-1 flex-wrap justify-end gap-2">
+            <Input
+              className="h-8 min-w-[180px] max-w-xs bg-white text-xs"
+              value={vistaSearchByEndpoint[endpoint.id] || ''}
+              onChange={(e) => setVistaSearchByEndpoint((prev) => ({ ...prev, [endpoint.id]: e.target.value }))}
+              placeholder="Buscar vista, ruta o componente"
+            />
             <Button
               type="button"
               size="sm"
@@ -4335,6 +4403,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
                   collectAllNodes(modulo.children || []).filter((f) => {
                     const fid = String(f._id);
                     if (allowedVistaIds.size > 0 && !allowedVistaIds.has(fid)) return false;
+                    if (!matchesVistaSearch(f)) return false;
                     if (esReglaSeleccionada) {
                       // Mostrar cualquier nodo que estÃ© activo en el Ã¡rbol de rutas
                       return vistaIdsActivos.has(fid) || esNodoFormularioLike(f);
@@ -4484,7 +4553,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
                   <>
                     <p className="mb-2 text-xs font-semibold text-slate-700">Vistas ({selected.vistas.length}/{vistasCatalogo.length})</p>
                     <div className="max-h-40 overflow-auto rounded-md border border-slate-300 bg-white p-2">
-                      {vistasCatalogo.map((vista) => (
+                      {vistasCatalogo.filter(matchesVistaSearch).map((vista) => (
                         <label key={vista.id} className="mb-1 flex cursor-pointer items-center gap-2 text-sm">
                           <input
                             type="checkbox"
@@ -4494,6 +4563,9 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
                           <span>{vista.label} {vista.path ? `(${vista.path})` : ''}</span>
                         </label>
                       ))}
+                      {!vistasCatalogo.filter(matchesVistaSearch).length && (
+                        <p className="text-xs text-slate-500">Sin vistas para la busqueda actual.</p>
+                      )}
                     </div>
                   </>
                 );

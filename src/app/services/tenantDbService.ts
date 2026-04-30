@@ -27,6 +27,8 @@ export interface TenantDbConfig {
   secuenciaHijoLabel?: string | null;
   poolName: string;
   dbName: string;
+  /** BD en cluster del padre donde se replica la data del hijo (backup); no es la BD operativa del padre */
+  backupReplicaDbName?: string | null;
   urlBase: string | null;
   estado: boolean;
   migrationStatus: 'pendiente' | 'en_proceso' | 'completada' | 'fallida';
@@ -50,6 +52,7 @@ export interface GuardarConexionPayload {
   mongoUri: string;
   dbName: string;
   urlBase?: string | null;
+  backupReplicaDbName?: string | null;
 }
 
 export interface ConfigurarSyncPayload {
@@ -158,6 +161,30 @@ export interface TenantDisponible {
   estado: boolean;
 }
 
+export interface CronSyncHijosSettings {
+  habilitado: boolean;
+  cronExpresion: string;
+  incluirColeccionesAutoSync: boolean;
+  habilitadoSubidaJerarquia: boolean;
+  cronExpresionSubidaJerarquia: string;
+  modoSubidaJerarquia: 'full' | 'incremental';
+  soloColeccionesSyncGuardadas: boolean;
+  actualizadoEl: string | null;
+}
+
+export type CronSyncHijosSettingsPayload = Partial<
+  Pick<
+    CronSyncHijosSettings,
+    | 'habilitado'
+    | 'cronExpresion'
+    | 'incluirColeccionesAutoSync'
+    | 'habilitadoSubidaJerarquia'
+    | 'cronExpresionSubidaJerarquia'
+    | 'modoSubidaJerarquia'
+    | 'soloColeccionesSyncGuardadas'
+  >
+>;
+
 // ─── Servicio ─────────────────────────────────────────────────────────────────
 
 export const tenantDbService = {
@@ -245,6 +272,14 @@ export const tenantDbService = {
     configId: string
   ): Promise<{ ok: boolean; msg: string; data: TenantDbConfig }> =>
     apiFetch(`/api/tenant-db/config/id/${configId}/migrar`, { method: 'POST' }),
+
+  obtenerCronSyncHijosSettings: (): Promise<{ ok: boolean; data: CronSyncHijosSettings }> =>
+    apiFetch('/api/tenant-db/cron-sync-hijos/settings', { method: 'GET' }),
+
+  guardarCronSyncHijosSettings: (
+    payload: CronSyncHijosSettingsPayload
+  ): Promise<{ ok: boolean; msg: string; data: CronSyncHijosSettings }> =>
+    apiFetch('/api/tenant-db/cron-sync-hijos/settings', { method: 'PUT', body: payload }),
 
   // ─── CONTENEDOR PARAMETRIZACION ─────────────────────────────────────────────
 
