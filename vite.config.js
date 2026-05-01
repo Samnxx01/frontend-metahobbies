@@ -25,8 +25,8 @@ export default defineConfig({
                 },
             },
             "/socket.io": {
-                //target: "https://server-mabs-xo9s.onrender.com",
-                target: "http://localhost:8080",
+                target: "https://server-mabs-xo9s.onrender.com",
+                //target: "http://localhost:8080",
                 ws: true,
             },
         },
