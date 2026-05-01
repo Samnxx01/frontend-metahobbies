@@ -93,6 +93,12 @@ export const NodoTenantGlobalCard = ({
                         </span>
                     )}
 
+                    {tenantGlobal.codigoJerarquia && (
+                        <Badge variant="outline" className="text-xs font-mono">
+                            {tenantGlobal.codigoJerarquia}
+                        </Badge>
+                    )}
+
                     {tenantGlobal.profundidad > 0 && (
                         <Badge variant="secondary" className="text-xs">
                             Sub-nivel {tenantGlobal.profundidad}

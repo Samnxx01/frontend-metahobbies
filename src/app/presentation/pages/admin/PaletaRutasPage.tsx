@@ -19,7 +19,7 @@ import type { ColoresPaleta } from '@/app/utils/ColorUtils';
 import {
     obtenerColoresPublico,
     guardarColoresApp,
-    DEFAULT_COLORES_APP,
+    fusionarColoresApp,
 } from '@/app/services/coloresAppService';
 import type { ColoresApp } from '@/app/services/coloresAppService';
 import {
@@ -123,7 +123,7 @@ const COLOR_META: Array<{
 export default function PaletaRutasPage() {
     const [paletaModalOpen, setPaletaModalOpen] = useState(false);
     const [ayudaPaletaOpen, setAyudaPaletaOpen] = useState(false);
-    const [paletaColores, setPaletaColores] = useState<PaletaColores>({ ...DEFAULT_COLORES_APP });
+    const [paletaColores, setPaletaColores] = useState<PaletaColores>(() => fusionarColoresApp());
     const [paletaLoading, setPaletaLoading] = useState(false);
     const [paletaSaving, setPaletaSaving] = useState(false);
     const [branding, setBranding] = useState<BrandingConfig | null>(null);
@@ -139,15 +139,27 @@ export default function PaletaRutasPage() {
 
     // ── Socket: actualización de paleta en tiempo real ────────────────────────
     useEffect(() => {
-        const handler = (data: { colores: Partial<ColoresPaleta> }): void => {
-            if (data?.colores) {
-                aplicarPaletaEnApp(data.colores as ColoresPaleta);
-            }
+        const handler = (data: { colores?: Partial<ColoresPaleta> }): void => {
+            if (!data?.colores) return;
+            const nuevos = fusionarColoresApp(data.colores as Partial<ColoresApp>);
+            setPaletaColores(nuevos);
+            aplicarPaletaEnApp(nuevos as ColoresPaleta);
         };
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         socketListeners.onPaletaColoresActualizada(handler as any);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         return () => { socketCleanup.offPaletaColoresActualizada(handler as any); };
+    }, []);
+
+    useEffect(() => {
+        void (async () => {
+            try {
+                const res = await obtenerColoresPublico();
+                setPaletaColores(fusionarColoresApp(res?.colores));
+            } catch {
+                /* mantiene fuente inicial alineada a DEFAULT_COLORES_APP */
+            }
+        })();
     }, []);
 
     useEffect(() => {
@@ -193,11 +205,7 @@ export default function PaletaRutasPage() {
         setPaletaLoading(true);
         try {
             const res = await obtenerColoresPublico();
-            if (res?.colores) {
-                setPaletaColores({ ...DEFAULT_COLORES_APP, ...res.colores });
-            } else {
-                setPaletaColores({ ...DEFAULT_COLORES_APP });
-            }
+            setPaletaColores(fusionarColoresApp(res?.colores));
         } catch { toast.error('No se pudo cargar los colores actuales.'); }
         finally { setPaletaLoading(false); }
     };
@@ -216,7 +224,7 @@ export default function PaletaRutasPage() {
         setPaletaSaving(true);
         try {
             await guardarColoresApp(paletaColores);
-            aplicarPaletaEnApp(paletaColores as ColoresPaleta);
+            aplicarPaletaEnApp(fusionarColoresApp(paletaColores) as ColoresPaleta);
             toast.success('Colores guardados y aplicados en toda la app.');
             cerrarModalPaleta();
         } catch (error: any) { toast.error(error?.message || 'No se pudo guardar los colores.'); }

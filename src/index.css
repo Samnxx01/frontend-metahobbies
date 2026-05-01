@@ -7,34 +7,34 @@
     --font-family-base: "Poppins", system-ui, sans-serif;
     --font-family-heading: "Poppins", system-ui, sans-serif;
     --button-font-weight: 600;
-    --background: 0 0% 100%;
+    /* Derivados en build de DEFAULT_COLORES_APP (hexToHsl misma formula que aplicarPaletaEnApp). */
+    --background: 339 81% 92%;           /* COLOR_BG #FBD9E5 */
     --foreground: 222.2 84% 4.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 328 78% 54%; /* Tickle Me Pink #F7854F */
+    --card: 34 67% 95%;                   /* COLOR_CHAMPAGNE #FBF4EB */
+    --card-foreground: 222 84% 5%;        /* alineado con aplicarPaletaEnApp */
+    --popover: 34 67% 95%;
+    --popover-foreground: 222 84% 5%;
+    --primary: 335 57% 49%;               /* COLOR_PRIMARY #C43670 */
     --primary-foreground: 0 0% 100%;
-    --secondary: 30 85% 76%; /* Sunset #F4CC98 */
-    --secondary-foreground: 328 78% 54%;
-    --muted: 345 100% 95%; /* Blush #FBD9E5 */
-    --muted-foreground: 328 47% 45%;
-    --accent: 335 55% 70%; /* Cherry Blossom #FBD9E5 */
-    --accent-foreground: 328 78% 54%;
-    --destructive: 339 75% 53%; /* Raspberry Rose #C43670 */
+    --secondary: 35 79% 77%;              /* COLOR_SUNSET #F3CC97 */
+    --secondary-foreground: 335 57% 49%;
+    --muted: 343 79% 92%;                  /* COLOR_LIGHT #FBDCE5 */
+    --muted-foreground: 335 57% 49%;
+    --accent: 336 81% 73%;                 /* COLOR_ACCENT #F283AF */
+    --accent-foreground: 335 57% 49%;
+    --destructive: 335 57% 49%;
     --destructive-foreground: 0 0% 100%;
-    --border: 345 100% 95%;
-    --input: 345 100% 95%;
-    --ring: 328 78% 54%;
+    --border: 343 79% 92%;
+    --input: 343 79% 92%;
+    --ring: 335 57% 49%;
     --radius: 0.5rem;
     
-    /* Colores adicionales de la paleta */
-    --tickle-pink: 328 78% 54%; /* #F7854F */
-    --champagne: 14 89% 62%; /* #FDF4EB */
-    --blush: 345 100% 95%; /* #FBD9E5 */
-    --cherry-blossom: 335 55% 70%; /* #FBD9E5 */
-    --raspberry-rose: 339 75% 53%; /* #C43670 */
-    --sunset: 30 91% 70%; /* #F5CC97 */
+    --tickle-pink: 335 57% 49%;
+    --champagne: 34 67% 95%;
+    --blush: 339 81% 92%;
+    --cherry-blossom: 336 81% 73%;
+    --raspberry-rose: 335 57% 49%;
+    --sunset: 35 79% 77%;
   }
 
   .dark {

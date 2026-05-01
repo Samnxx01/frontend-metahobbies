@@ -2,7 +2,9 @@ import React, { useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { BrandingConfig, BrandingPalette, obtenerBrandingPublico } from '@/app/services/brandingWidget';
 import { aplicarPaletaEnApp, restaurarPaletaLocal, type ColoresPaleta } from '@/app/utils/ColorUtils';
-import { obtenerColoresPublico } from '@/app/services/coloresAppService';
+import { obtenerColoresPublico, fusionarColoresApp, type ColoresApp } from '@/app/services/coloresAppService';
+import { getSocket } from '@/app/socket/socketService';
+import { useAuth } from '@/app/providers/AuthProvider';
 
 interface BrandingProviderProps {
   children: React.ReactNode;
@@ -113,19 +115,45 @@ const applyRouteOverrides = (branding: BrandingConfig, pathname: string): Brandi
 const cargarYAplicarPaletaActiva = async (): Promise<void> => {
   try {
     const res = await obtenerColoresPublico();
-    const colores = res?.colores as ColoresPaleta | null;
-    if (colores) {
-      aplicarPaletaEnApp(colores);
-    }
+    aplicarPaletaEnApp(fusionarColoresApp(res?.colores) as ColoresPaleta);
   } catch {
-    restaurarPaletaLocal();
+    if (!restaurarPaletaLocal()) {
+      aplicarPaletaEnApp(fusionarColoresApp() as ColoresPaleta);
+    }
   }
 };
 
 export default function BrandingProvider({ children }: BrandingProviderProps): React.ReactElement {
   const location = useLocation();
+  const { token } = useAuth();
   const appliedVarsRef = useRef<Set<string>>(new Set());
-  const paletaLoadedRef = useRef(false);
+
+  // Socket puede conectarse tras el login — enganchamos el evento de paleta en toda la app.
+  useEffect(() => {
+    const handler = (data: { colores?: Partial<ColoresPaleta> }): void => {
+      if (!data?.colores) return;
+      aplicarPaletaEnApp(fusionarColoresApp(data.colores as Partial<ColoresApp>) as ColoresPaleta);
+    };
+
+    let detach: (() => void) | undefined;
+    const tick = (): void => {
+      const s = getSocket();
+      if (s && !detach) {
+        s.on('paleta-colores-actualizada', handler);
+        detach = () => {
+          s.off('paleta-colores-actualizada', handler);
+          detach = undefined;
+        };
+      }
+    };
+
+    tick();
+    const id = window.setInterval(tick, 1000);
+    return () => {
+      window.clearInterval(id);
+      detach?.();
+    };
+  }, []);
 
   useEffect(() => {
     let brandingSnapshot: BrandingConfig | null = null;
@@ -137,31 +165,30 @@ export default function BrandingProvider({ children }: BrandingProviderProps): R
     });
 
     const cargarBranding = async (): Promise<void> => {
+      // Antes de cualquier await: misma paleta que ya tenía el usuario (post-login / LoadingScreen).
+      restaurarPaletaLocal();
+
       try {
         const branding = await obtenerBrandingPublico();
-        if (!branding) return;
-        const effectiveBranding = applyRouteOverrides(branding, location.pathname);
-        brandingSnapshot = effectiveBranding;
-        applyBranding(effectiveBranding, appliedVarsRef.current);
-        applyPaletteByMode(effectiveBranding, appliedVarsRef.current);
+        if (branding) {
+          const effectiveBranding = applyRouteOverrides(branding, location.pathname);
+          brandingSnapshot = effectiveBranding;
+          applyBranding(effectiveBranding, appliedVarsRef.current);
+          applyPaletteByMode(effectiveBranding, appliedVarsRef.current);
+        } else {
+          brandingSnapshot = null;
+        }
       } catch (error) {
+        brandingSnapshot = null;
         console.warn('No se pudo aplicar branding dinamico:', error);
       }
 
-      // Aplicar la paleta activa DESPUÉS del branding en cada cambio de ruta.
-      // Esto es necesario porque applyBranding sobreescribe las CSS variables
-      // en cada navegación. La paleta debe aplicarse siempre al final para
-      // que sus colores tengan precedencia sobre el branding base.
-      // Paso 1: restaurar desde localStorage instantáneamente (sin fetch)
-      // para que el color correcto aparezca de inmediato sin esperar la red.
+      // Tras tipografía/paleta del widget: volver a la paleta parametrizada guardada
+      // (applyPaletteByMode puede pisar --primary, etc.).
       restaurarPaletaLocal();
 
-      // Paso 2: solo en la primera carga, confirmado con el backend.
-      // En navegaciones posteriores, localStorage es suficiente.
-      if (!paletaLoadedRef.current) {
-        paletaLoadedRef.current = true;
-        await cargarYAplicarPaletaActiva();
-      }
+      // Servidor (colores-app) es fuente de verdad.
+      await cargarYAplicarPaletaActiva();
     };
 
     observer.observe(document.documentElement, {
@@ -176,7 +203,7 @@ export default function BrandingProvider({ children }: BrandingProviderProps): R
       appliedVarsRef.current.forEach((cssVar) => document.documentElement.style.removeProperty(cssVar));
       appliedVarsRef.current.clear();
     };
-  }, [location.pathname]);
+  }, [location.pathname, token]);
 
   return <>{children}</>;
 }

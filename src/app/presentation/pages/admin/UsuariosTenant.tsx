@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { RefreshCw, UserPlus, Shield, Building2, Globe, Plus, Loader2, Trash2, Edit } from 'lucide-react';
+import { RefreshCw, Shield, Building2, Globe, Plus, Loader2, Trash2, Edit } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -13,13 +13,16 @@ import { NodoTenantGlobalCard } from '@/app/presentation/components/admin/usuari
 import { UsuarioGlobalModal } from '@/app/presentation/components/admin/usuarios-tenant/UsuarioGlobalModal';
 import { UsuarioCorporativoModal } from '@/app/presentation/components/admin/usuarios-tenant/UsuarioCorporativoModal';
 import { UsuarioSuperAdminModal } from '@/app/presentation/components/admin/usuarios-tenant/UsuarioSuperAdminModal';
+import { TenantUserActionButtons } from '@/app/presentation/components/admin/usuarios-tenant/TenantUserActionButtons';
 import { RolGlobalEditModal } from '@/app/presentation/components/admin/usuarios-tenant/RolGlobalEditModal';
 import { RolCorporativoEditModal } from '@/app/presentation/components/admin/usuarios-tenant/RolCorporativoEditModal';
 import { RolesGlobalesModal } from '@/app/presentation/components/admin/usuarios-tenant/RolesGlobalesModal';
 import { RolesCorporativosModal } from '@/app/presentation/components/admin/usuarios-tenant/RolesCorporativosModal';
 import type { CorpNode, TenantGlobalInfo, TenantUsuario } from '@/app/services/tenantUsuariosService';
+import { useAuth } from '@/app/providers/AuthProvider';
 
 export default function UsuariosTenant(): React.ReactElement {
+    const { token } = useAuth();
     const {
         jerarquia,
         loadingJerarquia,
@@ -331,19 +334,16 @@ export default function UsuariosTenant(): React.ReactElement {
 
                         {/* Usuario SuperAdmin */}
                         <div className="flex flex-col items-center gap-1.5">
-                            {publicChecks?.diosUserExists ? (
-                                <Button size="sm" disabled className="opacity-60">
-                                    <Shield className="h-4 w-4 mr-2" />
-                                    Usuario SuperAdmin
-                                </Button>
-                            ) : (
-                                <Button size="sm" onClick={() => setModalSuperAdmin(true)}>
-                                    <Shield className="h-4 w-4 mr-2" />
-                                    Usuario SuperAdmin
-                                </Button>
-                            )}
+                            <Button
+                                size="sm"
+                                onClick={() => setModalSuperAdmin(true)}
+                                disabled={!publicChecks?.diosRolExists}
+                            >
+                                <Shield className="h-4 w-4 mr-2" />
+                                Usuario SuperAdmin
+                            </Button>
                             {publicChecks?.diosUserExists && (
-                                <span className="text-xs text-muted-foreground">Usuario DIOS ya existe</span>
+                                <span className="text-xs text-muted-foreground">Registro público por tenant activo</span>
                             )}
                         </div>
                     </div>
@@ -362,7 +362,7 @@ export default function UsuariosTenant(): React.ReactElement {
                     isSubmitting={isCreatingSuperAdmin}
                     submitError={errorCrearSuperAdmin}
                     scope={'SUPER_ADMIN'}
-                    onSincronizarGlobalCanReferir={sincronizarGlobalCanReferirUsuarios}
+                    onSincronizarGlobalCanReferir={token ? sincronizarGlobalCanReferirUsuarios : undefined}
                     isSincronizandoGlobal={isSincronizandoGlobalCanReferir}
                     sincronizarGlobalError={errorSincronizarGlobalCanReferir}
                 />
@@ -393,12 +393,11 @@ export default function UsuariosTenant(): React.ReactElement {
                             Actualizar
                         </Button>
                     )}
-                    {scope === 'SUPER_ADMIN' && (
-                        <Button size="sm" onClick={() => setModalSuperAdmin(true)}>
-                            <Shield className="h-4 w-4 mr-2" />
-                            Usuario SuperAdmin
-                        </Button>
-                    )}
+                    <TenantUserActionButtons
+                        scope={scope}
+                        onCreateSuperAdmin={() => setModalSuperAdmin(true)}
+                        onCreateGlobal={() => setModalGlobal(true)}
+                    />
                     {scope === 'SUPER_ADMIN' && (
                         <Button size="sm" variant="outline" onClick={() => { setModalDominios(true); setMostrarDesactivados(false); listarDominios(false); }}>
                             <Globe className="h-4 w-4 mr-2" />
@@ -415,12 +414,6 @@ export default function UsuariosTenant(): React.ReactElement {
                         <Button size="sm" variant="outline" onClick={() => setModalRolesCorporativos(true)}>
                             <Building2 className="h-4 w-4 mr-2" />
                             Rol Corporativo
-                        </Button>
-                    )}
-                    {(scope === 'SUPER_ADMIN' || scope === 'TENANT_GLOBAL') && (
-                        <Button size="sm" onClick={() => setModalGlobal(true)}>
-                            <UserPlus className="h-4 w-4 mr-2" />
-                            Usuario Global
                         </Button>
                     )}
                 </div>
@@ -479,7 +472,7 @@ export default function UsuariosTenant(): React.ReactElement {
                 isSubmitting={isCreatingSuperAdmin}
                 submitError={errorCrearSuperAdmin}
                 scope={scope as 'SUPER_ADMIN' | 'TENANT_GLOBAL' | 'CORPORATIVO'}
-                onSincronizarGlobalCanReferir={sincronizarGlobalCanReferirUsuarios}
+                onSincronizarGlobalCanReferir={token ? sincronizarGlobalCanReferirUsuarios : undefined}
                 isSincronizandoGlobal={isSincronizandoGlobalCanReferir}
                 sincronizarGlobalError={errorSincronizarGlobalCanReferir}
             />

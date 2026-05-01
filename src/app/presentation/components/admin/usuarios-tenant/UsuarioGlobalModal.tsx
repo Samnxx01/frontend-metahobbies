@@ -16,10 +16,13 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import { Info, Loader2, UserPlus, RefreshCw } from 'lucide-react';
+import { Loader2, UserPlus, RefreshCw } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
-import type { CreateUsuarioGlobalData, TenantGlobalInfo } from '@/app/services/tenantUsuariosService';
+import type { CreateUsuarioGlobalData, TenantGlobalInfo, TenantGlobalRegistroItem, TenantSuperAdminOption } from '@/app/services/tenantUsuariosService';
+import { getTenantsGlobalRegistro, getTenantsSuperAdmin, describeTenantSuperAdminOption } from '@/app/services/tenantUsuariosService';
 import { RH_OPTIONS } from './catalogos';
+import { useAuth } from '@/app/providers/AuthProvider';
+import { toast } from 'react-toastify';
 
 interface UsuarioGlobalModalProps {
     open: boolean;
@@ -77,11 +80,45 @@ export const UsuarioGlobalModal = ({
     isSincronizando = false,
     sincronizarError,
 }: UsuarioGlobalModalProps): React.ReactElement => {
+    const { token } = useAuth();
     const [form, setForm] = useState<FormState>(EMPTY_FORM);
+    const [saJerarquiaOpciones, setSaJerarquiaOpciones] = useState<TenantSuperAdminOption[]>([]);
+    const [saJerarquiaAncla, setSaJerarquiaAncla] = useState('');
+    const [globalesJerarquia, setGlobalesJerarquia] = useState<TenantGlobalRegistroItem[]>([]);
+    const [loadingSaJerarquia, setLoadingSaJerarquia] = useState(false);
+    const [loadingGlobJerarquia, setLoadingGlobJerarquia] = useState(false);
 
     useEffect(() => {
-        if (!open) setForm(EMPTY_FORM);
-    }, [open]);
+        if (!open) {
+            setForm(EMPTY_FORM);
+            setSaJerarquiaAncla('');
+            setGlobalesJerarquia([]);
+            return;
+        }
+        if (scope !== 'SUPER_ADMIN' || token) return;
+
+        setLoadingSaJerarquia(true);
+        getTenantsSuperAdmin(false)
+            .then((res) => setSaJerarquiaOpciones(Array.isArray(res?.tenants) ? res.tenants : []))
+            .catch(() => setSaJerarquiaOpciones([]))
+            .finally(() => setLoadingSaJerarquia(false));
+    }, [open, scope, token]);
+
+    useEffect(() => {
+        if (!open || scope !== 'SUPER_ADMIN' || token) return;
+        const ancla = saJerarquiaAncla.trim();
+        if (!ancla) {
+            setGlobalesJerarquia([]);
+            return;
+        }
+        setLoadingGlobJerarquia(true);
+        getTenantsGlobalRegistro(false, ancla)
+            .then((res) =>
+                setGlobalesJerarquia(Array.isArray(res?.tenantsGlobales) ? res.tenantsGlobales : []),
+            )
+            .catch(() => setGlobalesJerarquia([]))
+            .finally(() => setLoadingGlobJerarquia(false));
+    }, [open, scope, token, saJerarquiaAncla]);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         setForm(prev => ({ ...prev, [e.target.name]: e.target.value }));
@@ -108,6 +145,14 @@ export const UsuarioGlobalModal = ({
         if (scope === 'SUPER_ADMIN' && form.tenantGlobalId) {
             payload.tenantGlobalId = form.tenantGlobalId;
         }
+        if (scope === 'SUPER_ADMIN' && !payload.tenantGlobalId) {
+            toast.error(
+                !token && !saJerarquiaAncla.trim()
+                    ? 'Selecciona la rama Tenant SuperAdmin y luego el Tenant Global.'
+                    : 'Selecciona un Tenant Global.',
+            );
+            return;
+        }
         try {
             await onSubmit(payload);
             onClose();
@@ -129,26 +174,91 @@ export const UsuarioGlobalModal = ({
                 <form onSubmit={handleSubmit}>
                     <div className="py-4 space-y-4">
 
-                        {/* Selector de Tenant Global — solo visible para SUPER_ADMIN */}
+                        {/* SUPER_ADMIN: con JWT usa lista del padre; sin JWT elige rama SA → TG vía API jerárquica */}
                         {scope === 'SUPER_ADMIN' && (
-                            <div className="space-y-2">
-                                <Label>Tenant Global *</Label>
-                                <Select
-                                    value={form.tenantGlobalId}
-                                    onValueChange={handleSelect('tenantGlobalId')}
-                                    required
-                                >
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Selecciona un Tenant Global" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {tenantsGlobales.map(tg => (
-                                            <SelectItem key={tg.iud} value={tg.iud}>
-                                                {tg.razon_social ?? tg.titulo ?? tg.iud}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
+                            <div className="space-y-4">
+                                {!token && (
+                                    <div className="space-y-2">
+                                        <Label>Tenant SuperAdmin (rama jerárquica) *</Label>
+                                        {loadingSaJerarquia ? (
+                                            <p className="text-sm text-muted-foreground">Cargando ramas…</p>
+                                        ) : (
+                                            <Select
+                                                value={saJerarquiaAncla}
+                                                onValueChange={(v) => {
+                                                    setSaJerarquiaAncla(v);
+                                                    setForm((p) => ({ ...p, tenantGlobalId: '' }));
+                                                }}
+                                                required
+                                            >
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder="Elige la rama (codigoJerarquia)" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {saJerarquiaOpciones.map((sa) => {
+                                                        const { primary, principalLine } =
+                                                            describeTenantSuperAdminOption(sa);
+                                                        return (
+                                                            <SelectItem key={sa.iud} value={sa.iud}>
+                                                                <div className="flex flex-col gap-0.5 py-0.5 text-left">
+                                                                    <span className="font-medium leading-tight">{primary}</span>
+                                                                    <span className="text-xs text-muted-foreground leading-snug">
+                                                                        {principalLine}
+                                                                    </span>
+                                                                </div>
+                                                            </SelectItem>
+                                                        );
+                                                    })}
+                                                </SelectContent>
+                                            </Select>
+                                        )}
+                                        <p className="text-xs text-muted-foreground">
+                                            Sin sesión solo ves tenants acotados por jerarquía: primero raíces; puedes acotar sub-rama desde el formulario de SuperAdmin si hace falta.
+                                        </p>
+                                    </div>
+                                )}
+                                <div className="space-y-2">
+                                    <Label>Tenant Global *</Label>
+                                    {!token && loadingGlobJerarquia ? (
+                                        <p className="text-sm text-muted-foreground">Cargando Tenant Global…</p>
+                                    ) : (
+                                        <Select
+                                            value={form.tenantGlobalId}
+                                            onValueChange={handleSelect('tenantGlobalId')}
+                                            required
+                                            disabled={!token && !saJerarquiaAncla.trim()}
+                                        >
+                                            <SelectTrigger>
+                                                <SelectValue placeholder={
+                                                    !token && !saJerarquiaAncla.trim()
+                                                        ? 'Primero elige la rama SuperAdmin'
+                                                        : 'Selecciona un Tenant Global'
+                                                } />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {(token ? tenantsGlobales : globalesJerarquia).map((tg) => {
+                                                    const iud = tg.iud;
+                                                    const labelRaw = token
+                                                        ? (tg as TenantGlobalInfo).razon_social
+                                                            ?? (tg as TenantGlobalInfo).titulo
+                                                            ?? iud
+                                                        : (tg as TenantGlobalRegistroItem).coporativo?.razon_social
+                                                            ?? (tg as TenantGlobalRegistroItem).coporativo?.titulo
+                                                            ?? (tg as TenantGlobalRegistroItem).codigoJerarquia
+                                                            ?? iud;
+                                                    const codigo = !token
+                                                        ? (tg as TenantGlobalRegistroItem).codigoJerarquia
+                                                        : (tg as TenantGlobalInfo).codigoJerarquia;
+                                                    return (
+                                                        <SelectItem key={iud} value={iud}>
+                                                            {codigo ? `${codigo} · ${labelRaw}` : labelRaw}
+                                                        </SelectItem>
+                                                    );
+                                                })}
+                                            </SelectContent>
+                                        </Select>
+                                    )}
+                                </div>
                             </div>
                         )}
 
