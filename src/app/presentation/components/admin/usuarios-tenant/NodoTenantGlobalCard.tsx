@@ -8,7 +8,7 @@ import type { TenantGlobalNode, TenantUsuario, CorpNode } from '@/app/services/t
 // ─── Fila de usuario ─────────────────────────────────────────────────────────
 
 const UsuarioRow = ({ usuario, onEdit }: { usuario: TenantUsuario; onEdit?: () => void }) => (
-    <div className="flex items-center justify-between py-1.5 px-3 text-sm rounded hover:bg-muted/50">
+    <div className="flex items-center justify-between py-1.5 px-3 text-sm rounded transition-colors hover:bg-muted/50">
         <div className="flex items-center gap-2 min-w-0">
             <div className={`h-2 w-2 rounded-full flex-shrink-0 ${
                 usuario.estado === true || usuario.estado === 'activo' ? 'bg-green-500' : 'bg-gray-400'
@@ -18,7 +18,7 @@ const UsuarioRow = ({ usuario, onEdit }: { usuario: TenantUsuario; onEdit?: () =
         <div className="flex items-center gap-2 flex-shrink-0 ml-2">
             {usuario.rol && <Badge variant="outline" className="text-xs">{usuario.rol}</Badge>}
             {onEdit && (
-                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onEdit}>
+                <Button variant="ghost" size="icon" className="h-7 w-7 text-foreground/70 hover:bg-primary/10 hover:text-primary" onClick={onEdit}>
                     <Edit className="h-3.5 w-3.5" />
                 </Button>
             )}
@@ -67,7 +67,7 @@ export const NodoTenantGlobalCard = ({
             {/* Cabecera del TenantGlobal */}
             {tenantGlobal && (
                 <div
-                    className="flex items-center gap-2 cursor-pointer select-none group"
+                    className="flex items-center gap-2 cursor-pointer select-none group rounded-lg border border-border bg-card px-3 py-2 text-card-foreground shadow-sm transition-colors hover:bg-muted/30"
                     onClick={() => setExpanded(e => !e)}
                 >
                     <button
@@ -116,7 +116,7 @@ export const NodoTenantGlobalCard = ({
                         <Button
                             variant="ghost"
                             size="icon"
-                            className="h-7 w-7 ml-1"
+                            className="h-7 w-7 ml-1 text-foreground/70 hover:bg-primary/10 hover:text-primary"
                             onClick={e => { e.stopPropagation(); onEditTG(tenantGlobal); }}
                         >
                             <Edit className="h-3.5 w-3.5" />
@@ -130,12 +130,12 @@ export const NodoTenantGlobalCard = ({
                 <div className="space-y-3">
                     {/* Usuarios directos del TenantGlobal */}
                     {usuarios.length > 0 && (
-                        <div className="border rounded-lg overflow-hidden">
+                        <div className="overflow-hidden rounded-lg border border-border bg-card text-card-foreground shadow-sm">
                             <div className="px-3 py-2 bg-muted/30 text-xs font-semibold flex items-center gap-1.5">
                                 <Users className="h-3.5 w-3.5" />
                                 Usuarios del Tenant Global ({usuarios.length})
                             </div>
-                            <div className="divide-y">
+                            <div className="divide-y divide-border">
                                 {usuarios.map(u => (
                                     <UsuarioRow
                                         key={u.iud}
@@ -189,7 +189,7 @@ export const NodoTenantGlobalCard = ({
                     )}
 
                     {!tieneContenido && (
-                        <p className="text-sm text-muted-foreground">Sin registros en este tenant.</p>
+                        <p className="rounded-lg border border-dashed border-border bg-card p-3 text-sm text-muted-foreground">Sin registros en este tenant.</p>
                     )}
                 </div>
             )}

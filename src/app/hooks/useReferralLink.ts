@@ -5,6 +5,8 @@ interface ReferralData {
     codigoReferido: string;
     jwtReferido: string;
     enlaceCompleto: string;
+    guestSessionId?: string | null;
+    attributionId?: string | null;
 }
 
 interface UseReferralLinkReturn {
@@ -26,27 +28,35 @@ export const useReferralLink = (): UseReferralLinkReturn => {
 
             const token = localStorage.getItem('token');
             if (!token) {
-                throw new Error('No se encontró el token de autenticación');
+                throw new Error('No se encontro la sesion autenticada. Inicia sesion nuevamente para generar tu enlace.');
             }
 
             const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api';
-            const data = await apiFetch(`${API_BASE_URL}/referido/enlace/${token}`, {
-                method: 'GET'
+            const data = await apiFetch(`${API_BASE_URL}/referido/enlace/attribution`, {
+                method: 'POST',
+                body: {
+                    originType: 'membresia',
+                }
             });
 
-            // Construir el enlace completo usando la ruta actual
             const currentOrigin = window.location.origin;
-            const enlaceCompleto = `${currentOrigin}/membresia/pago/${data.jwtReferido}`;
+            const sessionQuery = data?.guestSessionId
+                ? `?guestSessionId=${encodeURIComponent(data.guestSessionId)}`
+                : '';
+            const enlaceCompleto = `${currentOrigin}/membresia/pago/${data.jwtReferido}${sessionQuery}`;
 
             setReferralData({
                 codigoReferido: data.codigoReferido,
                 jwtReferido: data.jwtReferido,
-                enlaceCompleto
+                enlaceCompleto,
+                guestSessionId: data?.guestSessionId || null,
+                attributionId: data?.attributionId || null,
             });
         } catch (err) {
-            const errorMessage = err instanceof Error ? err.message : 'Error desconocido';
+            const errorMessage = err instanceof Error ? err.message : 'No fue posible generar el enlace de referido.';
             setError(errorMessage);
             console.error('Error al obtener enlace de referido:', err);
+            throw new Error(errorMessage);
         } finally {
             setLoading(false);
         }

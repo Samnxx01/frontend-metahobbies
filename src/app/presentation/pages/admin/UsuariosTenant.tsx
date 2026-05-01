@@ -55,7 +55,7 @@ export default function UsuariosTenant(): React.ReactElement {
     const [modalRolesGlobales, setModalRolesGlobales] = useState(false);
     const [modalRolesCorporativos, setModalRolesCorporativos] = useState(false);
 
-    const scope = jerarquia?.scope ?? 'TENANT_GLOBAL';
+    const scope = jerarquia?.scope ?? null;
 
     // Lista de TenantGlobales para el selector del SUPER_ADMIN
     const tenantsGlobalesInfo: TenantGlobalInfo[] = (jerarquia?.tenantsGlobales ?? [])
@@ -276,7 +276,7 @@ export default function UsuariosTenant(): React.ReactElement {
     // ─── Loading ──────────────────────────────────────────────────────────────
     if (loadingJerarquia) {
         return (
-            <div className="flex items-center justify-center h-64 text-muted-foreground text-sm">
+            <div className="flex items-center justify-center h-64 rounded-lg border border-border bg-card text-muted-foreground text-sm shadow-sm">
                 Cargando jerarquía de usuarios...
             </div>
         );
@@ -284,7 +284,7 @@ export default function UsuariosTenant(): React.ReactElement {
 
     if (errorJerarquia) {
         return (
-            <div className="flex flex-col items-center justify-center h-64 gap-3">
+            <div className="flex flex-col items-center justify-center h-64 gap-3 rounded-lg border border-border bg-card shadow-sm">
                 <p className="text-destructive text-sm">{errorJerarquia.message}</p>
                 <Button variant="outline" size="sm" onClick={refetch}>
                     <RefreshCw className="h-4 w-4 mr-2" />
@@ -294,26 +294,105 @@ export default function UsuariosTenant(): React.ReactElement {
         );
     }
 
+    if (!scope) {
+        const publicChecks = jerarquia?.publicChecks;
+        const todosConfigurados = publicChecks?.diosRolExists && publicChecks?.diosUserExists;
+
+        return (
+            <div className="min-h-full p-4 md:p-6 lg:p-8 bg-background text-foreground">
+                <div className="flex flex-col items-center justify-center min-h-[60vh] gap-8">
+                    <div className="text-center space-y-2">
+                        <h1 className="text-2xl font-bold">Configuración inicial</h1>
+                        <p className="text-sm text-muted-foreground max-w-sm">
+                            {todosConfigurados
+                                ? 'El sistema ya tiene un administrador configurado. Inicia sesión para continuar.'
+                                : 'Para comenzar, crea el rol DIOS y luego el primer administrador del sistema.'}
+                        </p>
+                    </div>
+
+                    <div className="flex flex-wrap gap-4 justify-center">
+                        {/* Rol Global */}
+                        <div className="flex flex-col items-center gap-1.5">
+                            {publicChecks?.diosRolExists ? (
+                                <Button size="sm" variant="outline" disabled className="opacity-60">
+                                    <Globe className="h-4 w-4 mr-2" />
+                                    Rol Global
+                                </Button>
+                            ) : (
+                                <Button size="sm" variant="outline" onClick={() => setModalRolesGlobales(true)}>
+                                    <Globe className="h-4 w-4 mr-2" />
+                                    Rol Global
+                                </Button>
+                            )}
+                            {publicChecks?.diosRolExists && (
+                                <span className="text-xs text-muted-foreground">Rol DIOS ya existe</span>
+                            )}
+                        </div>
+
+                        {/* Usuario SuperAdmin */}
+                        <div className="flex flex-col items-center gap-1.5">
+                            {publicChecks?.diosUserExists ? (
+                                <Button size="sm" disabled className="opacity-60">
+                                    <Shield className="h-4 w-4 mr-2" />
+                                    Usuario SuperAdmin
+                                </Button>
+                            ) : (
+                                <Button size="sm" onClick={() => setModalSuperAdmin(true)}>
+                                    <Shield className="h-4 w-4 mr-2" />
+                                    Usuario SuperAdmin
+                                </Button>
+                            )}
+                            {publicChecks?.diosUserExists && (
+                                <span className="text-xs text-muted-foreground">Usuario DIOS ya existe</span>
+                            )}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Modales bootstrap */}
+                <RolesGlobalesModal
+                    open={modalRolesGlobales}
+                    onClose={() => { setModalRolesGlobales(false); refetch(); }}
+                    scope="SUPER_ADMIN"
+                />
+                <UsuarioSuperAdminModal
+                    open={modalSuperAdmin}
+                    onClose={() => setModalSuperAdmin(false)}
+                    onSubmit={crearUsuarioSuperAdmin}
+                    isSubmitting={isCreatingSuperAdmin}
+                    submitError={errorCrearSuperAdmin}
+                    scope={'SUPER_ADMIN'}
+                    onSincronizarGlobalCanReferir={sincronizarGlobalCanReferirUsuarios}
+                    isSincronizandoGlobal={isSincronizandoGlobalCanReferir}
+                    sincronizarGlobalError={errorSincronizarGlobalCanReferir}
+                />
+            </div>
+        );
+    }
+
     return (
-        <div className="p-6 space-y-6">
+        <div className="min-h-full p-4 md:p-6 lg:p-8 space-y-6 bg-background text-foreground">
             {/* Encabezado */}
             <div className="flex items-center justify-between flex-wrap gap-3">
                 <div>
-                    <h1 className="text-2xl font-bold">Usuarios Tenant</h1>
+                    <h1 className="text-2xl font-bold text-foreground">Usuarios Tenant</h1>
                     <p className="text-sm text-muted-foreground mt-1">
                         Jerarquía de usuarios por tenant
                     </p>
                 </div>
-                <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="gap-1">
-                        <Shield className="h-3.5 w-3.5" />
-                        {scope}
-                    </Badge>
-                    <Button variant="outline" size="sm" onClick={refetch}>
-                        <RefreshCw className="h-4 w-4 mr-2" />
-                        Actualizar
-                    </Button>
-                    {/* Agregar usuario SuperAdmin solo para SUPER_ADMIN */}
+                <div className="flex items-center gap-2 flex-wrap">
+                    {scope && (
+                        <Badge variant="outline" className="gap-1 border-primary/30 bg-primary/5 text-primary">
+                            <Shield className="h-3.5 w-3.5" />
+                            {scope}
+                        </Badge>
+                    )}
+                    {scope && (
+                        <Button variant="outline" size="sm" onClick={refetch}>
+                            <RefreshCw className="h-4 w-4 mr-2" />
+                            Actualizar
+                        </Button>
+                    )}
                     {scope === 'SUPER_ADMIN' && (
                         <Button size="sm" onClick={() => setModalSuperAdmin(true)}>
                             <Shield className="h-4 w-4 mr-2" />
@@ -326,16 +405,18 @@ export default function UsuariosTenant(): React.ReactElement {
                             Dominios
                         </Button>
                     )}
-                    {/* Gestión de roles */}
-                    <Button size="sm" variant="outline" onClick={() => setModalRolesGlobales(true)}>
-                        <Globe className="h-4 w-4 mr-2" />
-                        Rol Global
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={() => setModalRolesCorporativos(true)}>
-                        <Building2 className="h-4 w-4 mr-2" />
-                        Rol Corporativo
-                    </Button>
-                    {/* Agregar usuario global solo para SA y TG */}
+                    {scope && (
+                        <Button size="sm" variant="outline" onClick={() => setModalRolesGlobales(true)}>
+                            <Globe className="h-4 w-4 mr-2" />
+                            Rol Global
+                        </Button>
+                    )}
+                    {scope && (
+                        <Button size="sm" variant="outline" onClick={() => setModalRolesCorporativos(true)}>
+                            <Building2 className="h-4 w-4 mr-2" />
+                            Rol Corporativo
+                        </Button>
+                    )}
                     {(scope === 'SUPER_ADMIN' || scope === 'TENANT_GLOBAL') && (
                         <Button size="sm" onClick={() => setModalGlobal(true)}>
                             <UserPlus className="h-4 w-4 mr-2" />
@@ -348,14 +429,14 @@ export default function UsuariosTenant(): React.ReactElement {
             {/* SuperAdmins — solo visible para SUPER_ADMIN */}
             {scope === 'SUPER_ADMIN' && (jerarquia?.superAdmins.length ?? 0) > 0 && (
                 <section className="space-y-2">
-                    <h2 className="text-sm font-semibold flex items-center gap-2">
+                    <h2 className="text-sm font-semibold flex items-center gap-2 text-foreground">
                         <Shield className="h-4 w-4 text-primary" />
                         Super Administradores
                         <Badge variant="outline">{jerarquia!.superAdmins.length}</Badge>
                     </h2>
-                    <div className="border rounded-lg divide-y">
+                    <div className="overflow-hidden rounded-lg border border-border bg-card text-card-foreground shadow-sm divide-y divide-border">
                         {jerarquia!.superAdmins.map(sa => (
-                            <div key={sa.iud} className="flex items-center justify-between px-4 py-2.5 text-sm">
+                            <div key={sa.iud} className="flex items-center justify-between px-4 py-2.5 text-sm transition-colors hover:bg-muted/40">
                                 <div className="flex items-center gap-2">
                                     <div className={`h-2 w-2 rounded-full ${
                                         sa.estado === true || sa.estado === 'activo' ? 'bg-green-500' : 'bg-gray-400'
@@ -365,7 +446,7 @@ export default function UsuariosTenant(): React.ReactElement {
                                 <div className="flex items-center gap-2">
                                     <Badge variant="default" className="text-xs">{sa.rol ?? 'SUPER_ADMIN'}</Badge>
                                     {scope === 'SUPER_ADMIN' && (
-                                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => void openEditUser(sa)}>
+                                        <Button variant="ghost" size="icon" className="h-7 w-7 text-foreground/70 hover:bg-primary/10 hover:text-primary" onClick={() => void openEditUser(sa)}>
                                             <Edit className="h-3.5 w-3.5" />
                                         </Button>
                                     )}
@@ -418,7 +499,7 @@ export default function UsuariosTenant(): React.ReactElement {
 
             {/* Modal Dominios */}
             <Dialog open={modalDominios} onOpenChange={setModalDominios}>
-                <DialogContent className="max-h-[90vh] overflow-auto sm:max-w-lg">
+                <DialogContent className="max-h-[90vh] overflow-auto sm:max-w-lg bg-card text-card-foreground">
                     <DialogHeader>
                         <DialogTitle className="flex items-center gap-2">
                             <Globe className="h-5 w-5 text-primary" /> Dominios registrados
@@ -426,7 +507,7 @@ export default function UsuariosTenant(): React.ReactElement {
                     </DialogHeader>
                     <div className="space-y-5">
                         {/* Formulario */}
-                        <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
+                        <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3">
                             <p className="text-sm font-semibold">Registrar nuevo dominio</p>
                             <div className="space-y-1">
                                 <Label htmlFor="dom-etiquetas">Etiqueta</Label>
@@ -495,7 +576,7 @@ export default function UsuariosTenant(): React.ReactElement {
                                         const id = String(d?.iud || d?._id || i);
                                         const activo = d?.estadoDominio !== false;
                                         return (
-                                            <div key={id} className="rounded-lg border bg-background p-3 space-y-1">
+                                            <div key={id} className="rounded-lg border border-border bg-background/70 p-3 space-y-1 shadow-sm">
                                                 <div className="flex items-center justify-between gap-2">
                                                     <p className="text-sm font-medium">{String(d?.etiquetas || '-')}</p>
                                                     <div className="flex items-center gap-1.5 shrink-0">
@@ -589,7 +670,7 @@ export default function UsuariosTenant(): React.ReactElement {
 
             {/* ── Modal Editar TenantGlobal ────────────────────────────────── */}
             <Dialog open={editTGModal} onOpenChange={(v) => { if (!v) setEditTGModal(false); }}>
-                <DialogContent className="sm:max-w-md">
+                <DialogContent className="sm:max-w-md bg-card text-card-foreground">
                     <DialogHeader>
                         <DialogTitle className="flex items-center gap-2">
                             <Building2 className="h-4 w-4 text-primary" />

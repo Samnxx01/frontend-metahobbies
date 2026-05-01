@@ -43,7 +43,7 @@ export default function AboutUs(): React.ReactElement {
 
                     {/* Sección de la Imagen (Columna 1) */}
                     <div className="md:col-span-4 order-1 md:order-2 flex justify-center">
-                        <div className="rounded-md overflow-hidden shadow-lg w-full max-w-sm bg-white h-[350px] sm:h-[550px]">
+                        <div className="rounded-md overflow-hidden shadow-lg w-full max-w-sm bg-card h-[350px] sm:h-[550px]">
                             <img
                                 src={aboutConfig.imagen}
                                 alt="Logo Mabs by Gabs"
@@ -56,7 +56,7 @@ export default function AboutUs(): React.ReactElement {
                     <div className="md:col-span-8 order-2 md:order-1">
 
                         {/* Chip / Badge */}
-                        <Badge variant="default" className="mb-4 bg-primary/20 text-primary font-semibold hover:bg-primary/20">
+                        <Badge variant="outline" className="mb-4 border-primary/20 bg-primary/20 text-primary font-semibold hover:bg-primary/20">
                             Programa de Afiliados
                         </Badge>
 

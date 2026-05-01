@@ -10,8 +10,8 @@ export default function KpiCard({
     label, 
     value, 
     sub, 
-    subColor = '#757575', 
-    borderColor = '#eee', 
+    subColor = 'hsl(var(--muted-foreground))', 
+    borderColor = 'hsl(var(--border))', 
     children 
 }: KpiCardProps): React.ReactElement {
 

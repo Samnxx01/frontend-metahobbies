@@ -69,13 +69,17 @@ export interface SuperAdminNode {
     tenantsGlobales: TenantGlobalNode[];
 }
 
+export interface PublicChecks {
+    diosRolExists: boolean;
+    diosUserExists: boolean;
+}
+
 export interface JerarquiaResponse {
-    scope: 'SUPER_ADMIN' | 'TENANT_GLOBAL' | 'CORPORATIVO';
-    // Lista plana de usuarios sin tenant (compatibilidad)
+    scope: 'SUPER_ADMIN' | 'TENANT_GLOBAL' | 'CORPORATIVO' | null;
     superAdmins: TenantUsuario[];
     tenantsGlobales: TenantGlobalNode[];
-    // Árbol jerárquico (nuevo — cuando el backend lo soporte)
     superAdminTree?: SuperAdminNode[];
+    publicChecks?: PublicChecks;
 }
 
 export interface CreateUsuarioGlobalData {

@@ -73,7 +73,9 @@ export interface ColoresPaleta {
 export function aplicarPaletaEnApp(colores: ColoresPaleta): void {
     const root = document.documentElement;
 
-    const hsl = (key: PaletaColorKey) => hexToHsl(colores[key]);
+    const hsl: any = (key: PaletaColorKey) => hexToHsl(colores[key]);
+
+    root.style.setProperty('--background', hsl('COLOR_BG'));
 
     // COLOR_PRIMARY → color dominante de la app
     root.style.setProperty('--primary', hsl('COLOR_PRIMARY'));
@@ -131,6 +133,7 @@ export function restaurarPaletaLocal(): boolean {
 export function limpiarPaletaApp(): void {
     const root = document.documentElement;
     const vars = [
+        '--background',
         '--primary', '--primary-foreground', '--ring',
         '--accent', '--accent-foreground',
         '--secondary', '--secondary-foreground',

@@ -3,12 +3,23 @@ import { toast } from 'react-toastify';
 import { apiFetch } from '@/app/services/api';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, Play, RefreshCw, Settings2, Shield, ShieldCheck, Sparkles, Wand2, X } from 'lucide-react';
+import {
+  Building2,
+  KeyRound,
+  Loader2,
+  Play,
+  RefreshCw,
+  Search,
+  Settings2,
+  Shield,
+  ShieldCheck,
+  X,
+} from 'lucide-react';
 
 type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE';
 type EndpointSection = 'tenant' | 'permisos' | 'corporativo';
@@ -39,18 +50,30 @@ type EndpointSpec = {
 
 interface ParametrosGobernanzaProps {
   mode?: 'full' | 'rules' | 'superAdmin' | 'superAdminRules';
+  initialSection?: EndpointSection;
+  lockedSection?: EndpointSection | null;
+  allowedEndpointIds?: string[];
 }
 
 const SUPERADMIN_RULES_ENDPOINT_IDS = new Set([
-  'tenant-crear-regla-dios',
-  'tenant-actualizar-regla-dios',
+  'tenant-crear-global-reglas',
+  'tenant-listar-reglas',
+  'tenant-crear-dios-reglas',
+  'tenant-actualizar-dios-reglas',
 ]);
 
 const RULES_ENDPOINT_IDS = new Set([
   'tenant-crear-global-reglas',
   'tenant-listar-reglas',
   'tenant-actualizar-global-reglas',
+  'tenant-desactivar-global-reglas',
+  'tenant-eliminar-global-reglas',
+  'tenant-crear-dios-reglas',
+  'tenant-actualizar-dios-reglas',
 ]);
+
+// IDs que pertenecen exclusivamente a componentes con allowedEndpointIds.
+// Se mantienen en RULES_ENDPOINT_IDS para excluirlos del modo "full" sin allowedSet.
 
 type Vista = { id: string; label: string; path: string };
 type Accion = { id: string; label: string; method: string };
@@ -58,6 +81,7 @@ type TenantGlobal = {
   id: string;
   label: string;
   corporativo: string;
+  correo?: string;
   tenantSuperAdmin?: string;
   tenantGlobalAdmin?: string;
 };
@@ -229,10 +253,36 @@ const METHOD_STYLE: Record<HttpMethod, string> = {
   DELETE: 'bg-red-100 text-red-700 border-red-200',
 };
 
+const SECTION_META: Record<
+  EndpointSection,
+  { label: string; description: string; icon: React.ElementType }
+> = {
+  tenant: {
+    label: 'Gobernanza Tenant',
+    description: 'Tenants, reglas y jerarquia visible.',
+    icon: ShieldCheck,
+  },
+  permisos: {
+    label: 'Gobernanza Permisos',
+    description: 'Herencias, vistas y acciones por alcance.',
+    icon: KeyRound,
+  },
+  corporativo: {
+    label: 'Gobernanza Corporativo',
+    description: 'Catalogos, roles y niveles corporativos.',
+    icon: Building2,
+  },
+};
+
 const HIDDEN_ENDPOINT_IDS = new Set([
   'tenant-crear-global-usuario',
   'tenant-crear-global-admin',
   'tenant-listar-libres',
+  // Trasladados a PermisosTenant
+  'perm-usuario-tenant-global',
+  'perm-admin-tenant-global-listar',
+  'perm-admin-tenant-global-actualizar',
+  'perm-admin-tenant-global-desactivar',
 ]);
 
 const ENDPOINTS: EndpointSpec[] = [
@@ -362,23 +412,47 @@ const ENDPOINTS: EndpointSpec[] = [
     ],
   },
   {
-    id: 'tenant-crear-regla-dios',
+    id: 'tenant-desactivar-global-reglas',
+    section: 'tenant',
+    actor: 'ambos',
+    method: 'DELETE',
+    path: '/api/config/tenant/tipo/desactivar/globales/reglas/jerarquia',
+    title: 'Desactivar regla global',
+    description: 'Desactiva una regla global usando header x-regla-id.',
+    fields: [
+      { name: 'x-regla-id', label: 'x-regla-id', type: 'id', required: true, header: true },
+    ],
+  },
+  {
+    id: 'tenant-eliminar-global-reglas',
+    section: 'tenant',
+    actor: 'ambos',
+    method: 'DELETE',
+    path: '/api/config/tenant/tipo/eliminar/globales/reglas/jerarquia',
+    title: 'Eliminar regla global',
+    description: 'Elimina una regla global usando header x-regla-id.',
+    fields: [
+      { name: 'x-regla-id', label: 'x-regla-id', type: 'id', required: true, header: true },
+    ],
+  },
+  {
+    id: 'tenant-crear-dios-reglas',
     section: 'tenant',
     actor: 'tenantSuperAdmin',
     method: 'POST',
     path: '/api/config/tenant/tipo/crear/dios/reglas/jerarquia/roles',
     title: 'Crear regla DIOS',
-    description: 'Crea la regla DIOS usando el contexto del JWT (sin payload manual).',
+    description: 'Crea la regla de plataforma para el rol DIOS. Solo requiere el JWT del SA. Incluye todas las vistas y acciones activas.',
     fields: [],
   },
   {
-    id: 'tenant-actualizar-regla-dios',
+    id: 'tenant-actualizar-dios-reglas',
     section: 'tenant',
     actor: 'tenantSuperAdmin',
     method: 'PUT',
     path: '/api/config/tenant/tipo/actualizar/dios/reglas/jerarquia/roles',
     title: 'Actualizar regla DIOS',
-    description: 'Sincroniza la regla DIOS vigente usando el contexto del JWT.',
+    description: 'Sincroniza la regla DIOS existente con las vistas y acciones activas actuales.',
     fields: [],
   },
   { id: 'perm-listar-herencias', section: 'permisos', actor: 'ambos', method: 'GET', path: '/api/config/permisos/listar/usu/tenant/libres', title: 'Listar herencias', description: 'Lista permisos heredados del usuario autenticado.', fields: [] },
@@ -760,14 +834,38 @@ const buildTenantGlobalContextLabel = (row: any, id: string): string => {
     id
   );
 };
+
+const pickTenantCorreo = (row: any): string => {
+  const usuariosAsociados = Array.isArray(row?.usuariosAsociados) ? row.usuariosAsociados : [];
+  return String(
+    row?.correo ||
+    row?.email ||
+    row?.usuarioId?.correo ||
+    row?.usuarioId?.email ||
+    row?.rolesMabs?.usuarioId?.correo ||
+    row?.rolesMabs?.usuarioId?.email ||
+    usuariosAsociados.find((usuario: any) => usuario?.correo || usuario?.email)?.correo ||
+    usuariosAsociados.find((usuario: any) => usuario?.correo || usuario?.email)?.email ||
+    ''
+  ).trim();
+};
 const isTenantSuperAdminScopeOption = (value: string): boolean =>
   String(value || '').trim().startsWith(TENANT_SUPERADMIN_SCOPE_PREFIX);
 
-const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'full' }) => {
+const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
+  mode = 'full',
+  initialSection = 'tenant',
+  lockedSection = null,
+  allowedEndpointIds,
+}) => {
   const isRulesMode = mode === 'rules' || mode === 'superAdminRules';
-  const [activeSection, setActiveSection] = useState<EndpointSection>('tenant');
+  const initialResolvedSection = lockedSection ?? initialSection;
+  const [activeSection, setActiveSection] = useState<EndpointSection>(initialResolvedSection);
   const [endpointModal, setEndpointModal] = useState<EndpointSpec | null>(null);
   const [endpointSearch, setEndpointSearch] = useState('');
+  const [reglasSearch, setReglasSearch] = useState('');
+  const [vistaSearchByEndpoint, setVistaSearchByEndpoint] = useState<Record<string, string>>({});
+  const [reglasTenantFilter, setReglasTenantFilter] = useState('');
   const [loadingData, setLoadingData] = useState(false);
   const [running, setRunning] = useState<Record<string, boolean>>({});
   const [result, setResult] = useState<Record<string, string>>({});
@@ -792,6 +890,8 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
   const [tenantCorpErrorByEndpoint, setTenantCorpErrorByEndpoint] = useState<Record<string, string>>({});
   const [herenciasUsuario, setHerenciasUsuario] = useState<any[]>([]);
   const [herenciasExistentesPorTG, setHerenciasExistentesPorTG] = useState<Record<string, any[]>>({});
+  const [herenciasPorUsuario, setHerenciasPorUsuario] = useState<Record<string, any[]>>({});
+  const [loadingHerenciasPorUsuario, setLoadingHerenciasPorUsuario] = useState<Record<string, boolean>>({});
   const [herenciaAsociadaOptionsByEndpoint, setHerenciaAsociadaOptionsByEndpoint] = useState<Record<string, GenericSelectOption[]>>({});
   const [herenciaAsociadaDataByEndpoint, setHerenciaAsociadaDataByEndpoint] = useState<Record<string, Record<string, any>>>({});
   const [syncInfoByEndpoint, setSyncInfoByEndpoint] = useState<Record<string, any>>({});
@@ -806,6 +906,9 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
   const [catalogSeedRunning, setCatalogSeedRunning] = useState(false);
   const [catalogItems, setCatalogItems] = useState<{ iud: string; tipo_comprador: string; sigla: string; esDefault: boolean }[]>([]);
   const [catalogItemsLoaded, setCatalogItemsLoaded] = useState(false);
+  const [deltaByEndpoint, setDeltaByEndpoint] = useState<Record<string, any>>({});
+  const [loadingDeltaByEndpoint, setLoadingDeltaByEndpoint] = useState<Record<string, boolean>>({});
+  const [tenantFilterByEndpoint, setTenantFilterByEndpoint] = useState<Record<string, string>>({});
 
   const loadCatalogItems = async () => {
     try {
@@ -856,6 +959,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
 
   const visibleTenantPrimaryForms = useMemo(() => {
     if (mode === 'superAdminRules') return [];
+    if (allowedEndpointIds) return [];
     if (isRulesMode) return tenantPrimaryForms.rules ? [tenantPrimaryForms.rules] : [];
 
     // modo superAdmin: solo muestra el flujo puro tenantGlobal (trasladado desde Gobernanza)
@@ -867,11 +971,54 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
     const items = [];
     if (tenantPrimaryForms.superAdmin) items.push(tenantPrimaryForms.superAdmin);
     return items;
-  }, [isRulesMode, mode, tenantPrimaryForms]);
+  }, [allowedEndpointIds, isRulesMode, mode, tenantPrimaryForms]);
 
   const actorTieneScopeTenantSuperAdmin = Boolean(String(tenantGlobalActor?.tenantSuperAdminId || '').trim());
   const actorTieneGlobal = Boolean(String(tenantGlobalActor?.tenantGlobalId || '').trim());
   const actorTieneScopeTenantGlobal = actorTieneGlobal && !actorTieneScopeTenantSuperAdmin;
+  const tenantGlobalSelectsLoaded = useMemo(
+    () => Object.keys(tenantGlobalSelects || {}).length > 0,
+    [tenantGlobalSelects]
+  );
+  const tenantUpdateTargets = useMemo(() => {
+    const actorTenantGlobalId = String(tenantGlobalActor?.tenantGlobalId || '').trim();
+    const actorTenantSuperAdminId = String(tenantGlobalActor?.tenantSuperAdminId || '').trim();
+    const esSuperAdmin = !!actorTenantSuperAdminId;
+    const esTenantGlobal = !!actorTenantGlobalId && !esSuperAdmin;
+
+    const classifyScope = (tenant: TenantGlobal): 'tenantSuperAdmin' | 'tenantGlobal' | 'tenantCorporativo' => {
+      const parentTenantGlobalId = String(tenant?.tenantGlobalAdmin || '').trim();
+      const superAdminRef = String(tenant?.tenantSuperAdmin || '').trim();
+
+      if (actorTenantGlobalId && tenant.id === actorTenantGlobalId) return 'tenantGlobal';
+      if (parentTenantGlobalId) return 'tenantCorporativo';
+      if (superAdminRef) return 'tenantSuperAdmin';
+      return 'tenantGlobal';
+    };
+
+    return tenantGlobales
+      .filter((tenant) => {
+        if (esSuperAdmin) return true;
+        if (!esTenantGlobal) return false;
+        const parentTenantGlobalId = String(tenant?.tenantGlobalAdmin || '').trim();
+        return tenant.id === actorTenantGlobalId || parentTenantGlobalId === actorTenantGlobalId;
+      })
+      .map((tenant) => {
+        const scope = classifyScope(tenant);
+        const scopeLabel =
+          scope === 'tenantSuperAdmin'
+            ? 'tenantSuperAdmin'
+            : scope === 'tenantCorporativo'
+            ? 'tenantCorporativo'
+            : 'tenantGlobal';
+        const corporativo = String(tenant?.corporativo || '').trim();
+        return {
+          id: tenant.id,
+          label: `${scopeLabel} | ${tenant.label}${corporativo ? ` | ${corporativo}` : ''}`,
+          meta: { scope },
+        };
+      });
+  }, [tenantGlobalActor, tenantGlobales]);
 
   const endpointDisponibleParaScope = (endpoint: EndpointSpec) => {
     if (endpoint.actor === 'ambos') return true;
@@ -889,17 +1036,21 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
     }
     return false;
   };
-  const availableEndpoints = useMemo(
-    () =>
-      mode === 'rules'
-        ? ENDPOINTS.filter((endpoint) => RULES_ENDPOINT_IDS.has(endpoint.id))
-        : mode === 'superAdminRules'
-          ? ENDPOINTS.filter((endpoint) => SUPERADMIN_RULES_ENDPOINT_IDS.has(endpoint.id))
-          : mode === 'superAdmin'
-            ? ENDPOINTS.filter((endpoint) => endpoint.actor === 'tenantSuperAdmin' && !RULES_ENDPOINT_IDS.has(endpoint.id) && !HIDDEN_ENDPOINT_IDS.has(endpoint.id))
-            : ENDPOINTS.filter((endpoint) => !RULES_ENDPOINT_IDS.has(endpoint.id) && !HIDDEN_ENDPOINT_IDS.has(endpoint.id)),
-    [mode]
+  const allowedSet = useMemo(
+    () => (allowedEndpointIds ? new Set(allowedEndpointIds) : null),
+    [allowedEndpointIds]
   );
+  const availableEndpoints = useMemo(() => {
+    // allowedEndpointIds overrides everything: muestra exactamente esos IDs sin filtros de ocultación
+    if (allowedSet) return ENDPOINTS.filter((e) => allowedSet.has(e.id));
+    return mode === 'rules'
+      ? ENDPOINTS.filter((endpoint) => RULES_ENDPOINT_IDS.has(endpoint.id))
+      : mode === 'superAdminRules'
+        ? ENDPOINTS.filter((endpoint) => SUPERADMIN_RULES_ENDPOINT_IDS.has(endpoint.id))
+        : mode === 'superAdmin'
+          ? ENDPOINTS.filter((endpoint) => endpoint.actor === 'tenantSuperAdmin' && !RULES_ENDPOINT_IDS.has(endpoint.id) && !HIDDEN_ENDPOINT_IDS.has(endpoint.id))
+          : ENDPOINTS.filter((endpoint) => !RULES_ENDPOINT_IDS.has(endpoint.id) && !HIDDEN_ENDPOINT_IDS.has(endpoint.id));
+  }, [mode, allowedSet]);
   const sectionCounts = useMemo(
     () =>
       availableEndpoints.reduce(
@@ -915,7 +1066,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
     const esSA = Boolean(String(tenantGlobalActor?.tenantSuperAdminId || '').trim());
     const esTG = Boolean(String(tenantGlobalActor?.tenantGlobalId || '').trim()) && !esSA;
     const esCorp = Boolean(String(tenantGlobalActor?.tenantCorporativoId || '').trim()) && !esSA && !esTG;
-    return availableEndpoints.filter((e) => e.section === activeSection && !e.primary)
+    return availableEndpoints.filter((e) => e.section === activeSection && (!e.primary || !!allowedEndpointIds))
       .filter((e) => {
         if (activeSection === 'tenant' && (e.id === 'tenant-listar-libres-superadmin' || e.id === 'tenant-listar-libres-tenantglobal')) {
           return true;
@@ -1013,6 +1164,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
             })
             .filter(Boolean) as GenericSelectOption[],
           apisDominios: mapOptions(data.dominios, 'dominio'),
+          apis: mapOptions(data.dominios, 'dominio'),
           accionesUsu: mapOptions(data.acciones, 'method'),
           rolesMabs: rawRolesMabs
             .map((row: any) => {
@@ -1083,6 +1235,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
               id,
               label,
               corporativo: pickTenantCorporate(row),
+              correo: pickTenantCorreo(row),
               tenantSuperAdmin: String(row?.tenantSuperAdmin || '').trim() || undefined,
               tenantGlobalAdmin: String(row?.tenantGlobalAdmin || '').trim() || undefined,
             });
@@ -1107,6 +1260,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
               id,
               label,
               corporativo: pickTenantCorporate(row),
+              correo: pickTenantCorreo(row),
               tenantSuperAdmin: String(row?.tenantSuperAdmin || '').trim() || undefined,
               tenantGlobalAdmin: String(row?.tenantGlobalAdmin || '').trim() || undefined,
             });
@@ -1164,6 +1318,17 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
         });
         const fromHerencia = Array.from(map.values());
         if (fromHerencia.length) accionesResolved = fromHerencia;
+      }
+
+      // Fallback: usar acciones del endpoint de selects (accesible para todos los roles)
+      if (!accionesResolved.length && selectsRes.status === 'fulfilled') {
+        const selectsData = (selectsRes.value as any)?.data || {};
+        const rawAcciones = Array.isArray(selectsData.acciones) ? selectsData.acciones : [];
+        const mapped = rawAcciones
+          .filter((a: any) => a?.estadoAccion !== false)
+          .map((a: any) => ({ id: String(a?._id || a?.id || ''), label: String(a?.etiquetas || a?.method || a?._id || ''), method: String(a?.method || '') }))
+          .filter((a: Accion) => a.id);
+        if (mapped.length) accionesResolved = mapped;
       }
 
       if (herenciasRes.status === 'fulfilled' && (!vistasResolved.length || rutasRes.status !== 'fulfilled')) {
@@ -1304,7 +1469,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
                   heredaOptionsMap.set(ridRaw, { id: ridRaw, label: `[REGLA] ${base} | ${ridRaw}` });
                   heredaScopeMap[ridRaw] = r?.securityPlatform === true ? 'tenantSuperAdmin' : 'tenantGlobal';
                 }
-                return rid ? { id: rid, label: `[${platformFlag}] ${base} | ${ridEncrypted || ridRaw}` } : null;
+                return rid ? { id: rid, label: `[${platformFlag}] ${base}` } : null;
               })
             .filter(Boolean) as ReglaOption[]
         );
@@ -1345,6 +1510,14 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
       setActiveSection('tenant');
     }
   }, [isRulesMode, activeSection]);
+  useEffect(() => {
+    if (isRulesMode) return;
+    if (lockedSection) {
+      setActiveSection(lockedSection);
+      return;
+    }
+    setActiveSection(initialSection);
+  }, [initialSection, isRulesMode, lockedSection]);
 
   useEffect(() => {
     if (endpointModal?.id === 'corp-crear-catalogo') {
@@ -1399,12 +1572,69 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
       return changed ? next : prev;
     });
   }, [tenantGlobalActor, tenantGlobalSelects.coporativo, tenantGlobalSelects.nvlGeneracionTenant]);
+  useEffect(() => {
+    const endpointId = 'tenant-actualizar-global';
+    const selectedId = String(formData?.[endpointId]?.id || '').trim();
+    if (!selectedId) return;
+    if (tenantUpdateTargets.some((opt) => opt.id === selectedId)) return;
+    setFieldValue(endpointId, 'id', '');
+  }, [formData, tenantUpdateTargets]);
+  // Opciones de tenant derivadas del catálogo de reglas (para el filtro de tenant-actualizar-global-reglas)
+  const tenantOptionsFromRuleCatalog = useMemo(() => {
+    const seen = new Map<string, string>();
+    const tenantInfoById = new Map(tenantGlobales.map((tenant) => [String(tenant.id), tenant]));
+    Object.values(ruleCatalog).forEach((r: any) => {
+      if (r?.securityPlatform === true) return; // Excluir reglas DIOS
+      const tenantRef = Array.isArray(r?.generacionGlovallNvlRoles) ? r.generacionGlovallNvlRoles[0] : null;
+      const tenantId = String(tenantRef?._id || tenantRef || '').trim();
+      if (!tenantId || seen.has(tenantId)) return;
+      const tenantInfo = tenantInfoById.get(tenantId);
+      const rolMabs = String(
+        tenantRef?.rolesMabs?.rol ||
+        (Array.isArray(tenantRef?.rolesMabs) ? tenantRef.rolesMabs[0]?.rol : '') ||
+        tenantInfo?.label?.split('|')?.[0] ||
+        ''
+      ).trim();
+      const correo = String(pickTenantCorreo(tenantRef) || tenantInfo?.correo || '').trim();
+      const label = [rolMabs || 'TENANT', correo, tenantId].filter(Boolean).join(' | ');
+      seen.set(tenantId, label);
+    });
+    return Array.from(seen.entries()).map(([id, label]) => ({ id, label }));
+  }, [ruleCatalog, tenantGlobales]);
+
   const getCatalogSelection = (endpointId: string): CatalogSelection =>
     catalogSelection[endpointId] ?? { vistas: [], acciones: [] };
   const setCatalogSelectionFor = (endpointId: string, next: CatalogSelection) => {
     setCatalogSelection((prev) => ({ ...prev, [endpointId]: next }));
   };
+  const getReglasFiltradasPorTenant = (endpointId: string): ReglaOption[] => {
+    const tenantFiltro = tenantFilterByEndpoint[endpointId] || '';
+    if (!tenantFiltro) return reglas;
+
+    return reglas.filter((r) => {
+      const rule = ruleCatalog[r.id];
+      const tenantRef = Array.isArray(rule?.generacionGlovallNvlRoles)
+        ? rule.generacionGlovallNvlRoles[0]
+        : null;
+      const tenantId = String(tenantRef?._id || tenantRef || '').trim();
+      return tenantId === tenantFiltro;
+    });
+  };
+  const ensureReglaSeleccionadaParaVista = (endpointId: string): void => {
+    if (endpointId !== 'tenant-actualizar-global-reglas') return;
+    if (getFieldValue(endpointId, 'x-regla-id').trim()) return;
+
+    const firstRule = getReglasFiltradasPorTenant(endpointId)[0];
+    if (!firstRule?.id) return;
+
+    setFieldValue(endpointId, 'x-regla-id', firstRule.id);
+    applyRuleToForm(endpointId, firstRule.id);
+  };
   const toggleCatalogItem = (endpointId: string, key: 'vistas' | 'acciones', id: string, checked: boolean) => {
+    if (checked && key === 'vistas') {
+      ensureReglaSeleccionadaParaVista(endpointId);
+    }
+
     const current = getCatalogSelection(endpointId);
     const set = new Set(current[key]);
     if (checked) set.add(id); else set.delete(id);
@@ -1515,7 +1745,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
       });
 
       if (herenciaDirecta.length > 0) {
-        // El tenant ya tiene herencia parametrizada â€” mostrar esa (y solo esa)
+        // El tenant ya tiene herencia parametrizada - mostrar esa (y solo esa)
         const tgInfo = tenantGlobales.find((t) => String(t?.id || '').trim() === tg);
         const tgNombre = tgInfo ? String(tgInfo.label).split('|')[0].trim() : tg.slice(-6);
         const seen = new Set<string>();
@@ -1550,7 +1780,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
           seenReglas.add(reglaId);
           const vCount = Array.isArray(rule?.recurso) ? rule.recurso.length : 0;
           const aCount = Array.isArray(rule?.accionesUsu) ? rule.accionesUsu.length : 0;
-          // El modelo reglas no tiene campo nombre â€” se deriva del rolesMabs.rol del primer tenantGlobal asignado
+          // El modelo reglas no tiene campo nombre - se deriva del rolesMabs.rol del primer tenantGlobal asignado
           const tenantRef = Array.isArray(rule?.generacionGlovallNvlRoles) ? rule.generacionGlovallNvlRoles[0] : null;
           const rolNombre = String(
             tenantRef?.rolesMabs?.rol ||
@@ -1565,20 +1795,9 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
       });
       if (reglasParaTg.length > 0) return reglasParaTg;
 
-      // 3. Sin herencia directa ni reglas â†’ usar herencias del JWT (scope SA sin tenantGlobal asignado)
-      const seen = new Set<string>();
-      const herenciasJWT: HeredaGlobalOption[] = [];
-      herenciasUsuario.forEach((h: any) => {
-        const hTg = String(h?.tenantGlobal?._id || h?.tenantGlobal || '').trim();
-        if (hTg) return; // solo las del SA (sin TG asignado)
-        const hId = String(h?.iud || h?._id || '').trim();
-        if (!hId || seen.has(hId)) return;
-        seen.add(hId);
-        const vCount = Array.isArray(h?.vistas) ? h.vistas.length : 0;
-        const aCount = Array.isArray(h?.acciones) ? h.acciones.length : 0;
-        herenciasJWT.push({ id: hId, label: `Herencia JWT | Vistas:${vCount} | Acciones:${aCount}` });
-      });
-      return herenciasJWT;
+      // 3. Sin herencia directa ni reglas para este TG → retornar [] para que el catalogo
+      //    caiga al "last resort" y muestre todas las rutasSeguridad disponibles.
+      return [];
     }
 
     // TenantGlobal branch: filtrar por tenantGlobal ID
@@ -1612,7 +1831,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
     herenciasUsuario.forEach((h: any) => {
       const hTg = String(h?.tenantGlobal?._id || h?.tenantGlobal || '').trim();
       if (hTg !== tgId) return;
-      // herenciaGlobal records del TG no tienen heredaGlobal â€” usar su propio _id
+      // herenciaGlobal records del TG no tienen heredaGlobal - usar su propio _id
       const hId = String(h?.iud || h?._id || '').trim();
       if (!hId || seen.has(hId)) return;
       seen.add(hId);
@@ -1692,6 +1911,23 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
       setHerenciasExistentesPorTG((prev) => ({ ...prev, [tgId]: lista }));
     } catch {
       setHerenciasExistentesPorTG((prev) => ({ ...prev, [tgId]: [] }));
+    }
+  };
+
+  const cargarHerenciasPorUsuario = async (usuarioId: string) => {
+    if (!usuarioId || herenciasPorUsuario[usuarioId] !== undefined) return;
+    setLoadingHerenciasPorUsuario((prev) => ({ ...prev, [usuarioId]: true }));
+    try {
+      const res: any = await apiFetch(
+        '/api/config/permisos/listar/usu/tenant/libres?usuarioId=' + usuarioId + '&soloMios=false',
+        { method: 'GET' }
+      );
+      const lista = Array.isArray(res?.data) ? res.data : [];
+      setHerenciasPorUsuario((prev) => ({ ...prev, [usuarioId]: lista }));
+    } catch {
+      setHerenciasPorUsuario((prev) => ({ ...prev, [usuarioId]: [] }));
+    } finally {
+      setLoadingHerenciasPorUsuario((prev) => ({ ...prev, [usuarioId]: false }));
     }
   };
 
@@ -1946,6 +2182,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
             };
           }
           const fuente = String(row?.fuenteHerencia || 'tenantGlobal').trim();
+          if (endpointId === 'perm-admin-tenant-global-desactivar' && fuente !== 'tenantGlobal') return null;
           const rol = String(row?.rolId?.rol || row?.rolId?._id || row?.rolId || 'SIN_ROL').trim();
           const usuario = String(row?.usuarioId?.nombre || row?.usuarioId?.name || row?.usuarioId?._id || '-').trim();
           const fuenteTxt = fuente === 'tenantSuperAdmin' ? '[SUPERADMIN]' : fuente === 'regla' ? '[REGLA PARAM]' : '[TENANT]';
@@ -2229,7 +2466,10 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
             addAccion({ id, label: String(a?.etiquetas || a?.method || id), method: String(a?.method || '') });
           });
         });
-        return { vistasCatalogo: Array.from(vistasMap.values()), accionesCatalogo: Array.from(accionesMap.values()) };
+        // Si hay vistas de herencias propias del TG, retornarlas; sino caer al last resort
+        if (vistasMap.size > 0) {
+          return { vistasCatalogo: Array.from(vistasMap.values()), accionesCatalogo: Array.from(accionesMap.values()) };
+        }
       }
       if (!selectedHeredaGlobal && !actorEsTenantGlobalScope()) {
         sourceIds.forEach((sourceId) => {
@@ -2295,12 +2535,11 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
             return { vistasCatalogo, accionesCatalogo };
           }
         }
-        // Sin herencia con datos: catÃ¡logo vacÃ­o (TG no puede usar catÃ¡logo SA)
-        return { vistasCatalogo: [], accionesCatalogo: [] };
+        // Sin herencia con datos: caer al last resort para mostrar todas las rutasSeguridad
       }
 
       // SA scope: buscar primero por _id directo (herenciaGlobal directa del tenant)
-      // y como fallback por campo h.heredaGlobal (referencia a regla â€” estilo antiguo)
+      // y como fallback por campo h.heredaGlobal (referencia a regla - estilo antiguo)
       const herenciaDirectaSA = herenciasUsuario.find((h: any) =>
         String(h?.iud || h?._id || '').trim() === selectedHeredaGlobal
       );
@@ -2310,6 +2549,30 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
       });
 
       if (herenciaConDatos) {
+        // Para SA: el techo del catálogo es la REGLA padre (66 vistas), no la herencia (45).
+        // La herencia es un subconjunto de la regla — mostrar todas las vistas de la regla
+        // para que el SA pueda ampliar/modificar la asignación de la herencia.
+        const ruleRef = String(herenciaConDatos?.heredaGlobal?._id || herenciaConDatos?.heredaGlobal || '').trim();
+        const parentRule = ruleRef ? ruleCatalog[ruleRef] : null;
+
+        if (parentRule) {
+          const recursoIds = (Array.isArray(parentRule?.recurso) ? parentRule.recurso : [])
+            .map((v: any) => getId(v))
+            .filter(Boolean);
+          const accionIds = (Array.isArray(parentRule?.accionesUsu) ? parentRule.accionesUsu : [])
+            .map((a: any) => getId(a))
+            .filter(Boolean);
+          const accionByIdMap = new Map(acciones.map((a) => [a.id, a]));
+          const vistasDesdeRegla = resolveVistaCatalogByIds(recursoIds);
+          const accionesDesdeRegla = accionIds.length
+            ? accionIds.map((id: string) => accionByIdMap.get(id) || { id, label: id, method: '' })
+            : acciones;
+          if (vistasDesdeRegla.length) {
+            return { vistasCatalogo: vistasDesdeRegla, accionesCatalogo: accionesDesdeRegla };
+          }
+        }
+
+        // Sin regla padre resolvible: usar vistas de la herencia directamente como catálogo
         const vistasCatalogo = (Array.isArray(herenciaConDatos?.vistas) ? herenciaConDatos.vistas : [])
           .map((v: any) => {
             const id = getId(v);
@@ -2366,9 +2629,28 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
         }
       }
 
-      // Last resort: if vistas state is populated, expose all vistas so the admin can select
-      if (vistas.length) {
-        return { vistasCatalogo: vistas, accionesCatalogo: acciones };
+      // Last resort: solo para SA puro sin tenantGlobal ni tenantCorporativo en el JWT.
+      // Si el JWT trae tenant, no se debe exponer el catalogo completo.
+      const esSaPuro = actorEsTenantSuperAdmin()
+        && !String(tenantGlobalActor?.tenantGlobalId || '').trim()
+        && !String(tenantGlobalActor?.tenantCorporativoId || '').trim();
+      if (esSaPuro) {
+        // Derivar vistas desde rutasJerarquia (incluye rutas nuevas no enlazadas a contextos aun)
+        const seenIds = new Set<string>();
+        const allFromTree: Vista[] = [];
+        const traverseTree = (nodes: NodoRuta[]) => {
+          nodes.forEach((node) => {
+            const id = String(node._id || '').trim();
+            if (id && !seenIds.has(id)) {
+              seenIds.add(id);
+              allFromTree.push({ id, label: String(node.name || node.path || id), path: String(node.path || '') });
+            }
+            if (Array.isArray(node.children)) traverseTree(node.children);
+          });
+        };
+        traverseTree(rutasJerarquia);
+        const sourceVistas = allFromTree.length ? allFromTree : vistas;
+        if (sourceVistas.length) return { vistasCatalogo: sourceVistas, accionesCatalogo: acciones };
       }
 
       return { vistasCatalogo: [], accionesCatalogo: [] };
@@ -2446,9 +2728,50 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
       }
     }
 
+    if (endpointId === 'tenant-actualizar-global-reglas') {
+      // Si ya tenemos el delta del servidor, mostrar solo vistas/acciones faltantes
+      const delta = deltaByEndpoint[endpointId];
+      if (delta) {
+        const vistasCatalogo: Vista[] = (Array.isArray(delta.vistasFaltantes) ? delta.vistasFaltantes : [])
+          .map((v: any) => ({
+            id: String(v?._id || v || ''),
+            label: String(v?.name || v?.path || v?._id || v || ''),
+            path: String(v?.path || ''),
+          }));
+        const accionesCatalogo: Accion[] = (Array.isArray(delta.accionesFaltantes) ? delta.accionesFaltantes : [])
+          .map((a: any) => ({
+            id: String(a?._id || a || ''),
+            label: String(a?.etiquetas || a?.method || a?._id || a || ''),
+            method: String(a?.method || ''),
+          }));
+        // Si no hay acciones faltantes del delta, usar el catálogo global
+        return { vistasCatalogo, accionesCatalogo: accionesCatalogo.length ? accionesCatalogo : acciones };
+      }
+      // Mientras carga el delta, mostrar lista vacía para evitar confusión
+      if (loadingDeltaByEndpoint[endpointId]) {
+        return { vistasCatalogo: [], accionesCatalogo: acciones };
+      }
+    }
+
     if (endpointId === 'tenant-crear-global-reglas' || endpointId === 'tenant-actualizar-global-reglas') {
+      // Derivar vistas desde rutasJerarquia para incluir rutas nuevas no sincronizadas aún en `vistas`
+      const seenTreeIds = new Set<string>();
+      const allVistasFromTree: Vista[] = [];
+      const traverseForReglas = (nodes: NodoRuta[]) => {
+        nodes.forEach((node) => {
+          const id = String(node._id || '').trim();
+          if (id && !seenTreeIds.has(id)) {
+            seenTreeIds.add(id);
+            allVistasFromTree.push({ id, label: String(node.name || node.path || id), path: String(node.path || '') });
+          }
+          if (Array.isArray(node.children)) traverseForReglas(node.children);
+        });
+      };
+      traverseForReglas(rutasJerarquia);
+      const vistasFallback = allVistasFromTree.length ? allVistasFromTree : vistas;
+
       const tenantGlobalId = getFieldValue(endpointId, 'tenantGlobal').trim();
-      if (!tenantGlobalId) return { vistasCatalogo: vistas, accionesCatalogo: acciones };
+      if (!tenantGlobalId) return { vistasCatalogo: vistasFallback, accionesCatalogo: acciones };
 
       const tenantSel = tenantGlobales.find((t) => t.id === tenantGlobalId);
       let superAdminRef = String(tenantSel?.tenantSuperAdmin || '').trim();
@@ -2459,7 +2782,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
           superAdminRef = String(tenantPadre?.tenantSuperAdmin || '').trim();
         }
       }
-      if (!superAdminRef) return { vistasCatalogo: vistas, accionesCatalogo: acciones };
+      if (!superAdminRef) return { vistasCatalogo: vistasFallback, accionesCatalogo: acciones };
 
       const reglasRows = Object.values(ruleCatalog || {});
       const reglaDios = reglasRows.find((r: any) => {
@@ -2468,7 +2791,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
         return gens.some((g: any) => String(g?._id || g || '').trim() === superAdminRef);
       }) as any;
 
-      if (!reglaDios) return { vistasCatalogo: vistas, accionesCatalogo: acciones };
+      if (!reglaDios) return { vistasCatalogo: vistasFallback, accionesCatalogo: acciones };
 
       const recursoIds = Array.isArray(reglaDios?.recurso)
         ? reglaDios.recurso.map((v: any) => String(v?._id || v || '').trim()).filter(Boolean)
@@ -2477,7 +2800,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
         ? reglaDios.accionesUsu.map((a: any) => String(a?._id || a || '').trim()).filter(Boolean)
         : [];
 
-      if (!recursoIds.length) return { vistasCatalogo: vistas, accionesCatalogo: acciones };
+      if (!recursoIds.length) return { vistasCatalogo: vistasFallback, accionesCatalogo: acciones };
 
       const accionById = new Map(acciones.map((a) => [a.id, a]));
 
@@ -2619,9 +2942,44 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
     return map;
   };
 
+  const loadDeltaForRule = async (endpointId: string, ruleId: string) => {
+    setLoadingDeltaByEndpoint((prev) => ({ ...prev, [endpointId]: true }));
+    try {
+      const res = await apiFetch('/api/config/tenant/reglas/globales/delta', {
+        method: 'GET',
+        headers: { 'x-regla-id': ruleId },
+      });
+      if (res?.ok && res?.data) {
+        setDeltaByEndpoint((prev) => ({ ...prev, [endpointId]: res.data }));
+        // Auto-resolver contexto desde el servidor
+        const ctxArr = Array.isArray(res.data.contextoResuelto) ? res.data.contextoResuelto : [];
+        const ctxId = String(ctxArr[0]?._id || ctxArr[0] || '').trim();
+        if (ctxId) setFieldValue(endpointId, 'contextoDefi', ctxId);
+        // Limpiar permisos previos: las vistas del catalogo ahora son solo las faltantes
+        setPermisos(endpointId, []);
+      }
+    } catch {
+      // Si falla, el catalogo de vistas cae al fallback de 68
+    } finally {
+      setLoadingDeltaByEndpoint((prev) => ({ ...prev, [endpointId]: false }));
+    }
+  };
+
   const applyRuleToForm = (endpointId: string, ruleId: string) => {
     const rule = ruleCatalog[ruleId];
     if (!rule) return;
+
+    // Para el flujo de actualizar: contexto inmediato desde el catálogo local +
+    // dispara carga del delta (vistas faltantes) desde el servidor.
+    if (endpointId === 'tenant-actualizar-global-reglas') {
+      const ctxArr = Array.isArray(rule?.contextoDefi) ? rule.contextoDefi : [];
+      const ctxId = String(ctxArr[0]?._id || ctxArr[0] || '').trim();
+      if (ctxId) setFieldValue(endpointId, 'contextoDefi', ctxId);
+      // Limpiar delta previo para que el catalogo vuelva al fallback mientras carga
+      setDeltaByEndpoint((prev) => { const next = { ...prev }; delete next[endpointId]; return next; });
+      loadDeltaForRule(endpointId, ruleId);
+      return;
+    }
 
     const ctxArr = Array.isArray(rule?.contextoDefi) ? rule.contextoDefi : [];
     const ctxId = String(ctxArr[0]?._id || ctxArr[0] || '').trim();
@@ -2678,14 +3036,20 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
       endpointModal.id === 'tenant-crear-global-admin' ||
       endpointModal.id === 'tenant-actualizar-global';
     if (needsTenantGlobalSelects && !loadingData) {
-      hydrateData();
+      const needsBootstrap =
+        !tenantGlobalSelectsLoaded ||
+        tenantGlobales.length === 0 ||
+        (endpointModal.id === 'tenant-actualizar-global' && tenantUpdateTargets.length === 0);
+      if (needsBootstrap) {
+        hydrateData();
+      }
       return;
     }
     if (!needsTenantGlobal) return;
     if (tenantGlobales.length === 0 && !loadingData) {
       hydrateData();
     }
-  }, [endpointModal, tenantGlobales.length, loadingData]);
+  }, [endpointModal, tenantGlobales.length, loadingData, tenantGlobalSelectsLoaded, tenantUpdateTargets.length]);
 
   useEffect(() => {
     if (!endpointModal) return;
@@ -2837,6 +3201,52 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
     Object.keys(ruleCatalog || {}).length,
   ]);
 
+  // Auto-poblar seleccion cuando carguen las herencias del TG (scope SA)
+  useEffect(() => {
+    const endpointId = 'perm-usuario-tenant-global';
+    if (!actorEsTenantSuperAdmin()) return;
+    if (!endpointModal || endpointModal.id !== endpointId) return;
+    const tgId = String((formData[endpointId] || {})['tenantGlobalScope'] || '').trim();
+    if (!tgId) return;
+    const herenciasDelTG = herenciasExistentesPorTG[tgId];
+    if (herenciasDelTG === undefined) return;
+    const current = catalogSelection[endpointId] || { vistas: [], acciones: [] };
+    if (current.vistas.length > 0 || current.acciones.length > 0) return;
+    const { vistasCatalogo, accionesCatalogo } = getPermisosCatalog(endpointId);
+    if (herenciasDelTG.length > 0) {
+      // TG tiene herencias existentes: pre-seleccionar esas vistas/acciones, constrenidas al catalogo
+      const catalogVistaIds = new Set(vistasCatalogo.map((v) => v.id));
+      const vistasSet = new Set<string>();
+      const accionesSet = new Set<string>();
+      herenciasDelTG.forEach((h) => {
+        (Array.isArray(h?.vistas) ? h.vistas : []).forEach((v) => {
+          const id = String(v?._id || v || '').trim();
+          if (id && (!catalogVistaIds.size || catalogVistaIds.has(id))) vistasSet.add(id);
+        });
+        (Array.isArray(h?.acciones) ? h.acciones : []).forEach((a) => {
+          const id = String(a?._id || a || '').trim();
+          if (id) accionesSet.add(id);
+        });
+      });
+      setCatalogSelectionFor(endpointId, {
+        vistas: Array.from(vistasSet),
+        acciones: Array.from(accionesSet),
+      });
+    } else {
+      // TG sin herencias: pre-seleccionar todo el catalogo de reglas parametrizadas
+      if (vistasCatalogo.length > 0) {
+        setCatalogSelectionFor(endpointId, {
+          vistas: vistasCatalogo.map((v) => v.id),
+          acciones: accionesCatalogo.map((a) => a.id),
+        });
+      }
+    }
+  }, [
+    herenciasExistentesPorTG,
+    endpointModal?.id,
+    tenantGlobalActor?.tenantSuperAdminId,
+  ]);
+
   const runEndpoint = async (endpoint: EndpointSpec) => {
     try {
       setRunning((prev) => ({ ...prev, [endpoint.id]: true }));
@@ -2956,6 +3366,15 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
       let payload: any = { method: endpoint.method, headers };
       if (endpoint.method !== 'GET' && endpoint.method !== 'DELETE') payload.body = body;
 
+      // ── Modo "quitar solo esa vista": cambia DELETE /:id → PATCH /:id/vista
+      if (endpoint.id === 'perm-admin-tenant-global-desactivar') {
+        const vistaObjetivo = getFieldValue(endpoint.id, 'vistaObjetivoId').trim();
+        const herenciaId = getFieldValue(endpoint.id, 'herenciaAsociada').trim() || getFieldValue(endpoint.id, 'id').trim();
+        if (vistaObjetivo && herenciaId) {
+          resolvedPath = `/api/config/permisos/creacion/admin/tenant/global/${encodeURIComponent(herenciaId)}/vista`;
+          payload = { method: 'PATCH', headers, body: { vistaId: vistaObjetivo } };
+        }
+      }
 
       if (endpoint.id === 'perm-usuario-tenant-global') {
         const esSA = actorEsTenantSuperAdmin();
@@ -3122,6 +3541,9 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
       setResultData((prev) => ({ ...prev, [endpoint.id]: response }));
       setResult((prev) => ({ ...prev, [endpoint.id]: JSON.stringify(response, null, 2) }));
       toast.success(`${endpoint.title} ejecutado`);
+      if (endpoint.method !== 'GET') {
+        hydrateData();
+      }
     } catch (error: any) {
       const msg = error?.message || 'Error al ejecutar endpoint';
       setResultData((prev) => ({ ...prev, [endpoint.id]: null }));
@@ -3138,15 +3560,88 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
       return <pre className="max-h-48 overflow-auto rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-800">{result['tenant-listar-reglas'] || 'Aun sin respuesta'}</pre>;
     }
 
+    const resolveRuleUserLabel = (row: any): string => {
+      const tenant = Array.isArray(row?.generacionGlovallNvlRoles) ? row.generacionGlovallNvlRoles[0] : null;
+      const usuarioRol = tenant?.rolesMabs?.usuarioId;
+      return String(
+        usuarioRol?.nombre ||
+        usuarioRol?.name ||
+        usuarioRol?.correo ||
+        usuarioRol?.email ||
+        '-'
+      ).trim() || '-';
+    };
+
+    const q = reglasSearch.trim().toLowerCase();
+    const tenantFilter = reglasTenantFilter.trim();
+    const tenantOptions = Array.from(
+      new Map(
+        rows.map((row: any) => {
+          const tenant = Array.isArray(row?.generacionGlovallNvlRoles) ? row.generacionGlovallNvlRoles[0] : null;
+          const tenantId = String(tenant?._id || tenant || '').trim();
+          const corp = tenant?.coporativo;
+          const tenantLabel = String(
+            resolveRuleUserLabel(row) !== '-' ? resolveRuleUserLabel(row) : (
+              corp?.razon_social ||
+              corp?.titulo ||
+              tenantId ||
+              '-'
+            )
+          ).trim();
+          return [tenantId, { id: tenantId, label: tenantLabel }];
+        }).filter(([id]) => Boolean(id))
+      ).values()
+    );
+
+    const filteredRows = rows.filter((row: any) => {
+      const tenant = Array.isArray(row?.generacionGlovallNvlRoles) ? row.generacionGlovallNvlRoles[0] : null;
+      const tenantId = String(tenant?._id || tenant || '').trim();
+      if (tenantFilter && tenantId !== tenantFilter) return false;
+      if (!q) return true;
+      const corp = tenant?.coporativo;
+      const userLabel = resolveRuleUserLabel(row).toLowerCase();
+      const contexto = Array.isArray(row?.contextoDefi) ? row.contextoDefi.map((c: any) => c?.contexto || c?._id || c).join(', ').toLowerCase() : '';
+      const vistas = Array.isArray(row?.recurso) ? row.recurso.map((v: any) => v?.name || v?.path || v?._id || v).join(', ').toLowerCase() : '';
+      const acciones = Array.isArray(row?.accionesUsu) ? row.accionesUsu.map((a: any) => a?.etiquetas || a?.method || a?._id || a).join(', ').toLowerCase() : '';
+      const corpLabel = String(corp?.razon_social || corp?.titulo || '').toLowerCase();
+      const dominio = String(row?.dominioTenatGlobales || '').toLowerCase();
+      const tipo = String(row?.securityPlatform === true ? 'DIOS' : 'TENANT').toLowerCase();
+
+      return [userLabel, contexto, vistas, acciones, corpLabel, dominio, tipo].some((value) => value.includes(q));
+    });
+
     return (
-      <div className="overflow-auto rounded-lg border border-slate-200 bg-white">
+      <div className="space-y-3">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center">
+            <Input
+              value={reglasSearch}
+              onChange={(e) => setReglasSearch(e.target.value)}
+              placeholder="Buscar regla por usuario, contexto, corporativo, vista o accion"
+              className="md:w-[420px]"
+            />
+            <select
+              className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-700 md:w-[320px]"
+              value={reglasTenantFilter}
+              onChange={(e) => setReglasTenantFilter(e.target.value)}
+            >
+              <option value="">Todos los tenants</option>
+              {tenantOptions.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <p className="text-xs text-slate-500">Resultados: {filteredRows.length}</p>
+        </div>
+        <div className="overflow-auto rounded-lg border border-slate-200 bg-white">
         <table className="w-full min-w-[980px] text-left text-xs">
           <thead className="bg-slate-100 text-slate-700">
             <tr>
-              <th className="px-3 py-2">x-regla-id</th>
               <th className="px-3 py-2">Tipo</th>
               <th className="px-3 py-2">Dominio</th>
-              <th className="px-3 py-2">Tenant Global</th>
+              <th className="px-3 py-2">Usuario</th>
               <th className="px-3 py-2">Corporativo</th>
               <th className="px-3 py-2">Contexto</th>
               <th className="px-3 py-2">Vistas</th>
@@ -3154,19 +3649,19 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
             </tr>
           </thead>
           <tbody>
-            {rows.map((row: any, idx: number) => {
+            {filteredRows.map((row: any, idx: number) => {
               const reglaId = String(row?.['x-regla-id'] || row?.reglaIdEncrypted || row?.iud || row?.rid || row?._id || '');
               const tenant = Array.isArray(row?.generacionGlovallNvlRoles) ? row.generacionGlovallNvlRoles[0] : null;
               const corp = tenant?.coporativo;
+              const userLabel = resolveRuleUserLabel(row);
               const contexto = Array.isArray(row?.contextoDefi) ? row.contextoDefi.map((c: any) => c?.contexto || c?._id || c).join(', ') : '-';
               const vistas = Array.isArray(row?.recurso) ? row.recurso.map((v: any) => v?.name || v?.path || v?._id || v).join(', ') : '-';
               const acciones = Array.isArray(row?.accionesUsu) ? row.accionesUsu.map((a: any) => a?.etiquetas || a?.method || a?._id || a).join(', ') : '-';
               return (
                 <tr key={reglaId || idx} className="border-t border-slate-100">
-                  <td className="px-3 py-2 font-mono">{reglaId || '-'}</td>
                   <td className="px-3 py-2">{row?.securityPlatform === true ? 'DIOS' : 'TENANT'}</td>
                   <td className="px-3 py-2">{row?.dominioTenatGlobales || '-'}</td>
-                  <td className="px-3 py-2">{String(tenant?._id || tenant || '-')}</td>
+                  <td className="px-3 py-2">{userLabel}</td>
                   <td className="px-3 py-2">{corp?.razon_social || corp?.titulo || '-'}</td>
                   <td className="px-3 py-2">{contexto || '-'}</td>
                   <td className="px-3 py-2">{vistas || '-'}</td>
@@ -3176,6 +3671,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
             })}
           </tbody>
         </table>
+      </div>
       </div>
     );
   };
@@ -3699,7 +4195,20 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
             )}
           </div>
         </div>
-        {!vistasCatalogo.length ? (
+        {!vistasCatalogo.length && loadingDeltaByEndpoint[endpoint.id] ? (
+          <div className="rounded-md border border-sky-200 bg-sky-50 p-3 text-xs text-sky-800 flex items-center gap-2">
+            <Loader2 className="h-3 w-3 animate-spin shrink-0" />
+            Calculando vistas faltantes para esta regla…
+          </div>
+        ) : !vistasCatalogo.length && endpoint.id === 'tenant-actualizar-global-reglas' && !getFieldValue(endpoint.id, 'x-regla-id') ? (
+          <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+            Selecciona una regla para ver las vistas disponibles.
+          </div>
+        ) : !vistasCatalogo.length && endpoint.id === 'tenant-actualizar-global-reglas' && deltaByEndpoint[endpoint.id] ? (
+          <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800">
+            Esta regla ya tiene todas las vistas disponibles registradas.
+          </div>
+        ) : !vistasCatalogo.length ? (
           <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
             Faltan datos para construir permisos.
             <Button className="ml-2 h-7 px-2 text-xs" type="button" variant="outline" onClick={hydrateData} disabled={loadingData}>
@@ -3811,37 +4320,45 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
     const { vistasCatalogo, accionesCatalogo } = getPermisosCatalog(endpoint.id);
     const heredaSelVal = getFieldValue(endpoint.id, 'heredaGlobal').trim();
     const esReglaSeleccionada = !!heredaSelVal && !!ruleCatalog[heredaSelVal];
+    const vistaSearch = String(vistaSearchByEndpoint[endpoint.id] || '').trim().toLowerCase();
+    const matchesVistaSearch = (vista: any): boolean => {
+      if (!vistaSearch) return true;
+      return [
+        vista?.id,
+        vista?._id,
+        vista?.label,
+        vista?.name,
+        vista?.path,
+        vista?.component,
+      ].some((value) => String(value || '').toLowerCase().includes(vistaSearch));
+    };
     return (
       <div className="rounded-xl border border-emerald-100 bg-white/80 p-3">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs font-medium text-emerald-700">Elige la vista que quieres cambiarle los permisos</p>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-1 flex-wrap justify-end gap-2">
+            <Input
+              className="h-8 min-w-[180px] max-w-xs bg-white text-xs"
+              value={vistaSearchByEndpoint[endpoint.id] || ''}
+              onChange={(e) => setVistaSearchByEndpoint((prev) => ({ ...prev, [endpoint.id]: e.target.value }))}
+              placeholder="Buscar vista, ruta o componente"
+            />
             <Button
               type="button"
               size="sm"
               variant="outline"
+              disabled={actorEsTenantCorporativoScope()}
+              title={actorEsTenantCorporativoScope() ? 'Sin permisos para esta acción' : 'Seleccionar todas las vistas'}
               onClick={() => {
-                // "Todas" selecciona TODO el catÃ¡logo de la regla/herencia sin importar suite activa
+                if (actorEsTenantCorporativoScope()) return;
+                const todasVistasIds = getCatalogoVistaIdsRelacionadas(endpoint.id);
                 setCatalogSelectionFor(endpoint.id, {
-                  vistas: getCatalogoVistaIdsRelacionadas(endpoint.id),
+                  vistas: todasVistasIds,
                   acciones: accionesCatalogo.map((a) => a.id),
                 });
               }}
             >
               Todas
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="default"
-              className="bg-emerald-600 text-white hover:bg-emerald-700"
-              onClick={() => {
-                // Sincronizar: recorre TODO el Ã¡rbol y selecciona vistas que estÃ©n en el catÃ¡logo (sin filtro de tipoNodo)
-                const suiteId = suiteSelByEndpoint[endpoint.id] || '';
-                syncCatalogSelection(endpoint.id, suiteId);
-              }}
-            >
-              Sincronizar
             </Button>
             <Button
               type="button"
@@ -3886,6 +4403,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
                   collectAllNodes(modulo.children || []).filter((f) => {
                     const fid = String(f._id);
                     if (allowedVistaIds.size > 0 && !allowedVistaIds.has(fid)) return false;
+                    if (!matchesVistaSearch(f)) return false;
                     if (esReglaSeleccionada) {
                       // Mostrar cualquier nodo que estÃ© activo en el Ã¡rbol de rutas
                       return vistaIdsActivos.has(fid) || esNodoFormularioLike(f);
@@ -3904,9 +4422,10 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
                   return (
                     <div key={suite._id} className="mb-2">
                       {!suiteNodo && (
-                        <p className="mb-1 text-xs font-bold text-slate-600 bg-slate-100 rounded px-2 py-1">
-                          {suite.name} ({totalCatalogEnSuite})
-                        </p>
+                        <div className="mb-2 flex items-center gap-2 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-1.5">
+                          <span className="text-[11px] font-bold uppercase tracking-widest text-emerald-800">{suite.name}</span>
+                          <span className="ml-auto rounded-full bg-emerald-200 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">{totalCatalogEnSuite}</span>
+                        </div>
                       )}
                       <div className="space-y-1">
                         {modulos.map((modulo) => {
@@ -3918,10 +4437,10 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
                           const isExpanded = defaultExpand ? !expandedModulos.has(closedKey) : expandedModulos.has(moduleKey);
                           const selectedCount = formularios.filter((f) => selected.vistas.includes(String(f._id))).length;
                           return (
-                            <div key={modulo._id} className="rounded-md border border-slate-200 bg-white">
+                            <div key={modulo._id} className="rounded-md border border-emerald-200 bg-white">
                               <button
                                 type="button"
-                                className="flex w-full items-center justify-between px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                                className="flex w-full items-center justify-between px-3 py-2 text-xs font-semibold text-emerald-800 hover:bg-emerald-50"
                                 onClick={() =>
                                   setExpandedModulos((prev) => {
                                     const next = new Set(prev);
@@ -3938,32 +4457,54 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
                                 <span className="text-slate-400 font-normal">{selectedCount}/{formularios.length} {isExpanded ? '▲' : '▼'}</span>
                               </button>
                               {isExpanded && (
-                                <div className="border-t border-slate-100 p-2 space-y-1">
-                                  {formularios.map((form) => {
-                                    const fid = String(form._id);
-                                    // En regla: habilitado si catÃ¡logo vacÃ­o (sin restricciÃ³n) O si el nodo estÃ¡ en el catÃ¡logo
-                                    const enCatalogo = esReglaSeleccionada
-                                      ? (catalogIds.size === 0 || catalogIds.has(fid))
-                                      : (!hasCatalogFilter || catalogIds.has(fid));
-                                    return (
-                                      <label
-                                        key={fid}
-                                        className="flex cursor-pointer items-center gap-2 text-xs"
-                                      >
-                                        <input
-                                          type="checkbox"
-                                          checked={selected.vistas.includes(fid)}
-                                          onChange={(e) => toggleCatalogItem(endpoint.id, 'vistas', fid, e.target.checked)}
-                                        />
-                                        <span>
-                                          {form.name}
-                                          {getTipoNodoLabel(form) === 'SUBFORMULARIO' ? ' [Sub]' : ''}
-                                          {form.path ? <span className="text-slate-400"> ({form.path})</span> : ''}
-                                          {!enCatalogo && <span className="ml-1 text-amber-500">[fuera de regla]</span>}
-                                        </span>
-                                      </label>
-                                    );
-                                  })}
+                                <div className="border-t border-emerald-100 p-1.5 space-y-0.5">
+                                  {(() => {
+                                    const formularioIds = new Set(formularios.map((f) => String(f._id)));
+                                    const hasVisibleDescendant = (node: any): boolean => {
+                                      const nid = String(node._id || '');
+                                      if (formularioIds.has(nid)) return true;
+                                      return (Array.isArray(node.children) ? node.children : []).some(hasVisibleDescendant);
+                                    };
+                                    const renderNodo = (nodo: any, depth: number): React.ReactNode => {
+                                      if (!hasVisibleDescendant(nodo)) return null;
+                                      const nid = String(nodo._id || '');
+                                      const tipo = getTipoNodoLabel(nodo);
+                                      const esSelec = formularioIds.has(nid);
+                                      const hijos = Array.isArray(nodo.children) ? nodo.children : [];
+                                      const enCatalogo = esReglaSeleccionada
+                                        ? (catalogIds.size === 0 || catalogIds.has(nid))
+                                        : (!hasCatalogFilter || catalogIds.has(nid));
+                                      const isSubForm = tipo === 'SUBFORMULARIO';
+                                      return (
+                                        <div key={nid} style={{ paddingLeft: depth * 12 }}>
+                                          {esSelec ? (
+                                            <label className={`flex cursor-pointer items-start gap-2 rounded px-1.5 py-1 text-xs hover:bg-slate-50 border-l-2 ${isSubForm ? 'border-slate-200' : 'border-slate-300'}`}>
+                                              <input
+                                                type="checkbox"
+                                                className="mt-0.5 shrink-0 accent-emerald-600"
+                                                checked={selected.vistas.includes(nid)}
+                                                onChange={(e) => toggleCatalogItem(endpoint.id, 'vistas', nid, e.target.checked)}
+                                              />
+                                              <span className="flex flex-wrap items-center gap-1 leading-tight">
+                                                {isSubForm && (
+                                                  <span className="rounded bg-slate-200 px-1 text-[10px] font-medium text-slate-600">Sub</span>
+                                                )}
+                                                <span className={isSubForm ? 'text-slate-500' : 'text-slate-700 font-medium'}>{nodo.name}</span>
+                                                {nodo.path && <span className="text-slate-400">({nodo.path})</span>}
+                                                {!enCatalogo && <span className="text-amber-500">[fuera de regla]</span>}
+                                              </span>
+                                            </label>
+                                          ) : (
+                                            <p className="mt-1 mb-0.5 rounded border-l-2 border-blue-300 bg-blue-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-700">
+                                              {nodo.name}
+                                            </p>
+                                          )}
+                                          {hijos.map((hijo: any) => renderNodo(hijo, depth + 1))}
+                                        </div>
+                                      );
+                                    };
+                                    return (modulo.children || []).map((child: any) => renderNodo(child, 0));
+                                  })()}
                                 </div>
                               )}
                             </div>
@@ -3982,7 +4523,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
                   return (
                     <>
                       <p className="mb-2 text-xs font-semibold text-slate-700">
-                        Vistas ({selected.vistas.length}/{totalFormularios}) â€” {suiteNodo.name}
+                        Vistas ({selected.vistas.length}/{totalFormularios}) - {suiteNodo.name}
                       </p>
                       <div className="max-h-64 overflow-auto space-y-1">
                         {renderSuiteTree(suiteNodo) || <p className="text-xs text-slate-500 px-2">Esta suite no tiene mÃ³dulos disponibles.</p>}
@@ -3991,14 +4532,14 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
                   );
                 }
 
-                // Regla seleccionada sin suite â†’ mostrar TODAS las suites con jerarquÃ­a completa
-                if (esReglaSeleccionada || endpoint.id === 'perm-usuario-tenant-global') {
+                // Regla seleccionada sin suite - mostrar TODAS las suites con jerarquia completa
+                if (esReglaSeleccionada || endpoint.id === 'perm-usuario-tenant-global' || endpoint.id === 'perm-admin-tenant-global' || endpoint.id === 'tenant-crear-global-reglas') {
                   const suitesConNodos = rutasJerarquia.filter((s) => Array.isArray(s.children) && s.children.length > 0);
                   const totalCatalog = getCatalogoVistaIdsRelacionadas(endpoint.id).length;
                   return (
                     <>
                       <p className="mb-2 text-xs font-semibold text-slate-700">
-                        Vistas ({selected.vistas.length}/{totalCatalog}) â€” Todas las suites
+                        Vistas ({selected.vistas.length}/{totalCatalog}) - Todas las suites
                       </p>
                       <div className="max-h-72 overflow-auto space-y-2">
                         {suitesConNodos.map((suite) => renderSuiteTree(suite))}
@@ -4012,7 +4553,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
                   <>
                     <p className="mb-2 text-xs font-semibold text-slate-700">Vistas ({selected.vistas.length}/{vistasCatalogo.length})</p>
                     <div className="max-h-40 overflow-auto rounded-md border border-slate-300 bg-white p-2">
-                      {vistasCatalogo.map((vista) => (
+                      {vistasCatalogo.filter(matchesVistaSearch).map((vista) => (
                         <label key={vista.id} className="mb-1 flex cursor-pointer items-center gap-2 text-sm">
                           <input
                             type="checkbox"
@@ -4022,6 +4563,9 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
                           <span>{vista.label} {vista.path ? `(${vista.path})` : ''}</span>
                         </label>
                       ))}
+                      {!vistasCatalogo.filter(matchesVistaSearch).length && (
+                        <p className="text-xs text-slate-500">Sin vistas para la busqueda actual.</p>
+                      )}
                     </div>
                   </>
                 );
@@ -4184,7 +4728,8 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
         );
       })() : null}
       {endpoint.id === 'perm-admin-tenant-global-listar' ? (() => {
-        const tenantOptions = getTenantGlobalOptions(endpoint.id);
+        // Solo tenantGlobales reales (sin opción tenantSuperAdmin DIOS)
+        const tenantOptions = getTenantGlobalOptions(endpoint.id).filter((t) => !isTenantSuperAdminScopeOption(t.id));
         const tenantGlobalSelected = getFieldValue(endpoint.id, 'tenantGlobal').trim();
         const herenciaSelected = getFieldValue(endpoint.id, 'herenciaAsociada').trim();
         const herenciaOptions = herenciaAsociadaOptionsByEndpoint[endpoint.id] || [];
@@ -4651,10 +5196,14 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
                   <option key={opt.id} value={opt.id}>{opt.label}</option>
                 ))}
               </select>
-              <p className="mt-1 text-xs text-slate-500">
-                Se usa la herencia como base de vistas y acciones para parametrizar.
-              </p>
-              {renderHerenciaAsociadaDetalle(endpoint.id)}
+              {endpoint.id !== 'perm-admin-tenant-global' && (
+                <>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Se usa la herencia como base de vistas y acciones para parametrizar.
+                  </p>
+                  {renderHerenciaAsociadaDetalle(endpoint.id)}
+                </>
+              )}
             </div>
           );
         }
@@ -4706,13 +5255,46 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
             </div>
           );
         }
+        if (endpoint.id === 'tenant-actualizar-global' && field.name === 'id') {
+          const actorEsTenantSuperAdminScope = actorEsTenantSuperAdmin();
+          const actorEsTenantGlobal = actorEsTenantGlobalScope();
+          return (
+            <div key={field.name}>
+              <Label>{field.label} {field.required ? '*' : ''}</Label>
+              <select
+                className="mt-1 h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm shadow-sm"
+                value={getFieldValue(endpoint.id, field.name)}
+                onChange={(e) => setFieldValue(endpoint.id, field.name, e.target.value)}
+              >
+                <option value="">
+                  {loadingData ? 'Cargando opciones...' : 'Selecciona tenant a actualizar'}
+                </option>
+                {tenantUpdateTargets.map((opt) => (
+                  <option key={opt.id} value={opt.id}>{opt.label}</option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-slate-500">
+                {actorEsTenantSuperAdminScope
+                  ? 'Scope tenantSuperAdmin: puedes seleccionar nodos tenantSuperAdmin, tenantGlobal y tenantCorporativo visibles.'
+                  : actorEsTenantGlobal
+                  ? 'Scope tenantGlobal: solo puedes seleccionar tu tenantGlobal y sus nodos corporativos descendientes.'
+                  : 'El listado se resuelve desde tu scope actual.'}
+              </p>
+              {!loadingData && !tenantUpdateTargets.length ? (
+                <p className="mt-1 text-xs text-amber-700">
+                  No hay tenants disponibles para actualizar con tu scope actual.
+                </p>
+              ) : null}
+            </div>
+          );
+        }
         const usesTenantGlobalSelects =
           (
             endpoint.id === 'tenant-crear-global-usuario' ||
             endpoint.id === 'tenant-crear-global-admin' ||
             endpoint.id === 'tenant-actualizar-global'
           ) &&
-          ['tipo_tenant', 'ownerType', 'nvlGeneracionTenant', 'apisDominios', 'accionesUsu', 'rolesMabs', 'coporativo', 'tenantGlobalRef'].includes(field.name);
+          ['tipo_tenant', 'ownerType', 'nvlGeneracionTenant', 'apisDominios', 'apis', 'accionesUsu', 'rolesMabs', 'coporativo', 'tenantGlobalRef'].includes(field.name);
         if (usesTenantGlobalSelects) {
           const options = tenantGlobalSelects[field.name] || [];
           const actorEsTenantGlobal = actorEsTenantGlobalScope();
@@ -4733,6 +5315,10 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
           const optionsRoles = field.name === 'rolesMabs'
             ? opcionesRolesPorNivel.filter((opt) => !nvlBloqueaRolDios || String(opt.rol || '').toUpperCase() !== 'DIOS')
             : opcionesRolesPorNivel;
+          const ownerTypeBloqueadoPorScope =
+            endpoint.id === 'tenant-actualizar-global' &&
+            field.name === 'ownerType' &&
+            !actorEsTenantSuperAdmin();
           const optionsNivelPorScope = field.name === 'nvlGeneracionTenant'
             ? options.filter((opt) => {
                 const nvl = String((opt as any)?.meta?.nvl || '').trim();
@@ -4757,6 +5343,8 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
               ? !selectedNvl || !nvlPermiteCorporativo
               : field.name === 'tenantGlobalRef'
               ? !selectedNvl || !nvlEsTenantCorporativo || actorEsTenantGlobalPuro
+              : ownerTypeBloqueadoPorScope
+              ? true
               : false;
           const isAccionUsuarioMulti =
             field.name === 'accionesUsu' &&
@@ -4865,6 +5453,11 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
                     : 'Sin opciones para este campo. Verifica rol `tenantSuperAdmin` o la configuracion del nivel.'}
                 </p>
               ) : null}
+              {ownerTypeBloqueadoPorScope ? (
+                <p className="mt-1 text-xs text-slate-500">
+                  `ownerType` solo puede ajustarlo un usuario con scope `tenantSuperAdmin`.
+                </p>
+              ) : null}
               {field.name === 'tenantGlobalRef' && actorEsTenantGlobalPuro ? (
                 <p className="mt-1 text-xs text-sky-700">
                   Flujo puro <span className="font-semibold">tenantGlobal</span>: la referencia queda amarrada a tu propio tenantGlobal y solo afecta tu rama descendente.
@@ -4879,22 +5472,60 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
           );
         }
         if (field.name === 'x-regla-id') {
+          const tenantFiltro = tenantFilterByEndpoint[endpoint.id] || '';
+          const reglasFiltradas = tenantFiltro
+            ? reglas.filter((r) => {
+                const rule = ruleCatalog[r.id];
+                const tenantRef = Array.isArray(rule?.generacionGlovallNvlRoles)
+                  ? rule.generacionGlovallNvlRoles[0]
+                  : null;
+                const tenantId = String(tenantRef?._id || tenantRef || '').trim();
+                return tenantId === tenantFiltro;
+              })
+            : reglas;
           return (
-            <div key={field.name}>
-              <Label>{field.label} {field.required ? '*' : ''}</Label>
-              <select
-                className="mt-1 h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
-                value={getFieldValue(endpoint.id, field.name)}
-                onChange={(e) => {
-                  const selected = e.target.value;
-                  setFieldValue(endpoint.id, field.name, selected);
-                  applyRuleToForm(endpoint.id, selected);
-                }}
-              >
-                <option value="">Selecciona regla a actualizar</option>
-                {reglas.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
-              </select>
-              <p className="mt-1 text-xs text-slate-500">Se usa el ID encriptado devuelto por listar reglas.</p>
+            <div key={field.name} className="space-y-3">
+              {/* Selector de Tenant */}
+              <div>
+                <Label>Tenant *</Label>
+                <select
+                  className="mt-1 h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+                  value={tenantFiltro}
+                  onChange={(e) => {
+                    const nextTenant = e.target.value;
+                    setTenantFilterByEndpoint((prev) => ({ ...prev, [endpoint.id]: nextTenant }));
+                    // Limpiar regla seleccionada y delta al cambiar de tenant
+                    setFieldValue(endpoint.id, field.name, '');
+                    setDeltaByEndpoint((prev) => { const next = { ...prev }; delete next[endpoint.id]; return next; });
+                    setCatalogSelectionFor(endpoint.id, { vistas: [], acciones: [] });
+                  }}
+                >
+                  <option value="">Selecciona el tenant</option>
+                  {tenantOptionsFromRuleCatalog.map((t) => (
+                    <option key={t.id} value={t.id}>{t.label}</option>
+                  ))}
+                </select>
+              </div>
+              {/* Selector de Regla (filtrado por tenant) */}
+              <div>
+                <Label>{field.label} {field.required ? '*' : ''}</Label>
+                <select
+                  className="mt-1 h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+                  value={getFieldValue(endpoint.id, field.name)}
+                  disabled={!tenantFiltro}
+                  onChange={(e) => {
+                    const selected = e.target.value;
+                    setFieldValue(endpoint.id, field.name, selected);
+                    if (selected) applyRuleToForm(endpoint.id, selected);
+                  }}
+                >
+                  <option value="">
+                    {tenantFiltro ? 'Selecciona regla a actualizar' : 'Primero selecciona un tenant'}
+                  </option>
+                  {reglasFiltradas.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
+                </select>
+                <p className="mt-1 text-xs text-slate-500">Se usa el ID encriptado devuelto por listar reglas.</p>
+              </div>
             </div>
           );
         }
@@ -5074,7 +5705,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
                   className="rounded border border-blue-300 bg-white px-2 py-1 text-xs text-blue-700 hover:bg-blue-50"
                   onClick={() => setUsuariosDestinoSel((prev) => ({ ...prev, [endpointId]: disponibles.map((u) => u.id) }))}
                   disabled={cargando}
-                >SincrÃ³nica</button>
+                >Seleccionar todos</button>
                 <button
                   type="button"
                   className="rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
@@ -5089,7 +5720,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
                     cargarHerenciasExistentesTG(tgId);
                   }}
                   disabled={cargando}
-                >{cargando ? '...' : 'â†º'}</button>
+                >{cargando ? '...' : 'Recargar'}</button>
               </div>
             </div>
             {cargando ? (
@@ -5110,6 +5741,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
                           type="checkbox"
                           checked={seleccionados.includes(u.id)}
                           onChange={(e) => {
+                            if (e.target.checked) cargarHerenciasPorUsuario(u.id);
                             setUsuariosDestinoSel((prev) => {
                               const curr = prev[endpointId] || [];
                               return { ...prev, [endpointId]: e.target.checked ? [...curr, u.id] : curr.filter((id) => id !== u.id) };
@@ -5123,6 +5755,39 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
                           </span>
                         )}
                       </label>
+                      {seleccionados.includes(u.id) && (() => {
+                        const hxUsu = herenciasPorUsuario[u.id] || [];
+                        const loadingUsu = loadingHerenciasPorUsuario[u.id];
+                        const tgsMap = new Map();
+                        hxUsu.forEach((h) => {
+                          const tgId = String(h?.tenantGlobal?._id || h?.tenantGlobal || '').trim();
+                          if (!tgId || tgsMap.has(tgId)) return;
+                          tgsMap.set(tgId, {
+                            id: tgId,
+                            label: String(h?.tenantGlobal?.correo || h?.tenantGlobal?.label || tgId),
+                            vistas: Array.isArray(h?.vistas) ? h.vistas.length : 0,
+                            acciones: Array.isArray(h?.acciones) ? h.acciones.length : 0,
+                          });
+                        });
+                        const tgsUsu = Array.from(tgsMap.values());
+                        if (loadingUsu) return <p className="ml-5 text-[10px] text-slate-400">Validando tenants...</p>;
+                        if (!tgsUsu.length) return null;
+                        return (
+                          <div className="ml-5 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1.5 space-y-1">
+                            <p className="text-[10px] font-semibold text-emerald-700 uppercase tracking-wide">
+                              Parametrizado en {tgsUsu.length} tenantGlobal{tgsUsu.length > 1 ? 'es' : ''}
+                            </p>
+                            {tgsUsu.map((tg) => (
+                              <div key={tg.id} className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-emerald-800">
+                                <span className="font-mono text-emerald-500">{tg.id.slice(-8)}</span>
+                                <span className="flex-1 truncate">{tg.label !== tg.id ? tg.label : ''}</span>
+                                <span>V:<strong>{tg.vistas}</strong></span>
+                                <span>A:<strong>{tg.acciones}</strong></span>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })()}
                       {tieneHerencia && seleccionados.includes(u.id) && (
                         <div className="ml-5 rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 space-y-1">
                           <p className="text-[10px] font-semibold text-amber-700 uppercase tracking-wide">Herencias existentes</p>
@@ -5151,7 +5816,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
             )}
             {seleccionados.length > 1 && (
               <p className="text-xs text-blue-600 font-medium">
-                Se crearÃ¡n {seleccionados.length} documentos de herencia (uno por usuario).
+                Se crearan {seleccionados.length} documentos de herencia (uno por usuario).
               </p>
             )}
           </div>
@@ -5210,60 +5875,133 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
     </div>
   );
 
-  return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,#ffe4f2,transparent_40%),radial-gradient(circle_at_bottom_right,#dbfff0,transparent_45%),#f8fafc] p-4 md:p-8">
-      <div className="mx-auto max-w-7xl space-y-5">
-        <Card className="border-rose-200 bg-white/90 shadow-md backdrop-blur">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-3xl font-black tracking-tight text-slate-900">
-              <ShieldCheck className="h-8 w-8 text-rose-500" /> {isRulesMode ? 'Reglas Tenant' : 'Parametros Gobernanza'}
-            </CardTitle>
-            <p className="flex items-center gap-2 text-rose-600">
-              <Sparkles className="h-4 w-4" />
-              {isRulesMode
-                ? 'Vista enfocada en la parametrizacion de reglas globales y sincronizacion DIOS.'
-                : 'Formularios guiados con datos reales de tus endpoints.'}
-            </p>
-          </CardHeader>
-          <CardContent className="flex flex-wrap gap-3">
-            <Badge variant="outline">Vistas activas: {vistas.length}</Badge>
-            <Badge variant="outline">Acciones activas: {acciones.length}</Badge>
-            <Badge variant="outline">TenantGlobal + corporativo: {tenantGlobales.length}</Badge>
-            <Badge variant="outline">Contextos: {contextos.length}</Badge>
-            {isRulesMode && <Badge variant="outline">Endpoints reglas: {availableEndpoints.length}</Badge>}
-            <Button variant="outline" onClick={hydrateData} disabled={loadingData}>{loadingData ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />} Recargar datos API</Button>
-          </CardContent>
-        </Card>
+  const pageTitle = isRulesMode ? 'Reglas Tenant' : 'Parametros Gobernanza';
+  const pageDescription = isRulesMode
+    ? 'Gestiona reglas globales y sincronizacion de permisos desde un flujo enfocado.'
+    : 'Administra tenants, permisos y parametros corporativos desde un panel guiado.';
+  const activeSectionMeta = SECTION_META[activeSection];
+  const ActiveSectionIcon = activeSectionMeta.icon;
+  const stats = [
+    { label: 'Vistas', value: vistas.length },
+    { label: 'Acciones', value: acciones.length },
+    { label: 'Tenants', value: tenantGlobales.length },
+    { label: 'Contextos', value: contextos.length },
+    ...(isRulesMode ? [{ label: 'Reglas', value: availableEndpoints.length }] : []),
+  ];
 
-        {!isRulesMode && (
-        <div className="grid gap-4 md:grid-cols-3">
-          <button type="button" onClick={() => setActiveSection('tenant')} className={`rounded-2xl border p-5 text-left transition-all duration-300 ${activeSection === 'tenant' ? 'border-rose-400 bg-rose-50 shadow-lg' : 'border-slate-200 bg-white/70 hover:-translate-y-0.5 hover:shadow-md'}`}>
-            <h3 className="text-2xl font-bold text-slate-900">Gobernanza Tenant</h3>
-            <p className="text-rose-600">{sectionCounts.tenant} endpoints</p>
-          </button>
-          <button type="button" onClick={() => setActiveSection('permisos')} className={`rounded-2xl border p-5 text-left transition-all duration-300 ${activeSection === 'permisos' ? 'border-emerald-400 bg-emerald-50 shadow-lg' : 'border-slate-200 bg-white/70 hover:-translate-y-0.5 hover:shadow-md'}`}>
-            <h3 className="text-2xl font-bold text-slate-900">Gobernanza Permisos</h3>
-            <p className="text-emerald-700">{sectionCounts.permisos} endpoints</p>
-          </button>
-          <button type="button" onClick={() => setActiveSection('corporativo')} className={`rounded-2xl border p-5 text-left transition-all duration-300 ${activeSection === 'corporativo' ? 'border-violet-400 bg-violet-50 shadow-lg' : 'border-slate-200 bg-white/70 hover:-translate-y-0.5 hover:shadow-md'}`}>
-            <h3 className="text-2xl font-bold text-slate-900">Gobernanza Corporativo</h3>
-            <p className="text-violet-700">{sectionCounts.corporativo} endpoints</p>
-          </button>
-        </div>
+  return (
+    <div className="min-h-screen bg-slate-50 p-4 md:p-6">
+      <div className="mx-auto max-w-7xl space-y-6">
+        <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+            <div className="max-w-2xl space-y-3">
+              <div className="flex items-center gap-3">
+                <span className="flex h-10 w-10 items-center justify-center rounded-md border border-slate-200 bg-slate-50 text-slate-700">
+                  <ShieldCheck className="h-5 w-5" />
+                </span>
+                <div>
+                  <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                    Panel administrativo
+                  </p>
+                  <h1 className="text-2xl font-semibold tracking-tight text-slate-950">
+                    {pageTitle}
+                  </h1>
+                </div>
+              </div>
+              <p className="text-sm leading-6 text-slate-600">{pageDescription}</p>
+            </div>
+
+            <div className="flex w-full flex-col gap-3 lg:max-w-xl">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {stats.map((item) => (
+                  <div key={item.label} className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                    <p className="text-xs text-slate-500">{item.label}</p>
+                    <p className="text-lg font-semibold text-slate-950">{item.value}</p>
+                  </div>
+                ))}
+              </div>
+              <Button
+                variant="outline"
+                onClick={hydrateData}
+                disabled={loadingData}
+                className="w-full justify-center sm:w-auto sm:self-end"
+              >
+                {loadingData ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                )}
+                Recargar datos API
+              </Button>
+            </div>
+          </div>
+        </section>
+
+        {!isRulesMode && !lockedSection && (
+          <div className="grid gap-3 md:grid-cols-3">
+            {(['tenant', 'permisos', 'corporativo'] as EndpointSection[]).map((section) => {
+              const meta = SECTION_META[section];
+              const Icon = meta.icon;
+              const selected = activeSection === section;
+
+              return (
+                <button
+                  key={section}
+                  type="button"
+                  onClick={() => setActiveSection(section)}
+                  className={`rounded-lg border p-4 text-left transition-colors ${
+                    selected
+                      ? 'border-primary/35 bg-primary/5 text-slate-950 shadow-sm'
+                      : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-3">
+                      <span className={`mt-0.5 rounded-md border p-2 ${selected ? 'border-primary/20 bg-white text-primary' : 'border-slate-200 bg-slate-50 text-slate-500'}`}>
+                        <Icon className="h-4 w-4" />
+                      </span>
+                      <div>
+                        <h2 className="text-sm font-semibold">{meta.label}</h2>
+                        <p className="mt-1 text-xs text-slate-500">{meta.description}</p>
+                      </div>
+                    </div>
+                    <Badge variant={selected ? 'default' : 'outline'} className="shrink-0 rounded-md">
+                      {sectionCounts[section]}
+                    </Badge>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
         )}
 
-        <Card className="border-slate-200 bg-white/90">
-          <CardContent className="pt-6">
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <div className="flex items-center gap-2 text-slate-700">
-                <Wand2 className="h-4 w-4 text-rose-500" />
-                <span className="text-sm">{isRulesMode ? 'Flujo guiado solo para reglas de tenant' : 'Flujo guiado por endpoint con datos reales de API'}</span>
+        <Card className="border-slate-200 bg-white shadow-sm">
+          <CardContent className="p-4">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex min-w-0 items-center gap-3">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-slate-50 text-slate-600">
+                  <ActiveSectionIcon className="h-4 w-4" />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-slate-900">
+                    {isRulesMode ? 'Flujo de reglas' : activeSectionMeta.label}
+                  </p>
+                  <p className="text-sm text-slate-500">
+                    {isRulesMode
+                      ? 'Flujo guiado solo para reglas de tenant'
+                      : lockedSection === 'permisos'
+                      ? 'Flujo guiado solo para gobernanza de permisos'
+                      : `${activeSectionMeta.description} ${endpointsBySection.length} endpoints visibles.`}
+                  </p>
+                </div>
               </div>
-              <div className="w-full md:max-w-md">
+              <div className="relative w-full lg:max-w-md">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <Input
                   value={endpointSearch}
                   onChange={(e) => setEndpointSearch(e.target.value)}
                   placeholder="Buscar endpoint por nombre, ruta o metodo"
+                  className="pl-9"
                 />
               </div>
             </div>
@@ -5275,90 +6013,105 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
             {visibleTenantPrimaryForms.map((tenantForm) => {
               const esFlujoSA = tenantForm.id === 'tenant-crear-global-admin';
               const disponible = endpointDisponibleParaScope(tenantForm);
-              const accentClass = esFlujoSA
-                ? 'border-fuchsia-200 bg-gradient-to-br from-white via-fuchsia-50/50 to-rose-50/60'
-                : 'border-sky-200 bg-gradient-to-br from-white via-sky-50/50 to-cyan-50/60';
               const badgeClass = esFlujoSA
-                ? 'border-fuchsia-200 bg-fuchsia-100 text-fuchsia-700'
-                : 'border-sky-200 bg-sky-100 text-sky-700';
+                ? 'border-slate-200 bg-slate-100 text-slate-700'
+                : 'border-sky-200 bg-sky-50 text-sky-700';
               const helper = esFlujoSA
-                ? 'Parametrizas de tenantSuperAdmin hacia tenantGlobales visibles dentro de tu Ã¡rbol.'
+                ? 'Parametrizas de tenantSuperAdmin hacia tenantGlobales visibles dentro de tu arbol.'
                 : 'Flujo puro tenantGlobal: el subnodo queda amarrado a tu propio tenantGlobal y solo afecta descendencia.';
 
               return (
-                <Card key={tenantForm.id} className={`${accentClass} shadow-lg ${disponible ? '' : 'opacity-75'}`}>
-                  <CardHeader>
-                    <div className="flex flex-wrap items-center gap-3">
-                      <CardTitle className="text-xl font-bold text-slate-900">
+                <Card key={tenantForm.id} className={`border-slate-200 bg-white shadow-sm ${disponible ? '' : 'opacity-75'}`}>
+                  <CardHeader className="border-b border-slate-100 p-5">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <CardTitle className="text-lg font-semibold text-slate-950">
                         {isRulesMode ? 'Formulario principal recomendado' : esFlujoSA ? 'Flujo tenantSuperAdmin -> tenantGlobal' : 'Flujo puro tenantGlobal'}
                       </CardTitle>
                       <Badge className={`border ${METHOD_STYLE[tenantForm.method]}`}>{tenantForm.method}</Badge>
                       {!isRulesMode ? <Badge className={`border ${badgeClass}`}>{esFlujoSA ? 'Owner' : 'Descendencia'}</Badge> : null}
                       {!disponible ? <Badge variant="outline">Solo visible</Badge> : null}
                     </div>
-                    <p className={esFlujoSA ? 'text-fuchsia-700' : 'text-sky-700'}>{tenantForm.title}</p>
+                    <CardDescription>{tenantForm.title}</CardDescription>
                     {!isRulesMode ? <p className="text-sm text-slate-600">{helper}</p> : null}
                     {!isRulesMode && !disponible ? (
                       <p className="text-xs font-medium text-amber-600">
                         Tu sesi&oacute;n actual no ejecuta este formulario, pero lo dejamos visible para separar claramente el flujo tenantSuperAdmin del flujo tenantGlobal.
                       </p>
                     ) : null}
-                    <p className="rounded bg-white/80 p-2 font-mono text-xs text-slate-700">{tenantForm.path}</p>
+                    <p className="rounded-md border border-slate-200 bg-slate-50 p-2 font-mono text-xs text-slate-600">{tenantForm.path}</p>
                   </CardHeader>
-                  <CardContent>{renderForm(tenantForm)}</CardContent>
+                  <CardContent className="p-5">{renderForm(tenantForm)}</CardContent>
                 </Card>
               );
             })}
           </div>
         )}
 
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {endpointsBySection.map((endpoint) => (
-            <Card
-              key={endpoint.id}
-              className={`group border-slate-200 bg-white/90 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl ${endpoint.method === 'GET' ? 'md:col-span-2 xl:col-span-3' : ''} ${endpointDisponibleParaScope(endpoint) ? '' : 'opacity-75'}`}
-            >
-              <CardHeader>
-                <div className="mb-2 flex items-center justify-between gap-3">
-                  <Badge className={`border ${METHOD_STYLE[endpoint.method]}`}>{endpoint.method}</Badge>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline">{actorBadge(endpoint.actor)}</Badge>
-                    {!endpointDisponibleParaScope(endpoint) ? <Badge variant="outline">Solo visible</Badge> : null}
-                  </div>
-                </div>
-                <CardTitle className="text-lg text-slate-900">{endpoint.title}</CardTitle>
-                <p className="text-sm text-slate-600">{endpoint.description}</p>
-                {!endpointDisponibleParaScope(endpoint) ? (
-                  <p className="text-xs font-medium text-amber-600">
-                    Este bloque corresponde al otro scope y queda visible para diferenciar tenantSuperAdmin de tenantGlobal.
-                  </p>
-                ) : null}
-              </CardHeader>
-              <CardContent>
-                <p className={`mb-3 rounded bg-slate-100 p-2 font-mono text-xs ${endpoint.method === 'GET' ? '' : 'line-clamp-2'}`}>{endpoint.path}</p>
-                <div className="flex gap-2">
-                  <Button className="flex-1" variant="outline" onClick={() => setEndpointModal(endpoint)}>
-                    <Settings2 className="mr-2 h-4 w-4" />
-                    Configurar
-                  </Button>
-                  <Button className="flex-1" onClick={() => endpoint.fields.length === 0 ? runEndpoint(endpoint) : setEndpointModal(endpoint)} disabled={!!running[endpoint.id] || !endpointDisponibleParaScope(endpoint)}>
-                    {running[endpoint.id] ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
-                    Ejecutar
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+        {endpointsBySection.length === 0 ? (
+          <Card className="border-dashed border-slate-300 bg-white shadow-sm">
+            <CardContent className="flex min-h-40 flex-col items-center justify-center gap-2 p-6 text-center">
+              <Search className="h-5 w-5 text-slate-400" />
+              <p className="text-sm font-medium text-slate-900">Sin endpoints para mostrar</p>
+              <p className="max-w-md text-sm text-slate-500">
+                Ajusta la busqueda o cambia de seccion para ver mas opciones.
+              </p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {endpointsBySection.map((endpoint) => {
+              const disponible = endpointDisponibleParaScope(endpoint);
+
+              return (
+                <Card
+                  key={endpoint.id}
+                  className={`border-slate-200 bg-white shadow-sm transition-colors hover:border-primary/30 ${endpoint.method === 'GET' ? 'md:col-span-2 xl:col-span-3' : ''} ${disponible ? '' : 'opacity-75'}`}
+                >
+                  <CardHeader className="space-y-3 p-5">
+                    <div className="flex items-center justify-between gap-3">
+                      <Badge className={`border ${METHOD_STYLE[endpoint.method]}`}>{endpoint.method}</Badge>
+                      <div className="flex flex-wrap justify-end gap-2">
+                        <Badge variant="outline" className="rounded-md">{actorBadge(endpoint.actor)}</Badge>
+                        {!disponible ? <Badge variant="outline" className="rounded-md">Solo visible</Badge> : null}
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <CardTitle className="text-base leading-snug text-slate-950">{endpoint.title}</CardTitle>
+                      <CardDescription className="line-clamp-2">{endpoint.description}</CardDescription>
+                    </div>
+                    {!disponible ? (
+                      <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700">
+                        Este bloque pertenece a otro scope y queda disponible solo como referencia.
+                      </p>
+                    ) : null}
+                  </CardHeader>
+                  <CardContent className="space-y-4 p-5 pt-0">
+                    <p className={`rounded-md border border-slate-200 bg-slate-50 p-2 font-mono text-xs text-slate-600 ${endpoint.method === 'GET' ? '' : 'line-clamp-2'}`}>{endpoint.path}</p>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <Button variant="outline" onClick={() => setEndpointModal(endpoint)}>
+                        <Settings2 className="mr-2 h-4 w-4" />
+                        Configurar
+                      </Button>
+                      <Button onClick={() => endpoint.fields.length === 0 ? runEndpoint(endpoint) : setEndpointModal(endpoint)} disabled={!!running[endpoint.id] || !disponible}>
+                        {running[endpoint.id] ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
+                        Ejecutar
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <Dialog open={!!herenciaDetalle} onOpenChange={(open) => !open && setHerenciaDetalle(null)}>
-        <DialogContent className="max-h-[90vh] overflow-auto sm:max-w-5xl">
-          <DialogHeader>
-            <DialogTitle>Detalle de herencias por usuario/tenant</DialogTitle>
+        <DialogContent className="max-h-[92vh] overflow-hidden p-0 sm:max-w-5xl">
+          <DialogHeader className="border-b border-slate-200 px-6 py-4 pr-12">
+            <DialogTitle className="text-base text-slate-950">Detalle de herencias por usuario/tenant</DialogTitle>
           </DialogHeader>
           {herenciaDetalle ? (
-            <div className="space-y-3 text-xs">
+            <div className="max-h-[calc(92vh-72px)] space-y-3 overflow-auto px-6 py-5 text-xs">
               <div className="grid gap-2 md:grid-cols-3">
                 <div className="rounded border border-slate-200 bg-slate-50 p-2">Usuario: <span className="font-semibold">{String(herenciaDetalle?.usuario || herenciaDetalle?.usuarioId || '-')}</span></div>
                 <div className="rounded border border-slate-200 bg-slate-50 p-2">Total herencias: <span className="font-semibold">{Number(herenciaDetalle?.totalHerencias || herenciaDetalle?.total || 0)}</span></div>
@@ -5418,16 +6171,27 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({ mode = 'ful
           ) : null}
         </DialogContent>
       </Dialog>
-      <Dialog open={!!endpointModal} onOpenChange={(open) => !open && setEndpointModal(null)}>
+      <Dialog open={!!endpointModal} onOpenChange={(open) => {
+        if (!open) {
+          if (endpointModal?.id === 'tenant-actualizar-global-reglas') {
+            setTenantFilterByEndpoint((prev) => { const next = { ...prev }; delete next['tenant-actualizar-global-reglas']; return next; });
+            setDeltaByEndpoint((prev) => { const next = { ...prev }; delete next['tenant-actualizar-global-reglas']; return next; });
+          }
+          setEndpointModal(null);
+        }
+      }}>
         <DialogContent className="max-h-[90vh] overflow-auto sm:max-w-4xl">
           {endpointModal && (
             <>
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-2">
-                  <Shield className="h-5 w-5 text-rose-500" /> {endpointModal.title}
+              <DialogHeader className="border-b border-slate-200 px-6 py-4 pr-12">
+                <DialogTitle className="flex items-center gap-2 text-base text-slate-950">
+                  <Shield className="h-5 w-5 text-slate-600" /> {endpointModal.title}
                 </DialogTitle>
+                <p className="font-mono text-xs text-slate-500">{endpointModal.path}</p>
               </DialogHeader>
-              {renderForm(endpointModal)}
+              <div className="max-h-[calc(92vh-92px)] overflow-auto px-6 py-5">
+                {renderForm(endpointModal)}
+              </div>
             </>
           )}
         </DialogContent>

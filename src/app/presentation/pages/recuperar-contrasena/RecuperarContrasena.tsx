@@ -51,8 +51,8 @@ export default function RecuperarContrasena() {
             <div className="min-h-screen bg-background flex items-center justify-center px-4">
                 <div className="w-full max-w-sm text-center space-y-6">
                     <div className="flex justify-center">
-                        <div className="w-16 h-16 rounded-full bg-emerald-50 dark:bg-emerald-950/30 flex items-center justify-center border border-emerald-200/60 dark:border-emerald-800/40">
-                            <CheckCircle2 className="w-8 h-8 text-emerald-500" />
+                        <div className="w-16 h-16 rounded-full bg-secondary/20 flex items-center justify-center border border-secondary/40">
+                            <CheckCircle2 className="w-8 h-8 text-secondary-foreground" />
                         </div>
                     </div>
                     <div className="space-y-2">

@@ -1,0 +1,243 @@
+import React, { useEffect, useMemo, useState } from 'react';
+import { toast } from 'react-toastify';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Copy, Link2, Loader2, Orbit, ShoppingBag, Sparkles } from 'lucide-react';
+import {
+    generarEnlaceConAttribution,
+    type ReferralAttributionResult,
+} from '@/app/services/referralAttributionService';
+
+type GeneradorEnlaceVentasProps = {
+    originId?: string | null;
+    originName?: string | null;
+    compact?: boolean;
+};
+
+type LinkDestination = 'home' | 'productos' | 'referidos';
+
+const destinationPathByType: Record<LinkDestination, (token: string) => string> = {
+    home: () => '/public/render/home',
+    productos: () => '/productos',
+    referidos: (token: string) => `/membresia/pago/${token}`,
+};
+
+async function copyValue(value: string, label: string): Promise<void> {
+    try {
+        await navigator.clipboard.writeText(value);
+        toast.success(`${label} copiado correctamente.`);
+    } catch {
+        toast.error(`No fue posible copiar ${label.toLowerCase()}.`);
+    }
+}
+
+export default function GeneradorEnlaceVentas({
+    originId = null,
+    originName = null,
+    compact = false,
+}: GeneradorEnlaceVentasProps): React.ReactElement {
+    const [emailCliente, setEmailCliente] = useState('');
+    const [guestSessionId, setGuestSessionId] = useState('');
+    const [destination, setDestination] = useState<LinkDestination>(originId ? 'productos' : 'home');
+    const [loading, setLoading] = useState(false);
+    const [result, setResult] = useState<ReferralAttributionResult | null>(null);
+
+    const originType = originId ? 'producto' : 'membresia';
+
+    useEffect(() => {
+        setDestination(originId ? 'productos' : 'home');
+    }, [originId]);
+
+    const generatedLink = useMemo(() => {
+        if (!result?.jwtReferido) return '';
+
+        const params = new URLSearchParams();
+        params.set('guestSessionId', result.guestSessionId);
+        params.set('originType', result.originType || originType);
+        params.set('ref', result.jwtReferido);
+        params.set('flow', destination === 'referidos' ? 'referidos' : 'venta');
+        params.set('redirectTo', destination);
+        if (result.originId || originId) params.set('originId', String(result.originId || originId));
+
+        const path = destinationPathByType[destination](result.jwtReferido);
+        return `${window.location.origin}${path}?${params.toString()}`;
+    }, [destination, originId, originType, result]);
+
+    const handleGenerate = async (): Promise<void> => {
+        setLoading(true);
+        try {
+            const response = await generarEnlaceConAttribution({
+                emailCliente: emailCliente.trim() || undefined,
+                guestSessionId: guestSessionId.trim() || undefined,
+                originType,
+                originId: originId || undefined,
+            });
+
+            setResult(response);
+            toast.success(response.msg || 'Enlace de venta con attribution generado correctamente.');
+        } catch (error) {
+            const message = error instanceof Error
+                ? error.message
+                : 'No fue posible generar el enlace de venta con attribution.';
+            toast.error(message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const content = (
+        <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+            <Card className="border-slate-200 shadow-sm">
+                <CardHeader>
+                    <div className="flex items-center gap-2">
+                        <Link2 className="h-5 w-5 text-primary" />
+                        <CardTitle>Generador de enlace de ventas</CardTitle>
+                    </div>
+                    <CardDescription>
+                        Crea un enlace independiente con attribution session para Pipeline B, sin modificar la configuracion de comisiones.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-5">
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                        <div className="flex flex-wrap items-center gap-2">
+                            <Badge variant="secondary" className="gap-1">
+                                <ShoppingBag className="h-3.5 w-3.5" />
+                                {originType}
+                            </Badge>
+                            <Badge variant={originId ? 'default' : 'outline'}>
+                                {originName || (originId ? 'Producto seleccionado' : 'Sin producto seleccionado')}
+                            </Badge>
+                        </div>
+                        <p className="mt-2 text-xs text-slate-500">
+                            Si seleccionas un producto en DashboardVenta, este generador enviara `originType=producto` y su `originId`.
+                        </p>
+                    </div>
+
+                    <div className="grid gap-4 md:grid-cols-3">
+                        <div className="space-y-2">
+                            <Label>Email del cliente</Label>
+                            <Input
+                                value={emailCliente}
+                                onChange={(e) => setEmailCliente(e.target.value)}
+                                placeholder="cliente@correo.com"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Guest session manual</Label>
+                            <Input
+                                value={guestSessionId}
+                                onChange={(e) => setGuestSessionId(e.target.value)}
+                                placeholder="Opcional. Si lo dejas vacio se genera automatico."
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Destino del enlace</Label>
+                            <Select
+                                value={destination}
+                                onValueChange={(value) => setDestination(value as LinkDestination)}
+                            >
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Selecciona destino" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="home">Home publico</SelectItem>
+                                    <SelectItem value="productos">Productos / Pipeline B</SelectItem>
+                                    {!originId && <SelectItem value="referidos">Membresia / referidos</SelectItem>}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </div>
+
+                    <Alert className="border-violet-200 bg-violet-50 text-violet-950">
+                        <Sparkles className="h-4 w-4" />
+                        <AlertTitle>Navigate parametrizado</AlertTitle>
+                        <AlertDescription>
+                            En venta/producto no se crea relacion al generar el link: la relacion sponsor-hijo nace cuando Wompi confirma PAYMENT_APPROVED.
+                        </AlertDescription>
+                    </Alert>
+
+                    <div className="flex justify-end">
+                        <Button className="gap-2" onClick={() => void handleGenerate()} disabled={loading}>
+                            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />}
+                            Generar enlace de ventas
+                        </Button>
+                    </div>
+                </CardContent>
+            </Card>
+
+            <Card className="border-slate-200 shadow-sm">
+                <CardHeader>
+                    <div className="flex items-center gap-2">
+                        <Orbit className="h-5 w-5 text-primary" />
+                        <CardTitle>Resultado de attribution</CardTitle>
+                    </div>
+                    <CardDescription>
+                        Usa estos datos para compartir el enlace, probar checkout y rastrear la sesion capturada.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <div className="space-y-2">
+                        <Label>Enlace generado</Label>
+                        <div className="flex gap-2">
+                            <Input
+                                value={generatedLink || 'Aun no has generado ningun enlace.'}
+                                readOnly
+                                className="font-mono text-xs"
+                            />
+                            <Button
+                                variant="outline"
+                                size="icon"
+                                disabled={!generatedLink}
+                                onClick={() => void copyValue(generatedLink, 'Enlace')}
+                            >
+                                <Copy className="h-4 w-4" />
+                            </Button>
+                        </div>
+                    </div>
+
+                    <div className="grid gap-3 md:grid-cols-2">
+                        <ResultBox label="Attribution ID" value={result?.attributionId || 'Sin generar'} />
+                        <ResultBox label="Guest Session ID" value={result?.guestSessionId || 'Sin generar'} />
+                        <ResultBox label="Codigo" value={result?.codigoReferido || 'Sin generar'} />
+                        <ResultBox
+                            label="Relacion"
+                            value={result?.relacionId || (originId ? 'Se creara al aprobar el pago' : 'Sin generar')}
+                        />
+                    </div>
+                </CardContent>
+            </Card>
+        </div>
+    );
+
+    if (compact) return content;
+
+    return (
+        <div className="flex-1 space-y-8 bg-gradient-to-b from-slate-50 via-white to-slate-100 p-4 md:p-6 lg:p-8">
+            <div className="space-y-2">
+                <div className="inline-flex items-center gap-2 rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-xs font-medium uppercase tracking-[0.2em] text-violet-700">
+                    <Orbit className="h-3.5 w-3.5" />
+                    Attribution
+                </div>
+                <h1 className="text-3xl font-semibold tracking-tight text-slate-900">generadorenlaceVentas</h1>
+                <p className="max-w-3xl text-sm text-slate-600">
+                    Generador independiente para enlaces de venta con attribution session y trazabilidad del sponsor.
+                </p>
+            </div>
+            {content}
+        </div>
+    );
+}
+
+function ResultBox({ label, value }: { label: string; value: string }): React.ReactElement {
+    return (
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <p className="text-xs uppercase tracking-[0.18em] text-slate-500">{label}</p>
+            <p className="mt-2 break-all text-sm font-medium text-slate-900">{value}</p>
+        </div>
+    );
+}

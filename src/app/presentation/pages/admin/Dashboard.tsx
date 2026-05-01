@@ -20,7 +20,111 @@ import { useAuth } from '@/app/providers/AuthProvider';
 import { getJerarquiaUsuarios, TenantGlobalInfo, TenantGlobalNode } from '@/app/services/tenantUsuariosService';
 import ParametrizacionGenyProcent from './ParametrizacionGenyProcent/ParametrizacionGenyProcent';
 import ParametrizacionRedirects from './ParametrizacionRedirects';
-import { Edit, Loader2, Network, RefreshCw, Route, Users } from 'lucide-react';
+import { Edit, HelpCircle, Loader2, Network, Palette, RefreshCw, Route, Users } from 'lucide-react';
+import { socketListeners, socketCleanup } from '@/app/socket/socketEvents';
+import { aplicarPaletaEnApp } from '@/app/utils/ColorUtils';
+import type { ColoresPaleta } from '@/app/utils/ColorUtils';
+import {
+    obtenerColoresPublico,
+    guardarColoresApp,
+    DEFAULT_COLORES_APP,
+} from '@/app/services/coloresAppService';
+import type { ColoresApp } from '@/app/services/coloresAppService';
+import {
+    listarPaletas,
+    actualizarPaleta,
+    obtenerPorId,
+    listarRutasConPaleta,
+    listarRutasSinPaleta,
+    type PaletaRuta,
+    type RutaInfo,
+} from '@/app/services/paletaRutaService';
+import PaletaRutaForm from '@/app/presentation/components/admin/paleta-rutas/PaletaRutaForm';
+import type { FormPayload } from '@/app/presentation/components/admin/paleta-rutas/PaletaRutaForm';
+
+type PaletaColores = ColoresApp;
+
+// ─── Descripción explícita de cada color en el frontend ─────────────────────
+const COLOR_META: Array<{
+    key: keyof PaletaColores;
+    label: string;
+    cssVar: string;
+    afecta: string;
+    elementos: string[];
+}> = [
+    {
+        key: 'COLOR_PRIMARY',
+        label: 'Color principal',
+        cssVar: '--primary',
+        afecta: 'Define el tono dominante de toda la marca.',
+        elementos: [
+            'Botones primarios ("Ingresar", "Guardar", "Configurar")',
+            'Íconos activos del menú lateral',
+            'Texto de títulos y enlaces de marca',
+            'Anillo de foco al hacer clic en inputs',
+            'Color de encabezado del navbar',
+        ],
+    },
+    {
+        key: 'COLOR_ACCENT',
+        label: 'Color de acento',
+        cssVar: '--accent',
+        afecta: 'Complementa al principal en elementos interactivos secundarios.',
+        elementos: [
+            'Fondo de badges y etiquetas de estado',
+            'Hover de ítems del menú lateral',
+            'Fondo de chips y selects al pasar el cursor',
+            'Foreground del color principal (contraste)',
+        ],
+    },
+    {
+        key: 'COLOR_LIGHT',
+        label: 'Color claro (muted)',
+        cssVar: '--muted',
+        afecta: 'Controla todos los elementos sutiles y de soporte.',
+        elementos: [
+            'Bordes de tarjetas, inputs y separadores',
+            'Fondo de secciones atenuadas (muted)',
+            'Color de placeholders y texto secundario',
+            'Fondo de filas de tabla al hacer hover',
+        ],
+    },
+    {
+        key: 'COLOR_BG',
+        label: 'Fondo general',
+        cssVar: '--background',
+        afecta: 'El fondo base de TODA la aplicación, público y admin.',
+        elementos: [
+            'Fondo de las vistas públicas (home, productos, landing)',
+            'Fondo del panel admin',
+            'Fondo del layout principal que envuelve todo',
+        ],
+    },
+    {
+        key: 'COLOR_CHAMPAGNE',
+        label: 'Color champagne (tarjetas)',
+        cssVar: '--card',
+        afecta: 'Superficie de todos los contenedores flotantes.',
+        elementos: [
+            'Fondo de las Cards y paneles',
+            'Fondo de modales y Dialogs',
+            'Fondo de Popovers y Dropdowns',
+            'Header y footer de emails de la plataforma',
+        ],
+    },
+    {
+        key: 'COLOR_SUNSET',
+        label: 'Color sunset (secundario)',
+        cssVar: '--secondary',
+        afecta: 'Tono cálido complementario para botones y bordes de énfasis.',
+        elementos: [
+            'Botones secundarios (variante "secondary")',
+            'Bordes internos de bloques y separadores cálidos',
+            'Fondo de badges de estado "secondary"',
+            'Bordes de bloques en emails de la plataforma',
+        ],
+    },
+];
 
 type DashboardUser = {
     _id?: string;
@@ -34,8 +138,12 @@ type DashboardUser = {
     estado?: boolean;
 };
 
+const COLORES_INICIAL: PaletaColores = { ...DEFAULT_COLORES_APP };
+
 export default function Dashboard(): React.ReactElement {
     const { user } = useAuth();
+
+    // ── Usuarios ──────────────────────────────────────────────────────────────
     const [usuarios, setUsuarios] = useState<DashboardUser[]>([]);
     const [usuariosLoading, setUsuariosLoading] = useState(false);
     const [usuarioSearch, setUsuarioSearch] = useState('');
@@ -43,6 +151,7 @@ export default function Dashboard(): React.ReactElement {
     const [userEditSaving, setUserEditSaving] = useState(false);
     const [userEditForm, setUserEditForm] = useState({ correo: '', password: '', rol: '' });
 
+    // ── Tenants ───────────────────────────────────────────────────────────────
     const [tenantsGlobales, setTenantsGlobales] = useState<TenantGlobalInfo[]>([]);
     const [loadingTenants, setLoadingTenants] = useState(false);
     const [selectedTenantGlobalId, setSelectedTenantGlobalId] = useState<string | null>(null);
@@ -50,6 +159,21 @@ export default function Dashboard(): React.ReactElement {
     const [loadingParametrizacion, setLoadingParametrizacion] = useState(false);
     const [savingModoReferir, setSavingModoReferir] = useState(false);
 
+    // ── Paleta de colores ─────────────────────────────────────────────────────
+    const [paletaModalOpen, setPaletaModalOpen] = useState(false);
+    const [ayudaPaletaOpen, setAyudaPaletaOpen] = useState(false);
+    const [paletaColores, setPaletaColores] = useState<PaletaColores>(COLORES_INICIAL);
+    const [paletaLoading, setPaletaLoading] = useState(false);
+    const [paletaSaving, setPaletaSaving] = useState(false);
+
+    // ── Paletas por ruta ──────────────────────────────────────────────────────
+    const [paletasRuta, setPaletasRuta] = useState<PaletaRuta[]>([]);
+    const [paletasRutaCargando, setPaletasRutaCargando] = useState(false);
+    const [editarPaletaModal, setEditarPaletaModal] = useState<{ abierto: boolean; paleta?: PaletaRuta }>({ abierto: false });
+    const [guardandoPaleta, setGuardandoPaleta] = useState(false);
+    const [rutasParaEdicion, setRutasParaEdicion] = useState<RutaInfo[]>([]);
+
+    // ── Roles y scope ─────────────────────────────────────────────────────────
     const tenantScope = user?.auth?.tenantScope || {};
     const actorScope = {
         tenantSuperAdminId: String(user?.tenantSuperAdminId || tenantScope?.tenantSuperAdminId || '').trim() || null,
@@ -68,23 +192,26 @@ export default function Dashboard(): React.ReactElement {
             ?? tenantsGlobales.find((t) => t.iud === selectedTenantGlobalId)?.titulo
             ?? null);
 
-    const loadUsuarios = async (): Promise<void> => {
-        setUsuariosLoading(true);
-        try {
-            const res = await apiFetch('/api/registro/listarRegistro', { method: 'GET' });
-            const list = (res as any)?.data ?? (res as any)?.usuarios ?? (Array.isArray(res) ? res : []);
-            setUsuarios(Array.isArray(list) ? list : []);
-        } catch {
-            toast.error('Error cargando usuarios');
-        } finally {
-            setUsuariosLoading(false);
-        }
-    };
-
+    // ── Efectos: socket de paleta ─────────────────────────────────────────────
     useEffect(() => {
-        void loadUsuarios();
+        const handler = (data: { colores: Partial<ColoresPaleta> }): void => {
+            if (data?.colores) {
+                aplicarPaletaEnApp(data.colores as ColoresPaleta);
+            }
+        };
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        socketListeners.onPaletaColoresActualizada(handler as any);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        return () => { socketCleanup.offPaletaColoresActualizada(handler as any); };
     }, []);
 
+    // ── Efectos: usuarios ─────────────────────────────────────────────────────
+    useEffect(() => { void loadUsuarios(); }, []);
+
+    // ── Efectos: paletas por ruta ─────────────────────────────────────────────
+    useEffect(() => { void cargarPaletasRuta(); }, []);
+
+    // ── Efectos: tenants ──────────────────────────────────────────────────────
     useEffect(() => {
         if (!mostrarSeccionMultinivel) return;
         setLoadingTenants(true);
@@ -101,16 +228,24 @@ export default function Dashboard(): React.ReactElement {
     }, [mostrarSeccionMultinivel]);
 
     useEffect(() => {
-        if (!activeTenantGlobalId) {
-            setModoReferir('TODOS');
-            return;
-        }
+        if (!activeTenantGlobalId) { setModoReferir('TODOS'); return; }
         setLoadingParametrizacion(true);
         apiFetch(`/api/governance/parametrizacion/global/${activeTenantGlobalId}`, { method: 'GET' })
             .then((res) => setModoReferir(res?.parametrizacion?.modoReferir ?? 'TODOS'))
             .catch(() => setModoReferir('TODOS'))
             .finally(() => setLoadingParametrizacion(false));
     }, [activeTenantGlobalId]);
+
+    // ── Usuarios: handlers ────────────────────────────────────────────────────
+    const loadUsuarios = async (): Promise<void> => {
+        setUsuariosLoading(true);
+        try {
+            const res = await apiFetch('/api/registro/listarRegistro', { method: 'GET' });
+            const list = (res as any)?.data ?? (res as any)?.usuarios ?? (Array.isArray(res) ? res : []);
+            setUsuarios(Array.isArray(list) ? list : []);
+        } catch { toast.error('Error cargando usuarios'); }
+        finally { setUsuariosLoading(false); }
+    };
 
     const filteredUsuarios = useMemo(() => {
         const q = usuarioSearch.trim().toLowerCase();
@@ -124,50 +259,32 @@ export default function Dashboard(): React.ReactElement {
 
     const openEditUser = (u: DashboardUser): void => {
         setEditingUser(u);
-        setUserEditForm({
-            correo: String(u?.correo || u?.email || ''),
-            password: '',
-            rol: String(u?.rol || ''),
-        });
+        setUserEditForm({ correo: String(u?.correo || u?.email || ''), password: '', rol: String(u?.rol || '') });
     };
-
-    const closeEditUser = (): void => {
-        setEditingUser(null);
-        setUserEditForm({ correo: '', password: '', rol: '' });
-    };
+    const closeEditUser = (): void => { setEditingUser(null); setUserEditForm({ correo: '', password: '', rol: '' }); };
 
     const handleSaveUser = async (): Promise<void> => {
         if (!editingUser) return;
         const id = String(editingUser?._id || editingUser?.iud || editingUser?.id || '');
-        if (!id) {
-            toast.error('Sin ID de usuario');
-            return;
-        }
-
+        if (!id) { toast.error('Sin ID de usuario'); return; }
         const body: Record<string, string> = {};
         if (userEditForm.correo) body.correo = userEditForm.correo;
         if (userEditForm.password) body.password = userEditForm.password;
         if (userEditForm.rol) body.rol = userEditForm.rol;
-
         setUserEditSaving(true);
         try {
-            await apiFetch(`/api/seguridad/pruebas/actualizar/registro/${id}`, {
-                method: 'PUT',
-                body: JSON.stringify(body),
-            });
+            await apiFetch(`/api/seguridad/pruebas/actualizar/registro/${id}`, { method: 'PUT', body: JSON.stringify(body) });
             setUsuarios((prev) => prev.map((u) => {
                 const uid = String(u?._id || u?.iud || u?.id || '');
                 return uid === id ? { ...u, ...body } : u;
             }));
             toast.success('Usuario actualizado');
             closeEditUser();
-        } catch (error: any) {
-            toast.error(String(error?.message || 'Error al actualizar'));
-        } finally {
-            setUserEditSaving(false);
-        }
+        } catch (error: any) { toast.error(String(error?.message || 'Error al actualizar')); }
+        finally { setUserEditSaving(false); }
     };
 
+    // ── Modo referir ──────────────────────────────────────────────────────────
     const saveModoReferir = async (modo: 'TODOS' | 'SELECCION' | 'INHABILITADO'): Promise<void> => {
         if (!activeTenantGlobalId) return;
         setSavingModoReferir(true);
@@ -178,13 +295,91 @@ export default function Dashboard(): React.ReactElement {
             });
             setModoReferir(res?.parametrizacion?.modoReferir ?? modo);
             toast.success('Configuracion de referidos actualizada.');
-        } catch (error: any) {
-            toast.error(error?.message || 'No se pudo guardar el modo de referidos.');
-        } finally {
-            setSavingModoReferir(false);
+        } catch (error: any) { toast.error(error?.message || 'No se pudo guardar el modo de referidos.'); }
+        finally { setSavingModoReferir(false); }
+    };
+
+    // ── Paleta: abrir modal y cargar datos ────────────────────────────────────
+    const abrirModalPaleta = async (): Promise<void> => {
+        setPaletaModalOpen(true);
+        setPaletaLoading(true);
+        try {
+            const res = await obtenerColoresPublico();
+            if (res?.colores) {
+                setPaletaColores({ ...DEFAULT_COLORES_APP, ...res.colores });
+            } else {
+                setPaletaColores({ ...DEFAULT_COLORES_APP });
+            }
+        } catch { toast.error('No se pudo cargar los colores actuales.'); }
+        finally { setPaletaLoading(false); }
+    };
+
+    const cerrarModalPaleta = (): void => { setPaletaModalOpen(false); };
+
+    // Previsualiza en vivo sin guardar
+    const handleColorChange = (key: keyof PaletaColores, value: string): void => {
+        const nuevos = { ...paletaColores, [key]: value };
+        setPaletaColores(nuevos);
+        aplicarPaletaEnApp(nuevos as ColoresPaleta);
+    };
+
+    // ── Paleta: guardar ───────────────────────────────────────────────────────
+    const guardarYActivarPaleta = async (): Promise<void> => {
+        setPaletaSaving(true);
+        try {
+            await guardarColoresApp(paletaColores);
+            aplicarPaletaEnApp(paletaColores as ColoresPaleta);
+            toast.success('Colores guardados y aplicados en toda la app.');
+            cerrarModalPaleta();
+        } catch (error: any) { toast.error(error?.message || 'No se pudo guardar los colores.'); }
+        finally { setPaletaSaving(false); }
+    };
+
+    // ── Paletas por ruta: cargar ──────────────────────────────────────────────
+    const cargarPaletasRuta = async (): Promise<void> => {
+        setPaletasRutaCargando(true);
+        try {
+            const res = await listarPaletas(1, 50);
+            setPaletasRuta(res.paletas ?? []);
+        } catch { /* silencioso */ }
+        finally { setPaletasRutaCargando(false); }
+    };
+
+    // ── Paletas por ruta: abrir edición ───────────────────────────────────────
+    const abrirEditarPaleta = async (paleta: PaletaRuta): Promise<void> => {
+        try {
+            const [res, resSin, resCon] = await Promise.all([
+                obtenerPorId(paleta.iud),
+                listarRutasSinPaleta(),
+                listarRutasConPaleta(),
+            ]);
+            const todas = [...(resSin.rutas ?? []), ...(resCon.rutas ?? [])].filter(
+                (r, i, arr) => arr.findIndex((x) => x._id === r._id) === i
+            );
+            setRutasParaEdicion(todas);
+            setEditarPaletaModal({ abierto: true, paleta: res.paleta });
+        } catch {
+            setEditarPaletaModal({ abierto: true, paleta });
         }
     };
 
+    // ── Paletas por ruta: guardar ─────────────────────────────────────────────
+    const handleGuardarPaleta = async (data: FormPayload): Promise<void> => {
+        if (!editarPaletaModal.paleta) return;
+        setGuardandoPaleta(true);
+        try {
+            await actualizarPaleta(editarPaletaModal.paleta.iud, data as unknown as Partial<PaletaRuta>);
+            toast.success('Paleta actualizada correctamente');
+            setEditarPaletaModal({ abierto: false });
+            await cargarPaletasRuta();
+        } catch (error: any) {
+            toast.error(error?.message || 'Error al actualizar la paleta');
+        } finally {
+            setGuardandoPaleta(false);
+        }
+    };
+
+    // ── Render ────────────────────────────────────────────────────────────────
     return (
         <div className="p-4 md:p-6 lg:p-8 flex-1 space-y-8">
             <div>
@@ -194,6 +389,97 @@ export default function Dashboard(): React.ReactElement {
                 </p>
             </div>
 
+            {/* ── Paleta de colores ─────────────────────────────────────────── */}
+            <Card className="shadow-lg border-border">
+                <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                            <Palette className="h-5 w-5 text-primary" />
+                            <CardTitle>Paleta de colores de la aplicacion</CardTitle>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <Button variant="outline" size="sm" onClick={() => setAyudaPaletaOpen(true)}>
+                                <HelpCircle className="h-4 w-4 mr-1.5" />
+                                ¿Que cambia cada color?
+                            </Button>
+                            <Button size="sm" onClick={() => void abrirModalPaleta()}>
+                                <Palette className="h-4 w-4 mr-2" />
+                                Configurar colores
+                            </Button>
+                        </div>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                        Define los 6 colores que controlan toda la apariencia visual — vistas publicas y admin.
+                        Los cambios se propagan en tiempo real a todos los usuarios conectados via Socket.
+                    </p>
+                </CardHeader>
+                <CardContent>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                        {COLOR_META.map(({ key, label, cssVar }) => (
+                            <div key={key} className="flex flex-col items-center gap-1.5">
+                                <div
+                                    className="w-10 h-10 rounded-full border-2 border-border"
+                                    style={{ backgroundColor: `hsl(var(${cssVar}))` }}
+                                />
+                                <p className="text-xs font-medium text-center leading-tight">{label}</p>
+                            </div>
+                        ))}
+                    </div>
+                </CardContent>
+            </Card>
+
+            {/* ── Paletas por ruta ──────────────────────────────────────────── */}
+            <Card className="shadow-lg border-border">
+                <CardHeader className="pb-3">
+                    <div className="flex items-center gap-2">
+                        <Palette className="h-5 w-5 text-primary" />
+                        <CardTitle>Parametrización de Paletas por Ruta</CardTitle>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                        Edita colores, imágenes de fondo y estilos de botones por vista de la aplicación.
+                    </p>
+                </CardHeader>
+                <CardContent>
+                    {paletasRutaCargando ? (
+                        <div className="flex justify-center py-6">
+                            <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                        </div>
+                    ) : paletasRuta.length === 0 ? (
+                        <div className="text-center py-8 text-muted-foreground text-sm">
+                            <Palette className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                            <p>No hay paletas configuradas aún.</p>
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                            {paletasRuta.map((p) => (
+                                <div key={p.iud} className="flex items-center justify-between gap-3 p-3 rounded-lg border border-border bg-card">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                        <span
+                                            className="inline-block w-4 h-4 rounded-sm flex-shrink-0 border border-black/10"
+                                            style={{ backgroundColor: p.colores.colorPrimario }}
+                                        />
+                                        <div className="min-w-0">
+                                            <p className="text-sm font-medium truncate">{p.nombre}</p>
+                                            <p className="text-xs text-muted-foreground font-mono truncate">{p.rutaId?.path ?? '—'}</p>
+                                        </div>
+                                    </div>
+                                    <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => void abrirEditarPaleta(p)}
+                                        className="flex-shrink-0 h-7 text-xs"
+                                    >
+                                        <Edit className="h-3 w-3 mr-1" />
+                                        Editar
+                                    </Button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
+
+            {/* ── Usuarios ──────────────────────────────────────────────────── */}
             <Card className="shadow-lg border-border">
                 <CardHeader className="pb-4">
                     <div className="flex items-center gap-2">
@@ -214,7 +500,6 @@ export default function Dashboard(): React.ReactElement {
                             {usuariosLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                         </Button>
                     </div>
-
                     <div className="overflow-auto">
                         <Table>
                             <TableHeader>
@@ -260,17 +545,17 @@ export default function Dashboard(): React.ReactElement {
                 </CardContent>
             </Card>
 
+            {/* ── Parametrizacion multinivel ────────────────────────────────── */}
             {mostrarSeccionMultinivel && (
                 <Card className="shadow-lg border-border">
                     <CardHeader className="space-y-3">
                         <div className="flex items-center gap-2">
                             <Network className="h-5 w-5 text-primary" />
                             <CardTitle>Parametrizacion multinivel</CardTitle>
-                            {activeTenantLabel ? (
-                                <Badge variant="secondary">{activeTenantLabel}</Badge>
-                            ) : (
-                                <Badge variant="outline">Sin tenant seleccionado</Badge>
-                            )}
+                            {activeTenantLabel
+                                ? <Badge variant="secondary">{activeTenantLabel}</Badge>
+                                : <Badge variant="outline">Sin tenant seleccionado</Badge>
+                            }
                         </div>
                         <p className="text-sm text-muted-foreground">
                             Configura las generaciones y porcentajes de comision del sistema de referidos multinivel para el TenantGlobal activo.
@@ -280,19 +565,12 @@ export default function Dashboard(): React.ReactElement {
                         {esSuperAdmin && (
                             <div className="flex items-center gap-3">
                                 <div className="w-full max-w-sm">
-                                    <Select
-                                        value={selectedTenantGlobalId ?? ''}
-                                        onValueChange={setSelectedTenantGlobalId}
-                                        disabled={loadingTenants}
-                                    >
+                                    <Select value={selectedTenantGlobalId ?? ''} onValueChange={setSelectedTenantGlobalId} disabled={loadingTenants}>
                                         <SelectTrigger>
-                                            {loadingTenants ? (
-                                                <span className="flex items-center gap-2 text-sm text-muted-foreground">
-                                                    <Loader2 className="h-3 w-3 animate-spin" /> Cargando tenants...
-                                                </span>
-                                            ) : (
-                                                <SelectValue placeholder="Selecciona un TenantGlobal" />
-                                            )}
+                                            {loadingTenants
+                                                ? <span className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> Cargando tenants...</span>
+                                                : <SelectValue placeholder="Selecciona un TenantGlobal" />
+                                            }
                                         </SelectTrigger>
                                         <SelectContent>
                                             {tenantsGlobales.map((tg) => (
@@ -304,18 +582,12 @@ export default function Dashboard(): React.ReactElement {
                                     </Select>
                                 </div>
                                 {selectedTenantGlobalId && (
-                                    <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        className="text-xs text-muted-foreground"
-                                        onClick={() => setSelectedTenantGlobalId(null)}
-                                    >
+                                    <Button variant="ghost" size="sm" className="text-xs text-muted-foreground" onClick={() => setSelectedTenantGlobalId(null)}>
                                         Limpiar
                                     </Button>
                                 )}
                             </div>
                         )}
-
                         {activeTenantGlobalId ? (
                             <div className="space-y-4">
                                 <Card>
@@ -323,27 +595,16 @@ export default function Dashboard(): React.ReactElement {
                                         <div className="flex items-center justify-between gap-4">
                                             <div className="space-y-0.5">
                                                 <p className="text-sm font-medium">Modo de referidos</p>
-                                                <p className="text-xs text-muted-foreground">
-                                                    Define quien puede generar enlaces de referido en este TenantGlobal.
-                                                </p>
+                                                <p className="text-xs text-muted-foreground">Define quien puede generar enlaces de referido en este TenantGlobal.</p>
                                             </div>
-                                            {(loadingParametrizacion || savingModoReferir) && (
-                                                <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground shrink-0" />
-                                            )}
+                                            {(loadingParametrizacion || savingModoReferir) && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground shrink-0" />}
                                         </div>
                                         <div className="flex gap-2">
                                             {(['TODOS', 'SELECCION', 'INHABILITADO'] as const).map((modo) => (
-                                                <Button
-                                                    key={modo}
-                                                    size="sm"
-                                                    variant={modoReferir === modo ? 'default' : 'outline'}
+                                                <Button key={modo} size="sm" variant={modoReferir === modo ? 'default' : 'outline'}
                                                     disabled={loadingParametrizacion || savingModoReferir}
-                                                    onClick={() => void saveModoReferir(modo)}
-                                                    className="flex-1 text-xs"
-                                                >
-                                                    {modo === 'TODOS' && 'Todos'}
-                                                    {modo === 'SELECCION' && 'Seleccion'}
-                                                    {modo === 'INHABILITADO' && 'Inhabilitado'}
+                                                    onClick={() => void saveModoReferir(modo)} className="flex-1 text-xs">
+                                                    {modo === 'TODOS' && 'Todos'}{modo === 'SELECCION' && 'Seleccion'}{modo === 'INHABILITADO' && 'Inhabilitado'}
                                                 </Button>
                                             ))}
                                         </div>
@@ -354,7 +615,6 @@ export default function Dashboard(): React.ReactElement {
                                         </p>
                                     </CardContent>
                                 </Card>
-
                                 <ParametrizacionGenyProcent scope={esSuperAdmin ? 'SUPER_ADMIN' : 'TENANT_GLOBAL'} />
                             </div>
                         ) : esSuperAdmin && (
@@ -366,6 +626,7 @@ export default function Dashboard(): React.ReactElement {
                 </Card>
             )}
 
+            {/* ── Redirects ─────────────────────────────────────────────────── */}
             {esSuperAdmin && (
                 <Card className="shadow-lg border-border">
                     <CardContent className="pt-4">
@@ -376,9 +637,7 @@ export default function Dashboard(): React.ReactElement {
                                         <Route className="h-5 w-5 text-primary" />
                                         <div>
                                             <p className="text-sm font-semibold">Redirects del modulo</p>
-                                            <p className="text-xs text-muted-foreground">
-                                                Permanece cerrado por defecto y solo se despliega al abrirlo manualmente.
-                                            </p>
+                                            <p className="text-xs text-muted-foreground">Permanece cerrado por defecto y solo se despliega al abrirlo manualmente.</p>
                                         </div>
                                     </div>
                                 </AccordionTrigger>
@@ -391,6 +650,9 @@ export default function Dashboard(): React.ReactElement {
                 </Card>
             )}
 
+            {/* ═══════════════════════════════════════════════════════════════
+                MODAL: Editar usuario
+            ════════════════════════════════════════════════════════════════ */}
             <Dialog open={!!editingUser} onOpenChange={(open) => { if (!open) closeEditUser(); }}>
                 <DialogContent className="max-w-xl">
                     <DialogHeader>
@@ -402,28 +664,15 @@ export default function Dashboard(): React.ReactElement {
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                         <div>
                             <Label>Correo</Label>
-                            <Input
-                                value={userEditForm.correo}
-                                onChange={(e) => setUserEditForm((p) => ({ ...p, correo: e.target.value }))}
-                                placeholder="nuevo@correo.com"
-                            />
+                            <Input value={userEditForm.correo} onChange={(e) => setUserEditForm((p) => ({ ...p, correo: e.target.value }))} placeholder="nuevo@correo.com" />
                         </div>
                         <div>
                             <Label>Rol</Label>
-                            <Input
-                                value={userEditForm.rol}
-                                onChange={(e) => setUserEditForm((p) => ({ ...p, rol: e.target.value }))}
-                                placeholder="ADMIN_ROLE / USER_ROLE..."
-                            />
+                            <Input value={userEditForm.rol} onChange={(e) => setUserEditForm((p) => ({ ...p, rol: e.target.value }))} placeholder="ADMIN_ROLE / USER_ROLE..." />
                         </div>
                         <div className="md:col-span-2">
                             <Label>Nueva contraseña</Label>
-                            <Input
-                                type="password"
-                                value={userEditForm.password}
-                                onChange={(e) => setUserEditForm((p) => ({ ...p, password: e.target.value }))}
-                                placeholder="••••••••"
-                            />
+                            <Input type="password" value={userEditForm.password} onChange={(e) => setUserEditForm((p) => ({ ...p, password: e.target.value }))} placeholder="••••••••" />
                         </div>
                     </div>
                     <DialogFooter className="flex gap-2 pt-2">
@@ -433,6 +682,203 @@ export default function Dashboard(): React.ReactElement {
                             Guardar cambios
                         </Button>
                     </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* ═══════════════════════════════════════════════════════════════
+                MODAL: Paleta de colores
+            ════════════════════════════════════════════════════════════════ */}
+            <Dialog open={paletaModalOpen} onOpenChange={(open) => { if (!open) cerrarModalPaleta(); }}>
+                <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <Palette className="h-5 w-5 text-primary" />
+                            Paleta de colores de la aplicacion
+                        </DialogTitle>
+                        <DialogDescription>
+                            Cada color controla variables CSS especificas que afectan toda la interfaz.
+                            El preview es en vivo — la pagina se actualiza mientras eliges.
+                            Al guardar, los colores se propagan a todos los usuarios via Socket.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    {paletaLoading ? (
+                        <div className="flex justify-center items-center py-12">
+                            <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                        </div>
+                    ) : (
+                        <div className="space-y-5 py-2">
+                            {/* Separador */}
+                            <div className="border-t border-border" />
+
+                            {/* Color pickers con descripcion */}
+                            <div className="space-y-4">
+                                {COLOR_META.map(({ key, label, afecta }) => (
+                                    <div key={key} className="flex items-start gap-4 p-3 rounded-lg border border-border bg-card">
+                                        {/* Swatch + picker */}
+                                        <div className="flex flex-col items-center gap-2 shrink-0">
+                                            <div
+                                                className="w-12 h-12 rounded-lg border-2 border-border shadow-sm"
+                                                style={{ backgroundColor: paletaColores[key] }}
+                                            />
+                                            <input
+                                                type="color"
+                                                value={paletaColores[key]}
+                                                onChange={(e) => handleColorChange(key, e.target.value)}
+                                                className="w-10 h-7 cursor-pointer rounded border border-border"
+                                                title={`Seleccionar ${label}`}
+                                            />
+                                        </div>
+
+                                        {/* Info */}
+                                        <div className="flex-1 space-y-1 min-w-0">
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                                <p className="text-sm font-semibold">{label}</p>
+                                                <Badge variant="outline" className="text-xs font-mono">{key}</Badge>
+                                                <code className="text-xs text-muted-foreground font-mono">{paletaColores[key]}</code>
+                                            </div>
+                                            <p className="text-xs text-muted-foreground leading-relaxed">{afecta}</p>
+                                            <Input
+                                                value={paletaColores[key]}
+                                                onChange={(e) => handleColorChange(key, e.target.value)}
+                                                className="h-7 text-xs font-mono mt-1"
+                                                placeholder="#000000"
+                                                maxLength={7}
+                                            />
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                        </div>
+                    )}
+
+                    <DialogFooter className="flex gap-2 pt-2 border-t border-border">
+                        <Button variant="outline" onClick={cerrarModalPaleta} disabled={paletaSaving}>
+                            Cancelar
+                        </Button>
+                        <Button onClick={() => void guardarYActivarPaleta()} disabled={paletaSaving || paletaLoading}>
+                            {paletaSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Palette className="mr-2 h-4 w-4" />}
+                            Guardar y aplicar paleta
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* ═══════════════════════════════════════════════════════════════
+                MODAL: Ayuda de colores
+            ════════════════════════════════════════════════════════════════ */}
+            <Dialog open={ayudaPaletaOpen} onOpenChange={setAyudaPaletaOpen}>
+                <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <HelpCircle className="h-5 w-5 text-primary" />
+                            Guia de colores — ¿que cambia cada uno?
+                        </DialogTitle>
+                        <DialogDescription>
+                            Cada color de la paleta controla variables CSS especificas (<code className="font-mono text-xs">--primary</code>, <code className="font-mono text-xs">--accent</code>, etc.)
+                            que Tailwind aplica en toda la interfaz. Los swatches muestran el color activo en este momento.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="space-y-3 py-2">
+                        {/* Mini preview visual de la app */}
+                        <div className="rounded-lg border border-border overflow-hidden text-xs">
+                            <div className="flex items-center gap-2 px-3 py-2" style={{ backgroundColor: `hsl(var(--card))` }}>
+                                <div className="w-5 h-5 rounded-full" style={{ backgroundColor: `hsl(var(--primary))` }} />
+                                <span className="font-semibold" style={{ color: `hsl(var(--primary))` }}>Navbar / Logo</span>
+                                <div className="ml-auto flex gap-1.5">
+                                    <div className="px-2 py-0.5 rounded text-white text-[10px]" style={{ backgroundColor: `hsl(var(--primary))` }}>Boton</div>
+                                    <div className="px-2 py-0.5 rounded text-[10px]" style={{ backgroundColor: `hsl(var(--accent))`, color: `hsl(var(--primary))` }}>Badge</div>
+                                </div>
+                            </div>
+                            <div className="flex gap-2 p-3" style={{ backgroundColor: `hsl(var(--background))` }}>
+                                <div className="w-28 rounded p-2 space-y-1 shrink-0" style={{ backgroundColor: `hsl(var(--card))`, border: `1px solid hsl(var(--muted))` }}>
+                                    <div className="h-2 rounded w-3/4" style={{ backgroundColor: `hsl(var(--primary))` }} />
+                                    <div className="h-1.5 rounded w-full" style={{ backgroundColor: `hsl(var(--muted))` }} />
+                                    <div className="h-1.5 rounded w-5/6" style={{ backgroundColor: `hsl(var(--muted))` }} />
+                                    <div className="h-1.5 rounded w-2/3" style={{ backgroundColor: `hsl(var(--accent))` }} />
+                                </div>
+                                <div className="flex-1 rounded p-2" style={{ backgroundColor: `hsl(var(--card))`, border: `1px solid hsl(var(--muted))` }}>
+                                    <div className="h-1.5 rounded w-1/3 mb-2" style={{ backgroundColor: `hsl(var(--primary))` }} />
+                                    <div className="h-5 rounded mb-1.5 w-full" style={{ backgroundColor: `hsl(var(--muted))`, border: `1px solid hsl(var(--muted))` }} />
+                                    <div className="flex gap-1 mt-2">
+                                        <div className="h-4 px-2 rounded text-[9px] text-white flex items-center" style={{ backgroundColor: `hsl(var(--primary))` }}>Guardar</div>
+                                        <div className="h-4 px-2 rounded text-[9px] flex items-center" style={{ backgroundColor: `hsl(var(--secondary))`, color: `hsl(var(--primary))` }}>Cancelar</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <p className="text-xs text-muted-foreground text-center">
+                            Preview generado con los colores activos en este momento
+                        </p>
+
+                        <div className="border-t border-border" />
+
+                        {/* Tabla explicativa */}
+                        {COLOR_META.map(({ key, label, cssVar, afecta, elementos }) => (
+                            <div key={key} className="flex gap-3 p-3 rounded-lg border border-border">
+                                {/* Swatch con color real actual */}
+                                <div className="shrink-0 flex flex-col items-center gap-1">
+                                    <div
+                                        className="w-10 h-10 rounded-lg border border-border shadow-sm"
+                                        style={{ backgroundColor: `hsl(var(${cssVar}))` }}
+                                    />
+                                    <code className="text-[9px] text-muted-foreground font-mono">{cssVar}</code>
+                                </div>
+
+                                {/* Descripcion */}
+                                <div className="flex-1 space-y-1.5 min-w-0">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <p className="text-sm font-semibold">{label}</p>
+                                        <Badge variant="outline" className="text-[10px] font-mono">{key}</Badge>
+                                    </div>
+                                    <p className="text-xs text-muted-foreground">{afecta}</p>
+                                    <ul className="space-y-0.5">
+                                        {elementos.map((el) => (
+                                            <li key={el} className="text-xs flex items-start gap-1.5">
+                                                <span className="mt-1 shrink-0 w-1.5 h-1.5 rounded-full inline-block" style={{ backgroundColor: `hsl(var(${cssVar}))` }} />
+                                                {el}
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
+                    <DialogFooter className="border-t border-border pt-3">
+                        <Button variant="outline" onClick={() => setAyudaPaletaOpen(false)}>Cerrar</Button>
+                        <Button onClick={() => { setAyudaPaletaOpen(false); void abrirModalPaleta(); }}>
+                            <Palette className="h-4 w-4 mr-2" />
+                            Ir a configurar colores
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* ═══════════════════════════════════════════════════════════════
+                MODAL: Editar paleta por ruta
+            ════════════════════════════════════════════════════════════════ */}
+            <Dialog
+                open={editarPaletaModal.abierto}
+                onOpenChange={(open) => { if (!open) setEditarPaletaModal({ abierto: false }); }}
+            >
+                <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <Palette className="h-5 w-5 text-primary" />
+                            Editar paleta
+                        </DialogTitle>
+                    </DialogHeader>
+                    <PaletaRutaForm
+                        paletaInicial={editarPaletaModal.paleta}
+                        rutasDisponibles={rutasParaEdicion}
+                        onGuardar={handleGuardarPaleta}
+                        onCancelar={() => setEditarPaletaModal({ abierto: false })}
+                        cargando={guardandoPaleta}
+                    />
                 </DialogContent>
             </Dialog>
         </div>

@@ -108,7 +108,7 @@ export default function PostCard({ post }: PostCardProps) {
                                         />
                                     ))}
                                 </div>
-                                <div className="absolute top-2 right-2 bg-black/60 text-white text-xs px-2 py-1 rounded">
+                                <div className="absolute top-2 right-2 bg-foreground/70 text-background text-xs px-2 py-1 rounded">
                                     {currentImageIndex + 1} / {imageFiles.length}
                                 </div>
                             </>
@@ -141,7 +141,7 @@ export default function PostCard({ post }: PostCardProps) {
                             variant="ghost"
                             size="sm"
                             onClick={handleLike}
-                            className={`gap-2 ${liked ? 'text-red-500' : ''}`}
+                            className={`gap-2 ${liked ? 'text-primary' : ''}`}
                         >
                             <Heart
                                 className={`h-5 w-5 ${liked ? 'fill-current' : ''}`}

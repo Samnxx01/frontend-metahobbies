@@ -7,7 +7,7 @@ import { Sheet, SheetContent } from "@/components/ui/sheet";
 import {
     LayoutDashboard, Package, Tags, Users, ScrollText, Settings,
     LogOut, Network, Wrench, Palette, SquareStack, Route, Building2,
-    ChevronDown, ChevronRight, ShoppingCart, MapPin, Globe, Shield,
+    ChevronDown, ShoppingCart, MapPin, Globe, Shield,
     Bell, FileText, BarChart2, Star, Layers, Link, Mail, Image,
     UserCheck, Database, Key, Sliders, BookOpen, Truck, CreditCard,
     MessageSquare, Calendar, Search, PieChart, HelpCircle, Boxes,
@@ -15,7 +15,7 @@ import {
     RefreshCw, Code, Eye, Hash, Flag, Folder, UserCog, Handshake,
 } from 'lucide-react';
 
-import { getAdminSidebarFallbackTree, getAdminSidebarTreeWithContext, type AdminNavTreeItem } from '@/app/services/routeService';
+import { getAdminSidebarFallbackTree, getAdminSidebarTreeWithContext, invalidateSidebarCache, type AdminNavTreeItem } from '@/app/services/routeService';
 import { normalizeRoutePath } from '@/app/services/routePathNormalizer';
 import type { AdminSidebarProps } from '@/types/components';
 
@@ -163,13 +163,42 @@ export default function AdminSidebar({ mobileOpen, setMobileOpen }: AdminSidebar
         const visit = (items: MenuTreeItem[]): void => {
             items.forEach((item) => {
                 if (item.children.length > 0) {
-                    expanded[item.id] = true;
+                    expanded[item.id] = false;
                     visit(item.children);
                 }
             });
         };
         visit(nodes);
         return expanded;
+    };
+
+    const closeDescendants = (
+        nodes: MenuTreeItem[],
+        targetId: string,
+        state: Record<string, boolean>
+    ): Record<string, boolean> => {
+        const nextState = { ...state };
+
+        const collapseBranch = (items: MenuTreeItem[]): void => {
+            items.forEach((item) => {
+                nextState[item.id] = false;
+                if (item.children.length > 0) collapseBranch(item.children);
+            });
+        };
+
+        const visit = (items: MenuTreeItem[]): boolean => {
+            for (const item of items) {
+                if (item.id === targetId) {
+                    collapseBranch(item.children);
+                    return true;
+                }
+                if (visit(item.children)) return true;
+            }
+            return false;
+        };
+
+        visit(nodes);
+        return nextState;
     };
 
     useEffect(() => {
@@ -200,7 +229,10 @@ export default function AdminSidebar({ mobileOpen, setMobileOpen }: AdminSidebar
             }
         };
 
-        const onRoutesUpdated = (): void => { void loadDynamicMenu(); };
+        const onRoutesUpdated = (): void => {
+            invalidateSidebarCache();
+            void loadDynamicMenu();
+        };
         void loadDynamicMenu();
         window.addEventListener('admin-routes-updated', onRoutesUpdated);
         return () => {
@@ -210,7 +242,12 @@ export default function AdminSidebar({ mobileOpen, setMobileOpen }: AdminSidebar
     }, []);
 
     const toggleNode = (id: string): void => {
-        setExpandedNodes((prev) => ({ ...prev, [id]: !prev[id] }));
+        setExpandedNodes((prev) => {
+            if (prev[id]) {
+                return closeDescendants(dynamicTree, id, { ...prev, [id]: false });
+            }
+            return { ...prev, [id]: true };
+        });
     };
 
     const expandNode = (id: string): void => {
@@ -233,17 +270,17 @@ export default function AdminSidebar({ mobileOpen, setMobileOpen }: AdminSidebar
             }
         };
 
-        const indent = level * 12;
+        const indent = level * 8;
 
         const rowBase = `
-            group flex items-center justify-between gap-2 w-full
-            rounded-lg px-2.5 py-2 text-sm cursor-pointer
-            transition-all duration-150 select-none mb-0.5
+            group flex items-start justify-between gap-2 w-full
+            rounded-lg px-2.5 py-2.5 text-sm cursor-pointer
+            transition-colors duration-200 select-none mb-0.5
         `;
 
         const rowStyle = isActive
             ? `${rowBase} bg-primary/10 text-primary font-medium`
-            : `${rowBase} text-muted-foreground hover:bg-muted hover:text-foreground`;
+            : `${rowBase} text-foreground/85 hover:bg-muted/70 hover:text-foreground`;
 
         const row = (
             <div
@@ -257,20 +294,22 @@ export default function AdminSidebar({ mobileOpen, setMobileOpen }: AdminSidebar
                     }
                 }}
             >
-                <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                <div className="flex items-start gap-2.5 min-w-0 flex-1">
                     {/* Línea de nivel para subnodos */}
                     {level > 0 && (
-                        <span className="flex-shrink-0 w-px h-3.5 bg-border/60 rounded-full" />
+                        <span className="mt-1 flex-shrink-0 w-px h-4 bg-border/60 rounded-full" />
                     )}
-                    <span className={`flex-shrink-0 transition-colors duration-150 ${isActive ? 'text-primary' : 'text-muted-foreground group-hover:text-foreground'}`}>
+                    <span className={`mt-0.5 flex-shrink-0 transition-colors duration-150 ${isActive ? 'text-primary' : 'text-foreground/60 group-hover:text-foreground'}`}>
                         {node.icon}
                     </span>
-                    <span className="truncate text-[13px] leading-tight">{node.label}</span>
+                    <span className="min-w-0 flex-1 break-words whitespace-normal text-left text-[13px] leading-5">
+                        {node.label}
+                    </span>
                 </div>
 
                 {hasChildren && (
                     <span
-                        className={`flex-shrink-0 transition-transform duration-200 ${isExpanded ? 'rotate-180' : 'rotate-0'} ${isActive ? 'text-primary' : 'text-muted-foreground/60'}`}
+                        className={`mt-0.5 flex-shrink-0 transition-transform duration-200 ${isExpanded ? 'rotate-180' : 'rotate-0'} ${isActive ? 'text-primary' : 'text-foreground/45'}`}
                         onClick={(e) => {
                             e.stopPropagation();
                             toggleNode(node.id);
@@ -297,21 +336,21 @@ export default function AdminSidebar({ mobileOpen, setMobileOpen }: AdminSidebar
                 )}
 
                 {/* Subopciones con transición suave */}
-                <div
-                    className="overflow-hidden transition-all duration-200 ease-in-out"
-                    style={{
-                        maxHeight: isExpanded ? '1000px' : '0px',
-                        opacity: isExpanded ? 1 : 0,
-                    }}
-                >
-                    {hasChildren && (
-                        <div className="relative ml-4 pl-2 border-l border-border/40">
-                            {node.children.map((child) => (
-                                <TreeNode key={child.id} node={child} level={level + 1} />
-                            ))}
+                {hasChildren && (
+                    <div
+                        className={`grid overflow-hidden transition-[grid-template-rows,opacity] duration-300 ease-out ${isExpanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}
+                    >
+                        <div
+                            className={`min-h-0 overflow-hidden transition-transform duration-300 ease-out ${isExpanded ? 'translate-y-0' : '-translate-y-1'}`}
+                        >
+                            <div className="relative ml-2.5 pl-2.5 border-l border-border/40">
+                                {node.children.map((child) => (
+                                    <TreeNode key={child.id} node={child} level={level + 1} />
+                                ))}
+                            </div>
                         </div>
-                    )}
-                </div>
+                    </div>
+                )}
             </div>
         );
     };

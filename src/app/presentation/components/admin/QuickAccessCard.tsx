@@ -15,9 +15,9 @@ export default function QuickAccessCard({
             case 'primary':
                 return 'text-primary';
             case 'secondary':
-                return 'text-secondary';
+                return 'text-secondary-foreground';
             default:
-                return 'text-pink-600';
+                return 'text-primary';
         }
     };
 
@@ -26,9 +26,9 @@ export default function QuickAccessCard({
             case 'primary':
                 return 'bg-primary/20 text-primary hover:bg-primary/30';
             case 'secondary':
-                return 'bg-secondary/20 text-secondary hover:bg-secondary/30';
+                return 'bg-secondary/25 text-secondary-foreground hover:bg-secondary/35';
             default:
-                return 'bg-pink-100 text-pink-600 hover:bg-pink-200';
+                return 'bg-accent/20 text-accent-foreground hover:bg-accent/30';
         }
     };
 
@@ -37,7 +37,7 @@ export default function QuickAccessCard({
             className="
                 rounded-xl p-6 
                 shadow-sm border-0
-                bg-white h-full 
+                bg-card h-full 
                 flex flex-col
             "
             style={{ boxShadow: '0 2px 12px rgba(0,0,0,0.04)' }}
@@ -60,7 +60,7 @@ export default function QuickAccessCard({
                     text-sm shadow-none
                     ${getButtonStyles()}
                 `}
-                variant="secondary"
+                variant="ghost"
             >
                 Acceder
             </Button>

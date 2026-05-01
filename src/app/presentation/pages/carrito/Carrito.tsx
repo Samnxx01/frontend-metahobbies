@@ -161,7 +161,7 @@ export default function Carrito(): React.ReactElement {
               <Badge variant="destructive" className="text-xs mt-1">Stock insuficiente</Badge>
             )}
             {alerta && (
-              <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
+              <p className="text-xs text-primary mt-1 flex items-center gap-1">
                 <AlertTriangle className="w-3 h-3" /> {alerta.mensaje}
               </p>
             )}
@@ -217,7 +217,7 @@ export default function Carrito(): React.ReactElement {
 
       {/* Alertas de sincronización */}
       {alertas.length > 0 && (
-        <Alert className="mb-4 border-amber-300 bg-amber-50 text-amber-800">
+        <Alert variant="warning" className="mb-4">
           <AlertTriangle className="h-4 w-4" />
           <AlertTitle>Actualizaciones en tu carrito</AlertTitle>
           <AlertDescription>
@@ -229,7 +229,7 @@ export default function Carrito(): React.ReactElement {
       )}
 
       {cartItems.length === 0 ? (
-        <Alert className="bg-blue-50 border-blue-200 text-blue-700">
+        <Alert variant="info">
           <Info className="h-4 w-4" />
           <AlertTitle>Carrito Vacío</AlertTitle>
           <AlertDescription>Tu carrito está vacío. ¡Agrega productos para comenzar!</AlertDescription>
@@ -266,8 +266,8 @@ export default function Carrito(): React.ReactElement {
 
                 {/* Código de descuento */}
                 {descuentoAplicado ? (
-                  <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-lg px-3 py-2">
-                    <div className="flex items-center gap-2 text-green-700 text-sm">
+                  <div className="flex items-center justify-between bg-secondary/20 border border-secondary/40 rounded-lg px-3 py-2">
+                    <div className="flex items-center gap-2 text-secondary-foreground text-sm">
                       <Tag className="w-4 h-4" />
                       <span className="font-mono font-semibold">{descuentoAplicado.codigo}</span>
                       <span className="text-xs">
@@ -276,7 +276,7 @@ export default function Carrito(): React.ReactElement {
                           : `$${descuentoAplicado.valor.toLocaleString('es-CO')}`})
                       </span>
                     </div>
-                    <Button variant="ghost" size="icon" className="h-6 w-6 text-green-700 hover:bg-green-100" onClick={handleRemoverCodigo}>
+                    <Button variant="ghost" size="icon" className="h-6 w-6 text-secondary-foreground hover:bg-secondary/20" onClick={handleRemoverCodigo}>
                       <X className="w-3 h-3" />
                     </Button>
                   </div>
@@ -310,7 +310,7 @@ export default function Carrito(): React.ReactElement {
                   </div>
 
                   {totalDescuentoCodigo > 0 && (
-                    <div className="flex justify-between text-green-600">
+                    <div className="flex justify-between text-primary">
                       <p>Descuento ({descuentoAplicado?.codigo})</p>
                       <p className="font-medium">-${totalDescuentoCodigo.toLocaleString('es-CO')}</p>
                     </div>

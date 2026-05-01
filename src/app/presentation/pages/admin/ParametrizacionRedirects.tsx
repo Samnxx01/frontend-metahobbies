@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Save, RefreshCw, Route, ListTree } from 'lucide-react';
+import { Save, RefreshCw, Route, ListTree, GitMerge } from 'lucide-react';
 import {
   BrandingConfig,
   guardarBrandingPrivado,
@@ -189,6 +189,22 @@ export default function ParametrizacionRedirects({
     toast.info('Se cargaron los paths de rutasSeguridad en la whitelist.');
   };
 
+  // Fusiona los paths actualmente configurados en los 6 campos de redirect con la whitelist existente.
+  // Elimina el drift entre lo que está configurado y lo que está permitido.
+  const syncWhitelistFromConfiguredRedirects = (): void => {
+    const configuredPaths = REDIRECT_FIELDS
+      .map((field) => String(form[field.key].path || '').trim())
+      .filter((path) => path.startsWith('/') && path !== '/');
+
+    const existingPaths: string[] = (() => {
+      try { return parseAllowedPaths(form.allowedPathsJson); } catch { return []; }
+    })();
+
+    const merged = Array.from(new Set([...existingPaths, ...configuredPaths])).sort((a, b) => a.localeCompare(b));
+    setForm((prev) => ({ ...prev, allowedPathsJson: JSON.stringify(merged, null, 2) }));
+    toast.info(`Whitelist sincronizada: ${configuredPaths.length} paths de redirects incluidos.`);
+  };
+
   const updateField = (
     key: keyof Omit<RedirectFormState, 'allowedPathsJson'>,
     patch: Partial<RedirectEntryState>
@@ -354,16 +370,28 @@ export default function ParametrizacionRedirects({
         <div className="space-y-2">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <Label>Whitelist de rutas permitidas (JSON)</Label>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={loadWhitelistFromSecurityRoutes}
-              disabled={routePaths.length === 0}
-            >
-              <ListTree className="h-4 w-4 mr-2" />
-              Cargar paths de rutasSeguridad
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={syncWhitelistFromConfiguredRedirects}
+                disabled={REDIRECT_FIELDS.every((f) => !String(form[f.key].path || '').trim())}
+              >
+                <GitMerge className="h-4 w-4 mr-2" />
+                Sincronizar desde redirects
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={loadWhitelistFromSecurityRoutes}
+                disabled={routePaths.length === 0}
+              >
+                <ListTree className="h-4 w-4 mr-2" />
+                Cargar paths de rutasSeguridad
+              </Button>
+            </div>
           </div>
           <Textarea
             rows={compact ? 6 : 8}

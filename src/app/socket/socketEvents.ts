@@ -61,6 +61,10 @@ export const socketListeners = {
     onCustomEvent: (event: keyof SocketEvents, callback: SocketEventCallback): void => {
         onSocketEvent(event, callback);
     },
+
+    onPaletaColoresActualizada: (callback: SocketEventCallback<SocketEvents['paleta-colores-actualizada']>): void => {
+        onSocketEvent('paleta-colores-actualizada', callback);
+    },
 };
 
 // Event listener cleanup functions
@@ -93,6 +97,10 @@ export const socketCleanup = {
     // Remove custom event listener
     offCustomEvent: (event: keyof SocketEvents, callback?: SocketEventCallback): void => {
         offSocketEvent(event, callback);
+    },
+
+    offPaletaColoresActualizada: (callback?: SocketEventCallback<SocketEvents['paleta-colores-actualizada']>): void => {
+        offSocketEvent('paleta-colores-actualizada', callback);
     },
 
     // Remove all listeners

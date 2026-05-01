@@ -48,7 +48,7 @@ export default function ProductCard({ product, onAddToCart }: ProductCardProps):
                 flex flex-col 
                 overflow-visible 
                 border-none shadow-none 
-                bg-white p-0 group
+                bg-card p-0 group
             "
         >
 
@@ -87,10 +87,10 @@ export default function ProductCard({ product, onAddToCart }: ProductCardProps):
                             z-20 
                             font-semibold 
                             text-xs 
-                            bg-gray-300 text-gray-800 
-                            hover:bg-gray-400
+                            bg-secondary/60 text-secondary-foreground 
+                            hover:bg-secondary/80
                         "
-                        variant="default"
+                        variant="outline"
                     >
                         {`${product.discount}% off`}
                     </Badge>
@@ -107,7 +107,7 @@ export default function ProductCard({ product, onAddToCart }: ProductCardProps):
                         <span
                             className={`
                                 text-xs font-semibold 
-                                bg-black/70 text-white 
+                                bg-foreground/80 text-background 
                                 px-2 py-1 rounded-md mr-2 
                                 transition-opacity duration-300 whitespace-nowrap
                                 ${isSwatchHovered ? 'opacity-100' : 'opacity-0'}
@@ -118,7 +118,7 @@ export default function ProductCard({ product, onAddToCart }: ProductCardProps):
 
                         {/* Círculo de Color */}
                         <div
-                            className="w-6 h-6 rounded-full border border-gray-300 shadow-md cursor-pointer"
+                            className="w-6 h-6 rounded-full border border-border shadow-md cursor-pointer"
                             style={{ backgroundColor: product.color }}
                         />
                     </div>
@@ -140,8 +140,7 @@ export default function ProductCard({ product, onAddToCart }: ProductCardProps):
                         className="
                             flex-1 
                             text-xs h-8 
-                            font-semibold 
-                            bg-black hover:bg-black/80
+                            font-semibold
                         "
                     >
                         Agregar al Carrito
@@ -153,7 +152,7 @@ export default function ProductCard({ product, onAddToCart }: ProductCardProps):
                             flex-1 
                             text-xs h-8 
                             font-semibold 
-                            border-black text-black bg-white hover:bg-gray-100
+                            border-border bg-card text-foreground hover:bg-muted/50
                         "
                     >
                         Ver Detalles
@@ -170,14 +169,14 @@ export default function ProductCard({ product, onAddToCart }: ProductCardProps):
                     justify-center items-center 
                     text-center 
                     p-4 pt-6 
-                    bg-white
+                    bg-card
                 "
             >
                 {/* Categoría */}
                 <p
                     className="
                         text-xs font-normal 
-                        text-gray-500 uppercase 
+                        text-muted-foreground uppercase 
                         tracking-wider mb-0.5
                     "
                 >
@@ -189,7 +188,7 @@ export default function ProductCard({ product, onAddToCart }: ProductCardProps):
                     title={product.name}
                     className="
                         text-base font-semibold 
-                        text-gray-800 
+                        text-foreground 
                         mb-1 
                         line-clamp-1
                     "
@@ -198,7 +197,7 @@ export default function ProductCard({ product, onAddToCart }: ProductCardProps):
                 </h3>
 
                 {/* Precio */}
-                <p className="text-base font-bold text-gray-800">
+                <p className="text-base font-bold text-foreground">
                     ${product.price}
                 </p>
 

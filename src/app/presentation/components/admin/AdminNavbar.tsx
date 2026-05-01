@@ -4,12 +4,12 @@ import { useTheme } from 'next-themes'
 import { useAuth } from '@/app/providers/AuthProvider'
 import { useMembership } from '@/app/hooks/useMembership'
 import { apiFetch } from '@/app/services/api'
-import { getMenuUsuarioRoutes, getPrivateHomeRoute, getUserShortcutRoutes, type MenuUsuarioItem } from '@/app/services/routeService'
+import { getMenuUsuarioRoutes, getPrivateHomeRoute, getUserShortcutRoutes, readCachedPrivateHomeRoute, type MenuUsuarioItem } from '@/app/services/routeService'
 import { getRouteMenuTags, resolveCurrentRouteMenuTags, type RouteMenuTag } from '@/app/services/routesService'
 import { getGovernedLogoutPath } from '@/app/services/governedNavigation'
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Crown, Home, Landmark, LayoutDashboard, LogOut, Menu, Moon, Settings, Sun, User as UserIcon } from 'lucide-react'
 import type { AdminNavbarProps } from '@/types/components'
 
@@ -29,7 +29,7 @@ const mergeMenuUsuarioItems = (...sources: Array<MenuUsuarioItem[] | RouteMenuTa
     const items = new Map<string, MenuUsuarioItem>()
 
     sources.forEach((source) => {
-        ;(Array.isArray(source) ? source : []).forEach((row: any) => {
+        ; (Array.isArray(source) ? source : []).forEach((row: any) => {
             const key = String(row?.key || row?.codigo || row?.iud || '').trim()
             const path = String(row?.path || row?.routePath || row?.ruta?.path || '').trim()
             const label = String(row?.label || row?.nombreTag || '').trim()
@@ -87,25 +87,6 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
                     setLogoUrl(`data:${resContextual.logo.mimetype};base64,${resContextual.logo.base64}`)
                     return
                 }
-
-                const resPublico = await apiFetch('/api/config/parametrizacion/listar/logos/coporativo', {
-                    method: 'GET',
-                    useAuth: false,
-                    logoutOn401: false
-                })
-
-                if (!active) return
-
-                if (resPublico?.ok && resPublico?.logo?.dataUrl) {
-                    setLogoUrl(resPublico.logo.dataUrl)
-                    return
-                }
-
-                if (resPublico?.ok && resPublico?.logo?.base64 && resPublico?.logo?.mimetype) {
-                    setLogoUrl(`data:${resPublico.logo.mimetype};base64,${resPublico.logo.base64}`)
-                    return
-                }
-
                 setLogoUrl(null)
             } catch (_error) {
                 if (!active) return
@@ -132,12 +113,12 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
                 ])
 
                 if (!active) return
-                setAdminHomePath(privateHome || '/admin')
+                setAdminHomePath(privateHome || readCachedPrivateHomeRoute() || '/public/render/home')
                 setProfilePath(ADMIN_PROFILE_VIEW_PATH)
                 setMembershipPath(shortcuts.membresia || '/membresia/dashboard')
             } catch (_error) {
                 if (!active) return
-                setAdminHomePath('/admin')
+                setAdminHomePath(readCachedPrivateHomeRoute() || '/public/render/home')
                 setProfilePath(ADMIN_PROFILE_VIEW_PATH)
                 setMembershipPath('/membresia/dashboard')
             }

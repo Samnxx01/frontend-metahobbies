@@ -1,14 +1,14 @@
 import type { ReactElement } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import RepresentanteEmpresarial from './RepresentanteEmpresarial';
-import SociedadesCorporativas from './SociedadesCorporativas';
-import DireccionCorporativa from './DireccionCorporativa';
-import DocumentosCorporativos from './DocumentosCorporativos';
-import LogosCorporativos from './LogosCorporativos';
-import SectorIndustriaEmpresa from './SectorIndustriaEmpresa';
-import PerfilCorporativo from './PerfilCorporativo';
-import DesactivarPerfilCorporativo from './DesactivarPerfilCorporativo';
+import RepresentanteEmpresarial from '@/app/presentation/pages/admin/RepresentanteEmpresarial';
+import SociedadesCorporativas from '@/app/presentation/pages/admin/SociedadesCorporativas';
+import DireccionCorporativa from '@/app/presentation/pages/admin/DireccionCorporativa';
+import DocumentosCorporativos from '@/app/presentation/pages/admin/DocumentosCorporativos';
+import LogosCorporativos from '@/app/presentation/pages/admin/LogosCorporativos';
+import SectorIndustriaEmpresa from '@/app/presentation/pages/admin/SectorIndustriaEmpresa';
+import PerfilCorporativo from '@/app/presentation/pages/admin/PerfilCorporativo';
+import DesactivarPerfilCorporativo from '@/app/presentation/pages/admin/DesactivarPerfilCorporativo';
 import { getAdminSidebarTreeWithContext, type AdminNavTreeItem } from '@/app/services/routeService';
 
 type TabComponent = () => ReactElement;
@@ -111,6 +111,10 @@ const findNodeByComponent = (nodes: AdminNavTreeItem[], componentNames: string[]
   return null;
 };
 
+const headerStyle: React.CSSProperties = {
+  background: 'linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)), hsl(var(--secondary)))',
+};
+
 export default function ParametrizacionCorporativa() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('representante');
@@ -122,7 +126,7 @@ export default function ParametrizacionCorporativa() {
 
     const loadDynamicTabs = async () => {
       try {
-        const { tree } = await getAdminSidebarTreeWithContext();
+        const { tree, actorTipo } = await getAdminSidebarTreeWithContext();
         const parentNode = findNodeByComponent(tree, ['ParametrizacionCorporativa']);
         const children = Array.isArray(parentNode?.children) ? parentNode.children : [];
 
@@ -142,26 +146,36 @@ export default function ParametrizacionCorporativa() {
           (tab, index, array) => array.findIndex((candidate) => candidate.value === tab.value) === index
         );
 
+        const fallbackTabs = TAB_DEFINITIONS.filter((tab) => tab.value !== 'desactivar-perfil');
+        const routeAuthorizedButLeaf =
+          !!parentNode &&
+          String(parentNode.path || '').trim() === window.location.pathname &&
+          children.length === 0;
+
         const nextTabs = uniqueTabs.length
           ? uniqueTabs
-          : TAB_DEFINITIONS.filter((tab) => tab.value !== 'desactivar-perfil');
+          : routeAuthorizedButLeaf || actorTipo === 'SUPERADMIN'
+            ? fallbackTabs
+            : parentNode
+              ? []
+              : fallbackTabs;
 
-        if (active) {
-          setParentRoutePath(String(parentNode?.path || '').trim());
-          setDynamicTabs(nextTabs);
-          setActiveTab((current) => {
-            if (nextTabs.some((tab) => tab.value === current)) return current;
-            return nextTabs[0]?.value || 'representante';
-          });
-        }
+        if (!active) return;
+
+        setParentRoutePath(String(parentNode?.path || '').trim());
+        setDynamicTabs(nextTabs);
+        setActiveTab((current) => {
+          if (nextTabs.some((tab) => tab.value === current)) return current;
+          return nextTabs[0]?.value || 'representante';
+        });
       } catch (error) {
         console.error('Error resolviendo tabs dinamicos de parametrizacion corporativa:', error);
-        if (active) {
-          setParentRoutePath('');
-          const fallbackTabs = TAB_DEFINITIONS.filter((tab) => tab.value !== 'desactivar-perfil');
-          setDynamicTabs(fallbackTabs);
-          setActiveTab((current) => (fallbackTabs.some((tab) => tab.value === current) ? current : fallbackTabs[0].value));
-        }
+        if (!active) return;
+
+        setParentRoutePath('');
+        const fallbackTabs = TAB_DEFINITIONS.filter((tab) => tab.value !== 'desactivar-perfil');
+        setDynamicTabs(fallbackTabs);
+        setActiveTab((current) => (fallbackTabs.some((tab) => tab.value === current) ? current : fallbackTabs[0].value));
       } finally {
         if (active) setLoading(false);
       }
@@ -179,6 +193,14 @@ export default function ParametrizacionCorporativa() {
     () => visibleTabs.find((tab) => tab.value === activeTab) || visibleTabs[0] || null,
     [activeTab, visibleTabs]
   );
+
+  const handleTabChange = (value: string) => {
+    const selectedTab = visibleTabs.find((tab) => tab.value === value);
+    setActiveTab(value);
+    if (selectedTab?.path) {
+      window.history.replaceState(window.history.state, '', selectedTab.path);
+    }
+  };
 
   useEffect(() => {
     if (!visibleTabs.length) return;
@@ -207,38 +229,60 @@ export default function ParametrizacionCorporativa() {
   }, [activeTabConfig?.path, parentRoutePath]);
 
   if (loading) {
-    return <div className="p-4 text-sm text-muted-foreground">Cargando parametrizacion dinamica...</div>;
+    return <div className="rounded-xl border border-border bg-card p-4 text-sm text-muted-foreground">Cargando parametrizacion corporativa...</div>;
+  }
+
+  if (!visibleTabs.length) {
+    return (
+      <div className="rounded-xl border border-dashed border-border bg-card/80 p-6 text-sm text-muted-foreground">
+        No tienes rutas autorizadas para esta parametrizacion corporativa con el alcance actual del JWT.
+      </div>
+    );
   }
 
   return (
-    <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-      <div className="flex w-full flex-col items-center">
-        <TabsList className="mb-4 flex min-h-[88px] w-full max-w-[80vw] flex-wrap justify-center gap-2 md:min-h-[44px] md:max-w-[80%]">
-          {visibleTabs.map((tab) => (
-            <TabsTrigger
-              key={tab.value}
-              value={tab.value}
-              className={tab.destructive ? 'text-destructive' : undefined}
-            >
-              {tab.label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-        {activeTabConfig?.path ? (
-          <div className="mb-4 w-full max-w-[80vw] rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700 md:max-w-[80%]">
-            Ruta parametrizada: <span className="font-medium">{activeTabConfig.path}</span>
-          </div>
-        ) : null}
+    <section className="space-y-5">
+      <div
+        className="rounded-2xl border border-border px-5 py-6 text-primary-foreground shadow-sm"
+        style={headerStyle}
+      >
+        <p className="text-xs uppercase tracking-[0.22em] text-primary-foreground/80">Parametrizacion Corporativa</p>
+        <h1 className="mt-2 text-2xl font-semibold">Centro de parametrizacion Empresas</h1>
+        <p className="mt-2 max-w-3xl text-sm text-primary-foreground/85">
+          Administra perfiles, representantes, logos, documentos y los demas parametros visibles segun las rutas
+          autorizadas en tu contexto.
+        </p>
       </div>
 
-      {visibleTabs.map((tab) => {
-        const TabComponent = tab.render;
-        return (
-          <TabsContent key={tab.value} value={tab.value}>
-            <TabComponent />
-          </TabsContent>
-        );
-      })}
-    </Tabs>
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
+        <div className="flex w-full flex-col items-center">
+          <TabsList className="mb-4 flex min-h-[88px] w-full max-w-[80vw] flex-wrap justify-center gap-2 md:min-h-[44px] md:max-w-[80%]">
+            {visibleTabs.map((tab) => (
+              <TabsTrigger
+                key={tab.value}
+                value={tab.value}
+                className={tab.destructive ? 'text-destructive' : undefined}
+              >
+                {tab.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+          {activeTabConfig?.path ? (
+            <div className="mb-4 w-full max-w-[80vw] rounded-md border border-border bg-muted/60 px-3 py-2 text-xs text-foreground md:max-w-[80%]">
+              Ruta parametrizada: <span className="font-medium">{activeTabConfig.path}</span>
+            </div>
+          ) : null}
+        </div>
+
+        {visibleTabs.map((tab) => {
+          const TabComponent = tab.render;
+          return (
+            <TabsContent key={tab.value} value={tab.value}>
+              <TabComponent />
+            </TabsContent>
+          );
+        })}
+      </Tabs>
+    </section>
   );
 }

@@ -15,9 +15,9 @@ interface EmpresaData {
 export default function SobreNosotros() {
     const [empresa, setEmpresa] = useState<EmpresaData>({
         razon_social: 'Nuestra Empresa',
-        descripcion: 'Dedicada al desarrollo de software empresarial y gestión de redes.',
-        mision: 'Brindar soluciones tecnológicas innovadoras para el crecimiento de nuestros clientes.',
-        vision: 'Ser líderes globales en transformación digital y sistemas de referidos.'
+        descripcion: 'Dedicada al desarrollo de software empresarial y gestion de redes.',
+        mision: 'Brindar soluciones tecnologicas innovadoras para el crecimiento de nuestros clientes.',
+        vision: 'Ser lideres globales en transformacion digital y sistemas de referidos.'
     });
 
     const [logoUrl, setLogoUrl] = useState<string | null>(null);
@@ -27,38 +27,49 @@ export default function SobreNosotros() {
         const fetchData = async () => {
             setLoading(true);
             try {
-                const perfilRes = await apiFetch('/api/configuracion/listar/coporativo/perfil/publico', { method: 'GET' });
+                const [perfilResult, logoResult] = await Promise.allSettled([
+                    apiFetch('/api/configuracion/listar/coporativo/perfil/publico', {
+                        method: 'GET',
+                        useAuth: false,
+                        logoutOn401: false,
+                    }),
+                    apiFetch('/api/config/parametrizacion/listar/logos/coporativo', {
+                        method: 'GET',
+                        useAuth: false,
+                        logoutOn401: false,
+                    }),
+                ]);
 
-                if (perfilRes?.ok && perfilRes?.perfil) {
-                    const p = perfilRes.perfil;
+                if (perfilResult.status === 'fulfilled' && perfilResult.value?.ok && perfilResult.value?.perfil) {
+                    const p = perfilResult.value.perfil;
                     setEmpresa({
                         razon_social: p.razon_social || 'Nuestra Empresa',
                         descripcion: p.descripcion || 'Dedicada al desarrollo de software empresarial.',
-                        mision: p.descripcion_mision_empresa || 'Brindar soluciones tecnológicas innovadoras.',
-                        vision: p.descripcion_vision_empresa || 'Ser líderes en transformación digital.'
+                        mision: p.descripcion_mision_empresa || 'Brindar soluciones tecnologicas innovadoras.',
+                        vision: p.descripcion_vision_empresa || 'Ser lideres en transformacion digital.'
                     });
+                } else if (perfilResult.status === 'rejected') {
+                    console.warn('No se pudo cargar el perfil corporativo publico, se usaran valores por defecto.');
                 }
 
-                try {
-                    const listaLogosRes = await apiFetch('/api/config/parametrizacion/listar/logos/coporativa', { method: 'GET' });
-                    const logos = listaLogosRes?.logos || [];
-                    if (logos.length > 0) {
-                        const logoIdReal = logos[0].iud || logos[0]._id || logos[0].id;
-                        const logoDetalleRes = await apiFetch(`/api/config/parametrizacion/listar/logos/coporativa/${logoIdReal}`, { method: 'GET' });
+                if (logoResult.status === 'fulfilled' && logoResult.value?.ok && logoResult.value?.logo) {
+                    const { base64, mimetype, dataUrl } = logoResult.value.logo;
 
-                        if (logoDetalleRes?.ok && logoDetalleRes?.logo) {
-                            const { base64, mimetype } = logoDetalleRes.logo;
-                            if (base64 && mimetype) {
-                                setLogoUrl(`data:${mimetype};base64,${base64}`);
-                            }
-                        }
+                    if (dataUrl) {
+                        setLogoUrl(dataUrl);
+                    } else if (base64 && mimetype) {
+                        setLogoUrl(`data:${mimetype};base64,${base64}`);
+                    } else {
+                        setLogoUrl(null);
                     }
-                } catch (logoErr) {
-                    console.warn("No se pudo cargar el logo, se usará el icono por defecto.");
+                } else {
+                    setLogoUrl(null);
+                    if (logoResult.status === 'rejected') {
+                        console.warn('No se pudo cargar el logo, se usara el icono por defecto.');
+                    }
                 }
-
             } catch (error) {
-                console.error("Error cargando datos de Sobre Nosotros (usando valores por defecto):", error);
+                console.error('Error cargando datos de Sobre Nosotros (usando valores por defecto):', error);
             } finally {
                 setLoading(false);
             }
@@ -77,7 +88,7 @@ export default function SobreNosotros() {
                             <span className="block text-primary mt-2">un referido a la vez</span>
                         </h1>
                         <p className="text-xl md:text-2xl text-muted-foreground max-w-3xl mx-auto">
-                            La plataforma que transforma tu red en ingresos reales, con tecnología de pago segura.
+                            La plataforma que transforma tu red en ingresos reales, con tecnologia de pago segura.
                         </p>
                         <div className="flex flex-wrap justify-center gap-4 md:gap-6 pt-6">
                             <div className="flex items-center gap-2 text-sm md:text-base text-foreground font-medium">
@@ -101,7 +112,7 @@ export default function SobreNosotros() {
                 <div className="container mx-auto px-4 max-w-5xl">
                     <div className="grid md:grid-cols-2 gap-12 items-center">
                         <div className="space-y-6">
-                            <h2 className="text-3xl md:text-4xl font-bold text-foreground">Quiénes Somos</h2>
+                            <h2 className="text-3xl md:text-4xl font-bold text-foreground">Quienes Somos</h2>
                             <div className="space-y-4 text-muted-foreground leading-relaxed text-lg">
                                 <p>{empresa.descripcion}</p>
                             </div>
@@ -111,7 +122,7 @@ export default function SobreNosotros() {
                                         <div className="flex items-start gap-3">
                                             <Target className="h-6 w-6 text-primary mt-1" />
                                             <div>
-                                                <h3 className="font-semibold text-foreground mb-1">Misión</h3>
+                                                <h3 className="font-semibold text-foreground mb-1">Mision</h3>
                                                 <p className="text-sm text-muted-foreground">{empresa.mision}</p>
                                             </div>
                                         </div>
@@ -122,7 +133,7 @@ export default function SobreNosotros() {
                                         <div className="flex items-start gap-3">
                                             <Eye className="h-6 w-6 text-primary mt-1" />
                                             <div>
-                                                <h3 className="font-semibold text-foreground mb-1">Visión</h3>
+                                                <h3 className="font-semibold text-foreground mb-1">Vision</h3>
                                                 <p className="text-sm text-muted-foreground">{empresa.vision}</p>
                                             </div>
                                         </div>

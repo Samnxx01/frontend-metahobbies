@@ -10,6 +10,15 @@ export interface SocketOptions {
     reconnection: boolean;
 }
 
+export interface ColoresPaletaSocket {
+    COLOR_PRIMARY?: string;
+    COLOR_ACCENT?: string;
+    COLOR_LIGHT?: string;
+    COLOR_BG?: string;
+    COLOR_CHAMPAGNE?: string;
+    COLOR_SUNSET?: string;
+}
+
 // Socket events interface - Define all possible socket events
 export interface SocketEvents {
     'ping-usuario': void;
@@ -18,7 +27,7 @@ export interface SocketEvents {
     'membership-updated': { userId: string; membershipData: any };
     'payment-processed': { userId: string; paymentId: string; status: string };
     'notification': { userId: string; message: string; type: 'info' | 'warning' | 'error' | 'success' };
-    // Add more events as needed
+    'paleta-colores-actualizada': { colores: ColoresPaletaSocket };
 }
 
 // Socket connection status

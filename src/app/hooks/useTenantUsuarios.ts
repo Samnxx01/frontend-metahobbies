@@ -48,8 +48,13 @@ export const useTenantUsuarios = () => {
             setErrorJerarquia(null);
             const data = await getJerarquiaUsuarios();
             setJerarquia(data);
-        } catch (err) {
-            setErrorJerarquia(err as Error);
+        } catch (err: any) {
+            const status = err?.status ?? err?.response?.status ?? null;
+            if (status === 401) {
+                setJerarquia(null);
+            } else {
+                setErrorJerarquia(err as Error);
+            }
         } finally {
             setLoadingJerarquia(false);
         }

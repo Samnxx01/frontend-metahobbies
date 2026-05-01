@@ -1,6 +1,7 @@
 import type { BrandingConfig } from '@/app/services/brandingWidget';
 import { readCachedBranding } from '@/app/services/brandingCache';
 import { normalizeRoutePath } from '@/app/services/routePathNormalizer';
+import { readCachedPrivateHomeRoute } from '@/app/services/routeService';
 
 export type GovernedNavigationAction =
   | 'login'
@@ -27,11 +28,18 @@ export interface GovernedNavigationConfig {
 
 const DEFAULT_PATHS: Record<GovernedNavigationAction, string> = {
   login: '/public/render/login',
-  postLogin: '/admin',
-  logout: '/admin',
-  register: '/admin',
-  forgotPassword: '/admin',
+  postLogin: '',
+  logout: '',
+  register: '/public/render/registro-cliente',
+  forgotPassword: '/recuperar-contrasena',
   publicHome: '/public/render/home',
+};
+
+const resolveDefaultFallback = (action: GovernedNavigationAction): string => {
+  if (action === 'postLogin' || action === 'logout') {
+    return readCachedPrivateHomeRoute() || DEFAULT_PATHS.publicHome;
+  }
+  return DEFAULT_PATHS[action];
 };
 
 const isSafeInternalPath = (value: string): boolean => {
@@ -68,7 +76,7 @@ export const getGovernedPath = (
     fallback?: string;
   }
 ): string => {
-  const fallback = options?.fallback || DEFAULT_PATHS[action];
+  const fallback = options?.fallback || resolveDefaultFallback(action);
   const normalizedFallback = normalizeRoutePath(fallback);
   const branding = options?.branding ?? readCachedBranding();
   const config = getNavigationConfig(branding);
@@ -95,3 +103,15 @@ export const getGovernedLogoutPath = (): string => getGovernedPath('logout');
 export const getGovernedRegisterPath = (): string => getGovernedPath('register');
 export const getGovernedForgotPasswordPath = (): string => getGovernedPath('forgotPassword');
 export const getGovernedPublicHomePath = (): string => getGovernedPath('publicHome');
+
+// Retorna true solo cuando el backend tiene un path explícito y válido para la acción.
+// Úsalo para decidir si el governed path debe tener prioridad sobre rutas derivadas (ej. adminHomeRoute).
+export const isGovernedPathConfigured = (action: GovernedNavigationAction): boolean => {
+  const branding = readCachedBranding();
+  const config = getNavigationConfig(branding);
+  const entry = config[action];
+  if (!entry || entry.enabled === false) return false;
+  const candidate = String(entry.path || '').trim();
+  if (!isSafeInternalPath(candidate)) return false;
+  return !isDisallowedRootForAction(action, normalizeRoutePath(candidate));
+};

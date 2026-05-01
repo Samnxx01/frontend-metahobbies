@@ -38,6 +38,12 @@ interface MembresiaPlan {
     monedasId?: { monedas: string };
 }
 
+const normalizeMembershipPriceFromApi = (value: number | string | null | undefined): number => {
+    const numericValue = Number(value);
+    if (!Number.isFinite(numericValue) || numericValue <= 0) return 0;
+    return numericValue / 100;
+};
+
 interface ModalResultadoProps {
     resultado: ResultadoPago;
     onIrAMabs: () => void;
@@ -57,25 +63,25 @@ const MODAL_CONFIG: Record<EstadoTx, {
         icon: <CheckCircle2 className="w-10 h-10" />,
         titulo: '¡Pago exitoso!',
         descripcion: 'Tu membresía MABS ha sido activada. Revisa tu correo para los detalles de acceso.',
-        iconBg: 'bg-emerald-100 dark:bg-emerald-900/30',
-        iconColor: 'text-emerald-600 dark:text-emerald-400',
-        titleColor: 'text-emerald-700 dark:text-emerald-400',
+        iconBg: 'bg-secondary/25',
+        iconColor: 'text-secondary-foreground',
+        titleColor: 'text-secondary-foreground',
     },
     pendiente: {
         icon: <Clock className="w-10 h-10" />,
         titulo: 'Pago en verificación',
         descripcion: 'Tu transacción está siendo procesada. Te notificaremos por correo cuando tu membresía esté activa.',
-        iconBg: 'bg-amber-100 dark:bg-amber-900/30',
-        iconColor: 'text-amber-600 dark:text-amber-400',
-        titleColor: 'text-amber-700 dark:text-amber-400',
+        iconBg: 'bg-accent/25',
+        iconColor: 'text-accent-foreground',
+        titleColor: 'text-accent-foreground',
     },
     rechazada: {
         icon: <XCircle className="w-10 h-10" />,
         titulo: 'Pago no procesado',
         descripcion: 'No pudimos completar tu transacción. Verifica tu método de pago e inténtalo de nuevo.',
-        iconBg: 'bg-red-100 dark:bg-red-900/30',
-        iconColor: 'text-red-600 dark:text-red-400',
-        titleColor: 'text-red-700 dark:text-red-400',
+        iconBg: 'bg-destructive/15',
+        iconColor: 'text-destructive',
+        titleColor: 'text-destructive',
     },
 };
 
@@ -242,11 +248,18 @@ export default function MembershipPayment(): React.ReactElement {
                     console.log('Estado actual del pago:', data);
 
                     const nuevoEstado = wompiStatusToEstado(data.status || data.estado || 'PENDING');
+                    const montoNormalizado = normalizeMembershipPriceFromApi(data.monto);
 
                     if (nuevoEstado !== 'pendiente') {
                         // Estado cambió, actualizar el modal
                         console.log('Estado cambió de pendiente a:', nuevoEstado);
-                        setResultado(prev => prev ? { ...prev, estado: nuevoEstado } : null);
+                        setResultado(prev => prev ? {
+                            ...prev,
+                            estado: nuevoEstado,
+                            monto: montoNormalizado > 0 ? montoNormalizado : prev.monto,
+                            moneda: data.moneda || prev.moneda,
+                            email: data.email || prev.email,
+                        } : null);
                         setPollingActive(false);
 
                         if (nuevoEstado === 'aprobada') {
@@ -296,7 +309,12 @@ export default function MembershipPayment(): React.ReactElement {
 
                 // Filtrar solo las que tienen esPrecioDefault: true
                 const lista: MembresiaPlan[] = Array.isArray(json?.data)
-                    ? json.data.filter((m: MembresiaPlan) => m.esPrecioDefault === true)
+                    ? json.data
+                        .filter((m: MembresiaPlan) => m.esPrecioDefault === true)
+                        .map((m: MembresiaPlan) => ({
+                            ...m,
+                            precioMembresia: normalizeMembershipPriceFromApi(m.precioMembresia),
+                        }))
                     : [];
 
                 setPlanes(lista);
@@ -331,8 +349,15 @@ export default function MembershipPayment(): React.ReactElement {
             if (response.ok) {
                 const data = await response.json();
                 const nuevoEstado = wompiStatusToEstado(data.status || data.estado || 'PENDING');
+                const montoNormalizado = normalizeMembershipPriceFromApi(data.monto);
                 if (nuevoEstado !== 'pendiente') {
-                    setResultado(prev => prev ? { ...prev, estado: nuevoEstado } : null);
+                    setResultado(prev => prev ? {
+                        ...prev,
+                        estado: nuevoEstado,
+                        monto: montoNormalizado > 0 ? montoNormalizado : prev.monto,
+                        moneda: data.moneda || prev.moneda,
+                        email: data.email || prev.email,
+                    } : null);
                     setPollingActive(false);
                     if (nuevoEstado === 'aprobada') {
                         toast.success('¡Pago confirmado! Tu membresía ha sido activada.');

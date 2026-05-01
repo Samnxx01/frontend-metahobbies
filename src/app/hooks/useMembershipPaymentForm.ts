@@ -317,7 +317,7 @@ export function useMembershipPaymentForm({
       } else {
         // Fallback por si el hook se usa sin el modal
         const privateHome = await getPrivateHomeRoute();
-        navigate(privateHome || '/admin');
+        navigate(privateHome || '/public/render/home');
       }
 
     } catch (error: any) {

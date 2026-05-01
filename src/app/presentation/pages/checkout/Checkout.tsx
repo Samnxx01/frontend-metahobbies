@@ -134,7 +134,7 @@ export default function Checkout(): React.ReactElement {
                   <span>${cartSummary.subtotal.toLocaleString('es-CO')}</span>
                 </div>
                 {totalDescuentoCodigo > 0 && (
-                  <div className="flex justify-between text-green-600">
+                  <div className="flex justify-between text-primary">
                     <span>Descuento ({descuentoAplicado?.codigo})</span>
                     <span>-${totalDescuentoCodigo.toLocaleString('es-CO')}</span>
                   </div>
@@ -168,7 +168,7 @@ export default function Checkout(): React.ReactElement {
         {activeStep === 1 && (
           <Card className="w-full max-w-2xl shadow-xl border">
             <CardContent className="p-8 sm:p-10 text-center">
-              <div className="w-20 h-20 rounded-full bg-green-500 text-white flex items-center justify-center mx-auto mb-6 shadow-xl">
+              <div className="w-20 h-20 rounded-full bg-primary text-primary-foreground flex items-center justify-center mx-auto mb-6 shadow-xl">
                 <Check className="w-10 h-10" />
               </div>
               <h2 className="text-2xl font-bold mb-2">¡Pedido Confirmado!</h2>

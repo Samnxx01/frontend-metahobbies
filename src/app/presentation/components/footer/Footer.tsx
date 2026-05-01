@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { Facebook, Instagram, Twitter, Mail, Phone, Clock, Loader2 } from 'lucide-react';
 import { apiFetch } from '@/app/services/api';
 import { useAuth } from '@/app/providers/AuthProvider';
-import { getFooterPublicRoutes } from '@/app/services/routeService';
+import { getPublicNavigationRoutes } from '@/app/services/routeService';
 import type { FooterProps } from '@/types/components';
 
 interface PerfilData {
@@ -11,9 +11,17 @@ interface PerfilData {
     descripcion: string;
     titulo: string;
     regisUsuario?: {
-        correo: string;
+        correo?: string;
     };
     movil_corporativo?: number;
+    direccion_empresa_relacion?: {
+        telefono_empresa?: string;
+        correo_empresa?: string;
+        horario_atencion?: string;
+        prefijo?: {
+            prefijoTelefonicoPais?: string;
+        };
+    };
 }
 
 export default function Footer({ variant = 'default' }: FooterProps = {}): React.ReactElement {
@@ -35,7 +43,7 @@ export default function Footer({ variant = 'default' }: FooterProps = {}): React
                         method: 'GET',
                         useAuth: false,
                     }),
-                    getFooterPublicRoutes()
+                    getPublicNavigationRoutes(false)
                 ]);
 
                 if (!active) return;
@@ -80,7 +88,7 @@ export default function Footer({ variant = 'default' }: FooterProps = {}): React
                         useAuth: true,
                         logoutOn401: false,
                     }),
-                    getFooterPublicRoutes()
+                    getPublicNavigationRoutes(false)
                 ]);
 
                 if (!active) return;
@@ -121,10 +129,16 @@ export default function Footer({ variant = 'default' }: FooterProps = {}): React
     const descripcion =
         perfil?.descripcion ||
         'Tu destino para accesorios de belleza y maquillaje de alta calidad. Descubre tu estilo y resalta tu belleza natural.';
-    const correo = perfil?.regisUsuario?.correo || 'contacto@bellezayglam.com';
-    const telefono = perfil?.movil_corporativo?.toString() || '234 567 890';
-    const prefijo = '+57';
-    const horario = 'Lunes a Viernes: 9:00 AM - 6:00 PM';
+    const correo =
+        perfil?.direccion_empresa_relacion?.correo_empresa ||
+        perfil?.regisUsuario?.correo ||
+        'contacto@bellezayglam.com';
+    const telefono =
+        perfil?.direccion_empresa_relacion?.telefono_empresa ||
+        perfil?.movil_corporativo?.toString() ||
+        '234 567 890';
+    const prefijo = perfil?.direccion_empresa_relacion?.prefijo?.prefijoTelefonicoPais || '+57';
+    const horario = perfil?.direccion_empresa_relacion?.horario_atencion || 'Lunes a Viernes: 9:00 AM - 6:00 PM';
 
     if (isMinimal) {
         return (
@@ -140,7 +154,7 @@ export default function Footer({ variant = 'default' }: FooterProps = {}): React
 
     if (loading) {
         return (
-            <footer className="bg-pink-100 dark:bg-card py-8 md:py-12">
+            <footer className="bg-muted/50 py-8 md:py-12">
                 <div className="container mx-auto px-4 flex justify-center items-center py-12">
                     <Loader2 className="h-8 w-8 animate-spin text-primary" />
                 </div>
@@ -149,7 +163,7 @@ export default function Footer({ variant = 'default' }: FooterProps = {}): React
     }
 
     return (
-        <footer className="bg-pink-100 dark:bg-card py-8 md:py-12">
+        <footer className="bg-muted/50 py-8 md:py-12">
             <div className="container mx-auto px-4 sm:px-6 lg:px-8">
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 md:gap-8">
                     <div className="col-span-1 sm:col-span-2 lg:col-span-1">

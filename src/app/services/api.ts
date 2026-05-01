@@ -59,6 +59,9 @@ export const apiFetch = async (
         if (response.status === 401 && useAuth && logoutOn401) {
             localStorage.removeItem('user');
             localStorage.removeItem('token');
+            // Limpiar caches de sesión para que el próximo login no restaure rutas stale.
+            // No importamos routeService (dep circular), borramos el key directamente.
+            localStorage.removeItem('mabs_private_home_route');
             window.location.href = getGovernedLogoutPath();
             throw new Error('Sesion expirada. Por favor inicia sesion nuevamente.');
         }
