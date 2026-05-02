@@ -694,6 +694,88 @@ export const getAuthorizedRoutes = async (): Promise<AuthorizedRoutes> => {
     }
 };
 
+/** Navbar público: Home → Quiénes somos → Productos → Modelo negocios → Contacto → resto. */
+const accentFoldNavbar = (s: string): string =>
+    String(s ?? '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase();
+
+const navbarFlatSlug = (s: string): string => accentFoldNavbar(s).replace(/[^a-z0-9]/gi, '');
+
+type SecurityRouteRow = RouteResponse['data'][number];
+
+const canonicalGuestPublicNavbarRank = (
+    rawPath: string,
+    routeName: string,
+    navTag: string | null | undefined,
+    componentRaw: string | null | undefined,
+): number => {
+    const pathNorm = accentFoldNavbar(normalizeRoutePath(rawPath));
+    const pathSlug = navbarFlatSlug(pathNorm);
+
+    const compSlug = navbarFlatSlug(String(componentRaw ?? '').replace(/\.(tsx|jsx|ts|js)$/i, ''));
+    const lblSlug = navbarFlatSlug(`${routeName ?? ''}${navTag ?? ''}`);
+
+    const homeHit =
+        pathNorm === '/' ||
+        pathNorm.endsWith('/home') ||
+        pathNorm.includes('/render/home') ||
+        /^(home|inicio)$/i.test(compSlug) ||
+        pathSlug.endsWith('home') ||
+        pathSlug.includes('renderhome');
+    if (homeHit) return 0;
+
+    const aboutHit =
+        /sobre.?nosotros|quienes.?somos|about.?us|\b(sobre\s+nosotros|quiene?s\s+somos)\b/i.test(
+            pathNorm.replace(/\//g, ' '),
+        ) ||
+        /sobre.?nosotros|quienes.?somos|aboutus|\b(sobre\s+nosotros|quiene?s\s+somos)\b/i.test(
+            `${routeName ?? ''} ${navTag ?? ''}`,
+        ) ||
+        (/sobre.*nosotros|quien.*somos|sobrenostros|quienessomos|aboutus/).test(compSlug)
+        || (/nosotros|quienessomos|sobrenostros|about/).test(pathSlug || lblSlug);
+    if (aboutHit) return 1;
+
+    const modeloSlugHit =
+        (compSlug.includes('modelo') && compSlug.includes('negoci'))
+        || (/modelonegoci|modelodenegoci|modeloneg/).test(compSlug + pathSlug)
+        || (/modelo.*negoci|negoci.*modelo/).test(compSlug || pathSlug || lblSlug);
+    if (modeloSlugHit) return 3;
+
+    const productHit =
+        (compSlug.includes('productos') && !/(modeloadmin|admproduct)/i.test(compSlug))
+        || compSlug.includes('catalogo')
+        || pathSlug.includes('productos')
+        || lblSlug.includes('productos');
+    if (productHit) return 2;
+
+    const contactHit =
+        /\b(contacto|contáctanos|contactanos)\b/i.test(`${routeName ?? ''} ${navTag ?? ''}`)
+        || /contact(o|anos|enos)?|^contact$/i.test(pathNorm.replace(/\//g, ''))
+        || compSlug.includes('contacto')
+        || pathSlug.includes('contacto')
+        || (/contact/.test(pathSlug) && !/contract/.test(pathSlug));
+
+    if (contactHit) return 4;
+
+    return 100;
+};
+
+const compareGuestPublicNavbar = (a: SecurityRouteRow, b: SecurityRouteRow): number => {
+    const ia = canonicalGuestPublicNavbarRank(a.path, a.name, a.tiquetaNavb, a.component);
+    const ib = canonicalGuestPublicNavbarRank(b.path, b.name, b.tiquetaNavb, b.component);
+    if (ia !== ib) return ia - ib;
+
+    const oa = a.order ?? 0;
+    const ob = b.order ?? 0;
+    if (oa !== ob) return oa - ob;
+
+    return accentFoldNavbar(normalizeRoutePath(a.path)).localeCompare(
+        accentFoldNavbar(normalizeRoutePath(b.path)),
+    );
+};
+
 // export const getPublicNavigationRoutes = async (): Promise<PublicNavItem[]> => {
 //     try {
 //         const result = await fetchAllSecurityRoutes(false);
@@ -763,7 +845,7 @@ export const getPublicNavigationRoutes = async (
                 if (route.mostrarEnSidebar === true && !isHybrid) return false;
                 return true;
             })
-            .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+            .sort(compareGuestPublicNavbar)
             .map((route) => ({
                 path: normalizeRoutePath(route.path),
                 label: route.name,

@@ -90,6 +90,23 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
                 setLogoUrl(null)
             } catch (_error) {
                 if (!active) return
+                try {
+                    const resSplash = await apiFetch('/api/config/parametrizacion/listar/logos/coporativo', {
+                        method: 'GET',
+                        useAuth: false,
+                        logoutOn401: false,
+                    })
+                    if (resSplash?.ok && resSplash?.logo?.dataUrl) {
+                        setLogoUrl(resSplash.logo.dataUrl)
+                        return
+                    }
+                    if (resSplash?.ok && resSplash?.logo?.base64 && resSplash?.logo?.mimetype) {
+                        setLogoUrl(`data:${resSplash.logo.mimetype};base64,${resSplash.logo.base64}`)
+                        return
+                    }
+                } catch {
+                    /* ignora */
+                }
                 setLogoUrl(null)
             } finally {
                 if (active) setLogoLoading(false)

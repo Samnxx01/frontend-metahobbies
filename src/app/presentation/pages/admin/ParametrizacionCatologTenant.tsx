@@ -98,6 +98,7 @@ type NvlGlobalItem = {
   iud?: string;
   _id?: string;
   nvlGeneracionGlobal?: string;
+  /** Cuando viene del listado fusionado NVL padre + config hija */
   configNvlGlobalId?: string | null;
   nvl?: string | number;
   generation_tenant?: string;
@@ -138,9 +139,12 @@ type NvlSequenceState = {
     generation_tenant?: string | null;
     nombre?: string | null;
     descripcion?: string | null;
+    nvlGeneracionGlobal?: string | null;
     secuencia?: number | null;
     securityPlatform?: boolean;
     estado?: boolean;
+    nivelPadreActivo?: boolean;
+    nivelPadreFaltante?: boolean;
   }>;
 };
 
@@ -295,10 +299,10 @@ const EP_NVL_GLOBAL: EndpointSpec[] = [
       listPath: '/api/config/tenant/tipo/acceso/globales/jerarquia/roles',
       label: 'Ver NVL globales existentes',
       displayFields: ['nvl', 'generation_tenant', 'nombre', 'orden', 'estado'],
-      fillMap: { iud: 'nvl', nvl: 'nvl', generation_tenant: 'generation_tenant', nombre: 'nombre', descripcion: 'descripcion', orden: 'orden' },
+      fillMap: { nvl: 'nvl', generation_tenant: 'generation_tenant', nombre: 'nombre', descripcion: 'descripcion', orden: 'orden' },
     },
     fields: [
-      { name: 'nvl', label: 'Numero de nivel (nvl)', type: 'text', required: true, placeholder: 'Ej: 3', hint: 'Menor numero = mayor poder. 0=DIOS, 1=Global, 2=Corporativo. No puede repetirse.' },
+      { name: 'nvl', label: 'Numero de nivel (nvl)', type: 'text', required: true, placeholder: 'Ej: 3', hint: 'Menor numero = mayor poder. Elige un NVL parametrizado en el listado o «Otro / nuevo nivel» y completa datos con Parametrizar (barra bajo el formulario).' },
       { name: 'generation_tenant', label: 'Clave interna', type: 'text', required: true, placeholder: 'Ej: TENANT-REGIONAL', hint: 'Clave tecnica en UPPERCASE. Ej: LIBRE, TENANT-GLOBAL, TENANT-CORPORATIVO.' },
       { name: 'nombre', label: 'Nombre visible', type: 'text', placeholder: 'Ej: REGIONAL', hint: 'Etiqueta en UPPERCASE que se muestra en la UI al crear tenants.' },
       { name: 'descripcion', label: 'Descripcion', type: 'text', placeholder: 'Ej: Administrador regional', hint: 'Texto explicativo visible en formularios y tooltips.' },
@@ -904,6 +908,7 @@ const ParametrizacionCatologTenant: React.FC = () => {
   const [nvlSequenceLoading, setNvlSequenceLoading] = useState(false);
   const [nvlSequenceState, setNvlSequenceState] = useState<NvlSequenceState | null>(null);
   const [nvlSequenceActionId, setNvlSequenceActionId] = useState<string | null>(null);
+  const [sequenceRowRefreshing, setSequenceRowRefreshing] = useState<string | null>(null);
   const [retryModalOpen, setRetryModalOpen] = useState(false);
   const [retryModalValue, setRetryModalValue] = useState('2');
   const [retryModalLoading, setRetryModalLoading] = useState(false);
@@ -1082,6 +1087,29 @@ const ParametrizacionCatologTenant: React.FC = () => {
       toast.error('No se pudo consultar la secuencia de NVL registrados.');
     } finally {
       setNvlSequenceLoading(false);
+    }
+  };
+
+  /** GET parametrizacion filtrando por nivel padre y refresca tabla de secuencia (validacion puntual por registro). */
+  const validarRegistroSecuenciaIndividual = async (parentGlobalId?: string | null): Promise<void> => {
+    const pid = String(parentGlobalId || '').trim();
+    if (!pid) {
+      toast.error('Este registro no tiene id del nivel padre para validarlo.');
+      return;
+    }
+    setSequenceRowRefreshing(pid);
+    try {
+      await apiFetch(
+        `/api/config/tenant/tipo/acceso/globales/jerarquia/roles/parametrizacion?nvlGeneracionGlobalId=${encodeURIComponent(pid)}`,
+        { method: 'GET' },
+      );
+      await fetchNvlSequenceState();
+      toast.success('Parametrizacion del nivel revisada contra el backend.');
+    } catch (error) {
+      console.error(error);
+      toast.error('No se pudo consultar este registro de parametrizacion.');
+    } finally {
+      setSequenceRowRefreshing(null);
     }
   };
 
@@ -1291,6 +1319,9 @@ const ParametrizacionCatologTenant: React.FC = () => {
   useEffect(() => {
     if (selectedId !== 'nvlg-crear') return;
 
+    void fetchNvlGlobalList().catch((error) => {
+      console.error(error);
+    });
     void fetchNvlSequenceState(selectedId).catch((error) => {
       console.error(error);
     });
@@ -1438,7 +1469,7 @@ const ParametrizacionCatologTenant: React.FC = () => {
           throw new Error('Primero debes parametrizar el NVL desde el modal y luego ejecutar el formulario padre.');
         }
 
-        const { securityPlatform, ...catalogBody } = body as Record<string, unknown>;
+        const { securityPlatform, orden: _omitSeqForm, ...catalogBody } = body as Record<string, unknown>;
         const parentLookup = await apiFetch(
           `/api/config/tenant/tipo/acceso/globales/jerarquia/roles?nvl=${encodeURIComponent(String(catalogBody.nvl ?? ''))}&generation_tenant=${encodeURIComponent(String(catalogBody.generation_tenant ?? ''))}`,
           { method: 'GET' }
@@ -1459,7 +1490,14 @@ const ParametrizacionCatologTenant: React.FC = () => {
           : await apiFetch(path, {
               method: ep.method,
               headers,
-              ...(hasBody ? { body: catalogBody } : {}),
+              ...(hasBody
+                ? {
+                    body: {
+                      ...catalogBody,
+                      securityPlatform: Boolean(securityPlatform === true || securityPlatform === 'true'),
+                    },
+                  }
+                : {}),
             });
 
         const parentRecord = response?.data ?? existingParent ?? null;
@@ -1546,44 +1584,124 @@ const ParametrizacionCatologTenant: React.FC = () => {
       );
     }
     if (eid === 'nvlg-crear' && field.name === 'nvl') {
+      const sortedExisting = getSortedNvlGlobales(nvlGlobalListData);
+      const byParentId = new Map(
+        sortedExisting.map((row) => [String(row?.iud || row?._id || '').trim(), row]),
+      );
+
+      /** Preferir filas del contador (`parametrizacion/secuencia`) cruzadas con el catalogo GET roles. */
+      const regs = nvlSequenceState?.registros ?? [];
+      const fromCounter: NvlGlobalItem[] = [];
+      const seenParent = new Set<string>();
+      for (const reg of regs) {
+        if (reg.estado === false) continue;
+        const pid = String(reg.nvlGeneracionGlobal || '').trim();
+        if (!pid || seenParent.has(pid)) continue;
+        const parent = byParentId.get(pid);
+        if (!parent) continue;
+        seenParent.add(pid);
+        const seq = Number(reg.secuencia ?? 0);
+        fromCounter.push({
+          ...parent,
+          orden: seq,
+          secuencia: seq,
+          securityPlatform:
+            typeof reg.securityPlatform === 'boolean' ? reg.securityPlatform : parent.securityPlatform,
+          configNvlGlobalId: String(reg._id || reg.iud || parent.configNvlGlobalId || ''),
+        });
+      }
+      fromCounter.sort((a, b) => Number(a.orden ?? 0) - Number(b.orden ?? 0));
+
+      const parametrizadosFallback = sortedExisting.filter((row) =>
+        Boolean(String(row?.configNvlGlobalId ?? '').trim()) ||
+        (row?.orden != null && String(row.orden).trim() !== '' && Number.isFinite(Number(row.orden))),
+      );
+
+      const parametrizados = fromCounter.length > 0 ? fromCounter : parametrizadosFallback;
+
+      const parametrizadosOptionIds = new Set(
+        parametrizados.map((row) => String(row?.iud || row?._id || '').trim()).filter(Boolean),
+      );
+
+      const nvlTrim = String(value || '').trim();
+      const keyTrim = String(getField(eid, 'generation_tenant') || '').trim();
+      const matchedParam = parametrizados.find(
+        (row) =>
+          String(row?.nvl ?? '').trim() === nvlTrim &&
+          String(row?.generation_tenant ?? '').trim() === keyTrim,
+      );
+      /** Radix Select exige que `value` exista como SelectItem; si no, el trigger queda vacio. */
+      const matchedIdRaw = matchedParam ? String(matchedParam.iud || matchedParam._id || '').trim() : '';
+      const selectNvlControlled =
+        matchedIdRaw && parametrizadosOptionIds.has(matchedIdRaw) ? matchedIdRaw : '__manual';
+
+      const applyExistingNvlToForm = (row: NvlGlobalItem): void => {
+        const idRow = row?.iud || row?._id;
+        setField(eid, 'nvl', String(row?.nvl ?? '').trim());
+        setField(eid, 'generation_tenant', String(row?.generation_tenant ?? '').trim());
+        setField(eid, 'nombre', String(row?.nombre ?? '').trim());
+        setField(eid, 'descripcion', String(row?.descripcion ?? '').trim());
+        if (row?.orden != null && String(row?.orden ?? '').trim() !== '') {
+          setField(eid, 'orden', String(row?.orden ?? ''));
+        }
+        if (typeof row?.securityPlatform === 'boolean') {
+          setField(eid, 'securityPlatform', row.securityPlatform ? 'true' : 'false');
+        }
+        if (idRow) {
+          setField(eid, '__nvlSeleccionTemplate', String(idRow));
+        }
+      };
+
       return (
-        <div className="space-y-2">
-          <div className="flex items-center gap-3">
-            <Input
-              value={value}
-              type="text"
-              placeholder={field.placeholder || `Ingresa ${field.label}`}
-              onChange={(e) => setField(eid, field.name, e.target.value)}
+        <Select
+          value={selectNvlControlled}
+          onValueChange={(val) => {
+            if (!val || val === '__manual') {
+              setField(eid, '__nvlSeleccionTemplate', '');
+              return;
+            }
+            const row = parametrizados.find((item) => String(item?.iud || item?._id || '') === val);
+            if (row) applyExistingNvlToForm(row);
+          }}
+          disabled={nvlGlobalListLoading}
+        >
+          <SelectTrigger className="w-full">
+            <SelectValue
+              placeholder={
+                nvlGlobalListLoading
+                  ? 'Cargando catalogo de niveles…'
+                  : parametrizados.length === 0
+                    ? 'Sin coincidencias contador↔catalogo. Pulsa «Actualizar lista (GET catalogo)».'
+                    : 'Elige NVL del contador (secuencia) u otro / nuevo nivel'
+              }
             />
-            {canManageGlobalNvlState ? (
-              <Button
-                type="button"
-                variant="outline"
-                className="shrink-0 gap-2"
-                onClick={() => void openRetryModal(eid)}
-                disabled={retryModalLoading}
-              >
-                <Settings2 className="h-4 w-4" />
-                Reintentos
-              </Button>
-            ) : null}
-            <Button
-              type="button"
-              variant="outline"
-              className="shrink-0 gap-2"
-              onClick={() => void openNvlModal(eid)}
-              disabled={nvlModalLoading || !canManageGlobalNvlState}
-            >
-              {nvlModalLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
-              Parametrizar
-            </Button>
-          </div>
-          {canManageGlobalNvlState ? (
-            <p className="text-xs text-slate-500">
-              Reintentos visibles para este flujo: <span className="font-semibold text-slate-700">{currentRetryCount}</span>
-            </p>
-          ) : null}
-        </div>
+          </SelectTrigger>
+          <SelectContent className="max-h-72">
+            <SelectItem value="__manual">
+              Otro / nuevo nivel (definelo con Parametrizar en la barra de acciones del formulario)
+            </SelectItem>
+            {parametrizados.map((item) => {
+              const id = String(item?.iud || item?._id || '');
+              if (!id) return null;
+              const seq = item?.orden != null ? Number(item.orden) : null;
+              return (
+                <SelectItem key={`p-${id}`} value={id}>
+                  <span className="font-medium">NVL {String(item?.nvl ?? '?')}</span>
+                  {seq != null && Number.isFinite(seq) ? (
+                    <span className="text-muted-foreground"> · sec. {seq}</span>
+                  ) : null}
+                  {' · '}
+                  <span className="font-mono text-xs text-muted-foreground">
+                    {String(item?.generation_tenant ?? '') || '—'}
+                  </span>
+                  {item?.nombre ? (
+                    <span className="text-muted-foreground"> — {String(item.nombre)}</span>
+                  ) : null}
+                </SelectItem>
+              );
+            })}
+          </SelectContent>
+        </Select>
       );
     }
     if ((eid === 'nvlg-crear' || eid === 'nvlg-modificar') && field.name === 'orden') {
@@ -1635,7 +1753,9 @@ const ParametrizacionCatologTenant: React.FC = () => {
           <DialogHeader>
             <DialogTitle>Validar secuencia de NVL registrados</DialogTitle>
             <DialogDescription>
-              Consulta por GET el contador de `generacionglobalnvlrolesconfigs` y relaciona cada parametrizacion existente con el nivel global padre ya creado.
+              Coleccion{' '}
+              <code className="rounded bg-slate-100 px-1">generacionglobalnvlrolesconfigs</code>{' '}
+              : expande cada registro para ver el vinculo con el nivel global padre. Cada alta por POST en el nivel global crea tambien una fila de parametrizacion (secuencia) en la misma operacion atomicamente.
             </DialogDescription>
           </DialogHeader>
 
@@ -1662,86 +1782,120 @@ const ParametrizacionCatologTenant: React.FC = () => {
             </div>
 
             <div className="rounded-lg border border-slate-200 bg-white p-4">
-              <p className="text-sm font-medium text-slate-800">Secuencia creada y registros existentes</p>
+              <p className="text-sm font-medium text-slate-800">Registros individuales (parametrizacion por NVL)</p>
               <p className="mt-1 text-xs text-slate-500">
-                Cada fila muestra el numero del contador ya asociado al NVL registrado en Mongo.
+                Abre cada acordeon para revisar datos del nivel padre, validar ese registro contra el API y administrar securityPlatform / estado.
               </p>
-              <div className="mt-3 grid gap-2">
+              <div className="mt-3">
                 {nvlSequenceState?.registros?.length ? (
-                  nvlSequenceState.registros.map((item) => (
-                    <div
-                      key={`nvl-seq-${item?.iud || item?._id || item?.secuencia || item?.nvl}`}
-                      className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:flex-row sm:items-center sm:justify-between"
-                    >
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <Badge variant="outline" className="bg-white">
-                            Secuencia param {Number(item?.secuencia ?? 0)}
-                          </Badge>
-                          <Badge variant="outline" className="bg-white">
-                            NVL {String(item?.nvl ?? '')}
-                          </Badge>
-                          <Badge variant={item?.estado === false ? 'secondary' : 'outline'} className="bg-white">
-                            {item?.estado === false ? 'Inactivo' : 'Activo'}
-                          </Badge>
-                        </div>
-                        <p className="text-sm font-medium text-slate-800">
-                          {String(item?.nombre ?? '') || 'Sin nombre visible'}
-                        </p>
-                        <p className="text-xs font-mono text-slate-500">
-                          {String(item?.generation_tenant ?? '') || 'SIN-CLAVE'}
-                        </p>
-                        <p className="text-xs text-slate-500">
-                          {String(item?.descripcion ?? '') || 'Sin descripcion parametrizada'}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Badge variant={item?.securityPlatform ? 'default' : 'secondary'}>
-                          Acceso libre: {item?.securityPlatform ? 'true' : 'false'}
-                        </Badge>
-                        {canManageGlobalNvlState ? (
-                          <>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="gap-1"
-                              onClick={() => void handleUpdateSequenceConfig(item)}
-                              disabled={nvlSequenceActionId === String(item?.iud || item?._id || '')}
-                            >
-                              {nvlSequenceActionId === String(item?.iud || item?._id || '') ? (
-                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                              ) : (
-                                <Pencil className="h-3.5 w-3.5" />
-                              )}
-                              Actualizar
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="gap-1"
-                              onClick={() => void handleDeactivateSequenceConfig(item)}
-                              disabled={nvlSequenceActionId === String(item?.iud || item?._id || '') || item?.estado === false}
-                            >
-                              Desactivar
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="gap-1 text-red-600"
-                              onClick={() => void handleDeleteSequenceConfig(item)}
-                              disabled={nvlSequenceActionId === String(item?.iud || item?._id || '')}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                              Eliminar
-                            </Button>
-                          </>
-                        ) : null}
-                      </div>
-                    </div>
-                  ))
+                  <Accordion type="multiple" className="w-full divide-y rounded-lg border border-slate-100">
+                    {nvlSequenceState.registros.map((item, idx) => {
+                      const cfgId = String(item?.iud || item?._id || `idx-${idx}`);
+                      const accordionValue = `${cfgId}-${Number(item?.secuencia ?? idx)}`;
+                      const parentId = String(item?.nvlGeneracionGlobal || '').trim();
+                      const validandoEste = Boolean(parentId) && sequenceRowRefreshing === parentId;
+                      const padreHueco = Boolean(item?.nivelPadreFaltante);
+                      return (
+                        <AccordionItem key={`nvl-seq-${accordionValue}`} value={accordionValue} className="border-0 px-2">
+                          <AccordionTrigger className="py-3 text-sm hover:no-underline [&[data-state=open]]:pb-2">
+                            <span className="flex flex-wrap items-center gap-2 text-left">
+                              <Badge variant="outline" className="bg-white shrink-0">
+                                Sec. config {Number(item?.secuencia ?? 0)}
+                              </Badge>
+                              <Badge variant="outline" className="bg-white shrink-0">
+                                NVL {String(item?.nvl ?? '?')}
+                              </Badge>
+                              <Badge variant={item?.estado === false ? 'secondary' : 'outline'} className="bg-white shrink-0">
+                                {item?.estado === false ? 'Config inactiva' : 'Config activa'}
+                              </Badge>
+                              {padreHueco ? (
+                                <Badge variant="destructive" className="shrink-0">Padre NVL sin datos enlazados</Badge>
+                              ) : null}
+                              <span className="truncate text-xs font-mono text-slate-600">
+                                {String(item?.generation_tenant ?? '') || '—'}
+                              </span>
+                            </span>
+                          </AccordionTrigger>
+                          <AccordionContent>
+                            <div className="space-y-4 rounded-lg border border-slate-100 bg-slate-50 p-4">
+                              <div className="space-y-2 text-xs text-slate-600">
+                                <p>
+                                  <span className="font-semibold text-slate-700">ID parametrizacion: </span>
+                                  <code className="rounded bg-white px-1">{cfgId}</code>
+                                </p>
+                                <p>
+                                  <span className="font-semibold text-slate-700">ID nivel global padre: </span>
+                                  <code className="rounded bg-white px-1">{parentId || '—'}</code>
+                                </p>
+                                <p className="text-sm font-medium text-slate-800">
+                                  {String(item?.nombre ?? '') || 'Sin nombre visible'}
+                                </p>
+                                <p>{String(item?.descripcion ?? '') || 'Sin descripcion del nivel padre'}</p>
+                                <Badge variant={item?.securityPlatform ? 'default' : 'secondary'} className="w-fit">
+                                  Acceso libre (securityPlatform): {item?.securityPlatform ? 'true' : 'false'}
+                                </Badge>
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                <Button
+                                  type="button"
+                                  variant="secondary"
+                                  size="sm"
+                                  className="gap-1"
+                                  disabled={!parentId || validandoEste}
+                                  onClick={() => void validarRegistroSecuenciaIndividual(parentId)}
+                                >
+                                  {validandoEste ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
+                                  Validar este registro (GET parametrizacion)
+                                </Button>
+                                {canManageGlobalNvlState ? (
+                                  <>
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      className="gap-1"
+                                      onClick={() => void handleUpdateSequenceConfig(item)}
+                                      disabled={nvlSequenceActionId === String(item?.iud || item?._id || '')}
+                                    >
+                                      {nvlSequenceActionId === String(item?.iud || item?._id || '') ? (
+                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                      ) : (
+                                        <Pencil className="h-3.5 w-3.5" />
+                                      )}
+                                      Toggle acceso libre
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      className="gap-1"
+                                      onClick={() => void handleDeactivateSequenceConfig(item)}
+                                      disabled={
+                                        nvlSequenceActionId === String(item?.iud || item?._id || '') || item?.estado === false
+                                      }
+                                    >
+                                      Desactivar
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      className="gap-1 text-red-600"
+                                      onClick={() => void handleDeleteSequenceConfig(item)}
+                                      disabled={nvlSequenceActionId === String(item?.iud || item?._id || '')}
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                      Eliminar
+                                    </Button>
+                                  </>
+                                ) : null}
+                              </div>
+                            </div>
+                          </AccordionContent>
+                        </AccordionItem>
+                      );
+                    })}
+                  </Accordion>
                 ) : (
                   <Badge variant="outline" className="w-fit bg-white">No hay registros asociados a la secuencia todavia</Badge>
                 )}
@@ -2141,6 +2295,48 @@ const ParametrizacionCatologTenant: React.FC = () => {
                               onChange={(v) => setField(selectedEndpoint.id, field.name, v)}
                               renderField={() => renderField(field, selectedEndpoint.id)} />
                           ))}
+                        </div>
+                      )}
+                      {selectedEndpoint.id === 'nvlg-crear' && (
+                        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-3">
+                          {canManageGlobalNvlState ? (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="shrink-0 gap-2"
+                              onClick={() => void openRetryModal('nvlg-crear')}
+                              disabled={retryModalLoading}
+                            >
+                              <Settings2 className="h-4 w-4" />
+                              Reintentos
+                            </Button>
+                          ) : null}
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="shrink-0 gap-2"
+                            onClick={() => void openNvlModal('nvlg-crear')}
+                            disabled={nvlModalLoading || !canManageGlobalNvlState}
+                          >
+                            {nvlModalLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
+                            Parametrizar
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="shrink-0 gap-1 text-xs"
+                            onClick={() => void fetchNvlGlobalList()}
+                            disabled={nvlGlobalListLoading}
+                          >
+                            {nvlGlobalListLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RotateCcw className="h-3 w-3" />}
+                            Actualizar lista (GET catalogo)
+                          </Button>
+                          {canManageGlobalNvlState ? (
+                            <span className="text-xs text-slate-500">
+                              Reintentos en flujo: <span className="font-semibold text-slate-700">{currentRetryCount}</span>
+                            </span>
+                          ) : null}
                         </div>
                       )}
                     </>

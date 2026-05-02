@@ -29,13 +29,38 @@ export default function LoadingScreen(): React.ReactElement {
 
     useEffect(() => {
         const cargarRecursos = async (): Promise<void> => {
-            const [brandingResult, logoResult] = await Promise.allSettled([
-                obtenerBrandingPublico(),
+            const tieneTokenSesion =
+                typeof window !== 'undefined' && Boolean(String(localStorage.getItem('token') || '').trim());
+
+            const fetchSplashLogo = (): Promise<{ logo?: unknown }> =>
                 apiFetch('/api/config/parametrizacion/listar/logos/coporativo', {
                     method: 'GET',
-                    useAuth: false,
-                    logoutOn401: false
-                })
+                    useAuth: tieneTokenSesion,
+                    logoutOn401: false,
+                });
+
+            const cargarSplashLogoSafe = async (): Promise<{ logo?: unknown } | null> => {
+                try {
+                    return await fetchSplashLogo();
+                } catch {
+                    if (tieneTokenSesion) {
+                        try {
+                            return await apiFetch('/api/config/parametrizacion/listar/logos/coporativo', {
+                                method: 'GET',
+                                useAuth: false,
+                                logoutOn401: false,
+                            });
+                        } catch {
+                            return null;
+                        }
+                    }
+                    return null;
+                }
+            };
+
+            const [brandingResult, logoBox] = await Promise.allSettled([
+                obtenerBrandingPublico(),
+                cargarSplashLogoSafe(),
             ]);
 
             if (brandingResult.status === 'fulfilled') {
@@ -47,8 +72,8 @@ export default function LoadingScreen(): React.ReactElement {
                 setBackgroundUrl('');
             }
 
-            if (logoResult.status === 'fulfilled') {
-                setLogoUrl(resolveLogoUrl((logoResult.value as any)?.logo));
+            if (logoBox.status === 'fulfilled' && logoBox.value) {
+                setLogoUrl(resolveLogoUrl((logoBox.value as any)?.logo));
             } else {
                 setLogoUrl(DEFAULT_LOGO_URL);
             }
