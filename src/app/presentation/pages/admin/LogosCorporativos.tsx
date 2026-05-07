@@ -51,6 +51,11 @@ export default function LogosCorporativos() {
   const [tenantOptions, setTenantOptions] = useState<TenantOption[]>([]);
   const [selectedPerfilCorporativoId, setSelectedPerfilCorporativoId] = useState<string>('');
   const [loadingTenantOptions, setLoadingTenantOptions] = useState(false);
+  const [destinoLogoMeta, setDestinoLogoMeta] = useState<{
+    modoParametrizacion?: string;
+    sinJerarquiaCorporativoEnCounters?: boolean;
+    corporativoSeResuelveEnServidor?: boolean;
+  } | null>(null);
 
   const [isListModalOpen, setIsListModalOpen] = useState(false);
   const [selectedLogo, setSelectedLogo] = useState<any>(null);
@@ -104,6 +109,8 @@ export default function LogosCorporativos() {
 
         if (!active) return;
 
+        setDestinoLogoMeta(res?.meta && typeof res.meta === 'object' ? res.meta : null);
+
         const raw = Array.isArray(res?.data) ? res.data : [];
         const mapped: TenantOption[] = raw
           .map((item: any) => {
@@ -120,6 +127,7 @@ export default function LogosCorporativos() {
         console.error('Error cargando opciones de tenant destino:', error);
         if (!active) return;
         setTenantOptions([]);
+        setDestinoLogoMeta(null);
       } finally {
         if (active) setLoadingTenantOptions(false);
       }
@@ -388,13 +396,13 @@ export default function LogosCorporativos() {
         {isTenantSuperAdmin && (
           <td className="px-4 py-3 text-xs text-muted-foreground">
             <div className="space-y-1">
-              {logo.tenantGlobalLabel && logo.tenantGlobalLabel !== 'Sin razon social' && (
-                <div>{logo.tenantGlobalLabel}</div>
-              )}
-              {logo.perfilCorporativoLabel && (
+              <div className="font-medium text-foreground/90">tenantSuperAdmin (sesión)</div>
+              {logo.perfilCorporativoLabel ? (
                 <div className="text-[11px] text-muted-foreground/80">
-                  Corporativo: {logo.perfilCorporativoLabel}
+                  Perfil corporativo: {logo.perfilCorporativoLabel}
                 </div>
+              ) : (
+                <div className="text-[11px] text-amber-700/90">Sin perfil corporativo en el archivo</div>
               )}
             </div>
           </td>
@@ -490,7 +498,9 @@ export default function LogosCorporativos() {
                       <thead className="bg-muted/50">
                         <tr>
                           <th className="px-4 py-3 text-left font-semibold">Nombre</th>
-                          {isTenantSuperAdmin && <th className="px-4 py-3 text-left font-semibold">Tenant Global</th>}
+                          {isTenantSuperAdmin && (
+                            <th className="px-4 py-3 text-left font-semibold">Tenant SuperAdmin / Perfil</th>
+                          )}
                           <th className="px-4 py-3 text-left font-semibold">Extension</th>
                           <th className="px-4 py-3 text-left font-semibold">Estado Publico</th>
                           <th className="px-4 py-3 text-left font-semibold">Fecha</th>
@@ -527,10 +537,12 @@ export default function LogosCorporativos() {
             {isTenantSuperAdmin && tenantOptions.length > 0 && (
               <div className="mb-3">
                 <label className="block text-xs font-medium text-muted-foreground mb-1">
-                  Perfil corporativo destino (opcional para tenantSuperAdmin)
+                  Perfil corporativo (parametrización)
                 </label>
                 <p className="mb-2 text-[11px] text-muted-foreground">
-                  Si lo dejas vacio, el logo se guarda sin relacion y solo lo visualiza el tenantSuperAdmin que lo sube.
+                  {destinoLogoMeta?.sinJerarquiaCorporativoEnCounters
+                    ? 'Sin filas previas en tenantjerarquiacounters con corporativo: elige un perfil del catálogo. El tenantSuperAdmin lo toma del JWT.'
+                    : 'Perfiles acotados por tenantjerarquiacounters (y coporativo del tenantSuperAdmin). Si hay varios, elige uno; si hay uno solo, el servidor puede resolverlo al subir.'}
                 </p>
                 <select
                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
@@ -538,7 +550,11 @@ export default function LogosCorporativos() {
                   onChange={(e) => setSelectedPerfilCorporativoId(e.target.value)}
                   disabled={loadingTenantOptions || submitting}
                 >
-                  <option value="">Ver todos / usar contexto actual</option>
+                  <option value="">
+                    {destinoLogoMeta?.corporativoSeResuelveEnServidor && tenantOptions.length === 1
+                      ? 'Usar único perfil en jerarquía (automático)'
+                      : 'Opcional — resolver en servidor si aplica'}
+                  </option>
                   {tenantOptions.map((opt) => (
                     <option key={opt.id} value={opt.id}>{opt.label}</option>
                   ))}
@@ -566,7 +582,9 @@ export default function LogosCorporativos() {
             </div>
             {isTenantSuperAdmin && tenantOptions.length === 0 && !loadingTenantOptions && (
               <p className="text-xs text-muted-foreground mt-2">
-                No se encontraron tenantGlobal visibles para asignar destino.
+                {destinoLogoMeta?.modoParametrizacion === 'jerarquia_sin_perfil_resuelto'
+                  ? 'No hay perfiles derivados de tenantjerarquiacounters; puedes subir el logo sin perfil o revisa counters / coporativo del tenantSuperAdmin.'
+                  : 'El tenantSuperAdmin del JWT se usa solo; si tienes jerarquía con un corporativo, el servidor lo asignará al subir sin elegir aquí.'}
               </p>
             )}
           </div>
@@ -583,7 +601,7 @@ export default function LogosCorporativos() {
               <thead className="bg-muted sticky top-0 z-10">
                 <tr>
                   <th className="px-4 py-3 text-left">Nombre</th>
-                  {isTenantSuperAdmin && <th className="px-4 py-3 text-left">Tenant Global</th>}
+                  {isTenantSuperAdmin && <th className="px-4 py-3 text-left">Tenant SuperAdmin / Perfil</th>}
                   <th className="px-4 py-3 text-left">Extension</th>
                   <th className="px-4 py-3 text-left">Estado Publico</th>
                   <th className="px-4 py-3 text-left">Fecha</th>

@@ -130,8 +130,9 @@ export const ENDPOINTS: EndpointSpec[] = [
     actor: 'tenantSuperAdmin',
     method: 'POST',
     path: '/api/config/permisos/creacion/admin/tenant/global',
-    title: 'Asignar permisos heredados',
-    description: 'Flujo para tenantSuperAdmin (DIOS).',
+    title: 'Permisos heredados (solo tenantSuperAdmin)',
+    description:
+      'Solo sesión SuperAdmin (DIOS). El desplegable de alcance respeta tenantJerarquiaCounter: sin corporativo ves todos los TG; con corporativo asociado, solo la rama de tu SA.',
     fields: [
       { name: 'tenantGlobal', label: 'Tenant global', type: 'id', required: true },
       { name: 'tenantCorporativo', label: 'Tenant corporativo', type: 'id' },
@@ -149,13 +150,28 @@ export const ENDPOINTS: EndpointSpec[] = [
     fields: [],
   },
   {
-    id: 'perm-admin-tenant-global-actualizar',
+    id: 'perm-admin-tenant-global-actualizar-sa',
     section: 'permisos',
     actor: 'tenantSuperAdmin',
     method: 'PUT',
     path: '/api/config/permisos/creacion/admin/tenant/global/:id',
-    title: 'Actualizar herencia admin/global',
-    description: 'Actualiza una herencia por id.',
+    title: 'Actualizar herencia admin/global (SuperAdmin)',
+    description:
+      'Actualiza una herencia por id. Sesión tenantSuperAdmin (DIOS): mismo alcance que «Permisos heredados» (POST).',
+    fields: [
+      { name: 'tenantGlobal', label: 'Tenant global', type: 'id' },
+      { name: 'herenciaAsociada', label: 'Herencia asociada', type: 'id', required: true, pathParam: true },
+      { name: 'permisos', label: 'Permisos por vista/accion', type: 'permisos' },
+    ],
+  },
+  {
+    id: 'perm-admin-tenant-global-actualizar-tg',
+    section: 'permisos',
+    actor: 'tenantGlobal',
+    method: 'PUT',
+    path: '/api/config/permisos/creacion/admin/tenant/global/:id',
+    title: 'Actualizar herencia admin/global (Tenant global)',
+    description: 'Actualiza una herencia por id. Sesión tenantGlobal (ADMIN): solo herencias de tu TG.',
     fields: [
       { name: 'tenantGlobal', label: 'Tenant global', type: 'id' },
       { name: 'herenciaAsociada', label: 'Herencia asociada', type: 'id', required: true, pathParam: true },

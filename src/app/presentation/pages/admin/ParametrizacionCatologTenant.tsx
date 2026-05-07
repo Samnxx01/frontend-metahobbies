@@ -2,6 +2,12 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { toast } from 'react-toastify';
 import { apiFetch } from '@/app/services/api';
 import { cn } from '@/lib/utils';
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from '@/components/ui/accordion';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -239,6 +245,14 @@ const EP_CATALOGOS: EndpointSpec[] = [
       { name: 'tipo_acceso_apis', label: 'Tipo acceso APIs', type: 'text', required: true, placeholder: 'Ej: API_FULL', hint: 'Clave interna del tipo de acceso. Se usa en el selector al crear tenants.' },
       { name: 'sigla',            label: 'Sigla',            type: 'text', required: true, placeholder: 'Ej: AF',       hint: 'Abreviatura de 2-5 caracteres.' },
     ],
+  },
+  {
+    id: 'cat-tipo-tenant-listar', section: 'catalogos', method: 'GET',
+    path: '/api/config/tenant/tipo/acceso/usu/coporativa',
+    title: 'Listar tipos acceso tenant',
+    description:
+      'Lista registros en tipoAccesoTenant (tipo_acceso_apis, sigla, estado). Opcional en query: todos=true (incluye inactivos), estado=true|false.',
+    fields: [],
   },
   {
     id: 'cat-contexto-crear', section: 'catalogos', method: 'POST',
@@ -1054,6 +1068,8 @@ const ParametrizacionCatologTenant: React.FC = () => {
         apiFetch('/api/config/tenant/tipo/acceso/globales/jerarquia/roles', { method: 'GET' }),
         apiFetch('/api/config/tenant/tipo/acceso/globales/jerarquia/roles/parametrizacion', { method: 'GET' }),
         fetchNvlSequenceState(eid),
+        /** Misma fuente que el select del formulario (contador ↔ catálogo). */
+        fetchNvlGlobalList(),
       ]);
       const rows = Array.isArray(response?.data)
         ? response.data
@@ -1392,16 +1408,51 @@ const ParametrizacionCatologTenant: React.FC = () => {
           });
 
       const parentRecord = parentResponse?.data ?? existingParent ?? null;
+      const parentId = String(parentRecord?._id || parentRecord?.iud || '').trim();
 
-      const refreshedCatalog = await apiFetch('/api/config/tenant/tipo/acceso/globales/jerarquia/roles', {
-        method: 'GET',
-      });
-      const catalogRows = Array.isArray(refreshedCatalog?.data)
-        ? refreshedCatalog.data
-        : Array.isArray(refreshedCatalog)
-          ? refreshedCatalog
-          : [];
+      /**
+       * Sin fila en generacionglobalnvlrolesconfigs no hay secuencia en el contador:
+       * el select del formulario cruza registros de parametrizacion/secuencia con el catalogo.
+       * Igual que al ejecutar nvlg-crear: crear parametrizacion hija si aun no existe.
+       */
+      if (parentId) {
+        const configLookup = await apiFetch(
+          `/api/config/tenant/tipo/acceso/globales/jerarquia/roles/parametrizacion?nvlGeneracionGlobalId=${encodeURIComponent(parentId)}`,
+          { method: 'GET' },
+        );
+        const existingConfigs = Array.isArray(configLookup?.data)
+          ? configLookup.data
+          : Array.isArray(configLookup)
+            ? configLookup
+            : [];
+        const existingConfig = existingConfigs[0] ?? null;
+        const cid = String(existingConfig?._id || existingConfig?.iud || '').trim();
+        const securityPlatform = String(getField('nvlg-crear', 'securityPlatform') || '').trim() === 'true';
+        if (!cid) {
+          await apiFetch('/api/config/tenant/tipo/acceso/globales/jerarquia/roles/parametrizacion', {
+            method: 'POST',
+            body: {
+              nvlGeneracionGlobalId: parentId,
+              securityPlatform,
+            },
+          });
+        }
+      }
+
+      /** Catálogo + registros del contador (secuencia/reintentos): alimenta el select. */
+      const catalogRows = await fetchNvlGlobalList();
       setNvlGlobales(catalogRows);
+      const seqState = await fetchNvlSequenceState();
+
+      let ordenForm = String(parentRecord?.orden ?? '');
+      if (parentId && seqState.registros?.length) {
+        const reg = seqState.registros.find(
+          (x) => String(x.nvlGeneracionGlobal || '').trim() === parentId,
+        );
+        if (reg != null && reg.secuencia != null && String(reg.secuencia).trim() !== '') {
+          ordenForm = String(reg.secuencia);
+        }
+      }
 
       setFieldValues((prev) => ({
         ...prev,
@@ -1411,7 +1462,7 @@ const ParametrizacionCatologTenant: React.FC = () => {
           generation_tenant: String(parentRecord?.generation_tenant ?? payload.generation_tenant),
           nombre: String(parentRecord?.nombre ?? payload.nombre ?? ''),
           descripcion: String(parentRecord?.descripcion ?? payload.descripcion ?? ''),
-          orden: String(parentRecord?.orden ?? prev['nvlg-crear']?.orden ?? ''),
+          orden: ordenForm || String(prev['nvlg-crear']?.orden ?? ''),
           __nvlModalReady: 'true',
         }
       }));
@@ -1544,7 +1595,7 @@ const ParametrizacionCatologTenant: React.FC = () => {
         setNvlGlobalListData(rows);
       }
 
-      setResult((prev) => ({ ...prev, [ep.id]: JSON.stringify(response, null, 2) }));
+      setResult((prev) => ({ ...prev, [ep.id]: '' }));
 
       if (ep.id === 'nvlg-crear' || ep.id === 'nvlg-desactivar') {
         await fetchNvlSequenceState('nvlg-crear').catch((error) => {
@@ -1552,7 +1603,12 @@ const ParametrizacionCatologTenant: React.FC = () => {
         });
       }
 
-      toast.success(`${ep.title} ejecutado correctamente.`);
+      let notifyMsg = `${ep.title} ejecutado correctamente.`;
+      if (response && typeof response === 'object') {
+        const r = response as Record<string, unknown>;
+        if (typeof r.msg === 'string' && r.msg.trim()) notifyMsg = r.msg.trim();
+      }
+      toast.success(notifyMsg);
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : 'Error al ejecutar el endpoint';
       setResult((prev) => ({ ...prev, [ep.id]: msg }));
@@ -1584,40 +1640,34 @@ const ParametrizacionCatologTenant: React.FC = () => {
       );
     }
     if (eid === 'nvlg-crear' && field.name === 'nvl') {
+      /**
+       * Mismo origen que el modal «Catálogo NVL guardado»: GET catálogo `generacionGlobalNvlRoles`
+       * (`nvlGlobalListData`). Se enriquece con secuencia/security del contador si ya hay fila en
+       * `generacionglobalnvlrolesconfigs`; si no, el NVL sigue apareciendo en el select.
+       */
       const sortedExisting = getSortedNvlGlobales(nvlGlobalListData);
-      const byParentId = new Map(
-        sortedExisting.map((row) => [String(row?.iud || row?._id || '').trim(), row]),
-      );
-
-      /** Preferir filas del contador (`parametrizacion/secuencia`) cruzadas con el catalogo GET roles. */
       const regs = nvlSequenceState?.registros ?? [];
-      const fromCounter: NvlGlobalItem[] = [];
-      const seenParent = new Set<string>();
+      const regByParentId = new Map<string, (typeof regs)[number]>();
       for (const reg of regs) {
         if (reg.estado === false) continue;
         const pid = String(reg.nvlGeneracionGlobal || '').trim();
-        if (!pid || seenParent.has(pid)) continue;
-        const parent = byParentId.get(pid);
-        if (!parent) continue;
-        seenParent.add(pid);
+        if (pid && !regByParentId.has(pid)) regByParentId.set(pid, reg);
+      }
+
+      const parametrizados: NvlGlobalItem[] = sortedExisting.map((parent) => {
+        const id = String(parent?.iud || parent?._id || '').trim();
+        const reg = id ? regByParentId.get(id) : undefined;
+        if (!reg) return parent;
         const seq = Number(reg.secuencia ?? 0);
-        fromCounter.push({
+        return {
           ...parent,
           orden: seq,
           secuencia: seq,
           securityPlatform:
             typeof reg.securityPlatform === 'boolean' ? reg.securityPlatform : parent.securityPlatform,
           configNvlGlobalId: String(reg._id || reg.iud || parent.configNvlGlobalId || ''),
-        });
-      }
-      fromCounter.sort((a, b) => Number(a.orden ?? 0) - Number(b.orden ?? 0));
-
-      const parametrizadosFallback = sortedExisting.filter((row) =>
-        Boolean(String(row?.configNvlGlobalId ?? '').trim()) ||
-        (row?.orden != null && String(row.orden).trim() !== '' && Number.isFinite(Number(row.orden))),
-      );
-
-      const parametrizados = fromCounter.length > 0 ? fromCounter : parametrizadosFallback;
+        };
+      });
 
       const parametrizadosOptionIds = new Set(
         parametrizados.map((row) => String(row?.iud || row?._id || '').trim()).filter(Boolean),
@@ -1634,6 +1684,15 @@ const ParametrizacionCatologTenant: React.FC = () => {
       const matchedIdRaw = matchedParam ? String(matchedParam.iud || matchedParam._id || '').trim() : '';
       const selectNvlControlled =
         matchedIdRaw && parametrizadosOptionIds.has(matchedIdRaw) ? matchedIdRaw : '__manual';
+
+      const displaySeqRow =
+        selectNvlControlled !== '__manual'
+          ? parametrizados.find((item) => String(item?.iud || item?._id || '') === selectNvlControlled)
+          : matchedParam;
+      const secuenciaParametrizacion =
+        displaySeqRow?.orden != null && String(displaySeqRow.orden).trim() !== ''
+          ? Number(displaySeqRow.orden)
+          : null;
 
       const applyExistingNvlToForm = (row: NvlGlobalItem): void => {
         const idRow = row?.iud || row?._id;
@@ -1653,55 +1712,85 @@ const ParametrizacionCatologTenant: React.FC = () => {
       };
 
       return (
-        <Select
-          value={selectNvlControlled}
-          onValueChange={(val) => {
-            if (!val || val === '__manual') {
-              setField(eid, '__nvlSeleccionTemplate', '');
-              return;
-            }
-            const row = parametrizados.find((item) => String(item?.iud || item?._id || '') === val);
-            if (row) applyExistingNvlToForm(row);
-          }}
-          disabled={nvlGlobalListLoading}
-        >
-          <SelectTrigger className="w-full">
-            <SelectValue
-              placeholder={
-                nvlGlobalListLoading
-                  ? 'Cargando catalogo de niveles…'
-                  : parametrizados.length === 0
-                    ? 'Sin coincidencias contador↔catalogo. Pulsa «Actualizar lista (GET catalogo)».'
-                    : 'Elige NVL del contador (secuencia) u otro / nuevo nivel'
+        <div className="space-y-1.5">
+          <Select
+            value={selectNvlControlled}
+            onValueChange={(val) => {
+              if (!val || val === '__manual') {
+                setField(eid, '__nvlSeleccionTemplate', '');
+                return;
               }
-            />
-          </SelectTrigger>
-          <SelectContent className="max-h-72">
-            <SelectItem value="__manual">
-              Otro / nuevo nivel (definelo con Parametrizar en la barra de acciones del formulario)
-            </SelectItem>
-            {parametrizados.map((item) => {
-              const id = String(item?.iud || item?._id || '');
-              if (!id) return null;
-              const seq = item?.orden != null ? Number(item.orden) : null;
-              return (
-                <SelectItem key={`p-${id}`} value={id}>
-                  <span className="font-medium">NVL {String(item?.nvl ?? '?')}</span>
-                  {seq != null && Number.isFinite(seq) ? (
-                    <span className="text-muted-foreground"> · sec. {seq}</span>
-                  ) : null}
-                  {' · '}
-                  <span className="font-mono text-xs text-muted-foreground">
-                    {String(item?.generation_tenant ?? '') || '—'}
-                  </span>
-                  {item?.nombre ? (
-                    <span className="text-muted-foreground"> — {String(item.nombre)}</span>
-                  ) : null}
-                </SelectItem>
-              );
-            })}
-          </SelectContent>
-        </Select>
+              const row = parametrizados.find((item) => String(item?.iud || item?._id || '') === val);
+              if (row) applyExistingNvlToForm(row);
+            }}
+            disabled={nvlGlobalListLoading}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue
+                placeholder={
+                  nvlGlobalListLoading
+                    ? 'Cargando catalogo de niveles…'
+                    : parametrizados.length === 0
+                      ? 'Sin niveles en el catálogo. Pulsa «Actualizar lista» o abre Parametrizar.'
+                      : 'Elige un NVL del catálogo (mismo listado que el modal) u otro / nuevo nivel'
+                }
+              />
+            </SelectTrigger>
+            <SelectContent className="max-h-72">
+              <SelectItem value="__manual">
+                Otro / nuevo nivel (definelo con Parametrizar en la barra de acciones del formulario)
+              </SelectItem>
+              {parametrizados.map((item) => {
+                const id = String(item?.iud || item?._id || '');
+                if (!id) return null;
+                const seq = item?.orden != null ? Number(item.orden) : null;
+                return (
+                  <SelectItem key={`p-${id}`} value={id}>
+                    <span className="font-medium">NVL {String(item?.nvl ?? '?')}</span>
+                    {seq != null && Number.isFinite(seq) ? (
+                      <span className="text-muted-foreground"> · sec. {seq}</span>
+                    ) : null}
+                    {' · '}
+                    <span className="font-mono text-xs text-muted-foreground">
+                      {String(item?.generation_tenant ?? '') || '—'}
+                    </span>
+                    {item?.nombre ? (
+                      <span className="text-muted-foreground"> — {String(item.nombre)}</span>
+                    ) : null}
+                  </SelectItem>
+                );
+              })}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-slate-600 leading-relaxed">
+            {secuenciaParametrizacion != null && Number.isFinite(secuenciaParametrizacion) ? (
+              <>
+                Contador en parametrización (secuencia){' '}
+                <span className="font-semibold text-slate-800">{secuenciaParametrizacion}</span>
+                {canManageGlobalNvlState ? (
+                  <>
+                    {' '}
+                    · Reintentos en flujo (límite del contador){' '}
+                    <span className="font-semibold text-slate-800">{currentRetryCount}</span>
+                  </>
+                ) : null}
+              </>
+            ) : (
+              <>
+                Listado = catálogo <code className="rounded bg-slate-100 px-1 text-[11px]">generacionGlobalNvlRoles</code>
+                (como en Parametrizar). La <span className="font-medium">secuencia</span> aparece cuando existe parametrización en{' '}
+                <code className="rounded bg-slate-100 px-1 text-[11px]">generacionglobalnvlrolesconfigs</code>.
+                {canManageGlobalNvlState ? (
+                  <>
+                    {' '}
+                    Reintentos en flujo (límite global){' '}
+                    <span className="font-semibold text-slate-800">{currentRetryCount}</span>.
+                  </>
+                ) : null}
+              </>
+            )}
+          </p>
+        </div>
       );
     }
     if ((eid === 'nvlg-crear' || eid === 'nvlg-modificar') && field.name === 'orden') {
@@ -2332,11 +2421,6 @@ const ParametrizacionCatologTenant: React.FC = () => {
                             {nvlGlobalListLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RotateCcw className="h-3 w-3" />}
                             Actualizar lista (GET catalogo)
                           </Button>
-                          {canManageGlobalNvlState ? (
-                            <span className="text-xs text-slate-500">
-                              Reintentos en flujo: <span className="font-semibold text-slate-700">{currentRetryCount}</span>
-                            </span>
-                          ) : null}
                         </div>
                       )}
                     </>
@@ -2461,11 +2545,11 @@ const ParametrizacionCatologTenant: React.FC = () => {
                       </div>
                     </div>
                   </div>
-                ) : (
+                ) : resultText ? (
                   <pre className="overflow-auto rounded bg-slate-950 text-slate-50 p-4 text-xs font-mono leading-relaxed max-h-[400px] whitespace-pre-wrap break-words">
                     {resultText}
                   </pre>
-                )}
+                ) : null}
               </CardContent>
             </Card>
           )}

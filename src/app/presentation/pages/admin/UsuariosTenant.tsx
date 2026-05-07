@@ -10,6 +10,11 @@ import { apiFetch } from '@/app/services/api';
 import { toast } from 'react-toastify';
 import { useTenantUsuarios } from '@/app/hooks/useTenantUsuarios';
 import { NodoTenantGlobalCard } from '@/app/presentation/components/admin/usuarios-tenant/NodoTenantGlobalCard';
+import {
+    OrganigramaLegenda,
+    OrganigramaColumn,
+    OrganigramaConector,
+} from '@/app/presentation/components/admin/usuarios-tenant/JerarquiaOrganigrama';
 import { UsuarioGlobalModal } from '@/app/presentation/components/admin/usuarios-tenant/UsuarioGlobalModal';
 import { UsuarioCorporativoModal } from '@/app/presentation/components/admin/usuarios-tenant/UsuarioCorporativoModal';
 import { UsuarioSuperAdminModal } from '@/app/presentation/components/admin/usuarios-tenant/UsuarioSuperAdminModal';
@@ -18,8 +23,98 @@ import { RolGlobalEditModal } from '@/app/presentation/components/admin/usuarios
 import { RolCorporativoEditModal } from '@/app/presentation/components/admin/usuarios-tenant/RolCorporativoEditModal';
 import { RolesGlobalesModal } from '@/app/presentation/components/admin/usuarios-tenant/RolesGlobalesModal';
 import { RolesCorporativosModal } from '@/app/presentation/components/admin/usuarios-tenant/RolesCorporativosModal';
-import type { CorpNode, TenantGlobalInfo, TenantUsuario } from '@/app/services/tenantUsuariosService';
+import type {
+    CorpNode,
+    TenantGlobalInfo,
+    TenantUsuario,
+    TenantSuperTenantSinCorporativoItem,
+} from '@/app/services/tenantUsuariosService';
 import { useAuth } from '@/app/providers/AuthProvider';
+
+function countTenantSuperSaTree(nodes: TenantSuperTenantSinCorporativoItem[]): number {
+    let c = 0;
+    const walk = (arr: TenantSuperTenantSinCorporativoItem[]) => {
+        for (const n of arr) {
+            c++;
+            if (n.subTenantSuperAdmins?.length) {
+                walk(n.subTenantSuperAdmins);
+            }
+        }
+    };
+    walk(nodes);
+    return c;
+}
+
+/** Un nodo tenantSuperTenant libre y sus sub-ramas (`parent` en BD). */
+function SaLibreTreeNode({
+    nodo,
+    nivel,
+}: {
+    nodo: TenantSuperTenantSinCorporativoItem;
+    nivel: number;
+}): React.ReactElement {
+    const t = nodo;
+    const hijos = t.subTenantSuperAdmins ?? [];
+    const lineaRama = (() => {
+        if (t.ramaAsociada.padreFueraDeListaJerarquiaLibre) {
+            return `Sub-rama (padre no aparece aquí: suele tener TG+corporativo en counters) · ref padre ${t.ramaAsociada.codigoJerarquiaPadre ?? t.ramaAsociada.tenantSuperAdminPadreId ?? '—'}`;
+        }
+        if (t.ramaAsociada.esRaiz) {
+            return 'Raíz de rama (sin tenantSuperAdmin padre en BD)';
+        }
+        return `Sub-rama bajo SA ${t.ramaAsociada.codigoJerarquiaPadre ?? t.ramaAsociada.tenantSuperAdminPadreId ?? '—'}`;
+    })();
+
+    return (
+        <div className={nivel > 0 ? 'border-l-2 border-primary/25 pl-3 pt-2' : ''}>
+            <div className="rounded-lg border border-border bg-card px-3 py-2.5 text-sm shadow-sm">
+                <div className="flex flex-wrap items-center gap-2">
+                    <Building2 className="h-4 w-4 shrink-0 text-primary" />
+                    <span className="font-medium text-foreground">
+                        {t.corporativoPerfil?.razon_social
+                            ?? t.corporativoPerfil?.titulo
+                            ?? t.codigoJerarquia
+                            ?? 'Tenant SuperAdmin'}
+                    </span>
+                    {t.codigoJerarquia ? (
+                        <Badge variant="outline" className="font-mono text-xs">
+                            {t.codigoJerarquia}
+                        </Badge>
+                    ) : null}
+                    <span className="text-[11px] font-mono text-muted-foreground">{String(t.iud)}</span>
+                    <Badge
+                        variant={t.estado === true || t.estado === 'activo' ? 'default' : 'secondary'}
+                        className="text-xs"
+                    >
+                        {t.estado === true || t.estado === 'activo' ? 'Activo' : 'Inactivo'}
+                    </Badge>
+                    {hijos.length > 0 ? (
+                        <Badge variant="secondary" className="text-xs">
+                            {hijos.length} sub-rama{hijos.length !== 1 ? 's' : ''}
+                        </Badge>
+                    ) : null}
+                </div>
+                <p className="mt-1.5 text-xs text-muted-foreground">
+                    <Shield className="mr-1 inline h-3.5 w-3.5 align-text-bottom text-primary" />
+                    {lineaRama}
+                </p>
+                {t.usuarioPrincipal?.correo ? (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                        Usuario enlazado al doc (usuarioId):{' '}
+                        <span className="text-foreground">{t.usuarioPrincipal.correo}</span>
+                    </p>
+                ) : null}
+            </div>
+            {hijos.length > 0 ? (
+                <div className="mt-2 space-y-2">
+                    {hijos.map((sub) => (
+                        <SaLibreTreeNode key={String(sub.iud)} nodo={sub} nivel={nivel + 1} />
+                    ))}
+                </div>
+            ) : null}
+        </div>
+    );
+}
 
 export default function UsuariosTenant(): React.ReactElement {
     const { token } = useAuth();
@@ -370,6 +465,25 @@ export default function UsuariosTenant(): React.ReactElement {
         );
     }
 
+    const ocultarColumnaSaLibre =
+        jerarquia?.jerarquiaAlcance?.ocultarColumnaSaSinJerarquiaCorporativa === true;
+    const showSuperAdmins = scope === 'SUPER_ADMIN' && !ocultarColumnaSaLibre;
+    const showCorpSection =
+        scope === 'SUPER_ADMIN' || scope === 'TENANT_GLOBAL' || scope === 'CORPORATIVO';
+    const tgNodes = jerarquia?.tenantsGlobales ?? [];
+    const hasTenantGlobalTree = tgNodes.length > 0;
+    const tenantSuperTenantsLibres = jerarquia?.tenantSuperTenantsSinCorporativoEnCounter ?? [];
+    const countSaLibres = countTenantSuperSaTree(tenantSuperTenantsLibres);
+    const countUsuariosSaLibres = jerarquia?.superAdmins.length ?? 0;
+
+    let nextOrden = 1;
+    const ordenSa = showSuperAdmins ? nextOrden++ : 0;
+    const ordenCorp = showCorpSection ? nextOrden++ : 0;
+    const ordenTg = hasTenantGlobalTree ? nextOrden++ : 0;
+
+    const showConnectorSa = showSuperAdmins && (showCorpSection || hasTenantGlobalTree);
+    const showConnectorCorp = showCorpSection && hasTenantGlobalTree;
+
     return (
         <div className="min-h-full p-4 md:p-6 lg:p-8 space-y-6 bg-background text-foreground">
             {/* Encabezado */}
@@ -377,8 +491,27 @@ export default function UsuariosTenant(): React.ReactElement {
                 <div>
                     <h1 className="text-2xl font-bold text-foreground">Usuarios Tenant</h1>
                     <p className="text-sm text-muted-foreground mt-1">
-                        Jerarquía de usuarios por tenant
+                        Organigrama filtrado por el alcance de tu sesión (JWT:{' '}
+                        <code className="rounded bg-muted px-1 py-0.5 text-xs">tenantScope</code>
+                        {' '}y rol). Cada usuario ve solo la rama que autoriza su token.
                     </p>
+                    {jerarquia?.jerarquiaAlcance?.tipo === 'SUPER_ADMIN_SOLO_DESCENDIENTES' ? (
+                        <p className="text-xs text-muted-foreground mt-2 max-w-3xl border-l-2 border-primary/30 pl-3">
+                            Alcance SuperAdmin del JWT: solo tu rama descendente desde{' '}
+                            <code className="rounded bg-muted px-1 py-0.5 text-[11px]">
+                                tenantSuperAdminId
+                            </code>{' '}
+                            (este SA y sub-SA en BD). Sin vista ascendente: no aparecen SA padre ni ramas paralelas.
+                            {jerarquia.jerarquiaAlcance.ocultarColumnaSaSinJerarquiaCorporativa ? (
+                                <>
+                                    {' '}
+                                    Tu SA tiene jerarquía corporativa en counters: el organigrama muestra solo la rama
+                                    Tenant global / corporativa materializada, sin la columna de SuperAdmins sin
+                                    corporativo.
+                                </>
+                            ) : null}
+                        </p>
+                    ) : null}
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
                     {scope && (
@@ -419,50 +552,146 @@ export default function UsuariosTenant(): React.ReactElement {
                 </div>
             </div>
 
-            {/* SuperAdmins — solo visible para SUPER_ADMIN */}
-            {scope === 'SUPER_ADMIN' && (jerarquia?.superAdmins.length ?? 0) > 0 && (
-                <section className="space-y-2">
-                    <h2 className="text-sm font-semibold flex items-center gap-2 text-foreground">
-                        <Shield className="h-4 w-4 text-primary" />
-                        Super Administradores
-                        <Badge variant="outline">{jerarquia!.superAdmins.length}</Badge>
-                    </h2>
-                    <div className="overflow-hidden rounded-lg border border-border bg-card text-card-foreground shadow-sm divide-y divide-border">
-                        {jerarquia!.superAdmins.map(sa => (
-                            <div key={sa.iud} className="flex items-center justify-between px-4 py-2.5 text-sm transition-colors hover:bg-muted/40">
-                                <div className="flex items-center gap-2">
-                                    <div className={`h-2 w-2 rounded-full ${
-                                        sa.estado === true || sa.estado === 'activo' ? 'bg-green-500' : 'bg-gray-400'
-                                    }`} />
-                                    <span className="text-muted-foreground">{sa.correo}</span>
+            <OrganigramaLegenda />
+
+            <div className="mx-auto flex max-w-5xl flex-col">
+                {showSuperAdmins && (
+                    <>
+                        <OrganigramaColumn
+                            orden={ordenSa}
+                            titulo={`Super Administradores — sin fila corporativa en counters (${countSaLibres} SA · ${countUsuariosSaLibres} usuarios)`}
+                                    descripcion="Árbol padre→hijos de tenantSuperTenant (campo parent) en tu alcance JWT, sin fila SA+corporativo en tenantJerarquiaCounter; incluye sub-ramas bajo cada SA raíz."
+                        >
+                            <div className="space-y-5">
+                                <div>
+                                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                        Árbol tenantSuperTenant (padre e hijos en esta rama)
+                                    </p>
+                                    {countSaLibres === 0 ? (
+                                        <p className="rounded-lg border border-dashed border-border bg-muted/15 px-4 py-3 text-sm text-muted-foreground">
+                                            Ningún documento SA en este alcance queda fuera de emisiones con corporativo; las ramas con TG+corporativo aparecen en «Tenant global y ramas».
+                                        </p>
+                                    ) : (
+                                        <div className="space-y-2">
+                                            {tenantSuperTenantsLibres.map((t) => (
+                                                <SaLibreTreeNode key={String(t.iud)} nodo={t} nivel={0} />
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
-                                <div className="flex items-center gap-2">
-                                    <Badge variant="default" className="text-xs">{sa.rol ?? 'SUPER_ADMIN'}</Badge>
-                                    {scope === 'SUPER_ADMIN' && (
-                                        <Button variant="ghost" size="icon" className="h-7 w-7 text-foreground/70 hover:bg-primary/10 hover:text-primary" onClick={() => void openEditUser(sa)}>
-                                            <Edit className="h-3.5 w-3.5" />
-                                        </Button>
+
+                                <div>
+                                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                        Usuarios RegisUsu (mismo criterio por tenantSuperAdmin)
+                                    </p>
+                                    {countUsuariosSaLibres === 0 ? (
+                                        <p className="rounded-lg border border-dashed border-border bg-muted/15 px-4 py-3 text-sm text-muted-foreground">
+                                            Ningún usuario de este alcance queda solo con ramas SA sin corporativo en counters.
+                                        </p>
+                                    ) : (
+                                        <div className="overflow-hidden rounded-lg border border-border bg-background divide-y divide-border shadow-inner">
+                                            {jerarquia!.superAdmins.map((sa) => (
+                                                <div key={sa.iud} className="flex items-center justify-between px-4 py-2.5 text-sm transition-colors hover:bg-muted/40">
+                                                    <div className="flex items-center gap-2">
+                                                        <div
+                                                            className={`h-2 w-2 rounded-full ${
+                                                                sa.estado === true || sa.estado === 'activo' ? 'bg-green-500' : 'bg-gray-400'
+                                                            }`}
+                                                        />
+                                                        <span className="text-muted-foreground">{sa.correo}</span>
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        <Badge variant="default" className="text-xs">{sa.rol ?? 'SUPER_ADMIN'}</Badge>
+                                                        {scope === 'SUPER_ADMIN' && (
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                className="h-7 w-7 text-foreground/70 hover:bg-primary/10 hover:text-primary"
+                                                                onClick={() => void openEditUser(sa)}
+                                                            >
+                                                                <Edit className="h-3.5 w-3.5" />
+                                                            </Button>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
                                     )}
                                 </div>
                             </div>
-                        ))}
-                    </div>
-                </section>
-            )}
+                        </OrganigramaColumn>
+                        {showConnectorSa && <OrganigramaConector />}
+                    </>
+                )}
 
-            {/* Árbol de Tenant Globales — renderizado recursivo */}
-            {(jerarquia?.tenantsGlobales ?? []).map((tgNode, idx) => (
-                <NodoTenantGlobalCard
-                    key={tgNode.tenantGlobal?.iud ?? idx}
-                    nodo={tgNode}
-                    nivel={0}
-                    scope={scope as 'SUPER_ADMIN' | 'TENANT_GLOBAL' | 'CORPORATIVO'}
-                    onAddUsuario={nodo => setNodoCorp(nodo)}
-                    onEditUsuario={(u: TenantUsuario, tg: any) => void openEditUser(u, tg)}
-                    onEditUsuarioCorp={(u: TenantUsuario, corp: CorpNode) => void openEditCorp(u, corp)}
-                    onEditTG={(tg: any) => void openEditTG(tg)}
-                />
-            ))}
+                {showCorpSection && (
+                    <>
+                        <OrganigramaColumn
+                            orden={ordenCorp}
+                            titulo={`Usuarios con rol corporativo (${jerarquia?.usuariosRolCorporativo?.length ?? 0})`}
+                            descripcion="Operadores con roles corporativos visibles en el alcance del árbol (entre SA y tenant global)."
+                        >
+                            {(jerarquia?.usuariosRolCorporativo?.length ?? 0) === 0 ? (
+                                <p className="text-sm text-muted-foreground rounded-lg border border-dashed border-border bg-muted/15 px-4 py-3">
+                                    No hay usuarios con rol corporativo asignado en este alcance.
+                                </p>
+                            ) : (
+                                <div className="overflow-hidden rounded-lg border border-border bg-background divide-y divide-border shadow-inner">
+                                    {jerarquia!.usuariosRolCorporativo!.map((u) => (
+                                        <div key={String(u.iud)} className="flex items-center justify-between px-4 py-2.5 text-sm transition-colors hover:bg-muted/40">
+                                            <div className="flex items-center gap-2 min-w-0">
+                                                <div className={`h-2 w-2 shrink-0 rounded-full ${
+                                                    u.estado === true || u.estado === 'activo' ? 'bg-green-500' : 'bg-gray-400'
+                                                }`} />
+                                                <span className="text-muted-foreground truncate">{u.correo}</span>
+                                            </div>
+                                            <div className="flex items-center gap-2 shrink-0">
+                                                <Badge variant="secondary" className="text-xs max-w-[12rem] truncate" title={u.rol ?? ''}>
+                                                    {u.rol ?? 'ROL_CORP'}
+                                                </Badge>
+                                                {(scope === 'SUPER_ADMIN' || scope === 'TENANT_GLOBAL' || scope === 'CORPORATIVO') && (
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="h-7 w-7 text-foreground/70 hover:bg-primary/10 hover:text-primary"
+                                                        onClick={() => void openEditUser(u)}
+                                                    >
+                                                        <Edit className="h-3.5 w-3.5" />
+                                                    </Button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </OrganigramaColumn>
+                        {showConnectorCorp && <OrganigramaConector />}
+                    </>
+                )}
+
+                {hasTenantGlobalTree && (
+                    <OrganigramaColumn
+                        orden={ordenTg}
+                        titulo={`Tenant global y ramas (${tgNodes.length})`}
+                        descripcion="Por perfil corporativo del TG; vínculo SA↔TG preferente en tenantJerarquiaCountersGlobal (fallback tenantJerarquiaCounter). Lista SA: rama SuperAdmin sin duplicar quien ya tiene rol tenantGlobal en este TG. Código SA–TG; debajo globales, sub-globales y corporativos."
+                    >
+                        <div className="space-y-6 border-l-2 border-dashed border-primary/20 pl-3 sm:pl-4">
+                            {tgNodes.map((tgNode, idx) => (
+                                <NodoTenantGlobalCard
+                                    key={tgNode.tenantGlobal?.iud ?? idx}
+                                    nodo={tgNode}
+                                    nivel={0}
+                                    scope={scope as 'SUPER_ADMIN' | 'TENANT_GLOBAL' | 'CORPORATIVO'}
+                                    onAddUsuario={nodo => setNodoCorp(nodo)}
+                                    onEditUsuario={(u: TenantUsuario, tg: any) => void openEditUser(u, tg)}
+                                    onEditUsuarioCorp={(u: TenantUsuario, corp: CorpNode) => void openEditCorp(u, corp)}
+                                    onEditTG={(tg: any) => void openEditTG(tg)}
+                                />
+                            ))}
+                        </div>
+                    </OrganigramaColumn>
+                )}
+            </div>
 
             {/* Modales */}
             <UsuarioSuperAdminModal

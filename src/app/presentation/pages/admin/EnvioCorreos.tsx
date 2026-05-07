@@ -3,6 +3,7 @@ import { toast } from 'react-toastify';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -52,6 +53,8 @@ const CLASS_ZONES: [string, keyof PaletaColores][] = [
   ['wrapper', 'COLOR_BG'],
   ['link-fallback', 'COLOR_CHAMPAGNE'],
   ['alert', 'COLOR_CHAMPAGNE'],
+  ['empresa-line', 'COLOR_PRIMARY'],
+  ['verify-intro', 'COLOR_PRIMARY'],
 ];
 
 // Inyecta data-color-zone + script de interactividad en el HTML
@@ -133,6 +136,7 @@ export default function EnvioCorreos() {
   const [refreshKey, setRefreshKey] = useState(0);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const previewGenRef = useRef(0);
   const highlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const colorRowRefs = useRef<Partial<Record<keyof PaletaColores, HTMLDivElement | null>>>({});
 
@@ -179,20 +183,22 @@ export default function EnvioCorreos() {
   const actualizarPreview = useCallback((colores: PaletaColores, tipo: TipoCorreo, cnt: ContenidoCorreo) => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(async () => {
+      const gen = ++previewGenRef.current;
       setLoadingPreview(true);
       try {
         const html = await previewEmail(tipo, colores, cnt);
+        if (gen !== previewGenRef.current) return;
         setPreviewHtml(html);
       } catch { /* silencioso */ }
-      finally { setLoadingPreview(false); }
+      finally {
+        if (gen === previewGenRef.current) setLoadingPreview(false);
+      }
     }, 400);
   }, []);
 
   useEffect(() => {
     actualizarPreview(form.colores, tipoPreview, contenido);
   }, [form.colores, tipoPreview, contenido, actualizarPreview]);
-
-  useEffect(() => { setContenido({}); }, [tipoPreview]);
 
   // Manejadores de color
   const handleColorPicker = (key: keyof PaletaColores, value: string) => {
@@ -546,7 +552,10 @@ export default function EnvioCorreos() {
               <button
                 key={t.value}
                 type="button"
-                onClick={() => setTipoPreview(t.value)}
+                onClick={() => {
+                  setTipoPreview(t.value);
+                  setContenido({});
+                }}
                 className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${tipoPreview === t.value
                   ? 'bg-primary text-primary-foreground border-primary'
                   : 'bg-background border-border hover:bg-muted'
@@ -588,15 +597,25 @@ export default function EnvioCorreos() {
             <div className="rounded-xl border bg-muted/20 p-3 space-y-2">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Contenido del correo</p>
               {CAMPOS_CONTENIDO[tipoPreview].map(campo => (
-                <div key={campo.key} className="flex items-center gap-2">
-                  <Label className="text-xs w-40 shrink-0">{campo.label}</Label>
-                  <Input
-                    type={campo.type ?? 'text'}
-                    value={contenido[campo.key] ?? ''}
-                    onChange={e => setContenido(prev => ({ ...prev, [campo.key]: e.target.value }))}
-                    placeholder={campo.placeholder}
-                    className="h-7 text-xs"
-                  />
+                <div key={campo.key} className={`flex gap-2 ${campo.type === 'textarea' ? 'items-start' : 'items-center'}`}>
+                  <Label className={`text-xs w-44 shrink-0 ${campo.type === 'textarea' ? 'pt-2' : ''}`}>{campo.label}</Label>
+                  {campo.type === 'textarea' ? (
+                    <Textarea
+                      value={contenido[campo.key] ?? ''}
+                      onChange={e => setContenido(prev => ({ ...prev, [campo.key]: e.target.value }))}
+                      placeholder={campo.placeholder}
+                      className="min-h-[52px] text-xs py-2 flex-1"
+                      rows={3}
+                    />
+                  ) : (
+                    <Input
+                      type={campo.type ?? 'text'}
+                      value={contenido[campo.key] ?? ''}
+                      onChange={e => setContenido(prev => ({ ...prev, [campo.key]: e.target.value }))}
+                      placeholder={campo.placeholder}
+                      className="h-7 text-xs flex-1"
+                    />
+                  )}
                 </div>
               ))}
             </div>
@@ -606,6 +625,7 @@ export default function EnvioCorreos() {
           <div className="rounded-xl border overflow-hidden shadow-md bg-white">
             {previewHtml ? (
               <iframe
+                key={tipoPreview}
                 srcDoc={injectInteractivity(previewHtml)}
                 title="Vista previa interactiva del correo"
                 className="w-full"

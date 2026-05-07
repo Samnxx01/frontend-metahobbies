@@ -1,7 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ClipboardList, Plus, Save, Trash2 } from 'lucide-react';
 import { toast } from 'react-toastify';
-import inventarioService, { type BodegaInventario, type InventarioProveedor } from '@/app/services/inventarioService';
+import inventarioService, {
+  type BodegaInventario,
+  type InventarioOrdenCompra,
+  type InventarioProveedor,
+} from '@/app/services/inventarioService';
 import type { BackendProducto } from '@/app/services/productosService';
 import { Button } from '@/components/ui/button';
 import {
@@ -14,8 +18,8 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 const moneyCo = (n: number): string =>
@@ -30,7 +34,7 @@ type OcLineDraft = {
   cantidad: string;
   precioUnitario: string;
   descuento: string;
-  impuestos: string;
+  impuestoPorcentaje: string;
   bodega: string;
 };
 
@@ -43,10 +47,24 @@ const calcSubtotalLinea = (line: OcLineDraft): number => {
   const q = Number(line.cantidad) || 0;
   const p = Number(line.precioUnitario) || 0;
   const d = Number(line.descuento) || 0;
-  const t = Number(line.impuestos) || 0;
+  const taxPercent = Number(line.impuestoPorcentaje) || 0;
   const base = q * p;
-  return Math.max(0, Math.round((base - d + t + Number.EPSILON) * 100) / 100);
+  const baseNeta = Math.max(0, base - d);
+  const taxAmount = baseNeta * (taxPercent / 100);
+  return Math.max(0, Math.round((baseNeta + taxAmount + Number.EPSILON) * 100) / 100);
 };
+
+const calcImpuestoLinea = (line: OcLineDraft): number => {
+  const q = Number(line.cantidad) || 0;
+  const p = Number(line.precioUnitario) || 0;
+  const d = Number(line.descuento) || 0;
+  const taxPercent = Number(line.impuestoPorcentaje) || 0;
+  const baseNeta = Math.max(0, q * p - d);
+  return Math.max(0, Math.round((baseNeta * (taxPercent / 100) + Number.EPSILON) * 100) / 100);
+};
+
+const getProveedorId = (proveedor: InventarioProveedor): string =>
+  String(proveedor._id || proveedor.iud || '').trim();
 
 export type InventarioOrdenCompraModalProps = {
   open: boolean;
@@ -56,8 +74,12 @@ export type InventarioOrdenCompraModalProps = {
   bodegas: BodegaInventario[];
   productos: BackendProducto[];
   onCreated: () => void | Promise<void>;
+  /** Si viene definida, el modal opera en modo edición (PUT). */
+  ordenEdicion?: InventarioOrdenCompra | null;
   showTrigger?: boolean;
   triggerClassName?: string;
+  /** Al pulsar «Nueva orden» desde el trigger (limpia modo edición). */
+  onAntesNuevaOrden?: () => void;
 };
 
 export default function InventarioOrdenCompraModal({
@@ -68,8 +90,10 @@ export default function InventarioOrdenCompraModal({
   bodegas,
   productos,
   onCreated,
+  ordenEdicion = null,
   showTrigger = false,
   triggerClassName = '',
+  onAntesNuevaOrden,
 }: InventarioOrdenCompraModalProps): React.ReactElement {
   const bodegasActivas = useMemo(() => bodegas.filter((b) => b.estado !== false), [bodegas]);
   const productosConSku = useMemo(
@@ -77,33 +101,86 @@ export default function InventarioOrdenCompraModal({
     [productos]
   );
 
-  const [numeroOrden, setNumeroOrden] = useState('');
   const [numeroRemision, setNumeroRemision] = useState('');
-  const [fechaOrden, setFechaOrden] = useState(() => new Date().toISOString().slice(0, 10));
+  const [numeroFacturaElectronico, setNumeroFacturaElectronico] = useState('');
+  const [concepto, setConcepto] = useState('');
+  const [justificacion, setJustificacion] = useState('');
   const [proveedorId, setProveedorId] = useState('');
   const [lines, setLines] = useState<OcLineDraft[]>([]);
   const [enviando, setEnviando] = useState(false);
+  const [siguienteNumeroOrden, setSiguienteNumeroOrden] = useState('');
 
   useEffect(() => {
     if (!open) return;
-    setNumeroOrden('');
-    setNumeroRemision('');
-    setFechaOrden(new Date().toISOString().slice(0, 10));
-    setProveedorId('');
     const b0 = bodegasActivas[0]?.nombre ?? '';
-    setLines([
-      {
+    if (ordenEdicion?._id) {
+      const oc = ordenEdicion;
+      setNumeroRemision(oc.numeroRemision?.trim() || '');
+      setNumeroFacturaElectronico(oc.numeroFacturaElectronico?.trim() || '');
+      setConcepto(oc.concepto?.trim() || '');
+      setJustificacion('');
+      const prov =
+        proveedores.find((p) => p.nit === oc.proveedor?.nit && p.nombre === oc.proveedor?.nombre) ||
+        proveedores.find((p) => p.nit === oc.proveedor?.nit);
+      setProveedorId(prov ? getProveedorId(prov) : '');
+      const itemLines = (oc.items || []).map((it) => ({
         id: newLineId(),
-        sku: '',
-        nombreProducto: '',
-        cantidad: '1',
-        precioUnitario: '0',
-        descuento: '0',
-        impuestos: '0',
-        bodega: b0,
-      },
-    ]);
-  }, [open, bodegasActivas]);
+        sku: String(it.sku || ''),
+        nombreProducto: String(it.nombreProducto || ''),
+        cantidad: String(it.cantidadOrdenada ?? 1),
+        precioUnitario: String(it.costoUnitario ?? 0),
+        descuento: String(it.descuento ?? 0),
+        impuestoPorcentaje: String(
+          it.impuestoPorcentaje ??
+            (() => {
+              const base = Math.max(0, Number(it.cantidadOrdenada || 0) * Number(it.costoUnitario || 0) - Number(it.descuento || 0));
+              const imp = Number(it.impuestos || 0);
+              return base > 0 && imp > 0 ? Math.round(((imp / base) * 100 + Number.EPSILON) * 100) / 100 : 0;
+            })()
+        ),
+        bodega: String(it.bodega || b0),
+      }));
+      setLines(itemLines.length ? itemLines : [{ id: newLineId(), sku: '', nombreProducto: '', cantidad: '1', precioUnitario: '0', descuento: '0', impuestoPorcentaje: '0', bodega: b0 }]);
+    } else {
+      setNumeroRemision('');
+      setNumeroFacturaElectronico('');
+      setConcepto('');
+      setJustificacion('');
+      setProveedorId('');
+      setLines([
+        {
+          id: newLineId(),
+          sku: '',
+          nombreProducto: '',
+          cantidad: '1',
+          precioUnitario: '0',
+          descuento: '0',
+          impuestoPorcentaje: '0',
+          bodega: b0,
+        },
+      ]);
+    }
+  }, [open, bodegasActivas, ordenEdicion, proveedores]);
+
+  useEffect(() => {
+    if (!open || ordenEdicion?._id) return;
+
+    let activo = true;
+    setSiguienteNumeroOrden('');
+
+    inventarioService.obtenerSiguienteNumeroOrdenCompra()
+      .then((data) => {
+        if (activo) setSiguienteNumeroOrden(data?.numeroOrden || '');
+      })
+      .catch((error) => {
+        console.error('Error consultando siguiente numero OC:', error);
+        if (activo) setSiguienteNumeroOrden('');
+      });
+
+    return () => {
+      activo = false;
+    };
+  }, [open, ordenEdicion]);
 
   const addLine = (): void => {
     const b0 = bodegasActivas[0]?.nombre ?? '';
@@ -116,7 +193,7 @@ export default function InventarioOrdenCompraModal({
         cantidad: '1',
         precioUnitario: '0',
         descuento: '0',
-        impuestos: '0',
+        impuestoPorcentaje: '0',
         bodega: b0,
       },
     ]);
@@ -142,22 +219,35 @@ export default function InventarioOrdenCompraModal({
   const totalOrden = useMemo(() => lines.reduce((acc, l) => acc + calcSubtotalLinea(l), 0), [lines]);
 
   const guardar = async (): Promise<void> => {
-    const ord = numeroOrden.trim();
-    if (!ord) {
-      toast.error('El número de orden es obligatorio.');
-      return;
-    }
     if (!proveedorId) {
       toast.error('Selecciona un proveedor.');
       return;
     }
-    const prov = proveedores.find((p) => p._id === proveedorId);
+    const prov = proveedores.find((p) => getProveedorId(p) === proveedorId);
     if (!prov) {
       toast.error('Proveedor no válido.');
       return;
     }
-    if (!fechaOrden) {
-      toast.error('La fecha de la orden es obligatoria.');
+    const c = concepto.trim();
+    const j = justificacion.trim();
+    if (!ordenEdicion?._id && !c) {
+      toast.error('El concepto es obligatorio.');
+      return;
+    }
+    if (ordenEdicion?._id && !j) {
+      toast.error('La justificación del cambio es obligatoria.');
+      return;
+    }
+    const rem = numeroRemision.trim();
+    const factura = numeroFacturaElectronico.trim();
+    const tieneRem = rem.length > 0;
+    const tieneFac = factura.length > 0;
+    if (tieneRem && tieneFac) {
+      toast.error('No puede usar número de remisión y factura electrónica en el mismo documento.');
+      return;
+    }
+    if (!tieneRem && !tieneFac) {
+      toast.error('Indica número de remisión o número de factura electrónico (uno solo).');
       return;
     }
 
@@ -167,7 +257,7 @@ export default function InventarioOrdenCompraModal({
         const cant = Number(l.cantidad);
         const precio = Number(l.precioUnitario);
         const desc = Number(l.descuento) || 0;
-        const imp = Number(l.impuestos) || 0;
+        const impuestoPorcentaje = Number(l.impuestoPorcentaje) || 0;
         const bod = String(l.bodega || '').trim();
         return {
           sku,
@@ -175,7 +265,7 @@ export default function InventarioOrdenCompraModal({
           cantidadOrdenada: cant,
           costoUnitario: precio,
           descuento: desc,
-          impuestos: imp,
+          impuestoPorcentaje,
           bodega: bod,
         };
       })
@@ -188,20 +278,25 @@ export default function InventarioOrdenCompraModal({
 
     try {
       setEnviando(true);
-      const isoFecha = `${fechaOrden}T12:00:00.000Z`;
-      await inventarioService.crearOrdenCompra({
-        numeroOrden: ord,
-        numeroRemision: numeroRemision.trim() || undefined,
-        fechaOrden: isoFecha,
-        proveedor: { nombre: prov.nombre.trim(), nit: prov.nit.trim() },
-        documentoLegalCompra: {
-          tipo: 'ORDEN_COMPRA',
-          numero: ord,
-          fecha: isoFecha,
-        },
-        items,
-      });
-      toast.success('Orden de compra registrada.');
+      if (ordenEdicion?._id) {
+        await inventarioService.actualizarOrdenCompra(ordenEdicion._id, {
+          justificacion: j,
+          ...(tieneRem ? { numeroRemision: rem } : {}),
+          ...(tieneFac ? { numeroFacturaElectronico: factura } : {}),
+          proveedor: { nombre: prov.nombre.trim(), nit: prov.nit.trim() },
+          items,
+        });
+        toast.success('Orden de compra actualizada.');
+      } else {
+        const creada = await inventarioService.crearOrdenCompra({
+          concepto: c,
+          ...(tieneRem ? { numeroRemision: rem } : {}),
+          ...(tieneFac ? { numeroFacturaElectronico: factura } : {}),
+          proveedor: { nombre: prov.nombre.trim(), nit: prov.nit.trim() },
+          items,
+        });
+        toast.success(`Orden registrada: ${creada.numeroOrden}`);
+      }
       onOpenChange(false);
       await onCreated();
     } catch (error) {
@@ -215,41 +310,64 @@ export default function InventarioOrdenCompraModal({
   return (
     <>
       {showTrigger ? (
-        <Button type="button" variant="secondary" className={triggerClassName} onClick={() => onOpenChange(true)} disabled={saving || enviando}>
+        <Button
+          type="button"
+          variant="secondary"
+          className={triggerClassName}
+          onClick={() => {
+            onAntesNuevaOrden?.();
+          }}
+          disabled={saving || enviando}
+        >
           <ClipboardList className="mr-2 h-4 w-4" />
           Nueva orden de compra
         </Button>
       ) : null}
 
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-h-[95vh] max-w-5xl overflow-y-auto border-border bg-background text-foreground">
+        <DialogContent className="w-[min(1120px,calc(100vw-2rem))] max-w-none overflow-visible border-border bg-background text-foreground">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <ClipboardList className="h-5 w-5 text-primary" />
-              Nueva orden de compra
+              {ordenEdicion?._id ? 'Editar orden de compra' : 'Nueva orden de compra'}
             </DialogTitle>
             <DialogDescription className="text-muted-foreground">
-              Registra la OC con remisión opcional, fecha, proveedor e ítems con SKU, nombre, cantidades y valores de línea (descuento e impuestos en pesos).
+              Remisión o factura electrónica (uno solo). El concepto queda en el documento. El número OC lo genera el servidor al crear; la fecha de creación también.
             </DialogDescription>
           </DialogHeader>
 
+          <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">
+            <span className="text-muted-foreground">Número OC: </span>
+            <span className="font-mono font-semibold text-foreground">
+              {(ordenEdicion?.numeroOrden ?? siguienteNumeroOrden) || '(consultando consecutivo...)'}
+            </span>
+            {!ordenEdicion?._id && siguienteNumeroOrden ? (
+              <span className="ml-2 text-xs text-muted-foreground">se confirma al guardar</span>
+            ) : null}
+          </div>
+
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="space-y-2">
-              <Label>Número de orden *</Label>
-              <Input value={numeroOrden} onChange={(e) => setNumeroOrden(e.target.value)} placeholder="OC-2026-001" className="border-input bg-background" />
-            </div>
             <div className="space-y-2">
               <Label>Número de remisión</Label>
               <Input
                 value={numeroRemision}
                 onChange={(e) => setNumeroRemision(e.target.value)}
-                placeholder="REM-123 (opcional)"
+                placeholder="REM-123"
                 className="border-input bg-background"
+                autoComplete="off"
               />
+              <p className="text-[11px] text-muted-foreground">Solo si no usas factura electrónica.</p>
             </div>
             <div className="space-y-2">
-              <Label>Fecha de creación *</Label>
-              <Input type="date" value={fechaOrden} onChange={(e) => setFechaOrden(e.target.value)} className="border-input bg-background" />
+              <Label>Número factura electrónico</Label>
+              <Input
+                value={numeroFacturaElectronico}
+                onChange={(e) => setNumeroFacturaElectronico(e.target.value)}
+                placeholder="Ej. CUFE / número fiscal"
+                className="border-input bg-background"
+                autoComplete="off"
+              />
+              <p className="text-[11px] text-muted-foreground">Solo si no usas remisión.</p>
             </div>
             <div className="space-y-2 sm:col-span-2 lg:col-span-1">
               <Label>Proveedor *</Label>
@@ -258,14 +376,48 @@ export default function InventarioOrdenCompraModal({
                   <SelectValue placeholder={proveedores.length ? 'Selecciona proveedor' : 'Sin proveedores'} />
                 </SelectTrigger>
                 <SelectContent className="max-h-72 border-border bg-popover">
-                  {proveedores.map((p) => (
-                    <SelectItem key={p._id} value={p._id}>
-                      {p.nombre} · NIT {p.nit}
-                    </SelectItem>
-                  ))}
+                  {proveedores.map((p) => {
+                    const id = getProveedorId(p);
+                    return id ? (
+                      <SelectItem key={id} value={id}>
+                        {p.nombre} · NIT {p.nit}
+                      </SelectItem>
+                    ) : null;
+                  })}
                 </SelectContent>
               </Select>
             </div>
+          </div>
+
+          <div className={`grid gap-4 ${ordenEdicion?._id ? 'md:grid-cols-2' : 'md:grid-cols-1'}`}>
+            <div className="space-y-2">
+              <Label>Concepto {ordenEdicion?._id ? '' : '*'}</Label>
+              <Textarea
+                value={concepto}
+                onChange={(e) => setConcepto(e.target.value)}
+                placeholder="Ej. Compra de insumos para producción Q2"
+                rows={3}
+                readOnly={!!ordenEdicion?._id}
+                className={`border-input bg-background resize-y min-h-[72px] ${ordenEdicion?._id ? 'cursor-not-allowed bg-muted/40 text-muted-foreground' : ''}`}
+              />
+              {ordenEdicion?._id ? (
+                <p className="text-[11px] text-muted-foreground">
+                  El concepto queda en el documento original y no puede modificarse al editar.
+                </p>
+              ) : null}
+            </div>
+            {ordenEdicion?._id ? (
+              <div className="space-y-2">
+                <Label>Justificación de este cambio *</Label>
+                <Textarea
+                  value={justificacion}
+                  onChange={(e) => setJustificacion(e.target.value)}
+                  placeholder="Describe por qué modificas esta orden (queda guardado en el documento)."
+                  rows={3}
+                  className="border-input bg-background resize-y min-h-[72px]"
+                />
+              </div>
+            ) : null}
           </div>
 
           <div className="space-y-2">
@@ -276,19 +428,19 @@ export default function InventarioOrdenCompraModal({
                 Agregar línea
               </Button>
             </div>
-            <ScrollArea className="w-full rounded-md border border-border">
-              <Table>
+            <div className="w-full rounded-md border border-border">
+              <Table className="w-full table-fixed [&_td]:px-2 [&_th]:px-2">
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="min-w-[120px]">SKU</TableHead>
-                    <TableHead className="min-w-[140px]">Nombre producto</TableHead>
-                    <TableHead className="w-24 text-right">Cantidad</TableHead>
-                    <TableHead className="min-w-[100px] text-right">Precio u.</TableHead>
-                    <TableHead className="min-w-[90px] text-right">Descuento</TableHead>
-                    <TableHead className="min-w-[90px] text-right">Impuestos</TableHead>
-                    <TableHead className="min-w-[100px] text-right">Subtotal</TableHead>
-                    <TableHead className="min-w-[130px]">Bodega</TableHead>
-                    <TableHead className="w-12" />
+                    <TableHead className="w-[17%]">SKU</TableHead>
+                    <TableHead className="w-[16%]">Nombre producto</TableHead>
+                    <TableHead className="w-[8%] text-right">Cant.</TableHead>
+                    <TableHead className="w-[10%] text-right">Precio</TableHead>
+                    <TableHead className="w-[9%] text-right">Desc.</TableHead>
+                    <TableHead className="w-[9%] text-right">Imp. %</TableHead>
+                    <TableHead className="w-[10%] text-right">Subtotal</TableHead>
+                    <TableHead className="w-[16%]">Bodega</TableHead>
+                    <TableHead className="w-[5%]" />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -296,7 +448,7 @@ export default function InventarioOrdenCompraModal({
                     <TableRow key={line.id}>
                       <TableCell className="align-top">
                         <Select value={line.sku || undefined} onValueChange={(v) => onSkuChange(line.id, v)}>
-                          <SelectTrigger className="h-9 border-input bg-background">
+                          <SelectTrigger className="h-9 border-input bg-background px-2">
                             <SelectValue placeholder="SKU" />
                           </SelectTrigger>
                           <SelectContent className="max-h-60 border-border bg-popover">
@@ -308,7 +460,7 @@ export default function InventarioOrdenCompraModal({
                           </SelectContent>
                         </Select>
                         <Input
-                          className="mt-1 h-8 border-input bg-background text-xs"
+                          className="mt-1 h-8 border-input bg-background px-2 text-xs"
                           value={line.sku}
                           onChange={(e) => updateLine(line.id, { sku: e.target.value.toUpperCase() })}
                           placeholder="O escribe SKU"
@@ -318,7 +470,7 @@ export default function InventarioOrdenCompraModal({
                         <Input
                           value={line.nombreProducto}
                           onChange={(e) => updateLine(line.id, { nombreProducto: e.target.value })}
-                          className="border-input bg-background"
+                          className="border-input bg-background px-2"
                           placeholder="Nombre"
                         />
                       </TableCell>
@@ -327,7 +479,7 @@ export default function InventarioOrdenCompraModal({
                           type="number"
                           min="0"
                           step="any"
-                          className="border-input bg-background text-right"
+                          className="border-input bg-background px-2 text-right"
                           value={line.cantidad}
                           onChange={(e) => updateLine(line.id, { cantidad: e.target.value })}
                         />
@@ -337,7 +489,7 @@ export default function InventarioOrdenCompraModal({
                           type="number"
                           min="0"
                           step="any"
-                          className="border-input bg-background text-right"
+                          className="border-input bg-background px-2 text-right"
                           value={line.precioUnitario}
                           onChange={(e) => updateLine(line.id, { precioUnitario: e.target.value })}
                         />
@@ -347,7 +499,7 @@ export default function InventarioOrdenCompraModal({
                           type="number"
                           min="0"
                           step="any"
-                          className="border-input bg-background text-right"
+                          className="border-input bg-background px-2 text-right"
                           value={line.descuento}
                           onChange={(e) => updateLine(line.id, { descuento: e.target.value })}
                         />
@@ -357,17 +509,20 @@ export default function InventarioOrdenCompraModal({
                           type="number"
                           min="0"
                           step="any"
-                          className="border-input bg-background text-right"
-                          value={line.impuestos}
-                          onChange={(e) => updateLine(line.id, { impuestos: e.target.value })}
+                          className="border-input bg-background px-2 text-right"
+                          max="100"
+                          value={line.impuestoPorcentaje}
+                          onChange={(e) => updateLine(line.id, { impuestoPorcentaje: e.target.value })}
+                          placeholder="%"
                         />
+                        <p className="mt-1 text-right text-[10px] text-muted-foreground">{moneyCo(calcImpuestoLinea(line))}</p>
                       </TableCell>
                       <TableCell className="align-top text-right text-sm font-medium tabular-nums">
                         {moneyCo(calcSubtotalLinea(line))}
                       </TableCell>
                       <TableCell className="align-top">
                         <Select value={line.bodega || undefined} onValueChange={(v) => updateLine(line.id, { bodega: v })}>
-                          <SelectTrigger className="h-9 border-input bg-background">
+                          <SelectTrigger className="h-9 border-input bg-background px-2">
                             <SelectValue placeholder="Bodega" />
                           </SelectTrigger>
                           <SelectContent className="max-h-60 border-border bg-popover">
@@ -388,12 +543,12 @@ export default function InventarioOrdenCompraModal({
                   ))}
                 </TableBody>
               </Table>
-            </ScrollArea>
+            </div>
             <p className="text-right text-sm font-semibold text-foreground">
               Total orden: <span className="tabular-nums">{moneyCo(totalOrden)}</span>
             </p>
             <p className="text-xs text-muted-foreground">
-              Subtotal por línea = (cantidad × precio unitario) − descuento + impuestos. El backend recalcula y persiste el valor final.
+              Subtotal por linea = base neta + impuesto porcentual. Base neta = (cantidad x precio unitario) - descuento.
             </p>
           </div>
 
@@ -403,7 +558,7 @@ export default function InventarioOrdenCompraModal({
             </Button>
             <Button type="button" onClick={() => void guardar()} disabled={saving || enviando}>
               <Save className="mr-2 h-4 w-4" />
-              Guardar orden
+              {ordenEdicion?._id ? 'Guardar cambios' : 'Guardar orden'}
             </Button>
           </DialogFooter>
         </DialogContent>

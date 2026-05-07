@@ -2,80 +2,75 @@ import { useEffect, useState } from 'react';
 import { apiFetch } from '@/app/services/api';
 import { obtenerBrandingPublico } from '@/app/services/brandingWidget';
 
-const DEFAULT_LOGO_URL = '/assets/logo.png';
-
 const isPublicPath = (): boolean => {
     if (typeof window === 'undefined') return true;
     const pathname = window.location.pathname.toLowerCase();
     return !localStorage.getItem('token') || pathname.startsWith('/public/') || pathname === '/' || pathname.includes('/registro') || pathname.includes('/login');
 };
 
-const resolveLogoUrl = (logo: any): string => {
-    if (!logo) return DEFAULT_LOGO_URL;
-    if (typeof logo.dataUrl === 'string' && logo.dataUrl.trim()) return logo.dataUrl;
-    if (typeof logo.url === 'string' && logo.url.trim()) return logo.url;
-    if (typeof logo.imageUrl === 'string' && logo.imageUrl.trim()) return logo.imageUrl;
-    if (typeof logo.logoUrl === 'string' && logo.logoUrl.trim()) return logo.logoUrl;
+/** Solo URL del corporativo/API; sin fallback local */
+const resolveLogoUrl = (logo: any): string | null => {
+    if (!logo) return null;
+    if (typeof logo.dataUrl === 'string' && logo.dataUrl.trim()) return logo.dataUrl.trim();
+    if (typeof logo.url === 'string' && logo.url.trim()) return logo.url.trim();
+    if (typeof logo.imageUrl === 'string' && logo.imageUrl.trim()) return logo.imageUrl.trim();
+    if (typeof logo.logoUrl === 'string' && logo.logoUrl.trim()) return logo.logoUrl.trim();
     if (typeof logo.base64 === 'string' && logo.base64.trim() && typeof logo.mimetype === 'string' && logo.mimetype.trim()) {
-        return `data:${logo.mimetype};base64,${logo.base64}`;
+        return `data:${logo.mimetype.trim()};base64,${logo.base64.trim()}`;
     }
-    return DEFAULT_LOGO_URL;
+    return null;
 };
 
 export default function LoadingScreen(): React.ReactElement {
     const [backgroundUrl, setBackgroundUrl] = useState<string>('');
-    const [logoUrl, setLogoUrl] = useState<string>(DEFAULT_LOGO_URL);
+    const [logoUrl, setLogoUrl] = useState<string | null>(null);
+    const [logoFetchDone, setLogoFetchDone] = useState(false);
+    const [logoImageError, setLogoImageError] = useState(false);
     const [publicMode] = useState<boolean>(() => isPublicPath());
 
     useEffect(() => {
         const cargarRecursos = async (): Promise<void> => {
-            const tieneTokenSesion =
-                typeof window !== 'undefined' && Boolean(String(localStorage.getItem('token') || '').trim());
+            try {
+                const tieneTokenSesion =
+                    typeof window !== 'undefined' && Boolean(String(localStorage.getItem('token') || '').trim());
 
-            const fetchSplashLogo = (): Promise<{ logo?: unknown }> =>
-                apiFetch('/api/config/parametrizacion/listar/logos/coporativo', {
-                    method: 'GET',
-                    useAuth: tieneTokenSesion,
-                    logoutOn401: false,
-                });
+                const fetchSplashLogo = (): Promise<{ logo?: unknown }> =>
+                    apiFetch('/api/config/parametrizacion/listar/logos/coporativo', {
+                        method: 'GET',
+                        useAuth: tieneTokenSesion,
+                        logoutOn401: false,
+                    });
 
-            const cargarSplashLogoSafe = async (): Promise<{ logo?: unknown } | null> => {
-                try {
-                    return await fetchSplashLogo();
-                } catch {
-                    if (tieneTokenSesion) {
-                        try {
-                            return await apiFetch('/api/config/parametrizacion/listar/logos/coporativo', {
-                                method: 'GET',
-                                useAuth: false,
-                                logoutOn401: false,
-                            });
-                        } catch {
-                            return null;
-                        }
+                const cargarSplashLogoSafe = async (): Promise<{ logo?: unknown } | null> => {
+                    try {
+                        return await fetchSplashLogo();
+                    } catch {
+                        // Con sesión no repetir sin JWT: el backend ya no devuelve logo global arbitrario en privado.
+                        return null;
                     }
-                    return null;
+                };
+
+                const [brandingResult, logoBox] = await Promise.allSettled([
+                    obtenerBrandingPublico(),
+                    cargarSplashLogoSafe(),
+                ]);
+
+                if (brandingResult.status === 'fulfilled') {
+                    const branding = brandingResult.value;
+                    const loadingBackground = branding?.widgets?.loadingBackground;
+                    const nextBackgroundUrl = String(loadingBackground?.imageUrl || '').trim();
+                    setBackgroundUrl(loadingBackground?.enabled !== false ? nextBackgroundUrl : '');
+                } else {
+                    setBackgroundUrl('');
                 }
-            };
 
-            const [brandingResult, logoBox] = await Promise.allSettled([
-                obtenerBrandingPublico(),
-                cargarSplashLogoSafe(),
-            ]);
-
-            if (brandingResult.status === 'fulfilled') {
-                const branding = brandingResult.value;
-                const loadingBackground = branding?.widgets?.loadingBackground;
-                const nextBackgroundUrl = String(loadingBackground?.imageUrl || '').trim();
-                setBackgroundUrl(loadingBackground?.enabled !== false ? nextBackgroundUrl : '');
-            } else {
-                setBackgroundUrl('');
-            }
-
-            if (logoBox.status === 'fulfilled' && logoBox.value) {
-                setLogoUrl(resolveLogoUrl((logoBox.value as any)?.logo));
-            } else {
-                setLogoUrl(DEFAULT_LOGO_URL);
+                if (logoBox.status === 'fulfilled' && logoBox.value) {
+                    setLogoUrl(resolveLogoUrl((logoBox.value as any)?.logo));
+                } else {
+                    setLogoUrl(null);
+                }
+            } finally {
+                setLogoFetchDone(true);
             }
         };
 
@@ -108,12 +103,18 @@ export default function LoadingScreen(): React.ReactElement {
                     <div className="absolute -inset-3 rounded-[2.4rem] border border-primary/15" />
                     <div className="absolute -inset-3 rounded-[2.4rem] border-4 border-primary/10 border-t-primary animate-spin" />
                     <div className="relative flex h-36 w-36 items-center justify-center rounded-[1.8rem] bg-background/90 shadow-2xl shadow-primary/20 ring-1 ring-primary/15 backdrop-blur-xl">
-                        <img
-                            src={logoUrl}
-                            alt="Logo parametrizado"
-                            className="h-24 w-24 object-contain drop-shadow-sm"
-                            onError={() => setLogoUrl(DEFAULT_LOGO_URL)}
-                        />
+                        {logoFetchDone && logoUrl && !logoImageError ? (
+                            <img
+                                src={logoUrl}
+                                alt="Logo corporativo"
+                                className="h-24 w-24 object-contain drop-shadow-sm"
+                                onError={() => setLogoImageError(true)}
+                            />
+                        ) : (
+                            <p className="px-3 text-center text-sm font-semibold leading-snug text-muted-foreground">
+                                Cargando logo
+                            </p>
+                        )}
                     </div>
                 </div>
 

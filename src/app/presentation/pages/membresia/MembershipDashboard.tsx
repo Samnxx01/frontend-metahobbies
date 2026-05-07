@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { useReferralLink } from '@/app/hooks/useReferralLink';
 import { apiFetch } from '@/app/services/api';
 
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -25,6 +26,8 @@ interface Voucher {
     fecha: string;
     status: 'pendiente' | 'pagado';
     motivo: string;
+    estado?: boolean;
+    commissionLevel?: unknown;
 }
 
 interface UsuarioReferido {
@@ -236,6 +239,45 @@ export default function MembershipDashboard(): React.ReactElement {
     const totalPendiente = misDatos?.totalPendiente || 0;
     const visibleVouchers = misDatos?.vouchers ?? [];
     const visibleReferidos = misDatos?.referidos ?? [];
+    const totalMontoVouchers = visibleVouchers.reduce(
+        (sum, v) => sum + (Number(v.montoGanado) || 0),
+        0,
+    );
+
+    /** Orden por nivel de generación (jerarquía), luego por fecha de relación */
+    const referidosOrdenJerarquia = useMemo(() => {
+        const list = [...visibleReferidos];
+        list.sort((a, b) => {
+            const na = a.nivel ?? 999;
+            const nb = b.nivel ?? 999;
+            if (na !== nb) return na - nb;
+            return new Date(a.fechaRelacion).getTime() - new Date(b.fechaRelacion).getTime();
+        });
+        return list;
+    }, [visibleReferidos]);
+
+    const idsReferidosConUsuario = useMemo(
+        () =>
+            new Set(
+                visibleReferidos.filter((r) => r.usuarioId).map((r) => String(r.usuarioId)),
+            ),
+        [visibleReferidos],
+    );
+
+    const vouchersSinReferidoEnLista = useMemo(
+        () =>
+            visibleVouchers.filter((v) => !idsReferidosConUsuario.has(String(v.referidoId))),
+        [visibleVouchers, idsReferidosConUsuario],
+    );
+
+    const sumarVouchers = (lista: Voucher[]): number =>
+        lista.reduce((s, v) => s + (Number(v.montoGanado) || 0), 0);
+
+    const vouchersDeReferido = (ref: ReferidoRelacion): Voucher[] => {
+        if (!ref.usuarioId) return [];
+        const uid = String(ref.usuarioId);
+        return visibleVouchers.filter((v) => String(v.referidoId) === uid);
+    };
 
     const handleCopy = (text: string, type: string): void => {
         navigator.clipboard.writeText(text).catch(() => {
@@ -429,137 +471,212 @@ export default function MembershipDashboard(): React.ReactElement {
                     </Card>
                 </div>
 
-                <Card className="shadow-sm border-0 bg-card">
-                    <CardHeader>
-                        <CardTitle className="text-lg font-semibold flex items-center gap-2">
-                            <Users className="w-5 h-5 text-primary" /> Mi red de referidos
+                {/* Vouchers de comisiones: un bloque; al desplegar cada referido → jerarquía + vouchers de ese referido */}
+                <Card className="shadow-sm border-0 bg-card overflow-hidden">
+                    <CardHeader className="border-b border-border/40 bg-muted/10 pb-4">
+                        <CardTitle className="text-lg font-semibold flex flex-wrap items-center gap-2">
+                            <FileText className="w-5 h-5 text-primary shrink-0" />
+                            Vouchers de comisiones
                         </CardTitle>
+                        <p className="text-sm text-muted-foreground mt-1 font-normal">
+                            Despliega cada persona para ver su{' '}
+                            <span className="font-medium text-foreground">nivel en la jerarquía</span> y las{' '}
+                            <span className="font-medium text-foreground">comisiones generadas</span> por esa relación.
+                        </p>
+                        {misDatos && (
+                            <div className="mt-4 flex flex-wrap gap-3 text-sm">
+                                <span className="rounded-lg border border-border/60 bg-background/80 px-3 py-2">
+                                    <span className="text-muted-foreground">Total comisiones</span>{' '}
+                                    <span className="font-bold tabular-nums text-primary">{formatCurrency(totalMontoVouchers)}</span>
+                                </span>
+                                <span className="rounded-lg border border-border/60 bg-background/80 px-3 py-2">
+                                    <span className="text-muted-foreground">Referidos en red</span>{' '}
+                                    <span className="font-bold tabular-nums">{totalReferrals}</span>
+                                </span>
+                                <span className="rounded-lg border border-border/60 bg-background/80 px-3 py-2">
+                                    <span className="text-muted-foreground">Vouchers</span>{' '}
+                                    <span className="font-bold tabular-nums">{visibleVouchers.length}</span>
+                                </span>
+                            </div>
+                        )}
                     </CardHeader>
-                    <CardContent>
+                    <CardContent className="pt-6">
                         {loadingReferidos ? (
-                            <div className="flex justify-center items-center py-10">
+                            <div className="flex justify-center items-center py-14">
                                 <Loader2 className="w-8 h-8 animate-spin text-primary" />
                             </div>
-                        ) : visibleReferidos.length === 0 ? (
-                            <div className="rounded-xl border border-dashed border-border/60 bg-muted/20 px-4 py-8 text-center">
-                                <p className="text-sm font-medium text-foreground">Aun no tienes referidos activos</p>
+                        ) : !misDatos ? (
+                            <div className="rounded-xl border border-dashed border-border/60 bg-muted/10 px-4 py-8 text-center text-sm text-muted-foreground">
+                                No hay datos de membresía para mostrar. Completa tu registro o genera tu enlace de referido.
+                            </div>
+                        ) : referidosOrdenJerarquia.length === 0 && vouchersSinReferidoEnLista.length === 0 ? (
+                            <div className="rounded-xl border border-dashed border-border/60 bg-muted/15 px-4 py-10 text-center">
+                                <p className="text-sm font-medium text-foreground">Aún no tienes referidos ni comisiones registradas</p>
                                 <p className="mt-1 text-sm text-muted-foreground">
-                                    Cuando alguien compre con tu enlace, lo veras listado aqui.
+                                    Cuando alguien entre por tu enlace y se generen comisiones, podrás desplegar cada caso aquí.
                                 </p>
                             </div>
                         ) : (
-                            <Accordion type="single" collapsible className="w-full space-y-3">
-                                {visibleReferidos.map((referido, index) => (
+                            <Accordion type="multiple" className="w-full space-y-3">
+                                {referidosOrdenJerarquia.map((referido) => {
+                                    const vs = vouchersDeReferido(referido);
+                                    const subtotal = sumarVouchers(vs);
+                                    const nivelVisual = Math.min((Number(referido.nivel) || 0) * 12, 48);
+                                    return (
+                                        <AccordionItem
+                                            key={referido.relacionId}
+                                            value={referido.relacionId}
+                                            className="overflow-hidden rounded-xl border border-border/50 bg-muted/15"
+                                            style={{ marginLeft: nivelVisual }}
+                                        >
+                                            <AccordionTrigger className="px-4 py-4 hover:no-underline">
+                                                <div className="flex w-full flex-col gap-2 text-left sm:flex-row sm:items-center sm:justify-between sm:gap-4 pr-2">
+                                                    <div className="flex min-w-0 items-center gap-3">
+                                                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
+                                                            G{referido.nivel ?? '—'}
+                                                        </div>
+                                                        <div className="min-w-0">
+                                                            <p className="truncate text-sm font-semibold text-foreground">
+                                                                {referido.nombre || referido.correo}
+                                                            </p>
+                                                            <p className="truncate text-xs text-muted-foreground">{referido.correo}</p>
+                                                            <div className="mt-1 flex flex-wrap gap-1">
+                                                                <Badge variant="outline" className="text-[10px] font-normal">
+                                                                    {referido.nivelNombre ||
+                                                                        (referido.nivel != null ? `Nivel ${referido.nivel}` : 'Sin nivel')}
+                                                                </Badge>
+                                                                {referido.porcentaje != null && (
+                                                                    <Badge variant="secondary" className="text-[10px] font-normal">
+                                                                        {referido.porcentaje}% plan
+                                                                    </Badge>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex shrink-0 flex-wrap items-center gap-3 sm:flex-col sm:items-end">
+                                                        <span className="text-xs text-muted-foreground">
+                                                            {vs.length} voucher{vs.length !== 1 ? 's' : ''}
+                                                        </span>
+                                                        <span className="text-lg font-bold tabular-nums text-primary">{formatCurrency(subtotal)}</span>
+                                                    </div>
+                                                </div>
+                                            </AccordionTrigger>
+                                            <AccordionContent className="border-t border-border/40 bg-muted/10 px-4 pb-4 pt-3">
+                                                <div className="space-y-4">
+                                                    <div>
+                                                        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                                            Jerarquía de esta relación
+                                                        </p>
+                                                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                                                            <div className="rounded-lg border border-border/50 bg-background p-3">
+                                                                <p className="text-[10px] uppercase text-muted-foreground">Generación</p>
+                                                                <p className="mt-0.5 text-sm font-medium">
+                                                                    {referido.nivelNombre ||
+                                                                        (referido.nivel != null ? `Nivel ${referido.nivel}` : 'No asignado')}
+                                                                </p>
+                                                            </div>
+                                                            <div className="rounded-lg border border-border/50 bg-background p-3">
+                                                                <p className="text-[10px] uppercase text-muted-foreground">Nivel (#)</p>
+                                                                <p className="mt-0.5 text-sm font-medium tabular-nums">
+                                                                    {referido.nivel != null ? referido.nivel : '—'}
+                                                                </p>
+                                                            </div>
+                                                            <div className="rounded-lg border border-border/50 bg-background p-3">
+                                                                <p className="text-[10px] uppercase text-muted-foreground">Ingreso a tu red</p>
+                                                                <p className="mt-0.5 text-sm font-medium">{formatDate(referido.fechaRelacion)}</p>
+                                                            </div>
+                                                            <div className="rounded-lg border border-border/50 bg-background p-3">
+                                                                <p className="text-[10px] uppercase text-muted-foreground">Estado referido</p>
+                                                                <p className="mt-0.5 text-sm font-medium">
+                                                                    {referido.verificado ? 'Verificado' : 'Pendiente'}
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div>
+                                                        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                                            Comisiones generadas por esta persona
+                                                        </p>
+                                                        {vs.length === 0 ? (
+                                                            <p className="rounded-lg border border-dashed border-border/60 bg-background/60 px-3 py-4 text-center text-sm text-muted-foreground">
+                                                                Sin vouchers asociados aún para este referido.
+                                                            </p>
+                                                        ) : (
+                                                            <div className="space-y-2">
+                                                                {vs.map((voucher, vi) => (
+                                                                    <div
+                                                                        key={voucher._id}
+                                                                        className="flex flex-col gap-2 rounded-lg border border-border/40 bg-background p-3 sm:flex-row sm:items-center sm:justify-between"
+                                                                    >
+                                                                        <div className="min-w-0 space-y-1">
+                                                                            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+                                                                                <span className="inline-flex items-center gap-1">
+                                                                                    <Calendar className="h-3.5 w-3.5" />
+                                                                                    {formatDate(voucher.fecha)}
+                                                                                </span>
+                                                                                <span>·</span>
+                                                                                <span className="inline-flex items-center gap-1">
+                                                                                    <Hash className="h-3.5 w-3.5" />
+                                                                                    Ciclo {voucher.ciclo}
+                                                                                </span>
+                                                                            </div>
+                                                                            <p className="text-sm text-foreground">{voucher.motivo}</p>
+                                                                        </div>
+                                                                        <span className="shrink-0 text-lg font-bold tabular-nums text-primary">
+                                                                            {formatCurrency(voucher.montoGanado)}
+                                                                        </span>
+                                                                    </div>
+                                                                ))}
+                                                                <p className="pt-1 text-right text-xs text-muted-foreground">
+                                                                    Subtotal{' '}
+                                                                    <span className="font-semibold text-foreground">{formatCurrency(subtotal)}</span>
+                                                                </p>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </AccordionContent>
+                                        </AccordionItem>
+                                    );
+                                })}
+
+                                {vouchersSinReferidoEnLista.length > 0 && (
                                     <AccordionItem
-                                        key={referido.relacionId}
-                                        value={referido.relacionId}
-                                        className="overflow-hidden rounded-xl border border-border/50 bg-muted/15 px-4"
+                                        value="__vouchers_sin_ref"
+                                        className="overflow-hidden rounded-xl border border-amber-500/30 bg-amber-500/[0.04]"
                                     >
-                                        <AccordionTrigger className="py-4 hover:no-underline">
-                                            <div className="flex w-full items-center justify-between gap-4 text-left">
-                                                <div className="flex items-center gap-3 min-w-0">
-                                                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
-                                                        #{index + 1}
-                                                    </div>
-                                                    <div className="min-w-0">
-                                                        <p className="truncate text-sm font-semibold text-foreground">
-                                                            {referido.nombre || referido.correo}
-                                                        </p>
-                                                        <p className="truncate text-xs text-muted-foreground">
-                                                            {referido.correo}
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                                <div className="hidden sm:flex items-center gap-3 text-xs text-muted-foreground">
-                                                    <span>
-                                                        {referido.nivelNombre || (referido.nivel ? `Nivel ${referido.nivel}` : 'Sin nivel')}
-                                                    </span>
-                                                    <span>
-                                                        {formatDate(referido.fechaRelacion)}
-                                                    </span>
-                                                </div>
+                                        <AccordionTrigger className="px-4 py-4 hover:no-underline">
+                                            <div className="flex w-full flex-col gap-1 text-left sm:flex-row sm:items-center sm:justify-between">
+                                                <span className="text-sm font-semibold">Otros vouchers (sin coincidencia en tu lista de referidos)</span>
+                                                <span className="text-lg font-bold tabular-nums text-primary">
+                                                    {formatCurrency(sumarVouchers(vouchersSinReferidoEnLista))}
+                                                </span>
                                             </div>
                                         </AccordionTrigger>
-                                        <AccordionContent className="pb-4">
-                                            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-                                                <div className="rounded-lg bg-background/80 p-3">
-                                                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Correo</p>
-                                                    <p className="mt-1 text-sm font-medium text-foreground break-all">{referido.correo}</p>
-                                                </div>
-                                                <div className="rounded-lg bg-background/80 p-3">
-                                                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Fecha de ingreso</p>
-                                                    <p className="mt-1 text-sm font-medium text-foreground">{formatDate(referido.fechaRelacion)}</p>
-                                                </div>
-                                                <div className="rounded-lg bg-background/80 p-3">
-                                                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Generacion</p>
-                                                    <p className="mt-1 text-sm font-medium text-foreground">
-                                                        {referido.nivelNombre || (referido.nivel ? `Nivel ${referido.nivel}` : 'No asignado')}
-                                                    </p>
-                                                </div>
-                                                <div className="rounded-lg bg-background/80 p-3">
-                                                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Estado</p>
-                                                    <p className="mt-1 text-sm font-medium text-foreground">
-                                                        {referido.verificado ? 'Verificado' : 'Pendiente de verificar'}
-                                                    </p>
-                                                </div>
+                                        <AccordionContent className="border-t border-border/40 px-4 pb-4 pt-3">
+                                            <p className="mb-3 text-xs text-muted-foreground">
+                                                Estos movimientos tienen un referido distinto o datos históricos; siguen sumando a tu total.
+                                            </p>
+                                            <div className="space-y-2">
+                                                {vouchersSinReferidoEnLista.map((voucher) => (
+                                                    <div
+                                                        key={voucher._id}
+                                                        className="flex flex-col gap-2 rounded-lg border border-border/40 bg-background p-3 sm:flex-row sm:items-center sm:justify-between"
+                                                    >
+                                                        <div className="min-w-0 text-xs text-muted-foreground">
+                                                            {formatDate(voucher.fecha)} · Ciclo {voucher.ciclo}
+                                                            <p className="mt-1 text-sm text-foreground">{voucher.motivo}</p>
+                                                        </div>
+                                                        <span className="font-bold tabular-nums text-primary">
+                                                            {formatCurrency(voucher.montoGanado)}
+                                                        </span>
+                                                    </div>
+                                                ))}
                                             </div>
                                         </AccordionContent>
                                     </AccordionItem>
-                                ))}
+                                )}
                             </Accordion>
-                        )}
-                    </CardContent>
-                </Card>
-
-                {/* Tabla de vouchers */}
-                <Card className="shadow-sm border-0 bg-card">
-                    <CardHeader>
-                        <CardTitle className="text-lg font-semibold">Mis Vouchers de Comisiones</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        {loadingReferidos ? (
-                            <div className="flex justify-center items-center py-12">
-                                <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                            </div>
-                        ) : !misDatos || visibleVouchers.length === 0 ? (
-                            <div className="text-center py-12 text-muted-foreground">
-                                <p>No tienes vouchers de comisiones aún</p>
-                            </div>
-                        ) : (
-                            <div className="space-y-3">
-                                {visibleVouchers.map((voucher, index) => (
-                                    <div
-                                        key={voucher._id}
-                                        className="group relative p-4 rounded-lg border border-border/40 hover:border-primary/30 hover:bg-muted/20 transition-all duration-200"
-                                    >
-                                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                                            <div className="flex items-start gap-4">
-                                                <div className="flex-shrink-0 w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                                                    <span className="text-sm font-bold text-primary">#{index + 1}</span>
-                                                </div>
-                                                <div className="space-y-1">
-                                                    <div className="flex items-center gap-2">
-                                                        <Calendar className="w-4 h-4 text-muted-foreground" />
-                                                        <span className="text-sm text-muted-foreground">{formatDate(voucher.fecha)}</span>
-                                                        <span className="text-muted-foreground">•</span>
-                                                        <Hash className="w-4 h-4 text-muted-foreground" />
-                                                        <span className="text-sm font-medium text-foreground">Ciclo {voucher.ciclo}</span>
-                                                    </div>
-                                                    <div className="flex items-center gap-2">
-                                                        <FileText className="w-4 h-4 text-muted-foreground" />
-                                                        <span className="text-sm text-muted-foreground">{voucher.motivo}</span>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            <div className="flex items-center justify-end">
-                                                <span className="text-2xl font-bold text-primary">
-                                                    {formatCurrency(voucher.montoGanado)}
-                                                </span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
                         )}
                     </CardContent>
                 </Card>

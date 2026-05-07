@@ -89,8 +89,6 @@ export const UsuarioSuperAdminModal = ({
     const [publicTenants, setPublicTenants] = useState<TenantSuperAdminOption[]>([]);
     const [loadingPublicTenants, setLoadingPublicTenants] = useState(false);
     const [publicTenantsError, setPublicTenantsError] = useState(false);
-    /** Sin JWT: lista raíces por defecto; con ancla = solo esa rama + descendientes */
-    const [jerarquiaAnclaSaId, setJerarquiaAnclaSaId] = useState<string | null>(null);
 
     const tenantSuperAdminIdFromJwt = useMemo(() => {
         const fromUser = String(
@@ -121,7 +119,6 @@ export const UsuarioSuperAdminModal = ({
     useEffect(() => {
         if (!open) {
             setForm(EMPTY_FORM);
-            setJerarquiaAnclaSaId(null);
             setPublicTenantsError(false);
             return;
         }
@@ -137,32 +134,14 @@ export const UsuarioSuperAdminModal = ({
 
         setLoadingPublicTenants(true);
         setPublicTenantsError(false);
-        const opts = jerarquiaAnclaSaId
-            ? { bajoTenantSuperAdminId: jerarquiaAnclaSaId }
-            : undefined;
-        getTenantsSuperAdmin(Boolean(token), opts)
+        getTenantsSuperAdmin(Boolean(token))
             .then((res) => setPublicTenants(Array.isArray(res?.tenants) ? res.tenants : []))
             .catch(() => {
                 setPublicTenants([]);
                 setPublicTenantsError(true);
             })
             .finally(() => setLoadingPublicTenants(false));
-    }, [open, token, scope, tenantSuperAdminIdFromJwt, jerarquiaAnclaSaId]);
-
-    const aplicarAnclaJerarquia = () => {
-        const id = form.tenantSuperAdminId.trim();
-        if (!id) {
-            toast.error('Selecciona primero un Tenant SuperAdmin.');
-            return;
-        }
-        setJerarquiaAnclaSaId(id);
-        setForm((p) => ({ ...p, tenantSuperAdminId: '' }));
-    };
-
-    const limpiarAnclaJerarquia = () => {
-        setJerarquiaAnclaSaId(null);
-        setForm((p) => ({ ...p, tenantSuperAdminId: '' }));
-    };
+    }, [open, token, scope, tenantSuperAdminIdFromJwt]);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         setForm(prev => ({ ...prev, [e.target.name]: e.target.value }));
@@ -192,7 +171,6 @@ export const UsuarioSuperAdminModal = ({
             form.tenantSuperAdminId.trim();
         const esBootstrapDiosPublico =
             !token &&
-            !jerarquiaAnclaSaId &&
             !loadingPublicTenants &&
             !publicTenantsError &&
             publicTenants.length === 0;
@@ -203,7 +181,7 @@ export const UsuarioSuperAdminModal = ({
                     ? 'Espera a que carguen los tenants activos.'
                     : publicTenants.length === 0
                         ? 'No hay tenants SuperAdmin activos disponibles.'
-                        : 'Selecciona el tenant SuperAdmin donde se creará el usuario.',
+                        : 'Selecciona el tenant SuperAdmin (corporativo asociado) donde se creará el usuario.',
             );
             return;
         }
@@ -276,7 +254,7 @@ export const UsuarioSuperAdminModal = ({
                                         required
                                     >
                                         <SelectTrigger>
-                                            <SelectValue placeholder="Selecciona un tenant (código de jerarquía)" />
+                                            <SelectValue placeholder="Selecciona el corporativo asociado" />
                                         </SelectTrigger>
                                         <SelectContent>
                                             {publicTenants.map((tenant) => {
@@ -286,9 +264,11 @@ export const UsuarioSuperAdminModal = ({
                                                     <SelectItem key={tenant.iud} value={tenant.iud}>
                                                         <div className="flex flex-col gap-0.5 py-0.5 text-left">
                                                             <span className="font-medium leading-tight">{primary}</span>
-                                                            <span className="text-xs text-muted-foreground leading-snug">
-                                                                {principalLine}
-                                                            </span>
+                                                            {principalLine ? (
+                                                                <span className="text-xs text-muted-foreground leading-snug">
+                                                                    {principalLine}
+                                                                </span>
+                                                            ) : null}
                                                         </div>
                                                     </SelectItem>
                                                 );
@@ -296,31 +276,6 @@ export const UsuarioSuperAdminModal = ({
                                         </SelectContent>
                                     </Select>
                                 )}
-                                <p className="text-xs text-muted-foreground">
-                                    Lista acotada por jerarquía: sin sesión ves primero{' '}
-                                    <span className="font-medium">raíces</span>; puedes profundizar en una rama.
-                                    Con sesión, solo tu rama y descendientes.
-                                </p>
-                                {publicTenants.length > 0 && jerarquiaAnclaSaId ? (
-                                    <div className="flex flex-wrap gap-2 items-center">
-                                        <Badge variant="secondary" className="text-xs">
-                                            Rama: {jerarquiaAnclaSaId.slice(-8)}…
-                                        </Badge>
-                                        <Button type="button" variant="ghost" size="sm" onClick={limpiarAnclaJerarquia}>
-                                            Ver solo raíces
-                                        </Button>
-                                    </div>
-                                ) : publicTenants.length > 0 ? (
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={aplicarAnclaJerarquia}
-                                        disabled={!form.tenantSuperAdminId.trim()}
-                                    >
-                                        Mostrar esta rama y descendientes
-                                    </Button>
-                                ) : null}
                             </div>
                         )}
 

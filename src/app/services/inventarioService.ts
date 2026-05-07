@@ -28,7 +28,9 @@ export interface InventarioTipoMovimiento {
   estado: boolean;
 }
 
-export interface InventarioUnidadMedida {
+export type TipoUnidadMedida = string;
+
+export interface InventarioTipoUnidadMedida {
   _id: string;
   codigo: string;
   nombre: string;
@@ -36,8 +38,21 @@ export interface InventarioUnidadMedida {
   estado: boolean;
 }
 
-export interface InventarioProveedor {
+export interface InventarioUnidadMedida {
   _id: string;
+  codigo: string;
+  nombre: string;
+  descripcion?: string;
+  estado: boolean;
+  tipoUnidad?: TipoUnidadMedida;
+  esUnidadBaseInventario?: boolean;
+  unidadBaseRelacionada?: { _id: string; codigo: string; nombre: string } | null;
+  factorConversionHaciaBase?: number | null;
+}
+
+export interface InventarioProveedor {
+  _id?: string;
+  iud?: string;
   nombre: string;
   nit: string;
   correo?: string;
@@ -77,16 +92,39 @@ export interface OrdenCompraItemLinea {
   cantidadOrdenada: number;
   costoUnitario: number;
   descuento?: number;
+  impuestoPorcentaje?: number;
   impuestos?: number;
   subtotal?: number;
   bodega: string;
   ubicacion?: UbicacionInventario;
 }
 
+export interface RecepcionOrdenCompraPayload {
+  numeroRecepcion: string;
+  documentoSoporte: { tipo: string; numero: string };
+  items: Array<{
+    ordenItemIndex?: number;
+    sku: string;
+    cantidadRecibida: number;
+  }>;
+}
+
+export interface RecepcionOrdenCompraResponse {
+  orden: InventarioOrdenCompra;
+  recepcion: {
+    _id: string;
+    numeroRecepcion: string;
+    items: Array<{ sku: string; cantidadRecibida: number; costoUnitario: number; bodega: string }>;
+  };
+}
+
 export interface InventarioOrdenCompra {
   _id: string;
   numeroOrden: string;
   numeroRemision?: string;
+  numeroFacturaElectronico?: string;
+  concepto?: string;
+  justificacion?: string;
   fechaOrden?: string;
   proveedor: { nombre: string; nit: string };
   documentoLegalCompra: { tipo: string; numero: string; fecha: string };
@@ -94,6 +132,17 @@ export interface InventarioOrdenCompra {
   items: Array<OrdenCompraItemLinea & { cantidadRecibida?: number }>;
   createdAt?: string;
   updatedAt?: string;
+  auditoriaUltimaEdicion?: {
+    concepto?: string;
+    justificacion?: string;
+    timestamp?: string;
+  };
+}
+
+export interface SiguienteNumeroOrdenCompra {
+  year: number;
+  secuencial: number;
+  numeroOrden: string;
 }
 
 export interface InventarioSaldo {
@@ -283,6 +332,20 @@ const inventarioService = {
     return (resp?.data ?? []) as InventarioUnidadMedida[];
   },
 
+  async listarTiposUnidadMedida(): Promise<InventarioTipoUnidadMedida[]> {
+    const resp = await apiFetch('/api/inventario/tipos-unidad-medida/admin', { method: 'GET' });
+    return (resp?.data ?? []) as InventarioTipoUnidadMedida[];
+  },
+
+  async crearTipoUnidadMedida(payload: {
+    codigo?: string;
+    nombre: string;
+    descripcion?: string;
+  }): Promise<InventarioTipoUnidadMedida> {
+    const resp = await apiFetch('/api/inventario/tipos-unidad-medida', { method: 'POST', body: payload });
+    return resp?.data as InventarioTipoUnidadMedida;
+  },
+
   async crearUnidadMedida(payload: Omit<InventarioUnidadMedida, '_id'>): Promise<InventarioUnidadMedida> {
     const resp = await apiFetch('/api/inventario/unidades-medida', { method: 'POST', body: payload });
     return resp?.data as InventarioUnidadMedida;
@@ -336,16 +399,47 @@ const inventarioService = {
     return (resp?.data ?? []) as InventarioOrdenCompra[];
   },
 
+  async obtenerSiguienteNumeroOrdenCompra(): Promise<SiguienteNumeroOrdenCompra> {
+    const resp = await apiFetch('/api/inventario/compras/ordenes/siguiente-numero', { method: 'GET' });
+    return resp?.data as SiguienteNumeroOrdenCompra;
+  },
+
   async crearOrdenCompra(payload: {
-    numeroOrden: string;
     numeroRemision?: string;
-    fechaOrden?: string;
+    numeroFacturaElectronico?: string;
+    concepto: string;
+    justificacion?: string;
     proveedor: { nombre: string; nit: string };
-    documentoLegalCompra: { tipo: string; numero: string; fecha: string };
     items: OrdenCompraItemLinea[];
   }): Promise<InventarioOrdenCompra> {
     const resp = await apiFetch('/api/inventario/compras/ordenes', { method: 'POST', body: payload });
     return resp?.data as InventarioOrdenCompra;
+  },
+
+  async actualizarOrdenCompra(
+    id: string,
+    payload: {
+      numeroRemision?: string;
+      numeroFacturaElectronico?: string;
+      justificacion: string;
+      proveedor: { nombre: string; nit: string };
+      items: OrdenCompraItemLinea[];
+    }
+  ): Promise<InventarioOrdenCompra> {
+    const resp = await apiFetch(`/api/inventario/compras/ordenes/${id}`, { method: 'PUT', body: payload });
+    return resp?.data as InventarioOrdenCompra;
+  },
+
+  async eliminarOrdenCompra(id: string, payload: { justificacion: string }): Promise<void> {
+    await apiFetch(`/api/inventario/compras/ordenes/${id}`, { method: 'DELETE', body: payload });
+  },
+
+  async registrarRecepcionOrdenCompra(
+    id: string,
+    payload: RecepcionOrdenCompraPayload
+  ): Promise<RecepcionOrdenCompraResponse> {
+    const resp = await apiFetch(`/api/inventario/compras/ordenes/${id}/recepciones`, { method: 'POST', body: payload });
+    return resp?.data as RecepcionOrdenCompraResponse;
   },
 
   async crearProveedorCompra(payload: {

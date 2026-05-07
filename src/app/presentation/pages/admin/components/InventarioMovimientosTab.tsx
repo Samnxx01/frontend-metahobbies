@@ -1,6 +1,6 @@
 import React from 'react';
 import { Plus, Save, SlidersHorizontal } from 'lucide-react';
-import type { InventarioTipoMovimiento, MotivoMovimiento } from '@/app/services/inventarioService';
+import type { InventarioOrdenCompra, InventarioTipoMovimiento, MotivoMovimiento } from '@/app/services/inventarioService';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -10,6 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 type MovimientoForm = {
   tipoMovimientoConfigId: string;
   tipo: 'ENTRADA' | 'SALIDA';
+  ordenCompraId: string;
+  ordenCompraItemIndex: string;
   sku: string;
   bodega: string;
   cantidad: string;
@@ -23,6 +25,8 @@ type InventarioMovimientosTabProps = {
   movimientoForm?: MovimientoForm;
   setMovimientoForm?: React.Dispatch<React.SetStateAction<MovimientoForm>>;
   tiposMovimientoActivos?: InventarioTipoMovimiento[];
+  ordenesCompra?: InventarioOrdenCompra[];
+  onOrdenCompraLineChange?: (ordenCompraId: string, itemIndex: string) => void;
   motivos?: MotivoMovimiento[];
   saving?: boolean;
   renderSkuSelect?: (value: string, onChange: (value: string) => void) => React.ReactElement;
@@ -35,6 +39,8 @@ type InventarioMovimientosTabProps = {
 const movimientoFallback: MovimientoForm = {
   tipoMovimientoConfigId: '',
   tipo: 'ENTRADA',
+  ordenCompraId: '',
+  ordenCompraItemIndex: '',
   sku: '',
   bodega: '',
   cantidad: '',
@@ -50,6 +56,8 @@ export default function InventarioMovimientosTab({
   movimientoForm,
   setMovimientoForm,
   tiposMovimientoActivos,
+  ordenesCompra,
+  onOrdenCompraLineChange,
   motivos,
   saving,
   renderSkuSelect,
@@ -61,7 +69,17 @@ export default function InventarioMovimientosTab({
   const form = movimientoForm ?? movimientoFallback;
   const updateForm = setMovimientoForm ?? noop;
   const tipos = tiposMovimientoActivos ?? [];
+  const ordenesPendientes = ordenesCompra ?? [];
   const motivosList = motivos ?? [];
+  const ordenSeleccionada = ordenesPendientes.find((oc) => oc._id === form.ordenCompraId);
+  const esEntradaCompra = form.tipo === 'ENTRADA' && form.motivo === 'COMPRA';
+  const lineasPendientes = (ordenSeleccionada?.items || [])
+    .map((item, index) => ({
+      item,
+      index,
+      pendiente: Math.max(0, Number(item.cantidadOrdenada || 0) - Number(item.cantidadRecibida || 0)),
+    }))
+    .filter((line) => line.pendiente > 0);
   const renderSku = renderSkuSelect ?? ((value, onChange) => (
     <Input value={value} onChange={(event) => onChange(event.target.value)} />
   ));
@@ -100,6 +118,7 @@ export default function InventarioMovimientosTab({
                 ...prev,
                 tipoMovimientoConfigId: value,
                 tipo: selected?.naturaleza || prev.tipo,
+                ...(selected?.naturaleza === 'SALIDA' ? { ordenCompraId: '', ordenCompraItemIndex: '' } : {}),
               }));
             }}>
               <SelectTrigger><SelectValue /></SelectTrigger>
@@ -114,7 +133,21 @@ export default function InventarioMovimientosTab({
           </div>
           <div className="space-y-2">
             <Label>SKU</Label>
-            {renderSku(form.sku, (value) => updateForm((prev) => ({ ...prev, sku: value })))}
+            {esEntradaCompra && form.ordenCompraId ? (
+              <Select
+                value={form.ordenCompraItemIndex || undefined}
+                onValueChange={(value) => onOrdenCompraLineChange?.(form.ordenCompraId, value)}
+              >
+                <SelectTrigger><SelectValue placeholder="Linea de la OC" /></SelectTrigger>
+                <SelectContent>
+                  {lineasPendientes.map(({ item, index, pendiente }) => (
+                    <SelectItem key={`${ordenSeleccionada?._id}-${index}`} value={String(index)}>
+                      {item.sku} | {item.nombreProducto || item.descripcion || 'Producto'} | Pend. {pendiente}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : renderSku(form.sku, (value) => updateForm((prev) => ({ ...prev, sku: value })))}
           </div>
           <div className="space-y-2">
             <Label>Bodega</Label>
@@ -130,13 +163,42 @@ export default function InventarioMovimientosTab({
           </div>
           <div className="space-y-2">
             <Label>Motivo</Label>
-            <Select value={form.motivo} onValueChange={(value) => updateForm((prev) => ({ ...prev, motivo: value as MotivoMovimiento }))}>
+            <Select
+              value={form.motivo}
+              onValueChange={(value) => updateForm((prev) => ({
+                ...prev,
+                motivo: value as MotivoMovimiento,
+                ...(value !== 'COMPRA' ? { ordenCompraId: '', ordenCompraItemIndex: '' } : {}),
+              }))}
+            >
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 {motivosList.map((motivo) => <SelectItem key={motivo} value={motivo}>{motivo}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
+          {esEntradaCompra ? (
+            <div className="space-y-2">
+              <Label>Orden de compra</Label>
+              <Select
+                value={form.ordenCompraId || undefined}
+                onValueChange={(value) => {
+                  const oc = ordenesPendientes.find((orden) => orden._id === value);
+                  const firstIndex = oc?.items?.findIndex((item) => Number(item.cantidadOrdenada || 0) - Number(item.cantidadRecibida || 0) > 0);
+                  onOrdenCompraLineChange?.(value, firstIndex !== undefined && firstIndex >= 0 ? String(firstIndex) : '');
+                }}
+              >
+                <SelectTrigger><SelectValue placeholder="Selecciona OC" /></SelectTrigger>
+                <SelectContent>
+                  {ordenesPendientes.map((oc) => (
+                    <SelectItem key={oc._id} value={oc._id}>
+                      {oc.numeroOrden} | {oc.proveedor?.nombre || 'Proveedor'} | {oc.estado}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : null}
           <div className="space-y-2">
             <Label>Tipo documento</Label>
             <Input value={form.documentoTipo} onChange={(event) => updateForm((prev) => ({ ...prev, documentoTipo: event.target.value }))} />

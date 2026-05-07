@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
-import { BrandingConfig, BrandingPalette, obtenerBrandingPublico } from '@/app/services/brandingWidget';
+import { BrandingConfig, obtenerBrandingPublico } from '@/app/services/brandingWidget';
 import { aplicarPaletaEnApp, restaurarPaletaLocal, type ColoresPaleta } from '@/app/utils/ColorUtils';
 import { obtenerColoresPublico, fusionarColoresApp, type ColoresApp } from '@/app/services/coloresAppService';
 import { getSocket } from '@/app/socket/socketService';
@@ -9,23 +9,6 @@ import { useAuth } from '@/app/providers/AuthProvider';
 interface BrandingProviderProps {
   children: React.ReactNode;
 }
-
-// Helpers de CSS variables
-
-const paletteKeyToCssVar = (key: string): string =>
-  key.replace(/[A-Z]/g, (m) => `-${m.toLowerCase()}`);
-
-const applyPalette = (palette: BrandingPalette | undefined, appliedVars: Set<string>): void => {
-  if (!palette) return;
-  const target = document.documentElement;
-
-  Object.entries(palette).forEach(([key, value]) => {
-    if (!value || key === 'extras') return;
-    const cssVar = `--${paletteKeyToCssVar(key)}`;
-    target.style.setProperty(cssVar, value);
-    appliedVars.add(cssVar);
-  });
-};
 
 const applyBranding = (branding: BrandingConfig, appliedVars: Set<string>): void => {
   const root = document.documentElement;
@@ -57,12 +40,6 @@ const applyBranding = (branding: BrandingConfig, appliedVars: Set<string>): void
   });
   appliedVars.clear();
   nextVars.forEach((cssVar) => appliedVars.add(cssVar));
-};
-
-const applyPaletteByMode = (branding: BrandingConfig, appliedVars: Set<string>): void => {
-  const isDark = document.documentElement.classList.contains('dark');
-  const palette = isDark ? branding.paleta?.dark : branding.paleta?.light;
-  applyPalette(palette, appliedVars);
 };
 
 const mergeDeep = <T extends Record<string, unknown>>(target: T, source: Record<string, unknown> | undefined): T => {
@@ -160,7 +137,8 @@ export default function BrandingProvider({ children }: BrandingProviderProps): R
 
     const observer = new MutationObserver(() => {
       if (brandingSnapshot) {
-        applyPaletteByMode(brandingSnapshot, appliedVarsRef.current);
+        // Misma paleta para claro/oscuro y rutas públicas/privadas: solo colores-app (GET /publica).
+        void cargarYAplicarPaletaActiva();
       }
     });
 
@@ -174,7 +152,7 @@ export default function BrandingProvider({ children }: BrandingProviderProps): R
           const effectiveBranding = applyRouteOverrides(branding, location.pathname);
           brandingSnapshot = effectiveBranding;
           applyBranding(effectiveBranding, appliedVarsRef.current);
-          applyPaletteByMode(effectiveBranding, appliedVarsRef.current);
+          // No aplicar branding.paleta.light/dark aquí: choca con --primary/--background de colores-app.
         } else {
           brandingSnapshot = null;
         }
@@ -183,8 +161,7 @@ export default function BrandingProvider({ children }: BrandingProviderProps): R
         console.warn('No se pudo aplicar branding dinamico:', error);
       }
 
-      // Tras tipografía/paleta del widget: volver a la paleta parametrizada guardada
-      // (applyPaletteByMode puede pisar --primary, etc.).
+      // Tras tipografía del widget: restaurar cache local hasta confirmar servidor.
       restaurarPaletaLocal();
 
       // Servidor (colores-app) es fuente de verdad.

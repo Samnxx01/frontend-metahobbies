@@ -25,8 +25,10 @@ import inventarioService, {
   type InventarioMovimiento,
   type InventarioOrdenCompra,
   type InventarioProveedor,
+  type RecepcionOrdenCompraResponse,
   type InventarioSaldo,
   type InventarioTipoMovimiento,
+  type InventarioTipoUnidadMedida,
   type InventarioUnidadMedida,
   type MetodoValuacion,
   type MotivoMovimiento,
@@ -40,6 +42,7 @@ import InventarioAjustesTab from './components/InventarioAjustesTab';
 import InventarioBodegasTab from './components/InventarioBodegasTab';
 import InventarioConfiguracionTab from './components/InventarioConfiguracionTab';
 import InventarioMovimientosTab from './components/InventarioMovimientosTab';
+import InventarioComprobanteEntradaModal, { type DocumentoSoporte } from './components/InventarioComprobanteEntradaModal';
 import InventarioOrdenCompraModal from './components/InventarioOrdenCompraModal';
 import InventarioOrdenComprasTab from './components/InventarioOrdenComprasTab';
 import InventarioProveedorModal, { type InventarioProveedorDraft } from './components/InventarioProveedorModal';
@@ -115,6 +118,8 @@ const bodegaFormVacio = (): BodegaFormState => ({
 type MovimientoForm = {
   tipo: 'ENTRADA' | 'SALIDA';
   tipoMovimientoConfigId: string;
+  ordenCompraId: string;
+  ordenCompraItemIndex: string;
   sku: string;
   bodega: string;
   cantidad: string;
@@ -127,6 +132,8 @@ type MovimientoForm = {
 const movimientoInicial: MovimientoForm = {
   tipo: 'ENTRADA',
   tipoMovimientoConfigId: '',
+  ordenCompraId: '',
+  ordenCompraItemIndex: '',
   sku: '',
   bodega: '',
   cantidad: '',
@@ -166,8 +173,12 @@ const tipoMovimientoDraftInicial: TipoMovimientoDraft = {
 const unidadMedidaDraftInicial: UnidadMedidaDraft = {
   codigo: '',
   nombre: '',
+  tipoUnidad: '',
   descripcion: '',
   estado: true,
+  esUnidadBaseInventario: true,
+  unidadBaseRelacionadaId: '',
+  factorConversionHaciaBase: '',
 };
 
 const formatDate = (value?: string): string => {
@@ -214,10 +225,32 @@ export default function Inventario(): React.ReactElement {
   const [tipoMovimientoDraft, setTipoMovimientoDraft] = useState<TipoMovimientoDraft>(tipoMovimientoDraftInicial);
   const [unidadModalOpen, setUnidadModalOpen] = useState(false);
   const [unidadMedidaDraft, setUnidadMedidaDraft] = useState<UnidadMedidaDraft>(unidadMedidaDraftInicial);
+  const [unidadDeleteTarget, setUnidadDeleteTarget] = useState<InventarioUnidadMedida | null>(null);
+  const [unidadDeleteBusy, setUnidadDeleteBusy] = useState(false);
+  const [tiposUnidadMedida, setTiposUnidadMedida] = useState<InventarioTipoUnidadMedida[]>([]);
   const [proveedoresCompra, setProveedoresCompra] = useState<InventarioProveedor[]>([]);
   const [proveedorModalOpen, setProveedorModalOpen] = useState(false);
   const [ordenCompraModalOpen, setOrdenCompraModalOpen] = useState(false);
+  const [ordenEditando, setOrdenEditando] = useState<InventarioOrdenCompra | null>(null);
   const [ordenesCompra, setOrdenesCompra] = useState<InventarioOrdenCompra[]>([]);
+  const [comprobanteEntradaOpen, setComprobanteEntradaOpen] = useState(false);
+  const [comprobanteEntradaData, setComprobanteEntradaData] = useState<RecepcionOrdenCompraResponse | null>(null);
+  const [comprobanteEntradaDoc, setComprobanteEntradaDoc] = useState<DocumentoSoporte | null>(null);
+
+  const handleOrdenCompraModalChange = (nextOpen: boolean): void => {
+    setOrdenCompraModalOpen(nextOpen);
+    if (!nextOpen) setOrdenEditando(null);
+  };
+
+  const abrirNuevaOrdenCompra = (): void => {
+    setOrdenEditando(null);
+    setOrdenCompraModalOpen(true);
+  };
+
+  const abrirEditarOrdenCompra = (oc: InventarioOrdenCompra): void => {
+    setOrdenEditando(oc);
+    setOrdenCompraModalOpen(true);
+  };
 
   const resumen = useMemo(() => {
     const valorTotal = stockActual.reduce((acc, item) => {
@@ -263,10 +296,54 @@ export default function Inventario(): React.ReactElement {
       return acc + Math.max(0, Math.round((q * p - d + im + Number.EPSILON) * 100) / 100);
     }, 0);
 
+  const ordenesCompraConPendiente = useMemo(
+    () =>
+      ordenesCompra.filter((oc) =>
+        ['ABIERTA', 'RECIBIDA_PARCIAL'].includes(String(oc.estado || '')) &&
+        (oc.items || []).some((item) => Number(item.cantidadOrdenada || 0) - Number(item.cantidadRecibida || 0) > 0)
+      ),
+    [ordenesCompra]
+  );
+
+  const seleccionarLineaOrdenCompraMovimiento = (ordenCompraId: string, itemIndexText: string): void => {
+    const orden = ordenesCompra.find((oc) => oc._id === ordenCompraId);
+    const itemIndex = Number(itemIndexText);
+    const item = orden?.items?.[itemIndex];
+    if (!orden || !item || !Number.isInteger(itemIndex)) {
+      setMovimientoForm((prev) => ({
+        ...prev,
+        ordenCompraId,
+        ordenCompraItemIndex: itemIndexText,
+        sku: '',
+        bodega: '',
+        cantidad: '',
+        costoUnitario: '',
+        motivo: 'COMPRA',
+        documentoTipo: 'RECEPCION_OC',
+        documentoNumero: '',
+      }));
+      return;
+    }
+    const pendiente = Math.max(0, Number(item.cantidadOrdenada || 0) - Number(item.cantidadRecibida || 0));
+    setMovimientoForm((prev) => ({
+      ...prev,
+      ordenCompraId,
+      ordenCompraItemIndex: itemIndexText,
+      tipo: 'ENTRADA',
+      sku: item.sku,
+      bodega: item.bodega,
+      cantidad: pendiente > 0 ? String(pendiente) : '',
+      costoUnitario: String(item.costoUnitario ?? 0),
+      motivo: 'COMPRA',
+      documentoTipo: 'RECEPCION_OC',
+      documentoNumero: '',
+    }));
+  };
+
   const loadData = async (): Promise<void> => {
     try {
       setLoading(true);
-      const [configResp, bodegasResp, stockResp, ajustesResp, productosResp, tiposResp, unidadesResp, proveedoresResp, ordenesResp] = await Promise.all([
+      const [configResp, bodegasResp, stockResp, ajustesResp, productosResp, tiposResp, unidadesResp, tiposUnidadResp, proveedoresResp, ordenesResp] = await Promise.all([
         inventarioService.obtenerConfig(),
         inventarioService.listarBodegas(),
         inventarioService.stockActual(),
@@ -274,6 +351,7 @@ export default function Inventario(): React.ReactElement {
         productosService.listarProductosAdmin({ tipo: 'FISICO', estadoCatalogo: 'ACTIVO' }),
         inventarioService.listarTiposMovimientoAdmin(),
         inventarioService.listarUnidadesMedidaAdmin(),
+        inventarioService.listarTiposUnidadMedida(),
         inventarioService.listarProveedoresCompra(),
         inventarioService.listarOrdenesCompra({ limit: 50 }),
       ]);
@@ -284,6 +362,7 @@ export default function Inventario(): React.ReactElement {
       setProductosSku(productosResp.filter((producto) => Boolean(producto.sku)));
       setTiposMovimiento(tiposResp);
       setUnidadesMedida(unidadesResp);
+      setTiposUnidadMedida(tiposUnidadResp);
       setProveedoresCompra(proveedoresResp);
       setOrdenesCompra(ordenesResp);
       if (!movimientoForm.tipoMovimientoConfigId) {
@@ -551,9 +630,66 @@ export default function Inventario(): React.ReactElement {
       toast.error('El documento soporte es obligatorio.');
       return;
     }
+    if (tipoSeleccionado.naturaleza === 'ENTRADA' && movimientoForm.motivo === 'COMPRA' && movimientoForm.ordenCompraId) {
+      const orden = ordenesCompra.find((oc) => oc._id === movimientoForm.ordenCompraId);
+      const itemIndex = Number(movimientoForm.ordenCompraItemIndex);
+      const item = orden?.items?.[itemIndex];
+      const pendiente = item ? Math.max(0, Number(item.cantidadOrdenada || 0) - Number(item.cantidadRecibida || 0)) : 0;
+      if (!orden || !item || !Number.isInteger(itemIndex)) {
+        toast.error('Selecciona la linea de la orden de compra.');
+        return;
+      }
+      if (
+        movimientoForm.sku.trim().toUpperCase() !== String(item.sku || '').trim().toUpperCase() ||
+        movimientoForm.bodega.trim() !== String(item.bodega || '').trim()
+      ) {
+        toast.error('El SKU y la bodega deben corresponder a la linea seleccionada de la OC.');
+        return;
+      }
+      if (cantidad > pendiente) {
+        toast.error(`La cantidad excede el pendiente de la OC (${pendiente}).`);
+        return;
+      }
+    }
 
     try {
       setSaving(true);
+      if (tipoSeleccionado.naturaleza === 'ENTRADA' && movimientoForm.motivo === 'COMPRA' && movimientoForm.ordenCompraId) {
+        const itemIndex = Number(movimientoForm.ordenCompraItemIndex);
+        const data = await inventarioService.registrarRecepcionOrdenCompra(movimientoForm.ordenCompraId, {
+          numeroRecepcion: movimientoForm.documentoNumero.trim(),
+          documentoSoporte: {
+            tipo: movimientoForm.documentoTipo.trim(),
+            numero: movimientoForm.documentoNumero.trim(),
+          },
+          items: [{
+            ordenItemIndex: itemIndex,
+            sku: movimientoForm.sku.trim(),
+            cantidadRecibida: cantidad,
+          }],
+        });
+        setComprobanteEntradaData(data);
+        setComprobanteEntradaDoc({
+          tipo: movimientoForm.documentoTipo.trim(),
+          numero: movimientoForm.documentoNumero.trim(),
+        });
+        setComprobanteEntradaOpen(true);
+        setOrdenesCompra((prev) => prev.map((oc) => (oc._id === data.orden._id ? data.orden : oc)));
+        setMovimientoForm((prev) => ({
+          ...movimientoInicial,
+          tipo: tipoSeleccionado.naturaleza,
+          tipoMovimientoConfigId: prev.tipoMovimientoConfigId,
+          bodega: prev.bodega,
+        }));
+        const [stock, kardexActualizado] = await Promise.all([
+          inventarioService.stockActual(),
+          inventarioService.listarKardex({ limit: 100 }),
+        ]);
+        setStockActual(stock);
+        setKardex(kardexActualizado);
+        toast.success('Recepcion registrada en kardex.');
+        return;
+      }
       const payload = {
         sku: movimientoForm.sku.trim(),
         tipoMovimientoConfigId: movimientoForm.tipoMovimientoConfigId,
@@ -728,12 +864,24 @@ export default function Inventario(): React.ReactElement {
   };
 
   const editarUnidadMedida = (unidad: InventarioUnidadMedida): void => {
+    const rel = unidad.unidadBaseRelacionada;
+    const relId =
+      rel && typeof rel === 'object' && '_id' in rel && rel._id
+        ? String(rel._id)
+        : '';
     setUnidadMedidaDraft({
       _id: unidad._id,
       codigo: unidad.codigo,
       nombre: unidad.nombre,
+      tipoUnidad: unidad.tipoUnidad || 'UNIDAD',
       descripcion: unidad.descripcion || '',
       estado: unidad.estado,
+      esUnidadBaseInventario: unidad.esUnidadBaseInventario !== false,
+      unidadBaseRelacionadaId: relId,
+      factorConversionHaciaBase:
+        unidad.factorConversionHaciaBase != null && Number.isFinite(Number(unidad.factorConversionHaciaBase))
+          ? String(unidad.factorConversionHaciaBase)
+          : '',
     });
   };
 
@@ -742,12 +890,42 @@ export default function Inventario(): React.ReactElement {
       toast.error('Codigo y nombre son obligatorios.');
       return;
     }
+    if (!unidadMedidaDraft.tipoUnidad) {
+      toast.error('Seleccione el tipo de unidad.');
+      return;
+    }
+    if (!unidadMedidaDraft.esUnidadBaseInventario) {
+      if (!unidadMedidaDraft.unidadBaseRelacionadaId.trim()) {
+        toast.error('Seleccione la unidad base relacionada.');
+        return;
+      }
+      const factorNum = Number(String(unidadMedidaDraft.factorConversionHaciaBase).replace(',', '.'));
+      if (!Number.isFinite(factorNum) || factorNum <= 0) {
+        toast.error('Indique un factor de conversión válido mayor que 0.');
+        return;
+      }
+    }
+
+    const payload: Partial<Omit<InventarioUnidadMedida, '_id'>> & {
+      unidadBaseRelacionadaId?: string;
+    } = {
+      codigo: unidadMedidaDraft.codigo.trim(),
+      nombre: unidadMedidaDraft.nombre.trim(),
+      descripcion: unidadMedidaDraft.descripcion.trim(),
+      tipoUnidad: unidadMedidaDraft.tipoUnidad,
+      estado: unidadMedidaDraft.estado,
+      esUnidadBaseInventario: unidadMedidaDraft.esUnidadBaseInventario,
+    };
+    if (!unidadMedidaDraft.esUnidadBaseInventario) {
+      payload.unidadBaseRelacionadaId = unidadMedidaDraft.unidadBaseRelacionadaId.trim();
+      payload.factorConversionHaciaBase = Number(String(unidadMedidaDraft.factorConversionHaciaBase).replace(',', '.'));
+    }
 
     try {
       setSaving(true);
       const saved = unidadMedidaDraft._id
-        ? await inventarioService.actualizarUnidadMedida(unidadMedidaDraft._id, unidadMedidaDraft)
-        : await inventarioService.crearUnidadMedida(unidadMedidaDraft);
+        ? await inventarioService.actualizarUnidadMedida(unidadMedidaDraft._id, payload)
+        : await inventarioService.crearUnidadMedida(payload as Omit<InventarioUnidadMedida, '_id'>);
 
       setUnidadesMedida((prev) => {
         const exists = prev.some((unidad) => unidad._id === saved._id);
@@ -767,29 +945,72 @@ export default function Inventario(): React.ReactElement {
     }
   };
 
-  const eliminarUnidadMedida = async (unidad: InventarioUnidadMedida): Promise<void> => {
+  const crearTipoUnidadMedida = async (payload: {
+    codigo?: string;
+    nombre: string;
+    descripcion?: string;
+  }): Promise<InventarioTipoUnidadMedida> => {
+    const saved = await inventarioService.crearTipoUnidadMedida(payload);
+    setTiposUnidadMedida((prev) => {
+      const exists = prev.some((tipo) => tipo._id === saved._id || tipo.codigo === saved.codigo);
+      const next = exists ? prev.map((tipo) => (tipo._id === saved._id || tipo.codigo === saved.codigo ? saved : tipo)) : [...prev, saved];
+      return next.sort((a, b) => a.nombre.localeCompare(b.nombre));
+    });
+    setUnidadMedidaDraft((prev) => ({ ...prev, tipoUnidad: saved.codigo }));
+    return saved;
+  };
+
+  const inactivarUnidadMedida = async (unidad: InventarioUnidadMedida): Promise<void> => {
+    if (!unidad.estado) return;
     try {
       setSaving(true);
-      await inventarioService.eliminarUnidadMedida(unidad._id);
+      const updated = await inventarioService.actualizarUnidadMedida(unidad._id, { estado: false });
       setUnidadesMedida((prev) => {
-        const next = prev.filter((u) => u._id !== unidad._id);
+        const next = prev
+          .map((u) => (u._id === updated._id ? { ...u, ...updated } : u))
+          .sort((a, b) => a.nombre.localeCompare(b.nombre));
         setSkuForm((p) => {
           if (p.unidadMedida !== unidad.codigo) return p;
-          const first = next.find((u) => u.estado);
+          const first = next.find((x) => x.estado);
           return { ...p, unidadMedida: first?.codigo ?? 'UNIDAD' };
         });
         return next;
       });
-      setUnidadMedidaDraft((d) => (d._id === unidad._id ? unidadMedidaDraftInicial : d));
-      toast.success('Unidad eliminada.');
+      setUnidadMedidaDraft((d) => (d._id === unidad._id ? { ...d, estado: false } : d));
+      toast.success('Unidad inactivada.');
     } catch (error) {
-      console.error('Error eliminando unidad de medida:', error);
+      console.error('Error inactivando unidad de medida:', error);
       const msg =
-        error instanceof Error ? error.message.replace(/^\[\d+\]\s*/, '') : 'No se pudo eliminar la unidad.';
+        error instanceof Error ? error.message.replace(/^\[\d+\]\s*/, '') : 'No se pudo inactivar la unidad.';
       toast.error(msg);
       throw error;
     } finally {
       setSaving(false);
+    }
+  };
+
+  const confirmarEliminarUnidadMedida = async (): Promise<void> => {
+    if (!unidadDeleteTarget) return;
+    try {
+      setUnidadDeleteBusy(true);
+      await inventarioService.eliminarUnidadMedida(unidadDeleteTarget._id);
+      setUnidadesMedida((prev) => {
+        const next = prev.filter((u) => u._id !== unidadDeleteTarget._id);
+        setSkuForm((p) => {
+          if (p.unidadMedida !== unidadDeleteTarget.codigo) return p;
+          const first = next.find((x) => x.estado);
+          return { ...p, unidadMedida: first?.codigo ?? 'UNIDAD' };
+        });
+        return next;
+      });
+      setUnidadMedidaDraft((d) => (d._id === unidadDeleteTarget._id ? unidadMedidaDraftInicial : d));
+      setUnidadDeleteTarget(null);
+      toast.success('Unidad eliminada.');
+    } catch (error) {
+      console.error('Error eliminando unidad de medida:', error);
+      toast.error(error instanceof Error ? error.message.replace(/^\[\d+\]\s*/, '') : 'No se pudo eliminar la unidad.');
+    } finally {
+      setUnidadDeleteBusy(false);
     }
   };
 
@@ -915,6 +1136,8 @@ export default function Inventario(): React.ReactElement {
           <InventarioMovimientosTab
             movimientoForm={movimientoForm}
             setMovimientoForm={setMovimientoForm}
+            ordenesCompra={ordenesCompraConPendiente}
+            onOrdenCompraLineChange={seleccionarLineaOrdenCompraMovimiento}
             tiposMovimientoActivos={tiposMovimientoActivos}
             motivos={MOTIVOS}
             saving={saving}
@@ -936,11 +1159,13 @@ export default function Inventario(): React.ReactElement {
             bodegas={bodegas}
             productosSku={productosSku}
             money={MONEY}
+            ordenEdicion={ordenEditando}
             setProveedorModalOpen={setProveedorModalOpen}
-            setOrdenCompraModalOpen={setOrdenCompraModalOpen}
+            onOrdenCompraModalChange={handleOrdenCompraModalChange}
+            abrirNuevaOrdenCompra={abrirNuevaOrdenCompra}
+            abrirEditarOrdenCompra={abrirEditarOrdenCompra}
             guardarProveedorCompra={guardarProveedorCompra}
             refreshOrdenesCompra={refreshOrdenesCompra}
-            formatDate={formatDate}
             sumSubtotalOrdenCompra={sumSubtotalOrdenCompra}
           />
         </TabsContent>
@@ -1021,16 +1246,57 @@ export default function Inventario(): React.ReactElement {
         open={unidadModalOpen}
         saving={saving}
         unidades={unidadesMedida}
+        tiposUnidad={tiposUnidadMedida}
         draft={unidadMedidaDraft}
         onOpenChange={setUnidadModalOpen}
         onDraftChange={setUnidadMedidaDraft}
+        onCreateTipoUnidad={crearTipoUnidadMedida}
         onSubmit={() => void guardarUnidadMedida()}
         onEdit={editarUnidadMedida}
         onReset={() => setUnidadMedidaDraft(unidadMedidaDraftInicial)}
-        onDelete={eliminarUnidadMedida}
+        onInactivate={inactivarUnidadMedida}
+        onDelete={setUnidadDeleteTarget}
+      />
+
+      <AlertDialog open={Boolean(unidadDeleteTarget)} onOpenChange={(open) => !open && setUnidadDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Eliminar unidad de medida</AlertDialogTitle>
+            <AlertDialogDescription>
+              {unidadDeleteTarget
+                ? `Se eliminara la unidad ${unidadDeleteTarget.nombre} (${unidadDeleteTarget.codigo}). Esta accion no se puede deshacer.`
+                : 'Esta accion no se puede deshacer.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={unidadDeleteBusy}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={unidadDeleteBusy}
+              onClick={(event) => {
+                event.preventDefault();
+                void confirmarEliminarUnidadMedida();
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {unidadDeleteBusy ? 'Eliminando...' : 'Eliminar'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <InventarioComprobanteEntradaModal
+        open={comprobanteEntradaOpen}
+        data={comprobanteEntradaData}
+        documentoSoporte={comprobanteEntradaDoc}
+        onOpenChange={(open) => {
+          setComprobanteEntradaOpen(open);
+          if (!open) {
+            setComprobanteEntradaData(null);
+            setComprobanteEntradaDoc(null);
+          }
+        }}
       />
 
     </div>
   );
 }
-

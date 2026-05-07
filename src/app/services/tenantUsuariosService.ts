@@ -86,7 +86,7 @@ export interface TenantSuperAdminOption {
         nvl?: string | number | null;
         generation_tenant?: string | number | null;
     } | null;
-    /** Usuario enlazado al tenant (p.ej. DIOS principal — campo usuarioId en tenantSuperTenant) */
+    /** Usuario enlazado al tenant (p.ej. DIOS — campo usuarioId en tenantSuperTenant); la opción se etiqueta por corporativo asociado */
     usuarioTenantPrincipal?: UsuarioTenantPrincipalInfo | null;
 }
 
@@ -97,8 +97,31 @@ export interface CorpNode {
     hijos: CorpNode[];
 }
 
+/** Rama tenantSuperTenant asociada al TG (preferente `tenantJerarquiaCountersGlobal`, fallback counter plano). */
+export interface TenantSuperAdminBranchInfo {
+    iud: string;
+    codigoJerarquia?: string | null;
+    codigoPadre?: string | null;
+    secuenciaJerarquia?: number | null;
+    estado: boolean | string;
+    corporativoPerfil?: {
+        razon_social?: string | null;
+        nit_ruc_rtn?: string | null;
+        titulo?: string | null;
+    } | null;
+    nvlGeneracion?: string | number | null;
+    /** TG padre jerárquico cuando viene de tenantJerarquiaCountersGlobal. */
+    tenantGlobalPadreId?: string | null;
+    /** true si el SA se resolvió desde colección global materializada. */
+    saResueltoPorCountersGlobal?: boolean;
+}
+
 export interface TenantGlobalNode {
     tenantGlobal: TenantGlobalInfo | null;
+    /** Documento `tenantSuperTenant` alineado al perfil corporativo del TG (emisión en tenantJerarquiaCounter). */
+    tenantSuperAdmin?: TenantSuperAdminBranchInfo | null;
+    /** RegisUsu con alcance SA en la rama del `tenantSuperAdmin` (mismo criterio que el bloque Super Administradores). */
+    usuariosTenantSuperAdmin?: TenantUsuario[];
     usuarios: TenantUsuario[];
     corporativos: CorpNode[];
     // Sub-TenantGlobals (jerarquía recursiva)
@@ -119,11 +142,48 @@ export interface PublicChecks {
     diosUserExists: boolean;
 }
 
+/** tenantSuperTenant (colección `tenantsupertenants`) sin fila en tenantJerarquiaCounter con `corporativo`. */
+export interface TenantSuperTenantSinCorporativoItem {
+    iud: string;
+    codigoJerarquia?: string | null;
+    codigoPadre?: string | null;
+    secuenciaJerarquia?: number | null;
+    estado: boolean | string;
+    corporativoPerfil?: {
+        razon_social?: string | null;
+        nit_ruc_rtn?: string | null;
+        titulo?: string | null;
+    } | null;
+    ramaAsociada: {
+        tenantSuperAdminPadreId: string | null;
+        codigoJerarquiaPadre: string | null;
+        esRaiz: boolean;
+        /** Padre existe en BD pero no está en esta lista (p. ej. SA con TG+corporativo en counter). */
+        padreFueraDeListaJerarquiaLibre?: boolean;
+    };
+    usuarioPrincipal?: { iud: string; correo: string | null } | null;
+    /** Sub–tenantSuperTenant (`parent` → este `iud`), ordenados por secuencia/código. */
+    subTenantSuperAdmins?: TenantSuperTenantSinCorporativoItem[];
+}
+
 export interface JerarquiaResponse {
     scope: 'SUPER_ADMIN' | 'TENANT_GLOBAL' | 'CORPORATIVO' | null;
+    /**
+     * JWT con tenantSuperAdmin: solo subárbol descendente desde el ancla (sin padres SA ni ramas paralelas).
+     */
+    jerarquiaAlcance?: {
+        tipo: 'SUPER_ADMIN_SOLO_DESCENDIENTES';
+        anclaTenantSuperAdminId: string;
+        /** true si el SA del JWT tiene jerarquía corporativa en counters: no columna «sin corporativo». */
+        ocultarColumnaSaSinJerarquiaCorporativa?: boolean;
+    };
     /** Solo rol DIOS: jerarquía completa de todas las ramas tenantSuperAdmin */
     vistaDios?: boolean;
+    /** Docs SA en alcance JWT sin emisión SA+corporativo en counters (rama “libre”). */
+    tenantSuperTenantsSinCorporativoEnCounter?: TenantSuperTenantSinCorporativoItem[];
     superAdmins: TenantUsuario[];
+    /** Usuarios con rolesCorporativos asignados (rolCorporativoId) en el alcance del árbol */
+    usuariosRolCorporativo?: TenantUsuario[];
     tenantsGlobales: TenantGlobalNode[];
     superAdminTree?: SuperAdminNode[];
     publicChecks?: PublicChecks;
@@ -179,33 +239,34 @@ export interface SincronizarCanReferirData {
 
 // ─── Selectores / etiquetas jerárquicos ───────────────────────────────────────
 
-/** Texto para listas de TenantSuperAdmin (incl. usuario DIOS / principal en usuarioId). */
+/** Texto para listas de TenantSuperAdmin: nombre del corporativo (sin correo ni nombre de usuario). */
 export function describeTenantSuperAdminOption(sa: TenantSuperAdminOption): {
     primary: string;
     principalLine: string;
 } {
+    const corpNombre = String(sa.coporativo?.razon_social ?? sa.coporativo?.titulo ?? '').trim();
+    const corpFallback = corpNombre || String(sa.codigoJerarquia ?? '').trim() || String(sa.iud);
+
+    const p = sa.usuarioTenantPrincipal;
+    if (p) {
+        const rolUp = (p.rol ?? '').toUpperCase();
+        const rolEt =
+            rolUp === 'DIOS'
+                ? 'DIOS — corporativo asociado'
+                : (p.rol ?? 'Usuario');
+        const primary = `${rolEt}: ${corpNombre || corpFallback}`;
+        return { primary, principalLine: '' };
+    }
+
     const corpLabel = sa.coporativo?.razon_social ?? sa.coporativo?.titulo ?? '';
     const codigo = sa.codigoJerarquia ?? '';
     const primary = codigo
         ? `${codigo} · ${corpLabel || String(sa.iud)}`
         : (corpLabel || String(sa.iud));
-
-    const p = sa.usuarioTenantPrincipal;
-    if (!p) {
-        return {
-            primary,
-            principalLine: 'Sin usuario asociado en el tenant (usuarioId)',
-        };
-    }
-    const rolUp = (p.rol ?? '').toUpperCase();
-    const rolEt =
-        rolUp === 'DIOS'
-            ? 'DIOS — usuario principal del tenant'
-            : (p.rol ?? 'Usuario');
-    const nom = [p.nombre, p.apellido].filter(Boolean).join(' ').trim() || '—';
-    const principalLine = `${rolEt}: ${nom} · ${p.correo ?? 'sin correo'}`;
-
-    return { primary, principalLine };
+    return {
+        primary,
+        principalLine: 'Sin contacto DIOS; corporativo asociado según jerarquía',
+    };
 }
 
 // ─── Service functions ────────────────────────────────────────────────────────

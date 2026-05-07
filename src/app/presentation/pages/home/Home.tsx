@@ -184,9 +184,9 @@ export default function Home(): React.ReactElement {
               </div>
             ) : (
               <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                {visibleProductos.map(product => (
+                {visibleProductos.map((product, idx) => (
                   <ProductCard
-                    key={product.id}
+                    key={`${String(product.id ?? 'p')}-${idx}`}
                     product={product}
                     onAddToCart={() => handleAddToCart(product)}
                   />
