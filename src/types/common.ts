@@ -83,12 +83,31 @@ export interface CartSummary {
 // User interface
 export interface User {
   _id: UserId;
+  id?: UserId;
   iud?: UserId;
-  nombre: string;
-  apellido: string;
+  nombre?: string | null;
+  apellido?: string | null;
   correo: string;
   provisional?: boolean;
   rol: string;
+  rolInfo?: {
+    id?: string | null;
+    nombre?: string | null;
+    fuente?: string | null;
+  } | null;
+  perfil?: {
+    id?: string | null;
+    tipo?: string | null;
+    nombre?: string | null;
+    apellido?: string | null;
+    nombreCompleto?: string | null;
+    cc?: string | null;
+    telefono?: string | null;
+    cargo?: string | null;
+    tenantSuperAdminId?: string | null;
+    tenantGlobalId?: string | null;
+    tenantCorporativoId?: string | null;
+  } | null;
   estado: string | boolean; // Puede venir como string o boolean del backend
   role?: string; // Campo normalizado para consistencia
   telefono?: string;
@@ -102,6 +121,11 @@ export interface User {
       tenantSuperAdminId?: string | null;
       tenantGlobalId?: string | null;
       tenantCorporativoId?: string | null;
+      rol?: {
+        id?: string | null;
+        nombre?: string | null;
+        fuente?: string | null;
+      } | null;
     };
   };
 }

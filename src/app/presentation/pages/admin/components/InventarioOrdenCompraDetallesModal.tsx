@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { Eye } from 'lucide-react';
 import type { InventarioOrdenCompra } from '@/app/services/inventarioService';
+import { descuentoMontoLinea, totalLineaOrdenCompra } from '@/app/presentation/pages/admin/utils/ordenCompraLineaCalculo';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -8,28 +9,25 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 const moneyCo = (n: number): string =>
   new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(n);
 
-const round2 = (n: number): number => Math.round((n + Number.EPSILON) * 100) / 100;
-
 const calcSubtotalLinea = (line: {
   cantidadOrdenada?: number;
   costoUnitario?: number;
   descuento?: number;
+  descuentoPorcentaje?: number;
   impuestoPorcentaje?: number;
   impuestos?: number;
   subtotal?: number;
-}): number => {
-  const subtotal = Number(line.subtotal);
-  if (!Number.isNaN(subtotal) && subtotal > 0) return subtotal;
+}): number => totalLineaOrdenCompra(line);
 
-  const q = Number(line.cantidadOrdenada) || 0;
-  const p = Number(line.costoUnitario) || 0;
-  const d = Number(line.descuento) || 0;
-  const taxPercent = Number(line.impuestoPorcentaje) || 0;
-  const base = q * p;
-  const baseNeta = Math.max(0, base - d);
-  const taxAmount =
-    !Number.isNaN(Number(line.impuestos)) && Number(line.impuestos) > 0 ? Number(line.impuestos) : baseNeta * (taxPercent / 100);
-  return Math.max(0, round2(baseNeta + taxAmount));
+const textoDescuentoLinea = (line: {
+  cantidadOrdenada?: number;
+  costoUnitario?: number;
+  descuento?: number;
+  descuentoPorcentaje?: number;
+}): string => {
+  const bruto = (Number(line.cantidadOrdenada) || 0) * (Number(line.costoUnitario) || 0);
+  const monto = descuentoMontoLinea(bruto, line);
+  return monto > 0 ? moneyCo(monto) : '—';
 };
 
 export type InventarioOrdenCompraDetallesModalProps = {
@@ -119,7 +117,7 @@ export default function InventarioOrdenCompraDetallesModal({
                       <TableHead className="text-right">Cant. ord.</TableHead>
                       <TableHead className="text-right">Cant. rec.</TableHead>
                       <TableHead className="text-right">Precio</TableHead>
-                      <TableHead className="text-right">Desc.</TableHead>
+                      <TableHead className="text-right">Desc. (COP)</TableHead>
                       <TableHead className="text-right">Imp. %</TableHead>
                       <TableHead className="text-right">Subtotal</TableHead>
                     </TableRow>
@@ -136,7 +134,7 @@ export default function InventarioOrdenCompraDetallesModal({
                         <TableCell className="text-right tabular-nums">{Number(it.cantidadOrdenada ?? 0)}</TableCell>
                         <TableCell className="text-right tabular-nums">{Number((it as any).cantidadRecibida ?? 0)}</TableCell>
                         <TableCell className="text-right tabular-nums">{moneyCo(Number(it.costoUnitario ?? 0))}</TableCell>
-                        <TableCell className="text-right tabular-nums">{moneyCo(Number(it.descuento ?? 0))}</TableCell>
+                        <TableCell className="text-right tabular-nums">{textoDescuentoLinea(it)}</TableCell>
                         <TableCell className="text-right tabular-nums">{Number(it.impuestoPorcentaje ?? 0)}</TableCell>
                         <TableCell className="text-right tabular-nums font-medium">{moneyCo(calcSubtotalLinea(it))}</TableCell>
                       </TableRow>

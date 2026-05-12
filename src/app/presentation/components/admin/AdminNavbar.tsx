@@ -134,7 +134,6 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
     const cargarMenuDinamico = useCallback(async (): Promise<void> => {
         try {
             const resolvedItems = await getMenuUsuarioRoutes()
-            console.log('[MABS][AdminNavbar][cargarMenuDinamico][resolvedItems]', resolvedItems)
             setDynamicMenuItems(Array.isArray(resolvedItems) ? resolvedItems : [])
         } catch (error) {
             console.error('Error cargando menu dinamico del avatar:', error)

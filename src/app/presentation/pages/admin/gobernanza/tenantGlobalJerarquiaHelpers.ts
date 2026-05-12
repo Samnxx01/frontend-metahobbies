@@ -70,10 +70,13 @@ export function tenantGlobalOptionsFromJerarquiaUsuarios(
 }
 
 /**
- * Filtrado de tenant globales según `tenantJerarquiaCounter` para el SuperAdmin en sesión.
- * Misma semántica que menú admin / `routeService.debeAplicarFiltroHerenciaSuperAdmin`:
- * - Sin fila SA↔corporativo en counters → sin acotar (lista completa).
- * - Con corporativo asociado → solo TG raíz con ese `tenantSuperAdmin` y descendientes por `tenantGlobalAdmin`.
+ * Filtrado de tenant globales para sesión SuperAdmin según la rama del `tenantSuperTenant` efectivo:
+ * solo TG cuyo `tenantSuperAdmin` coincide + descendientes (`tenantGlobalAdmin`), materializados en
+ * `tenantGlobales` (GET selects / jerarquía).
+ *
+ * Si no hay filas con `tenantSuperAdmin` resuelto (datos legacy o incompletos) y **no** hay corporativo
+ * en counters para el JWT (`saJerarquiaTieneCorporativoEnCounters === false`), se devuelve la lista
+ * completa como respaldo. Con jerarquía corporativa activa y sin coincidencias, lista vacía (rama inexistente).
  */
 
 export type TenantGlobalJerarquiaRow = {
@@ -115,15 +118,25 @@ export function filtrarTenantGlobalesPorJerarquiaSuperAdmin(
   actorTenantSuper: string,
   saJerarquiaTieneCorporativoEnCounters: boolean
 ): TenantGlobalJerarquiaRow[] {
-  if (!actorTenantSuper) return tenantGlobales;
-  if (!saJerarquiaTieneCorporativoEnCounters) {
+  const sa = String(actorTenantSuper || '').trim();
+  if (!sa) {
     return tenantGlobales;
   }
+
   const roots = tenantGlobales
-    .filter((t) => String(t.tenantSuperAdmin || '').trim() === actorTenantSuper)
+    .filter((t) => String(t.tenantSuperAdmin || '').trim() === sa)
     .map((t) => String(t.id || '').trim())
     .filter(Boolean);
   const allowed = expandTenantGlobalDescendants(tenantGlobales, roots);
   const visibles = tenantGlobales.filter((t) => allowed.has(String(t.id || '').trim()));
-  return visibles.length ? visibles : tenantGlobales;
+
+  if (visibles.length > 0) {
+    return visibles;
+  }
+
+  if (!saJerarquiaTieneCorporativoEnCounters) {
+    return tenantGlobales;
+  }
+
+  return [];
 }

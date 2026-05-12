@@ -42,6 +42,8 @@ type InventarioOrdenComprasTabProps = {
   guardarProveedorCompra: (draft: InventarioProveedorDraft) => Promise<void>;
   refreshOrdenesCompra: () => Promise<void>;
   sumSubtotalOrdenCompra: (oc: InventarioOrdenCompra) => number;
+  /** SuperAdmin de rama: habilita editar/eliminar OC aunque no estén ABIERTA. */
+  esTenantSuperAdmin?: boolean;
 };
 
 export default function InventarioOrdenComprasTab({
@@ -61,6 +63,7 @@ export default function InventarioOrdenComprasTab({
   guardarProveedorCompra,
   refreshOrdenesCompra,
   sumSubtotalOrdenCompra,
+  esTenantSuperAdmin = false,
 }: InventarioOrdenComprasTabProps): React.ReactElement {
   const [ordenEliminar, setOrdenEliminar] = useState<InventarioOrdenCompra | null>(null);
   const [motivoEliminar, setMotivoEliminar] = useState('');
@@ -73,7 +76,7 @@ export default function InventarioOrdenComprasTab({
   const [comprobanteDoc, setComprobanteDoc] = useState<{ tipo: string; numero: string } | null>(null);
 
   const eliminarOrden = async (oc: InventarioOrdenCompra): Promise<void> => {
-    if (oc.estado !== 'ABIERTA') {
+    if (oc.estado !== 'ABIERTA' && !esTenantSuperAdmin) {
       toast.error('Solo se pueden eliminar órdenes en estado ABIERTA.');
       return;
     }
@@ -179,7 +182,7 @@ export default function InventarioOrdenComprasTab({
                   </TableHeader>
                   <TableBody>
                     {ordenesCompra.map((oc) => {
-                      const editable = oc.estado === 'ABIERTA';
+                      const editable = oc.estado === 'ABIERTA' || esTenantSuperAdmin;
                       return (
                         <TableRow key={oc._id}>
                           <TableCell className="font-medium text-foreground">{oc.numeroOrden}</TableCell>
@@ -216,7 +219,7 @@ export default function InventarioOrdenComprasTab({
                                 size="icon"
                                 className="h-8 w-8"
                                 disabled={!editable || saving || eliminando}
-                                title="Editar"
+                                title={esTenantSuperAdmin && oc.estado !== 'ABIERTA' ? 'Editar (SuperAdmin)' : 'Editar'}
                                 onClick={() => abrirEditarOrdenCompra(oc)}
                               >
                                 <Pencil className="h-4 w-4" />
@@ -227,7 +230,7 @@ export default function InventarioOrdenComprasTab({
                                 size="icon"
                                 className="h-8 w-8 text-destructive"
                                 disabled={!editable || saving}
-                                title="Eliminar"
+                                title={esTenantSuperAdmin && oc.estado !== 'ABIERTA' ? 'Eliminar (SuperAdmin)' : 'Eliminar'}
                                 onClick={() => void eliminarOrden(oc)}
                               >
                                 <Trash2 className="h-4 w-4" />
@@ -358,6 +361,7 @@ export default function InventarioOrdenComprasTab({
         onPreview={({ data, documentoSoporte }) => {
           setComprobanteData(data);
           setComprobanteDoc(documentoSoporte);
+          void refreshOrdenesCompra();
           setComprobanteOpen(true);
           setComprobanteParamOpen(false);
         }}

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Ban, Pencil, Plus, Save, Trash2 } from 'lucide-react';
+import { Ban, Eye, Pencil, Plus, Save, Trash2 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import type { InventarioTipoUnidadMedida, InventarioUnidadMedida, TipoUnidadMedida } from '@/app/services/inventarioService';
 import { Badge } from '@/components/ui/badge';
@@ -74,6 +74,7 @@ export default function InventarioUnidadMedidaModal({
   onDelete,
 }: InventarioUnidadMedidaModalProps): React.ReactElement {
   const [tipoModalOpen, setTipoModalOpen] = useState(false);
+  const [tipoListModalOpen, setTipoListModalOpen] = useState(false);
   const [tipoSaving, setTipoSaving] = useState(false);
   const [tipoDraft, setTipoDraft] = useState({ codigo: '', nombre: '', descripcion: '' });
 
@@ -154,10 +155,16 @@ export default function InventarioUnidadMedidaModal({
               <CardTitle className="text-base">Información general</CardTitle>
               <div className="flex items-start justify-between gap-3">
                 <CardDescription>Código, nombre, tipo y estado de la unidad.</CardDescription>
-                <Button type="button" size="sm" variant="outline" onClick={() => setTipoModalOpen(true)} disabled={saving}>
-                  <Plus className="mr-1 h-4 w-4" />
-                  Tipo unidad
-                </Button>
+                <div className="flex flex-wrap justify-end gap-2">
+                  <Button type="button" size="sm" variant="outline" onClick={() => setTipoListModalOpen(true)} disabled={saving}>
+                    <Eye className="mr-1 h-4 w-4" />
+                    Ver tipos
+                  </Button>
+                  <Button type="button" size="sm" variant="outline" onClick={() => setTipoModalOpen(true)} disabled={saving}>
+                    <Plus className="mr-1 h-4 w-4" />
+                    Tipo unidad
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent className="space-y-4 pt-0">
@@ -389,6 +396,74 @@ export default function InventarioUnidadMedidaModal({
           </Button>
         </DialogFooter>
       </DialogContent>
+
+      <Dialog open={tipoListModalOpen} onOpenChange={setTipoListModalOpen}>
+        <DialogContent className="z-[60] max-w-2xl border-border bg-background text-foreground shadow-xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Eye className="h-5 w-5" />
+              Tipos de unidad creados
+            </DialogTitle>
+            <DialogDescription>
+              Consulta los tipos registrados desde el GET y carga uno en el formulario cuando lo necesites.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex items-center justify-between rounded-lg border border-border/70 bg-muted/30 px-3 py-2 text-sm">
+            <span className="font-medium text-foreground">Catalogo de tipos</span>
+            <Badge variant="secondary">{tiposUnidad.length} registros</Badge>
+          </div>
+
+          <div className="grid max-h-[55vh] gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
+            {tiposUnidad.length ? (
+              tiposUnidad.map((tipo) => (
+                <div
+                  key={tipo._id || tipo.codigo}
+                  className="flex flex-col gap-3 rounded-xl border border-border/70 bg-card p-3 shadow-sm"
+                >
+                  <div className="min-w-0 space-y-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-foreground">{tipo.nombre}</p>
+                        <p className="truncate font-mono text-xs text-muted-foreground">{tipo.codigo}</p>
+                      </div>
+                      <Badge variant={tipo.estado ? 'outline' : 'destructive'} className="shrink-0 text-[10px]">
+                        {tipo.estado ? 'Activo' : 'Inactivo'}
+                      </Badge>
+                    </div>
+                    <p className="line-clamp-2 text-xs text-muted-foreground">
+                      {tipo.descripcion?.trim() || 'Sin descripcion registrada.'}
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="self-end"
+                    disabled={saving || !tipo.estado}
+                    onClick={() => {
+                      patch({ tipoUnidad: tipo.codigo as TipoUnidadMedida });
+                      setTipoListModalOpen(false);
+                    }}
+                  >
+                    Usar tipo
+                  </Button>
+                </div>
+              ))
+            ) : (
+              <p className="col-span-full rounded-lg border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
+                No hay tipos de unidad creados.
+              </p>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setTipoListModalOpen(false)}>
+              Cerrar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={tipoModalOpen} onOpenChange={setTipoModalOpen}>
         <DialogContent className="z-[60] max-w-md border-border bg-background text-foreground shadow-xl">

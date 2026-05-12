@@ -4,7 +4,12 @@ import { Crown } from 'lucide-react';
 import { ParametrosGobernanzaWithRouting } from './gobernanza';
 
 /** Solo reglas DIOS (plataforma). `tenant-listar-reglas` queda en `ReglasTenantGlobalOperaciones` para no duplicar. */
-export const REGLAS_TENANT_SUPER_ADMIN_IDS = ['tenant-crear-dios-reglas', 'tenant-actualizar-dios-reglas'];
+export const REGLAS_TENANT_SUPER_ADMIN_IDS = [
+  'tenant-crear-dios-reglas',
+  'tenant-actualizar-dios-reglas',
+  'tenant-listar-dios-reglas',
+  'tenant-eliminar-dios-reglas',
+];
 
 /**
  * Panel de operaciones de reglas a nivel **tenantSuperAdmin (DIOS)**.

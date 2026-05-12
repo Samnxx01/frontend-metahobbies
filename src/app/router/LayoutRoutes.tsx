@@ -154,9 +154,6 @@ function RootRedirect({ user }: { user: any }): ReactElement {
 
     useEffect(() => {
         if (!user) {
-            console.log('[MABS][LayoutRoutes][RootRedirect][public]', {
-                target: getGovernedPublicHomePath(),
-            });
             setTargetPath(getGovernedPublicHomePath());
             return;
         }
@@ -166,16 +163,9 @@ function RootRedirect({ user }: { user: any }): ReactElement {
             try {
                 const nextPath = await getPrivateHomeRoute();
                 if (!active) return;
-                console.log('[MABS][LayoutRoutes][RootRedirect][private]', {
-                    nextPath,
-                    fallback: readCachedPrivateHomeRoute() || getGovernedPublicHomePath(),
-                });
                 setTargetPath(nextPath?.trim() || readCachedPrivateHomeRoute() || getGovernedPublicHomePath());
             } catch {
                 if (!active) return;
-                console.log('[MABS][LayoutRoutes][RootRedirect][catch]', {
-                    fallback: readCachedPrivateHomeRoute() || getGovernedPublicHomePath(),
-                });
                 setTargetPath(readCachedPrivateHomeRoute() || getGovernedPublicHomePath());
             }
         };
@@ -203,16 +193,9 @@ function AdminEntryRedirect(): ReactElement {
             try {
                 const nextPath = await getPrivateHomeRoute();
                 if (!active) return;
-                console.log('[MABS][LayoutRoutes][AdminEntryRedirect]', {
-                    nextPath,
-                    fallback: readCachedPrivateHomeRoute() || getGovernedPublicHomePath(),
-                });
                 setTargetPath(nextPath?.trim() || readCachedPrivateHomeRoute() || getGovernedPublicHomePath());
             } catch (_error) {
                 if (!active) return;
-                console.log('[MABS][LayoutRoutes][AdminEntryRedirect][catch]', {
-                    fallback: readCachedPrivateHomeRoute() || getGovernedPublicHomePath(),
-                });
                 setTargetPath(readCachedPrivateHomeRoute() || getGovernedPublicHomePath());
             }
         };
@@ -259,13 +242,6 @@ export default function LayoutRoutes(): ReactElement {
                     getAuthorizedRoutes(),
                     user ? resolveCurrentRouteMenuTags({ menuTipo: 'USER_DROPDOWN' }) : Promise.resolve({ data: [] }),
                 ]);
-                console.log('[MABS][LayoutRoutes][loadRoutes]', {
-                    userId: user?._id ?? null,
-                    adminRoots: routes?.adminRoutes?.length ?? 0,
-                    publicRoutes: routes?.publicRoutes?.length ?? 0,
-                    authRoutes: routes?.authRoutes?.length ?? 0,
-                    hybridRoutes: routes?.hybridRoutes?.length ?? 0,
-                });
                 setAuthorizedRoutes(routes as AuthorizedRoutes);
 
                 // Extraer rutas únicas de los menu tags que tengan componente definido

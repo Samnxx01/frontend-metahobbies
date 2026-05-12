@@ -255,6 +255,8 @@ export interface UsuarioOption {
   rol: string;
   tenantGlobal: string;
   tenantCorporativo: string;
+  /** Presente en catalogos que filtran por jerarquia SA + corporativo (p. ej. inventario). */
+  tenantSuperAdmin?: string;
 }
 
 export interface FormulariosOpcionesResponse {

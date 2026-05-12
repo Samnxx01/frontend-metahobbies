@@ -2,11 +2,13 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { toast } from 'react-toastify';
 import {
   AlertTriangle,
+  Barcode,
   CheckCircle2,
   ClipboardList,
   Package,
   Pencil,
   Plus,
+  Printer,
   RefreshCcw,
   RotateCcw,
   Save,
@@ -31,16 +33,21 @@ import inventarioService, {
   type InventarioTipoUnidadMedida,
   type InventarioUnidadMedida,
   type MetodoValuacion,
+  type MonedaInventarioConfig,
   type MotivoMovimiento,
   type StockActualItem,
   type TipoAjuste,
 } from '@/app/services/inventarioService';
+import { totalLineaOrdenCompra } from '@/app/presentation/pages/admin/utils/ordenCompraLineaCalculo';
 import productosService, { type BackendProducto } from '@/app/services/productosService';
 import { apiFetch } from '@/app/services/api';
+import { useAuth } from '@/app/providers/AuthProvider';
 import InventarioMenuTabs, { type InventarioTabValue } from './components/InventarioMenuTabs';
 import InventarioAjustesTab from './components/InventarioAjustesTab';
 import InventarioBodegasTab from './components/InventarioBodegasTab';
-import InventarioConfiguracionTab from './components/InventarioConfiguracionTab';
+import InventarioConciliacionTab from './components/InventarioConciliacionTab';
+import ConfigInventario from './components/ConfigInventario';
+import InventarioTrmConfiguracionTab from './components/InventarioTrmConfiguracionTab';
 import InventarioMovimientosTab from './components/InventarioMovimientosTab';
 import InventarioComprobanteEntradaModal, { type DocumentoSoporte } from './components/InventarioComprobanteEntradaModal';
 import InventarioOrdenCompraModal from './components/InventarioOrdenCompraModal';
@@ -65,6 +72,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -78,6 +86,67 @@ const MONEY = new Intl.NumberFormat('es-CO', {
   currency: 'COP',
   maximumFractionDigits: 0,
 });
+
+const EAN13_L: Record<string, string> = {
+  '0': '0001101', '1': '0011001', '2': '0010011', '3': '0111101', '4': '0100011',
+  '5': '0110001', '6': '0101111', '7': '0111011', '8': '0110111', '9': '0001011',
+};
+const EAN13_G: Record<string, string> = {
+  '0': '0100111', '1': '0110011', '2': '0011011', '3': '0100001', '4': '0011101',
+  '5': '0111001', '6': '0000101', '7': '0010001', '8': '0001001', '9': '0010111',
+};
+const EAN13_R: Record<string, string> = {
+  '0': '1110010', '1': '1100110', '2': '1101100', '3': '1000010', '4': '1011100',
+  '5': '1001110', '6': '1010000', '7': '1000100', '8': '1001000', '9': '1110100',
+};
+const EAN13_PARITY: Record<string, string> = {
+  '0': 'LLLLLL', '1': 'LLGLGG', '2': 'LLGGLG', '3': 'LLGGGL', '4': 'LGLLGG',
+  '5': 'LGGLLG', '6': 'LGGGLL', '7': 'LGLGLG', '8': 'LGLGGL', '9': 'LGGLGL',
+};
+
+const buildEan13Bits = (codigo: string): string | null => {
+  const digits = String(codigo || '').replace(/\D/g, '');
+  if (digits.length !== 13) return null;
+  const parity = EAN13_PARITY[digits[0]];
+  const left = digits.slice(1, 7).split('').map((digit, index) => (
+    parity[index] === 'L' ? EAN13_L[digit] : EAN13_G[digit]
+  )).join('');
+  const right = digits.slice(7).split('').map((digit) => EAN13_R[digit]).join('');
+  return `101${left}01010${right}101`;
+};
+
+const BarcodePreview = ({ codigo }: { codigo?: string }): React.ReactElement => {
+  const clean = String(codigo || '').replace(/\D/g, '');
+  const bits = buildEan13Bits(clean);
+  if (!clean) return <span className="text-xs text-muted-foreground">Sin codigo</span>;
+  if (!bits) {
+    return (
+      <div className="space-y-1">
+        <div className="flex h-8 w-36 items-end gap-px rounded bg-white px-2 py-1">
+          {clean.split('').map((digit, index) => (
+            <span
+              key={`${digit}-${index}`}
+              className="block bg-foreground"
+              style={{ width: 1 + (Number(digit) % 3), height: 12 + ((Number(digit) + index) % 18) }}
+            />
+          ))}
+        </div>
+        <p className="font-mono text-[10px] leading-none">{clean}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-1">
+      <svg viewBox={`0 0 ${bits.length} 48`} className="h-10 w-40 rounded bg-white px-1" preserveAspectRatio="none" aria-label={`Codigo de barras ${clean}`}>
+        {bits.split('').map((bit, index) => bit === '1' ? (
+          <rect key={index} x={index} y="4" width="1" height="36" fill="currentColor" />
+        ) : null)}
+      </svg>
+      <p className="font-mono text-[10px] leading-none tracking-[0.18em]">{clean}</p>
+    </div>
+  );
+};
 
 const MOTIVOS: MotivoMovimiento[] = ['COMPRA', 'VENTA', 'MERMA', 'DANO', 'ERROR_CONTEO', 'PERDIDA', 'OTRO'];
 const CAUSALES_AJUSTE = ['MERMA', 'DANO', 'ERROR_CONTEO', 'PERDIDA', 'OTRO'];
@@ -155,6 +224,7 @@ const ajusteInicial: AjustePayload = {
 
 const skuFormInicial: SkuForm = {
   sku: '',
+  codigoBarras: '',
   nombre: '',
   precio: '1',
   unidadMedida: 'UNIDAD',
@@ -195,7 +265,11 @@ const estadoBadge = (estado: string): 'default' | 'secondary' | 'destructive' | 
   return 'outline';
 };
 
+const getProductoId = (producto: BackendProducto): string =>
+  String(producto.iud || producto._id || producto.id || '').trim();
+
 export default function Inventario(): React.ReactElement {
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [config, setConfig] = useState<InventarioConfig | null>(null);
@@ -220,6 +294,9 @@ export default function Inventario(): React.ReactElement {
   const [ajusteFiltro, setAjusteFiltro] = useState<EstadoAjuste | ''>('');
   const [activeTab, setActiveTab] = useState<InventarioTabValue>('stock');
   const [skuModalOpen, setSkuModalOpen] = useState(false);
+  const [skuCatalogoOpen, setSkuCatalogoOpen] = useState(false);
+  const [skuCatalogoFiltro, setSkuCatalogoFiltro] = useState('');
+  const [skuBarcodePreview, setSkuBarcodePreview] = useState<BackendProducto | null>(null);
   const [skuForm, setSkuForm] = useState<SkuForm>(skuFormInicial);
   const [tipoModalOpen, setTipoModalOpen] = useState(false);
   const [tipoMovimientoDraft, setTipoMovimientoDraft] = useState<TipoMovimientoDraft>(tipoMovimientoDraftInicial);
@@ -279,6 +356,31 @@ export default function Inventario(): React.ReactElement {
       .sort((a, b) => String(a.sku).localeCompare(String(b.sku))),
     [productosSku]
   );
+  const skuCatalogoFiltrado = useMemo(() => {
+    const query = skuCatalogoFiltro.trim().toLowerCase();
+    if (!query) return skuOptions;
+    const queryDigits = query.replace(/\D/g, '');
+    return skuOptions.filter((producto) => {
+      const sku = String(producto.sku || '').toLowerCase();
+      const nombre = String(producto.nombre || '').toLowerCase();
+      const codigoBarras = String(producto.codigoBarras || '').toLowerCase();
+      return sku.includes(query)
+        || nombre.includes(query)
+        || codigoBarras.includes(query)
+      || (!!queryDigits && codigoBarras.includes(queryDigits));
+    });
+  }, [skuCatalogoFiltro, skuOptions]);
+  const tenantScope = user?.auth?.tenantScope || {};
+  const puedeGestionarSku = Boolean(
+    user?.tenantSuperAdminId
+    || user?.tenantGlobalId
+    || tenantScope?.tenantSuperAdminId
+    || tenantScope?.tenantGlobalId
+  );
+  /** Sesión con tenantSuperAdmin: puede editar/eliminar órdenes aunque no estén ABIERTA (alineado al backend). */
+  const esUsuarioTenantSuperAdmin = Boolean(
+    String(user?.tenantSuperAdminId || tenantScope?.tenantSuperAdminId || '').trim()
+  );
 
   const tiposMovimientoActivos = useMemo(
     () => tiposMovimiento.filter((tipo) => tipo.estado),
@@ -286,29 +388,25 @@ export default function Inventario(): React.ReactElement {
   );
 
   const sumSubtotalOrdenCompra = (oc: InventarioOrdenCompra): number =>
-    (oc.items || []).reduce((acc, it) => {
-      const s = Number(it.subtotal);
-      if (!Number.isNaN(s) && s > 0) return acc + s;
-      const q = Number(it.cantidadOrdenada) || 0;
-      const p = Number(it.costoUnitario) || 0;
-      const d = Number(it.descuento) || 0;
-      const im = Number(it.impuestos) || 0;
-      return acc + Math.max(0, Math.round((q * p - d + im + Number.EPSILON) * 100) / 100);
-    }, 0);
+    (oc.items || []).reduce((acc, it) => acc + totalLineaOrdenCompra(it), 0);
 
-  const ordenesCompraConPendiente = useMemo(
-    () =>
-      ordenesCompra.filter((oc) =>
-        ['ABIERTA', 'RECIBIDA_PARCIAL'].includes(String(oc.estado || '')) &&
-        (oc.items || []).some((item) => Number(item.cantidadOrdenada || 0) - Number(item.cantidadRecibida || 0) > 0)
-      ),
-    [ordenesCompra]
-  );
+  const calcularCostoUnitarioOrdenCompra = (
+    item: InventarioOrdenCompra['items'][number]
+  ): number => {
+    const cantidadOrdenada = Number(item.cantidadOrdenada || 0);
+    const lineTotal = totalLineaOrdenCompra(item);
+    if (cantidadOrdenada > 0 && lineTotal > 0) {
+      return Math.round(((lineTotal / cantidadOrdenada) + Number.EPSILON) * 100) / 100;
+    }
+
+    return Math.round((Number(item.costoUnitario || 0) + Number.EPSILON) * 100) / 100;
+  };
 
   const seleccionarLineaOrdenCompraMovimiento = (ordenCompraId: string, itemIndexText: string): void => {
     const orden = ordenesCompra.find((oc) => oc._id === ordenCompraId);
     const itemIndex = Number(itemIndexText);
     const item = orden?.items?.[itemIndex];
+    const documentoNumero = orden?.numeroRemision?.trim() || orden?.numeroFacturaElectronico?.trim() || orden?.numeroOrden || '';
     if (!orden || !item || !Number.isInteger(itemIndex)) {
       setMovimientoForm((prev) => ({
         ...prev,
@@ -320,11 +418,15 @@ export default function Inventario(): React.ReactElement {
         costoUnitario: '',
         motivo: 'COMPRA',
         documentoTipo: 'RECEPCION_OC',
-        documentoNumero: '',
+        documentoNumero,
       }));
       return;
     }
     const pendiente = Math.max(0, Number(item.cantidadOrdenada || 0) - Number(item.cantidadRecibida || 0));
+    const cantidadReferencia = pendiente > 0
+      ? pendiente
+      : Number((item as any).cantidadRecibida || 0) || Number(item.cantidadOrdenada || 0);
+    const costoUnitarioCalculado = calcularCostoUnitarioOrdenCompra(item);
     setMovimientoForm((prev) => ({
       ...prev,
       ordenCompraId,
@@ -332,11 +434,11 @@ export default function Inventario(): React.ReactElement {
       tipo: 'ENTRADA',
       sku: item.sku,
       bodega: item.bodega,
-      cantidad: pendiente > 0 ? String(pendiente) : '',
-      costoUnitario: String(item.costoUnitario ?? 0),
+      cantidad: cantidadReferencia > 0 ? String(cantidadReferencia) : '',
+      costoUnitario: String(costoUnitarioCalculado),
       motivo: 'COMPRA',
       documentoTipo: 'RECEPCION_OC',
-      documentoNumero: '',
+      documentoNumero,
     }));
   };
 
@@ -390,8 +492,14 @@ export default function Inventario(): React.ReactElement {
   };
 
   const refreshOrdenesCompra = async (): Promise<void> => {
-    const data = await inventarioService.listarOrdenesCompra({ limit: 50 });
-    setOrdenesCompra(data);
+    const [ordenes, stock, kardexActualizado] = await Promise.all([
+      inventarioService.listarOrdenesCompra({ limit: 50 }),
+      inventarioService.stockActual(),
+      inventarioService.listarKardex({ limit: 50 }),
+    ]);
+    setOrdenesCompra(ordenes);
+    setStockActual(stock);
+    setKardex(kardexActualizado);
   };
 
   useEffect(() => {
@@ -426,29 +534,35 @@ export default function Inventario(): React.ReactElement {
   };
 
   const refreshKardex = async (): Promise<void> => {
+    const sku = stockFiltro.sku.trim();
+    const bodega = stockFiltro.bodega.trim();
     const data = await inventarioService.listarKardex({
-      sku: stockFiltro.sku,
-      bodega: stockFiltro.bodega,
+      sku: sku || undefined,
+      bodega: bodega || undefined,
       limit: 100,
     });
     setKardex(data);
   };
 
   const consultarStock = async (): Promise<void> => {
-    if (!stockFiltro.sku.trim() || !stockFiltro.bodega.trim()) {
-      toast.error('SKU y bodega son obligatorios para consultar stock.');
+    const sku = stockFiltro.sku.trim();
+    const bodega = stockFiltro.bodega.trim();
+
+    if (!sku && !bodega) {
+      toast.error('Selecciona una bodega o ingresa un SKU para consultar stock.');
       return;
     }
 
     try {
-      const [saldo] = await Promise.all([
-        inventarioService.obtenerStock({
-          sku: stockFiltro.sku.trim(),
-          bodega: stockFiltro.bodega.trim(),
-        }),
+      const [saldo, stockFiltrado] = await Promise.all([
+        sku && bodega
+          ? inventarioService.obtenerStock({ sku, bodega })
+          : Promise.resolve(null),
+        inventarioService.stockActual(bodega || undefined),
         refreshKardex(),
       ]);
       setStockConsulta(saldo);
+      setStockActual(stockFiltrado);
     } catch (error) {
       console.error('Error consultando stock:', error);
       toast.error('No se pudo consultar el stock.');
@@ -484,6 +598,20 @@ export default function Inventario(): React.ReactElement {
     } catch (error) {
       console.error('Error cerrando periodo:', error);
       toast.error('No se pudo cerrar el periodo.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const guardarMonedaInventario = async (payload: MonedaInventarioConfig): Promise<void> => {
+    try {
+      setSaving(true);
+      const data = await inventarioService.actualizarMonedaInventario(payload);
+      setConfig(data);
+      toast.success('Moneda de inventario actualizada.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No se pudo actualizar la moneda de inventario.');
+      throw error;
     } finally {
       setSaving(false);
     }
@@ -646,6 +774,10 @@ export default function Inventario(): React.ReactElement {
         toast.error('El SKU y la bodega deben corresponder a la linea seleccionada de la OC.');
         return;
       }
+      if (pendiente <= 0) {
+        toast.error('La linea seleccionada de la OC ya no tiene cantidades pendientes por recibir.');
+        return;
+      }
       if (cantidad > pendiente) {
         toast.error(`La cantidad excede el pendiente de la OC (${pendiente}).`);
         return;
@@ -787,6 +919,7 @@ export default function Inventario(): React.ReactElement {
       setSaving(true);
       const created = await productosService.crearProductoAdmin({
         sku,
+        codigoBarras: skuForm.codigoBarras.trim() || undefined,
         nombre,
         precio,
         moneda: 'COP',
@@ -797,7 +930,8 @@ export default function Inventario(): React.ReactElement {
         descripcionCorta: nombre,
         estadoCatalogo: 'ACTIVO',
       });
-      setProductosSku((prev) => [...prev.filter((producto) => producto.iud !== created.iud), created]);
+      const createdId = getProductoId(created);
+      setProductosSku((prev) => [...prev.filter((producto) => getProductoId(producto) !== createdId), created]);
       setMovimientoForm((prev) => ({ ...prev, sku: created.sku || sku }));
       setSkuForm(skuFormInicial);
       setSkuModalOpen(false);
@@ -813,6 +947,139 @@ export default function Inventario(): React.ReactElement {
   const abrirModalTiposMovimiento = (): void => {
     setTipoMovimientoDraft(tipoMovimientoDraftInicial);
     setTipoModalOpen(true);
+  };
+
+  const abrirModalSkuCatalogo = (): void => {
+    setSkuCatalogoFiltro('');
+    setSkuCatalogoOpen(true);
+  };
+
+  const seleccionarSkuCatalogo = (producto: BackendProducto): void => {
+    const sku = String(producto.sku || '').trim().toUpperCase();
+    if (!sku) return;
+    setMovimientoForm((prev) => ({ ...prev, sku }));
+    setSkuCatalogoOpen(false);
+    toast.success(`SKU ${sku} seleccionado.`);
+  };
+
+  const desactivarSkuCatalogo = async (producto: BackendProducto): Promise<void> => {
+    const productoId = getProductoId(producto);
+    if (!productoId) {
+      toast.error('No se encontro el ID del SKU.');
+      return;
+    }
+    if (!puedeGestionarSku) {
+      toast.error('Tu scope no permite desactivar SKU.');
+      return;
+    }
+    if (!window.confirm(`Deseas desactivar el SKU ${producto.sku || producto.nombre}?`)) return;
+    try {
+      setSaving(true);
+      await productosService.desactivarProductoAdmin(productoId);
+      setProductosSku((prev) => prev.filter((item) => getProductoId(item) !== productoId));
+      toast.success('SKU desactivado.');
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo desactivar el SKU.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const eliminarSkuCatalogo = async (producto: BackendProducto): Promise<void> => {
+    const productoId = getProductoId(producto);
+    if (!productoId) {
+      toast.error('No se encontro el ID del SKU.');
+      return;
+    }
+    if (!puedeGestionarSku) {
+      toast.error('Tu scope no permite eliminar SKU.');
+      return;
+    }
+    if (!window.confirm(`Esta accion elimina definitivamente el SKU ${producto.sku || producto.nombre}. Deseas continuar?`)) return;
+    try {
+      setSaving(true);
+      await productosService.eliminarProductoAdmin(productoId);
+      setProductosSku((prev) => prev.filter((item) => getProductoId(item) !== productoId));
+      toast.success('SKU eliminado.');
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo eliminar el SKU.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const generarCodigoSkuCatalogo = async (producto: BackendProducto): Promise<void> => {
+    const productoId = getProductoId(producto);
+    if (!productoId) {
+      toast.error('No se encontro el ID del SKU.');
+      return;
+    }
+    if (!puedeGestionarSku) {
+      toast.error('Tu scope no permite generar codigo de barras.');
+      return;
+    }
+    try {
+      setSaving(true);
+      const actualizado = await productosService.actualizarProductoAdmin(productoId, { codigoBarras: '' });
+      setProductosSku((prev) => prev.map((item) => (getProductoId(item) === productoId ? { ...item, ...actualizado } : item)));
+      toast.success('Codigo de barras generado.');
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo generar el codigo de barras.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const imprimirCodigoBarrasSku = (producto: BackendProducto | null): void => {
+    const codigo = String(producto?.codigoBarras || '').replace(/\D/g, '');
+    if (!producto || !codigo) {
+      toast.error('Este SKU no tiene codigo de barras para imprimir.');
+      return;
+    }
+    const bits = buildEan13Bits(codigo);
+    if (!bits) {
+      toast.error('Solo se puede imprimir la zebra EAN-13 para codigos de 13 digitos.');
+      return;
+    }
+    const bars = bits.split('').map((bit, index) => (
+      bit === '1' ? `<rect x="${index}" y="10" width="1" height="70" fill="#111827" />` : ''
+    )).join('');
+    const label = `${producto.sku || ''} ${producto.nombre || ''}`.trim();
+    const printWindow = window.open('', '_blank', 'width=420,height=320');
+    if (!printWindow) {
+      toast.error('No se pudo abrir la ventana de impresion.');
+      return;
+    }
+    printWindow.document.write(`
+      <!doctype html>
+      <html>
+        <head>
+          <title>Codigo de barras ${codigo}</title>
+          <style>
+            body { margin: 0; font-family: Arial, sans-serif; color: #111827; }
+            .label { width: 320px; padding: 18px; text-align: center; }
+            .name { font-size: 12px; font-weight: 700; margin-bottom: 8px; }
+            svg { width: 260px; height: 120px; }
+            .code { font-family: monospace; font-size: 14px; letter-spacing: 4px; margin-top: 4px; }
+            @media print { body { margin: 0; } .label { page-break-inside: avoid; } }
+          </style>
+        </head>
+        <body>
+          <div class="label">
+            <div class="name">${label}</div>
+            <svg viewBox="0 0 ${bits.length} 90" preserveAspectRatio="none">${bars}</svg>
+            <div class="code">${codigo}</div>
+          </div>
+          <script>
+            window.onload = function () {
+              window.focus();
+              window.print();
+            };
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
   };
 
   const editarTipoMovimiento = (tipo: InventarioTipoMovimiento): void => {
@@ -1040,7 +1307,7 @@ export default function Inventario(): React.ReactElement {
       </SelectTrigger>
       <SelectContent>
         {skuOptions.map((producto) => (
-          <SelectItem key={producto.iud} value={producto.sku || ''}>
+          <SelectItem key={getProductoId(producto) || producto.sku} value={producto.sku || ''}>
             {producto.sku} | {producto.nombre}
           </SelectItem>
         ))}
@@ -1136,7 +1403,8 @@ export default function Inventario(): React.ReactElement {
           <InventarioMovimientosTab
             movimientoForm={movimientoForm}
             setMovimientoForm={setMovimientoForm}
-            ordenesCompra={ordenesCompraConPendiente}
+            ordenesCompra={ordenesCompra}
+            stockActual={stockActual}
             onOrdenCompraLineChange={seleccionarLineaOrdenCompraMovimiento}
             tiposMovimientoActivos={tiposMovimientoActivos}
             motivos={MOTIVOS}
@@ -1144,6 +1412,7 @@ export default function Inventario(): React.ReactElement {
             renderSkuSelect={renderSkuSelect}
             renderBodegaSelect={renderBodegaSelect}
             abrirModalTiposMovimiento={abrirModalTiposMovimiento}
+            abrirModalSkuCatalogo={abrirModalSkuCatalogo}
             abrirModalSku={() => setSkuModalOpen(true)}
             registrarMovimiento={registrarMovimiento}
           />
@@ -1167,6 +1436,7 @@ export default function Inventario(): React.ReactElement {
             guardarProveedorCompra={guardarProveedorCompra}
             refreshOrdenesCompra={refreshOrdenesCompra}
             sumSubtotalOrdenCompra={sumSubtotalOrdenCompra}
+            esTenantSuperAdmin={esUsuarioTenantSuperAdmin}
           />
         </TabsContent>
 
@@ -1185,6 +1455,10 @@ export default function Inventario(): React.ReactElement {
             cambiarEstadoAjuste={cambiarEstadoAjuste}
             estadoBadge={estadoBadge}
           />
+        </TabsContent>
+
+        <TabsContent value="conciliacion" className="space-y-4">
+          <InventarioConciliacionTab />
         </TabsContent>
 
         <TabsContent value="bodegas" className="space-y-4">
@@ -1208,13 +1482,22 @@ export default function Inventario(): React.ReactElement {
         </TabsContent>
 
         <TabsContent value="config">
-          <InventarioConfiguracionTab
+          <ConfigInventario
             config={config}
             periodo={periodo}
             saving={saving}
             setPeriodo={setPeriodo}
             actualizarMetodo={actualizarMetodo}
             cerrarPeriodo={cerrarPeriodo}
+            onNavigateTab={setActiveTab}
+          />
+        </TabsContent>
+
+        <TabsContent value="trm" className="space-y-4">
+          <InventarioTrmConfiguracionTab
+            config={config}
+            saving={saving}
+            onGuardarMonedaInventario={guardarMonedaInventario}
           />
         </TabsContent>
       </Tabs>
@@ -1241,6 +1524,177 @@ export default function Inventario(): React.ReactElement {
         onOpenUnidadMedida={abrirModalUnidadMedida}
         onSubmit={() => void crearSku()}
       />
+
+      <Dialog open={skuCatalogoOpen} onOpenChange={setSkuCatalogoOpen}>
+        <DialogContent className="max-w-5xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Package className="h-5 w-5" />
+              Visualizador de SKU creados
+            </DialogTitle>
+            <DialogDescription>
+              Escanea un codigo de barras o busca manualmente por SKU, codigo o nombre.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="flex flex-col gap-2 md:flex-row md:items-center">
+              <div className="relative flex-1">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  autoFocus
+                  value={skuCatalogoFiltro}
+                  onChange={(event) => setSkuCatalogoFiltro(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key !== 'Enter' || skuCatalogoFiltrado.length !== 1) return;
+                    seleccionarSkuCatalogo(skuCatalogoFiltrado[0]);
+                  }}
+                  className="pl-9"
+                  placeholder="Escanea codigo de barras o escribe nombre/SKU"
+                />
+              </div>
+              <Badge variant="secondary" className="h-9 justify-center rounded-md px-3">
+                {skuCatalogoFiltrado.length} de {skuOptions.length}
+              </Badge>
+            </div>
+
+            <div className="max-h-[58vh] overflow-auto rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>SKU</TableHead>
+                    <TableHead>Codigo de barras</TableHead>
+                    <TableHead>Producto</TableHead>
+                    <TableHead>Unidad</TableHead>
+                    <TableHead>Precio</TableHead>
+                    <TableHead className="text-right">Accion</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {skuCatalogoFiltrado.map((producto) => (
+                    <TableRow key={getProductoId(producto) || producto.sku || producto.nombre}>
+                      <TableCell className="font-mono text-xs font-semibold">{producto.sku || '-'}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <Barcode className="h-4 w-4 shrink-0 text-muted-foreground" />
+                          <div className="space-y-2">
+                            {producto.codigoBarras ? (
+                              <button
+                                type="button"
+                                className="rounded border border-transparent p-1 text-left transition hover:border-primary/40 hover:bg-background/70"
+                                title="Ver e imprimir codigo"
+                                onClick={() => setSkuBarcodePreview(producto)}
+                              >
+                                <BarcodePreview codigo={producto.codigoBarras} />
+                              </button>
+                            ) : (
+                              <BarcodePreview codigo={producto.codigoBarras} />
+                            )}
+                            {!producto.codigoBarras && puedeGestionarSku && (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-7 text-xs"
+                                disabled={saving}
+                                onClick={() => void generarCodigoSkuCatalogo(producto)}
+                              >
+                                Generar codigo
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="space-y-0.5">
+                          <p className="font-medium">{producto.nombre}</p>
+                          <p className="line-clamp-1 text-xs text-muted-foreground">{producto.descripcion || producto.descripcionCorta || 'Sin descripcion'}</p>
+                        </div>
+                      </TableCell>
+                      <TableCell><Badge variant="outline">{producto.unidadMedida || 'UNIDAD'}</Badge></TableCell>
+                      <TableCell>{MONEY.format(Number(producto.precio || 0))}</TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-1">
+                          <Button type="button" size="sm" onClick={() => seleccionarSkuCatalogo(producto)}>
+                            Seleccionar
+                          </Button>
+                          {puedeGestionarSku && (
+                            <>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="icon"
+                                disabled={saving}
+                                title="Desactivar SKU"
+                                onClick={() => void desactivarSkuCatalogo(producto)}
+                              >
+                                <AlertTriangle className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="destructive"
+                                size="icon"
+                                disabled={saving}
+                                title="Eliminar SKU"
+                                onClick={() => void eliminarSkuCatalogo(producto)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {skuCatalogoFiltrado.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
+                        No se encontraron SKU con ese filtro.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(skuBarcodePreview)} onOpenChange={(open) => !open && setSkuBarcodePreview(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Barcode className="h-5 w-5" />
+              Codigo de barras del SKU
+            </DialogTitle>
+            <DialogDescription>
+              Visualiza la etiqueta antes de imprimirla.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="rounded-md border bg-white p-5 text-center text-slate-950">
+              <p className="text-sm font-semibold">{skuBarcodePreview?.sku || 'SKU'}</p>
+              <p className="mb-3 text-xs uppercase text-slate-500">{skuBarcodePreview?.nombre || 'Producto'}</p>
+              <div className="flex justify-center">
+                <BarcodePreview codigo={skuBarcodePreview?.codigoBarras} />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setSkuBarcodePreview(null)}>
+                Cerrar
+              </Button>
+              <Button type="button" variant="outline" onClick={() => seleccionarSkuCatalogo(skuBarcodePreview as BackendProducto)}>
+                Seleccionar
+              </Button>
+              <Button type="button" onClick={() => imprimirCodigoBarrasSku(skuBarcodePreview)}>
+                <Printer className="mr-2 h-4 w-4" />
+                Imprimir
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <InventarioUnidadMedidaModal
         open={unidadModalOpen}

@@ -155,17 +155,44 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
 
     const getUserInitials = (): string => {
         if (!user) return 'U';
-        return user.nombre?.charAt(0)?.toUpperCase() || user.correo?.charAt(0)?.toUpperCase() || 'U';
+        const perfil = user.perfil;
+        const displayName = perfil?.nombreCompleto || [perfil?.nombre, perfil?.apellido].filter(Boolean).join(' ') || user.nombre || user.correo;
+        return displayName?.charAt(0)?.toUpperCase() || 'U';
     };
 
     const getUserName = (): string => {
         if (!user) return 'Usuario';
-        return user.nombre || user.correo?.split('@')[0] || 'Usuario';
+        const perfil = user.perfil;
+        return perfil?.nombreCompleto
+            || [perfil?.nombre, perfil?.apellido].filter(Boolean).join(' ')
+            || user.nombre
+            || user.correo?.split('@')[0]
+            || 'Usuario';
     };
 
     const getUserEmail = (): string => {
         if (!user) return '';
         return user.correo || '';
+    };
+
+    const getUserRoleLabel = (): string => {
+        if (!user) return '';
+        const tenantRole = user.auth?.tenantScope?.rol?.nombre;
+        return String(user.rolInfo?.nombre || tenantRole || user.rol || user.role || '').trim();
+    };
+
+    const getUserProfileLabel = (): string => {
+        if (!user?.perfil) return '';
+        const profileTypeLabels: Record<string, string> = {
+            SUPER_ADMIN: 'Perfil SuperAdmin',
+            TENANT_GLOBAL: 'Perfil TenantGlobal',
+            TENANT_CORPORATIVO: 'Perfil corporativo',
+            CLIENTE: 'Perfil cliente',
+        };
+        const tipo = String(user.perfil.tipo || '').trim().toUpperCase();
+        const base = profileTypeLabels[tipo] || 'Perfil';
+        const detalle = user.perfil.cargo || user.perfil.cc || '';
+        return [base, detalle].filter(Boolean).join(' | ');
     };
 
     const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>): void => {
@@ -264,7 +291,7 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
                     </Avatar>
                 </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-56 backdrop-blur-lg border-none shadow-xl" align="end">
+            <DropdownMenuContent className="w-80 backdrop-blur-lg border-none shadow-xl" align="end">
                 <div className="flex items-center gap-2 p-3">
                     <Avatar className="h-9 w-9">
                         <AvatarFallback className="bg-primary text-primary-foreground text-sm">
@@ -274,6 +301,20 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
                     <div className="flex flex-col space-y-0.5">
                         <p className="text-sm font-medium leading-none">{getUserName()}</p>
                         <p className="text-xs leading-none text-muted-foreground">{getUserEmail()}</p>
+                        {(getUserRoleLabel() || getUserProfileLabel()) && (
+                            <div className="flex flex-wrap gap-1 pt-1">
+                                {getUserRoleLabel() && (
+                                    <Badge variant="secondary" className="h-5 rounded-md px-1.5 text-[10px]">
+                                        {getUserRoleLabel()}
+                                    </Badge>
+                                )}
+                                {getUserProfileLabel() && (
+                                    <Badge variant="outline" className="h-5 rounded-md px-1.5 text-[10px]">
+                                        {getUserProfileLabel()}
+                                    </Badge>
+                                )}
+                            </div>
+                        )}
                     </div>
                 </div>
                 <DropdownMenuSeparator />

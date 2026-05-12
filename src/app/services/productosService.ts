@@ -19,8 +19,11 @@ export interface CategoriaPayload {
 }
 
 export interface BackendProducto {
+  _id?: string;
   iud: string;
+  id?: string;
   sku?: string;
+  codigoBarras?: string;
   nombre: string;
   descripcion?: string;
   descripcionCorta?: string;
@@ -67,6 +70,7 @@ export interface FiltrosProductos {
 export interface AdminProductoPayload {
   nombre: string;
   sku?: string;
+  codigoBarras?: string;
   descripcion?: string;
   descripcionCorta?: string;
   precio: number;
@@ -136,6 +140,10 @@ const productosService = {
 
   async desactivarProductoAdmin(id: string): Promise<void> {
     await apiFetch(`/api/productos/admin/desactivar/${id}`, { method: 'DELETE' });
+  },
+
+  async eliminarProductoAdmin(id: string): Promise<void> {
+    await apiFetch(`/api/productos/admin/eliminar/${id}`, { method: 'DELETE' });
   },
 
   /** Lista productos mapeados directamente a ComponentProduct */

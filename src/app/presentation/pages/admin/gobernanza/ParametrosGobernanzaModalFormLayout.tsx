@@ -15,6 +15,11 @@ export type ParametrosGobernanzaModalFormLayoutProps = {
   extraToolbar?: React.ReactNode;
   onExecute: () => void;
   onClearForm: () => void;
+  /**
+   * Si se define, sustituye el botón «Limpiar formulario» (p. ej. sincronización jerarquía counters).
+   * Si no se pasa, se muestra el limpiado por defecto.
+   */
+  clearFormReplacement?: React.ReactNode;
   /** Campos del formulario (pueden vivir en componentes hijos por endpoint). */
   children: React.ReactNode;
   /** Tablas JSON / pre según endpoint — lo controla el padre ParametrosGobernanza. */
@@ -35,6 +40,7 @@ export function ParametrosGobernanzaModalFormLayout({
   extraToolbar,
   onExecute,
   onClearForm,
+  clearFormReplacement,
   children,
   resultSlot,
 }: ParametrosGobernanzaModalFormLayoutProps): React.ReactElement {
@@ -51,9 +57,13 @@ export function ParametrosGobernanzaModalFormLayout({
           {running ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
           Ejecutar
         </Button>
-        <Button type="button" variant="outline" onClick={onClearForm}>
-          Limpiar formulario
-        </Button>
+        {clearFormReplacement != null ? (
+          clearFormReplacement
+        ) : (
+          <Button type="button" variant="outline" onClick={onClearForm}>
+            Limpiar formulario
+          </Button>
+        )}
         <code className="rounded bg-slate-100 px-2 py-1 text-xs">{path}</code>
       </div>
       {!disponible ? (

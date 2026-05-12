@@ -43,7 +43,7 @@ type CiudadRow = {
 };
 
 type InventarioBodegasTabProps = {
-  bodegaForm: BodegaFormState;
+  bodegaForm?: BodegaFormState;
   setBodegaForm: React.Dispatch<React.SetStateAction<BodegaFormState>>;
   editingBodegaId: string | null;
   saving: boolean;
@@ -67,15 +67,30 @@ const getDepartamentoNombre = (departamento: GeoDepartamentoRow, nombres: Record
   departamento.nombre_Departamento ??
   String(departamento.departamentoId);
 
+const EMPTY_BODEGA_FORM: BodegaFormState = {
+  nombre: '',
+  descripcion: '',
+  depId: '',
+  ciudadId: '',
+  municipiosExtra: [],
+  estado: true,
+};
+
+const normalizeBodegaForm = (form?: Partial<BodegaFormState> | null): BodegaFormState => ({
+  ...EMPTY_BODEGA_FORM,
+  ...(form ?? {}),
+  municipiosExtra: Array.isArray(form?.municipiosExtra) ? form.municipiosExtra : [],
+});
+
 export default function InventarioBodegasTab({
-  bodegaForm,
+  bodegaForm: rawBodegaForm,
   setBodegaForm,
   editingBodegaId,
   saving,
-  bodegas,
-  bodegaDepartamentos,
-  bodegaCiudades,
-  departamentoNombres,
+  bodegas = [],
+  bodegaDepartamentos = [],
+  bodegaCiudades = [],
+  departamentoNombres = {},
   bodegaDeleteTarget,
   bodegaDeleteBusy,
   setBodegaDeleteTarget,
@@ -84,6 +99,7 @@ export default function InventarioBodegasTab({
   iniciarEdicionBodega,
   confirmarEliminarBodega,
 }: InventarioBodegasTabProps): React.ReactElement {
+  const bodegaForm = normalizeBodegaForm(rawBodegaForm);
   const departamentoCabecera = bodegaDepartamentos.find((d) => String(d.departamentoId) === String(bodegaForm.depId));
   const ciudadCabecera = bodegaCiudades.find((c) => String(c.ciudadId) === String(bodegaForm.ciudadId));
 
@@ -106,7 +122,7 @@ export default function InventarioBodegasTab({
               <Label>Nombre</Label>
               <Input
                 value={bodegaForm.nombre}
-                onChange={(event) => setBodegaForm((prev) => ({ ...prev, nombre: event.target.value }))}
+                onChange={(event) => setBodegaForm((prev) => ({ ...normalizeBodegaForm(prev), nombre: event.target.value }))}
                 placeholder="BODEGA-PRINCIPAL"
                 className="border-input bg-background"
                 disabled={!!editingBodegaId}
@@ -117,7 +133,7 @@ export default function InventarioBodegasTab({
               <Label>Descripcion</Label>
               <Input
                 value={bodegaForm.descripcion}
-                onChange={(event) => setBodegaForm((prev) => ({ ...prev, descripcion: event.target.value }))}
+                onChange={(event) => setBodegaForm((prev) => ({ ...normalizeBodegaForm(prev), descripcion: event.target.value }))}
                 className="border-input bg-background"
               />
             </div>
@@ -125,7 +141,7 @@ export default function InventarioBodegasTab({
               <Label>Departamento</Label>
               <Select
                 value={bodegaForm.depId || undefined}
-                onValueChange={(val) => setBodegaForm((prev) => ({ ...prev, depId: val, ciudadId: '', municipiosExtra: [] }))}
+                onValueChange={(val) => setBodegaForm((prev) => ({ ...normalizeBodegaForm(prev), depId: val, ciudadId: '', municipiosExtra: [] }))}
               >
                 <SelectTrigger className="border-input bg-background">
                   <SelectValue placeholder="Selecciona departamento" />
@@ -143,13 +159,16 @@ export default function InventarioBodegasTab({
               <Label>Ciudad</Label>
               <Select
                 value={bodegaForm.ciudadId || undefined}
-                onValueChange={(val) => setBodegaForm((prev) => ({
-                  ...prev,
+                onValueChange={(val) => setBodegaForm((prev) => {
+                  const normalized = normalizeBodegaForm(prev);
+                  return {
+                  ...normalized,
                   ciudadId: val,
-                  municipiosExtra: prev.municipiosExtra.filter((id) =>
+                  municipiosExtra: normalized.municipiosExtra.filter((id) =>
                     bodegaCiudades.some((c) => String(c.ciudadId) === String(id))
                   ),
-                }))}
+                };
+                })}
                 disabled={!bodegaForm.depId}
               >
                 <SelectTrigger className="border-input bg-background">
@@ -188,13 +207,14 @@ export default function InventarioBodegasTab({
                         onCheckedChange={(v) => {
                           if (isPrincipal) return;
                           setBodegaForm((prev) => {
+                            const normalized = normalizeBodegaForm(prev);
                             if (v === true) {
-                              if (prev.municipiosExtra.some((id) => String(id) === String(c.ciudadId))) return prev;
-                              return { ...prev, municipiosExtra: [...prev.municipiosExtra, String(c.ciudadId)] };
+                              if (normalized.municipiosExtra.some((id) => String(id) === String(c.ciudadId))) return normalized;
+                              return { ...normalized, municipiosExtra: [...normalized.municipiosExtra, String(c.ciudadId)] };
                             }
                             return {
-                              ...prev,
-                              municipiosExtra: prev.municipiosExtra.filter((id) => String(id) !== String(c.ciudadId)),
+                              ...normalized,
+                              municipiosExtra: normalized.municipiosExtra.filter((id) => String(id) !== String(c.ciudadId)),
                             };
                           });
                         }}
@@ -229,7 +249,7 @@ export default function InventarioBodegasTab({
               <Switch
                 id="bodega-activa"
                 checked={bodegaForm.estado}
-                onCheckedChange={(v) => setBodegaForm((prev) => ({ ...prev, estado: v === true }))}
+                onCheckedChange={(v) => setBodegaForm((prev) => ({ ...normalizeBodegaForm(prev), estado: v === true }))}
               />
               <Label htmlFor="bodega-activa" className="cursor-pointer text-sm font-normal leading-none">
                 Bodega activa (visible en listados y selectores)

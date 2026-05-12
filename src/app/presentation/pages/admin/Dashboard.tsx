@@ -124,6 +124,18 @@ type DashboardUser = {
     correo?: string;
     email?: string;
     rol?: string;
+    role?: string;
+    rolInfo?: {
+        nombre?: string | null;
+    } | null;
+    perfil?: {
+        tipo?: string | null;
+        nombre?: string | null;
+        apellido?: string | null;
+        nombreCompleto?: string | null;
+        cargo?: string | null;
+        cc?: string | null;
+    } | null;
     estado?: boolean;
 };
 
@@ -171,6 +183,30 @@ export default function Dashboard(): React.ReactElement {
         : (tenantsGlobales.find((t) => t.iud === selectedTenantGlobalId)?.razon_social
             ?? tenantsGlobales.find((t) => t.iud === selectedTenantGlobalId)?.titulo
             ?? null);
+
+    const getUsuarioNombre = (u: DashboardUser): string => {
+        const perfil = u?.perfil;
+        return perfil?.nombreCompleto
+            || [perfil?.nombre, perfil?.apellido].filter(Boolean).join(' ')
+            || String(u?.nombre || u?.name || '-');
+    };
+
+    const getUsuarioRol = (u: DashboardUser): string => {
+        return String(u?.rolInfo?.nombre || u?.rol || u?.role || '-');
+    };
+
+    const getUsuarioPerfil = (u: DashboardUser): string => {
+        const perfil = u?.perfil;
+        if (!perfil) return 'Sin perfil';
+        const labels: Record<string, string> = {
+            SUPER_ADMIN: 'SuperAdmin',
+            TENANT_GLOBAL: 'TenantGlobal',
+            TENANT_CORPORATIVO: 'Corporativo',
+            CLIENTE: 'Cliente',
+        };
+        const tipo = String(perfil.tipo || '').toUpperCase();
+        return [labels[tipo] || 'Perfil', perfil.cargo || perfil.cc].filter(Boolean).join(' | ');
+    };
 
     // ── Efectos: socket de paleta ─────────────────────────────────────────────
     useEffect(() => {
@@ -242,7 +278,8 @@ export default function Dashboard(): React.ReactElement {
         return usuarios.filter((u) => (
             String(u?.nombre || u?.name || '').toLowerCase().includes(q)
             || String(u?.correo || u?.email || '').toLowerCase().includes(q)
-            || String(u?.rol || '').toLowerCase().includes(q)
+            || getUsuarioRol(u).toLowerCase().includes(q)
+            || getUsuarioPerfil(u).toLowerCase().includes(q)
         ));
     }, [usuarioSearch, usuarios]);
 
@@ -406,9 +443,14 @@ export default function Dashboard(): React.ReactElement {
                                     const uid = String(u?._id || u?.iud || u?.id || i);
                                     return (
                                         <TableRow key={uid}>
-                                            <TableCell className="font-medium">{String(u?.nombre || u?.name || '-')}</TableCell>
+                                            <TableCell>
+                                                <div className="space-y-0.5">
+                                                    <p className="font-medium">{getUsuarioNombre(u)}</p>
+                                                    <p className="text-xs text-muted-foreground">{getUsuarioPerfil(u)}</p>
+                                                </div>
+                                            </TableCell>
                                             <TableCell className="text-xs text-slate-500">{String(u?.correo || u?.email || '-')}</TableCell>
-                                            <TableCell><Badge variant="outline">{String(u?.rol || '-')}</Badge></TableCell>
+                                            <TableCell><Badge variant="outline">{getUsuarioRol(u)}</Badge></TableCell>
                                             <TableCell>
                                                 <Badge variant={u?.estado !== false ? 'outline' : 'secondary'}>
                                                     {u?.estado !== false ? 'Activo' : 'Inactivo'}

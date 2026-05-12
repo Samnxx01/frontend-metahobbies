@@ -48,7 +48,7 @@ export default function InventarioStockTab({
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><Search className="h-5 w-5" /> Consultar stock</CardTitle>
-            <CardDescription>Busca saldo y kardex por SKU y bodega.</CardDescription>
+            <CardDescription>Busca saldos por bodega y, si ingresas SKU, consulta su saldo puntual.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
@@ -152,7 +152,7 @@ export default function InventarioStockTab({
                 ))}
                 {kardex.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">Consulta un SKU para ver su kardex.</TableCell>
+                    <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">Consulta una bodega o SKU para ver movimientos.</TableCell>
                   </TableRow>
                 ) : null}
               </TableBody>

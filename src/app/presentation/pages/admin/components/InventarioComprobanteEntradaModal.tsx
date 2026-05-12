@@ -9,6 +9,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 const moneyCo = (n: number): string =>
   new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(n);
 
+const formatDateTimeCo = (value?: string): string => {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' });
+};
+
 export type DocumentoSoporte = { tipo: string; numero: string };
 
 export type InventarioComprobanteEntradaModalProps = {
@@ -69,6 +76,7 @@ export default function InventarioComprobanteEntradaModal({
                 <p className="text-sm text-foreground">
                   {documentoSoporte?.tipo?.trim() ? documentoSoporte.tipo : '—'} {documentoSoporte?.numero?.trim() ? `· ${documentoSoporte.numero}` : ''}
                 </p>
+                <p className="mt-1 text-xs text-muted-foreground">Creado: {formatDateTimeCo(data.recepcion.createdAt)}</p>
               </div>
 
               <div className="sm:col-span-2 lg:col-span-4">

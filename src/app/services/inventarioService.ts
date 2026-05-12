@@ -1,4 +1,5 @@
 import { apiFetch } from './api';
+import type { UsuarioOption } from './routesService';
 
 export type MetodoValuacion = 'PROMEDIO' | 'FIFO';
 export type TipoMovimiento = 'ENTRADA' | 'SALIDA' | 'AJUSTE' | 'REVERSA';
@@ -6,11 +7,70 @@ export type MotivoMovimiento = 'COMPRA' | 'VENTA' | 'MERMA' | 'DANO' | 'ERROR_CO
 export type TipoAjuste = 'POSITIVO' | 'NEGATIVO';
 export type EstadoAjuste = 'SOLICITADO' | 'APROBADO' | 'RECHAZADO';
 
+export type InventarioFormularioRutaOpcion = {
+  id: string;
+  name: string;
+  path: string;
+  tipoNodo: string;
+  component?: string | null;
+};
+
+/** Tenant global visible segun JWT o tenantSuperAdminId (DIOS). */
+export type InventarioTenantGlobalOpcion = {
+  iud: string;
+  label: string;
+  codigoJerarquia?: string | null;
+};
+
+/** tenantJerarquiaCounter con corporativo + tenantSuperAdmin (misma regla que jerarquia de usuarios). */
+export type InventarioTenantSuperAdminOpcion = {
+  iud: string;
+  label: string;
+  codigoJerarquia?: string | null;
+};
+
+export type InventarioFormulariosAutorizacionPolicy = {
+  esDios?: boolean;
+  esTenantSuperAdmin?: boolean;
+  puedeEditarAccionesTenant?: boolean;
+};
+
 export interface InventarioConfig {
   _id?: string;
   metodoValuacion: MetodoValuacion;
   metodoBloqueadoDesdeAnioFiscal?: number | null;
   periodosCerrados: string[];
+  documentosSoporte?: DocumentoSoporteTipoConfig[];
+  monedaInventario?: MonedaInventarioConfig;
+}
+
+export interface MonedaInventarioConfig {
+  monedaBase: string;
+  monedaCompra: string;
+  simbolo: string;
+  decimales: number;
+  formato: string;
+  convertirPorTrm: boolean;
+  conversionesMoneda?: ConversionMonedaConfig[];
+}
+
+export interface ConversionMonedaConfig {
+  id: string;
+  monedaOrigen: string;
+  monedaDestino: string;
+  tasa: number;
+  fuente: string;
+  fechaVigencia?: string | null;
+  activo: boolean;
+}
+
+export interface DocumentoSoporteTipoConfig {
+  id: string;
+  codigo: string;
+  prefijo: string;
+  padding: number;
+  siguiente: number;
+  activo: boolean;
 }
 
 export interface DocumentoRelacionado {
@@ -91,6 +151,7 @@ export interface OrdenCompraItemLinea {
   descripcion?: string;
   cantidadOrdenada: number;
   costoUnitario: number;
+  descuentoPorcentaje?: number;
   descuento?: number;
   impuestoPorcentaje?: number;
   impuestos?: number;
@@ -114,7 +175,16 @@ export interface RecepcionOrdenCompraResponse {
   recepcion: {
     _id: string;
     numeroRecepcion: string;
-    items: Array<{ sku: string; cantidadRecibida: number; costoUnitario: number; bodega: string }>;
+    items: Array<{
+      sku: string;
+      cantidadRecibida: number;
+      costoUnitario: number;
+      bodega: string;
+      movimientoKardexId?: string | null;
+      estadoKardex?: 'NO_CONFIRMADO' | 'CONFIRMADO';
+    }>;
+    createdAt?: string;
+    updatedAt?: string;
   };
 }
 
@@ -173,6 +243,12 @@ export interface InventarioMovimiento {
   bodega: string;
   ubicacion?: UbicacionInventario;
   documentoRelacionado: DocumentoRelacionado;
+  auditoriaRelacion?: {
+    origenColeccion?: string | null;
+    origenId?: string | null;
+    estadoRelacion?: 'NO_CONFIRMADO' | 'CONFIRMADO';
+    confirmadoEn?: string | null;
+  };
   referenciaMovimientoOriginal?: string | null;
   esReversion: boolean;
   hashPrevio?: string | null;
@@ -238,6 +314,44 @@ export interface StockActualItem {
   valorTotal?: number;
 }
 
+export interface InventoryLedgerMovement {
+  _id: string;
+  tenantId: string;
+  productId: string;
+  direction: 'IN' | 'OUT';
+  movementType: 'PURCHASE' | 'SALE' | 'ADJUSTMENT_IN' | 'ADJUSTMENT_OUT' | 'REVERSAL';
+  quantity: number;
+  unitCost: number;
+  totalCost: number;
+  referenceDocument: {
+    type: string;
+    number: string;
+    invoiceId?: string | null;
+    issuedAt?: string | null;
+  };
+  cufe: string;
+  parentTransactionId?: string | null;
+  reason: string;
+  transactionHash: string;
+  previousHash?: string | null;
+  audit?: { userId?: string; ipOrigen?: string; timestamp?: string };
+  createdAt?: string;
+  updatedAt?: string;
+  parent?: InventoryLedgerMovement | null;
+}
+
+export interface LedgerByInvoiceResponse {
+  invoiceId: string;
+  tenantId: string;
+  documento: Record<string, unknown> | null;
+  documentoTipo: 'FACTURA_PROVEEDOR_LEGACY' | 'ORDEN_COMPRA' | 'FACTURA_DIAN_COMPRA' | 'FACTURA_DIAN_VENTA' | null;
+  estadoValidacion: string | null;
+  mensajeValidacion: string | null;
+  validada: boolean;
+  total: number;
+  movements: InventoryLedgerMovement[];
+}
+
 const buildQuery = (params: Record<string, string | number | undefined | null>): string => {
   const query = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
@@ -263,6 +377,81 @@ const inventarioService = {
     return resp?.data as InventarioConfig;
   },
 
+  async actualizarMonedaInventario(monedaInventario: MonedaInventarioConfig): Promise<InventarioConfig> {
+    const resp = await apiFetch('/api/inventario/config/moneda', {
+      method: 'PUT',
+      body: monedaInventario,
+    });
+    return resp?.data as InventarioConfig;
+  },
+
+  async listarDocumentosSoporte(): Promise<DocumentoSoporteTipoConfig[]> {
+    const resp = await apiFetch('/api/inventario/config/documentos-soporte', { method: 'GET' });
+    return (resp?.data ?? []) as DocumentoSoporteTipoConfig[];
+  },
+
+  async guardarDocumentosSoporte(documentos: DocumentoSoporteTipoConfig[]): Promise<DocumentoSoporteTipoConfig[]> {
+    const resp = await apiFetch('/api/inventario/config/documentos-soporte', {
+      method: 'PUT',
+      body: { documentos },
+    });
+    return (resp?.data ?? []) as DocumentoSoporteTipoConfig[];
+  },
+
+  async obtenerFormulariosAutorizacionOpciones(tenantSuperAdminId?: string): Promise<{
+    formularios: InventarioFormularioRutaOpcion[];
+    tenantGlobales: InventarioTenantGlobalOpcion[];
+    tenantSuperAdmins: InventarioTenantSuperAdminOpcion[];
+    usuarios: UsuarioOption[];
+    policy: InventarioFormulariosAutorizacionPolicy;
+    meta?: {
+      alcance?: string;
+      origenResolucion?: string;
+      totalRutasActivas?: number;
+      totalFormulariosSubformularios?: number;
+      totalMostrados?: number;
+      ayuda?: string | null;
+      inventarioFormulariosModoAlcance?: string;
+      requiereParametrizacionTenantSuperAdmin?: boolean;
+      tenantSuperAdminAnclaId?: string | null;
+      tenantGlobalJerarquiaOk?: boolean;
+      totalTenantGlobalEnRama?: number;
+      /** true si el ancla JWT tiene SA+ corporativo en tenantJerarquiaCounter (rama restringida). */
+      filtroCorporativoCountersActivo?: boolean;
+    };
+  }> {
+    const q =
+      tenantSuperAdminId && /^[0-9a-fA-F]{24}$/.test(tenantSuperAdminId)
+        ? `?tenantSuperAdminId=${encodeURIComponent(tenantSuperAdminId)}`
+        : '';
+    const resp = await apiFetch(`/api/inventario/config/formularios-autorizacion/opciones${q}`, { method: 'GET' });
+    const data = resp?.data ?? {};
+    return {
+      formularios: (data.formularios ?? []) as InventarioFormularioRutaOpcion[],
+      tenantGlobales: (data.tenantGlobales ?? []) as InventarioTenantGlobalOpcion[],
+      tenantSuperAdmins: (data.tenantSuperAdmins ?? []) as InventarioTenantSuperAdminOpcion[],
+      usuarios: (data.usuarios ?? []) as UsuarioOption[],
+      policy: (data.policy ?? {}) as InventarioFormulariosAutorizacionPolicy,
+      meta: data.meta,
+    };
+  },
+
+  async aplicarFormulariosAutorizacion(body: {
+    rutaIds: string[];
+    tenantIds: string[];
+    usuarioIds: string[];
+    tenantSuperAdminId?: string;
+  }): Promise<{ actualizadas: number; resultados: Array<{ rutaId: string; ok: boolean; error?: string }> }> {
+    const resp = await apiFetch('/api/inventario/config/formularios-autorizacion', {
+      method: 'PUT',
+      body,
+    });
+    return {
+      actualizadas: Number(resp?.actualizadas ?? 0),
+      resultados: Array.isArray(resp?.resultados) ? resp.resultados : [],
+    };
+  },
+
   async cerrarPeriodo(periodo: string): Promise<string[]> {
     const resp = await apiFetch('/api/inventario/periodos/cerrar', {
       method: 'POST',
@@ -279,6 +468,11 @@ const inventarioService = {
   async listarKardex(params: { sku?: string; bodega?: string; limit?: number }): Promise<InventarioMovimiento[]> {
     const resp = await apiFetch(`/api/inventario/kardex${buildQuery(params)}`, { method: 'GET' });
     return (resp?.data ?? []) as InventarioMovimiento[];
+  },
+
+  async obtenerLedgerPorInvoice(invoiceId: string): Promise<LedgerByInvoiceResponse> {
+    const resp = await apiFetch(`/api/inventario/ledger/by-invoice/${encodeURIComponent(invoiceId)}`, { method: 'GET' });
+    return resp?.data as LedgerByInvoiceResponse;
   },
 
   async registrarEntrada(payload: MovimientoPayload): Promise<InventarioMovimiento> {

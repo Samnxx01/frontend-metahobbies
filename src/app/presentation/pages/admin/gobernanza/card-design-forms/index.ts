@@ -1,0 +1,10 @@
+export type { GobernanzaEndpointDesignFormProps } from './types';
+export { EmbeddedApiFormSection } from './EmbeddedApiFormSection';
+export type { EmbeddedApiFormSectionProps } from './EmbeddedApiFormSection';
+export { GobernanzaCardDesignFormByEndpoint } from './GobernanzaCardDesignFormByEndpoint';
+export { GobernanzaCardDesignFormGeneric } from './GobernanzaCardDesignFormGeneric';
+export { TenantCrearGlobalUsuarioDesignForm } from './TenantCrearGlobalUsuarioDesignForm';
+export { TenantListarLibresTenantglobalDesignForm } from './TenantListarLibresTenantglobalDesignForm';
+export { TenantActualizarGlobalDesignForm } from './TenantActualizarGlobalDesignForm';
+export { TenantDesactivarGlobalDesignForm } from './TenantDesactivarGlobalDesignForm';
+export { TenantEliminarGlobalDesignForm } from './TenantEliminarGlobalDesignForm';

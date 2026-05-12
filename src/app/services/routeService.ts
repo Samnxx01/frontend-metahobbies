@@ -166,7 +166,6 @@ const getHerenciaAdminPermitida = async (): Promise<{
 }> => {
     try {
         const token = localStorage.getItem("token");
-        console.log('[DEBUG getHerenciaAdminPermitida] token present=', Boolean(token));
         if (!token) {
             return { idsPermitidos: new Set(), pathsPermitidos: new Set() };
         }
@@ -181,30 +180,6 @@ const getHerenciaAdminPermitida = async (): Promise<{
         const pathsPermitidos = new Set<string>();
 
         const herencias = Array.isArray(result?.herencias) ? result.herencias : [];
-
-        if (import.meta.env.DEV && result) {
-            const ctx = result.contexto;
-            const tenantSuperEnDocs = [
-                ...new Set(
-                    herencias
-                        .map((h) =>
-                            String(
-                                (h as { tenantSuperTenant?: { _id?: string } })?.tenantSuperTenant?._id ||
-                                    (h as { tenantSuperTenant?: string })?.tenantSuperTenant ||
-                                    ''
-                            ).trim()
-                        )
-                        .filter(Boolean)
-                )
-            ];
-            console.log('[MABS][herencia listar → rutas admin]', {
-                permitidosAPI: ctx?.tenantSuperTenantsPermitidos,
-                jwtSA: ctx?.tenantSuperTenantJwt,
-                usuarioTenantSA: ctx?.tenantSuperTenantUsuario,
-                totalHerencias: herencias.length,
-                tenantSuperTenantPorDocumento: tenantSuperEnDocs,
-            });
-        }
 
         herencias.forEach((h) => {
             const vistas = Array.isArray(h.vistas) ? h.vistas : [];
@@ -221,11 +196,6 @@ const getHerenciaAdminPermitida = async (): Promise<{
             });
         });
 
-        console.log('[DEBUG getHerenciaAdminPermitida] herencias resolved', {
-            idsCount: idsPermitidos.size,
-            pathsCount: pathsPermitidos.size,
-            paths: Array.from(pathsPermitidos).slice(0, 20),
-        });
         return { idsPermitidos, pathsPermitidos };
     } catch (error) {
         console.error("Error al resolver herencias de vistas admin:", error);
@@ -462,12 +432,6 @@ const resolveAdminActorTipoFromToken = (): AdminActorTipo => {
                         : ['DIOS', 'DESAROLLADOR'].includes(rol)
                             ? 'SUPERADMIN'
                             : 'UNKNOWN';
-        console.log('[MABS][routeService][resolveAdminActorTipoFromToken]', {
-            actorTipoDetectado,
-            tenantScope,
-            rol,
-            payloadKeys: payload ? Object.keys(payload) : [],
-        });
 
         return actorTipoDetectado as AdminActorTipo;
     } catch {
@@ -747,15 +711,6 @@ export const getUserShortcutRoutes = async (): Promise<UserShortcutRoutes> => {
             names: ['Mi Membresía', 'Mi Membresia', 'Membresía', 'Membresia'],
         });
 
-        console.log('[MABS][routeService][getUserShortcutRoutes]', {
-            treeSize: tree.length,
-            firstAdminPath,
-            adminByMenu: adminByMenu?.path ?? null,
-            adminRoute: adminRoute?.path ?? null,
-            perfilRoute: perfilRoute?.path ?? null,
-            membresiaRoute: membresiaRoute?.path ?? null,
-        });
-
         const resolvedAdmin = firstAdminPath || (adminRoute ? toAppRoutePath(adminRoute) : '') || readCachedPrivateHomeRoute() || '';
         writeCachedPrivateHomeRoute(resolvedAdmin);
 
@@ -779,7 +734,6 @@ export const getAuthorizedRoutes = async (): Promise<AuthorizedRoutes> => {
     try {
         const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "/api";
         const token = localStorage.getItem("token");
-        const rawUser = localStorage.getItem("user");
         const hasToken = Boolean(token);
         const actorTipo = resolveAdminActorTipoFromToken();
         const endpoint = hasToken
@@ -797,12 +751,6 @@ export const getAuthorizedRoutes = async (): Promise<AuthorizedRoutes> => {
             });
 
         if (!result.success || !result.data) {
-            console.log('[MABS][routeService][getAuthorizedRoutes][empty-result]', {
-                hasToken,
-                actorTipo,
-                rawUser,
-                result,
-            });
             return { publicRoutes: [], adminRoutes: [], authRoutes: [] };
         }
 
@@ -928,18 +876,6 @@ export const getAuthorizedRoutes = async (): Promise<AuthorizedRoutes> => {
                 }
             }
         }
-
-        console.log('[MABS][routeService][getAuthorizedRoutes]', {
-            hasToken,
-            actorTipo,
-            rawUser,
-            resultTotal: result.total,
-            publicRoutes: publicRoutes.length,
-            authRoutes: authRoutes.length,
-            hybridRoutes: hybridRoutes.length,
-            adminRoots: adminRoutes.length,
-            adminFlatPaths: flattenAdminRoutes(adminRoutes).map((route) => route.path),
-        });
 
         return { publicRoutes, authRoutes, adminRoutes, hybridRoutes };
 
@@ -1349,21 +1285,10 @@ const _fetchSidebarTreeWithContext = async (): Promise<AdminSidebarTreeContext> 
                 filteredTree = filterTreeByAllowedRoutes(filteredTree, securityLookup.ids, securityLookup.paths);
             }
 
-            console.log('[MABS][routeService][getAdminSidebarTreeWithContext]', {
-                actorTipoJwt,
-                actorTipoBackend,
-                actorTipo,
-                sourceCollection,
-                treeResultTotal: treeResult.total ?? null,
-                rawDataLength: treeResult.data.length,
-                rootCount: filteredTree.length,
-                flatPaths: flattenTreePaths(filteredTree),
-            });
             return { actorTipo, sourceCollection, tree: filteredTree };
         }
 
         const actorTipo = actorTipoJwt;
-        console.log('[MABS][routeService][getAdminSidebarTreeWithContext][empty]', { actorTipoJwt, actorTipo });
         return { actorTipo, sourceCollection: resolveSidebarSourceCollection(actorTipo), tree: [] };
     } catch (error) {
         console.error('Error al obtener arbol admin por contexto:', error);
@@ -1390,21 +1315,12 @@ export const getPrivateHomeRoute = async (): Promise<string> => {
         const shortcuts = await getUserShortcutRoutes();
         if (shortcuts.admin?.trim()) {
             writeCachedPrivateHomeRoute(shortcuts.admin);
-            console.log('[MABS][routeService][getPrivateHomeRoute]', {
-                resolved: shortcuts.admin,
-            });
             return shortcuts.admin;
         }
         const cached = readCachedPrivateHomeRoute();
-        console.log('[MABS][routeService][getPrivateHomeRoute][fallback]', {
-            resolved: cached || '',
-        });
         return cached || "";
     } catch (_error) {
         const cached = readCachedPrivateHomeRoute();
-        console.log('[MABS][routeService][getPrivateHomeRoute][catch]', {
-            resolved: cached || '',
-        });
         return cached || "";
     }
 };
@@ -1420,9 +1336,6 @@ export const getAdminHomeRoute = async (): Promise<string | null> => {
         const treeHome = findFirstAuthorizedAdminPath(tree);
         if (treeHome) {
             writeCachedPrivateHomeRoute(treeHome);
-            console.log('[MABS][routeService][getAdminHomeRoute][tree]', {
-                resolved: treeHome,
-            });
             return treeHome;
         }
 
@@ -1435,21 +1348,11 @@ export const getAdminHomeRoute = async (): Promise<string | null> => {
 
         const resolved = adminEntry ? toAppRoutePath(adminEntry) : null;
         writeCachedPrivateHomeRoute(resolved);
-        console.log('[MABS][routeService][getAdminHomeRoute][catalog]', {
-            resolved,
-            adminEntry: adminEntry?.path ?? null,
-        });
         return resolved;
     } catch {
-        console.log('[MABS][routeService][getAdminHomeRoute][catch]', {
-            resolved: null,
-        });
         return null;
     }
 };
-
-const flattenTreePaths = (nodes: AdminNavTreeItem[] = []): string[] =>
-    nodes.flatMap((node) => [node.path, ...flattenTreePaths(node.children || [])]);
 
 /**
  * Retorna los ítems del menú de usuario desde el endpoint de menu-tags,
@@ -1463,8 +1366,6 @@ export const getMenuUsuarioRoutes = async (): Promise<MenuUsuarioItem[]> => {
             { method: 'GET', useAuth: true, logoutOn401: false }
         );
 
-        console.log('[MABS][routeService][getMenuUsuarioRoutes][raw]', result);
-
         if (!result?.success || !Array.isArray(result?.data)) return [];
 
         const items = result.data
@@ -1476,7 +1377,6 @@ export const getMenuUsuarioRoutes = async (): Promise<MenuUsuarioItem[]> => {
                 icon: t.iconKey ?? null,
                 order: Number(t.order ?? 0),
             }));
-        console.log('[MABS][routeService][getMenuUsuarioRoutes][items]', items);
         return items;
     } catch {
         return [];

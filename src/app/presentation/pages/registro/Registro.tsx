@@ -21,6 +21,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { apiFetch } from '@/app/services/api';
+import { obtenerBrandingPublico } from '@/app/services/brandingWidget';
 import { getGovernedLoginPath } from '@/app/services/governedNavigation';
 
 // Lucide icons
@@ -69,6 +70,7 @@ export default function Registro(): React.ReactElement {
     // --- ESTADO DE CONTROL DE LA UI ---
     const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
     const [logoUrl, setLogoUrl] = useState<string | null>(null);
+    const [backgroundUrl, setBackgroundUrl] = useState<string | null>(null);
 
     // Estado para el Dialog (Errores críticos)
     const [dialogOpen, setDialogOpen] = useState<boolean>(false);
@@ -109,6 +111,25 @@ export default function Registro(): React.ReactElement {
         };
 
         void fetchPublicLogo();
+    }, []);
+
+    useEffect(() => {
+        const fetchLoginBackground = async (): Promise<void> => {
+            try {
+                const branding = await obtenerBrandingPublico();
+                const loginBackground = branding?.widgets?.loginBackground;
+                const nextBackgroundUrl = String(loginBackground?.imageUrl || '').trim();
+
+                if (loginBackground?.enabled !== false && nextBackgroundUrl) {
+                    setBackgroundUrl(nextBackgroundUrl);
+                }
+            } catch (error) {
+                console.warn('No se pudo cargar el fondo publico para registro (mismo que login):', error);
+                setBackgroundUrl(null);
+            }
+        };
+
+        void fetchLoginBackground();
     }, []);
 
     const handleCloseDialog = (): void => {
@@ -172,7 +193,15 @@ export default function Registro(): React.ReactElement {
 
 
     return (
-        <div className="flex justify-center items-center min-h-screen bg-gradient-to-br from-background via-muted/20 to-background p-4 sm:p-6">
+        <div
+            className="relative flex justify-center items-center min-h-screen bg-background bg-center bg-cover p-4 sm:p-6"
+            style={{
+                backgroundImage: backgroundUrl
+                    ? `linear-gradient(rgba(0,0,0,.18), rgba(0,0,0,.18)), url("${backgroundUrl}")`
+                    : undefined
+            }}
+        >
+            {backgroundUrl ? <div className="absolute inset-0 bg-background/20 backdrop-blur-[1px]" /> : null}
 
             {/* --- DIALOG DE ERROR CRÍTICO --- */}
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -201,8 +230,8 @@ export default function Registro(): React.ReactElement {
                 </DialogContent>
             </Dialog>
 
-            {/* Contenedor del Formulario con adaptación dark/light */}
-            <Card className="w-full max-w-md shadow-2xl border-border bg-card">
+            {/* Contenedor del Formulario — mismo contraste que Login */}
+            <Card className="relative z-10 w-full max-w-md shadow-2xl border-border bg-card/95 backdrop-blur">
                 <CardContent className="p-6 sm:p-8 flex flex-col items-center">
 
                     {/* Logo con adaptación dark/light */}

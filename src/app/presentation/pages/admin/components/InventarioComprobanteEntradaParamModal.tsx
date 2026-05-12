@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { FileText } from 'lucide-react';
+import { toast } from 'react-toastify';
+import inventarioService from '@/app/services/inventarioService';
 import type { InventarioOrdenCompra, RecepcionOrdenCompraResponse } from '@/app/services/inventarioService';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -10,6 +12,7 @@ import InventarioDocumentoSoporteConfigModal, {
   consumeDocNumero,
   loadDocumentoSoporteTipos,
   nextDocNumero,
+  saveDocumentoSoporteTipos,
   type DocumentoSoporteTipoConfig,
 } from './InventarioDocumentoSoporteConfigModal';
 
@@ -30,27 +33,19 @@ export type InventarioComprobanteEntradaParamModalProps = {
   }) => void;
 };
 
-const buildComprobanteData = (oc: InventarioOrdenCompra, documentoNumero: string): RecepcionOrdenCompraResponse => {
-  const itemsRecibidos = (oc.items || [])
-    .map((it) => ({
-      sku: String(it.sku || ''),
-      cantidadRecibida: Number((it as any).cantidadRecibida || 0),
-      costoUnitario: Number(it.costoUnitario || 0),
-      bodega: String(it.bodega || ''),
-    }))
-    .filter((it) => it.sku && it.bodega && it.cantidadRecibida > 0);
-
-  const numeroRecepcion = documentoNumero.trim() || oc.numeroRemision?.trim() || oc.numeroFacturaElectronico?.trim() || `OC-${oc.numeroOrden}`;
-
-  return {
-    orden: oc,
-    recepcion: {
-      _id: `local-${oc._id}`,
-      numeroRecepcion,
-      items: itemsRecibidos,
-    },
-  };
-};
+const buildRecepcionItems = (oc: InventarioOrdenCompra) =>
+  (oc.items || [])
+    .map((it, index) => {
+      const cantidadOrdenada = Number(it.cantidadOrdenada || 0);
+      const cantidadRecibida = Number((it as any).cantidadRecibida || 0);
+      const pendiente = Math.max(0, cantidadOrdenada - cantidadRecibida);
+      return {
+        ordenItemIndex: index,
+        sku: String(it.sku || '').trim(),
+        cantidadRecibida: pendiente,
+      };
+    })
+    .filter((it) => it.sku && it.cantidadRecibida > 0);
 
 export default function InventarioComprobanteEntradaParamModal({
   open,
@@ -71,22 +66,41 @@ export default function InventarioComprobanteEntradaParamModal({
   });
   const [tiposDoc, setTiposDoc] = useState<DocumentoSoporteTipoConfig[]>([]);
   const [configOpen, setConfigOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const orden = useMemo(() => ordenesSorted.find((oc) => oc._id === values.ordenId) ?? null, [ordenesSorted, values.ordenId]);
-  const ordenTieneEntrada = useMemo(
-    () => Boolean(orden) && (orden?.items || []).some((it) => Number((it as any).cantidadRecibida || 0) > 0),
+  const ordenTienePendienteRecepcion = useMemo(
+    () => Boolean(orden) && buildRecepcionItems(orden as InventarioOrdenCompra).length > 0,
     [orden]
   );
 
-  const canPreview = Boolean(orden) && ordenTieneEntrada && !saving;
+  const canPreview = Boolean(orden) && ordenTienePendienteRecepcion && !saving && !submitting;
 
   useEffect(() => {
     if (!open) return;
+    let cancelled = false;
     const loaded = loadDocumentoSoporteTipos().filter((t) => t.activo);
     setTiposDoc(loaded);
     if (loaded.length && !loaded.some((t) => t.codigo === values.documentoTipo)) {
       setValues((p) => ({ ...p, documentoTipo: loaded[0].codigo }));
     }
+    inventarioService.listarDocumentosSoporte()
+      .then((serverRows) => {
+        if (cancelled) return;
+        const activos = serverRows.filter((t) => t.activo);
+        if (!activos.length) return;
+        saveDocumentoSoporteTipos(serverRows);
+        setTiposDoc(activos);
+        if (!activos.some((t) => t.codigo === values.documentoTipo)) {
+          setValues((p) => ({ ...p, documentoTipo: activos[0].codigo, documentoNumero: '' }));
+        }
+      })
+      .catch((error) => {
+        console.error('Error cargando documentos soporte:', error);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [open]);
 
   useEffect(() => {
@@ -109,21 +123,34 @@ export default function InventarioComprobanteEntradaParamModal({
       }}
     >
       <DialogContent className="max-w-xl border-border bg-background text-foreground">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <FileText className="h-5 w-5 text-primary" />
-            Parametrizar comprobante de entrada
-          </DialogTitle>
-          <DialogDescription className="text-muted-foreground">
-            Define primero el documento soporte y luego selecciona la orden de compra para generar el comprobante.
-          </DialogDescription>
+        <DialogHeader className="pr-8">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="space-y-1.5">
+              <DialogTitle className="flex items-center gap-2">
+                <FileText className="h-5 w-5 text-primary" />
+                Parametrizar comprobante de entrada
+              </DialogTitle>
+              <DialogDescription className="text-muted-foreground">
+                Define primero el documento soporte y luego selecciona la orden de compra para generar el comprobante.
+              </DialogDescription>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full shrink-0 sm:w-auto"
+              onClick={() => setConfigOpen(true)}
+              disabled={saving}
+            >
+              Parametrizar
+            </Button>
+          </div>
         </DialogHeader>
 
         <div className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label>Tipo documento soporte</Label>
-              <div className="flex gap-2">
+              <div className="w-full">
                 <Select
                   value={values.documentoTipo || undefined}
                   onValueChange={(codigo) => setValues((p) => ({ ...p, documentoTipo: codigo, documentoNumero: '' }))}
@@ -139,9 +166,6 @@ export default function InventarioComprobanteEntradaParamModal({
                     ))}
                   </SelectContent>
                 </Select>
-                <Button type="button" variant="outline" onClick={() => setConfigOpen(true)} disabled={saving}>
-                  Parametrizar
-                </Button>
               </div>
             </div>
             <div className="space-y-2">
@@ -178,10 +202,10 @@ export default function InventarioComprobanteEntradaParamModal({
               </SelectTrigger>
               <SelectContent className="max-h-72 border-border bg-popover">
                 {ordenesSorted.map((oc) => {
-                  const tieneEntrada = (oc.items || []).some((it) => Number((it as any).cantidadRecibida || 0) > 0);
+                  const tienePendiente = buildRecepcionItems(oc).length > 0;
                   return (
                   <SelectItem key={oc._id} value={oc._id}>
-                    {oc.numeroOrden} · {oc.proveedor?.nombre || 'Proveedor'} · {oc.estado}{tieneEntrada ? '' : ' · (sin entrada)'}
+                    {oc.numeroOrden} · {oc.proveedor?.nombre || 'Proveedor'} · {oc.estado}{tienePendiente ? '' : ' · (sin pendiente)'}
                   </SelectItem>
                   );
                 })}
@@ -194,8 +218,8 @@ export default function InventarioComprobanteEntradaParamModal({
                   {orden.proveedor?.nombre} (NIT {orden.proveedor?.nit})
                 </p>
                 <p className="text-muted-foreground">OC: {orden.numeroOrden}</p>
-                {!ordenTieneEntrada ? (
-                  <p className="mt-1 text-xs text-muted-foreground">Esta OC aún no tiene entradas registradas; no es posible generar comprobante.</p>
+                {!ordenTienePendienteRecepcion ? (
+                  <p className="mt-1 text-xs text-muted-foreground">Esta OC no tiene cantidades pendientes por recibir; no es posible generar comprobante.</p>
                 ) : null}
               </div>
             ) : null}
@@ -209,28 +233,46 @@ export default function InventarioComprobanteEntradaParamModal({
           <Button
             type="button"
             disabled={!canPreview}
-            onClick={() => {
+            onClick={async () => {
               if (!orden) return;
               const tipo = values.documentoTipo.trim();
               if (!tipo) return;
-              // Consume el consecutivo si el usuario no digitó otro
-              const numeroFinal = values.documentoNumero.trim() ? values.documentoNumero.trim() : consumeDocNumero(tipo).numero;
+              const numeroDigitado = values.documentoNumero.trim();
+              const expected = nextDocNumero(tipo).numero;
+              const numeroFinal = numeroDigitado || expected;
               if (!numeroFinal) return;
 
-              // Incrementa secuencia si el número coincide con el esperado (caso típico)
-              // Si el usuario editó manualmente, dejamos la secuencia tal cual.
-              const expected = nextDocNumero(tipo).numero;
-              if (numeroFinal === expected) {
-                consumeDocNumero(tipo);
+              try {
+                setSubmitting(true);
+                const items = buildRecepcionItems(orden);
+                if (!items.length) {
+                  toast.error('La orden no tiene cantidades pendientes por recibir.');
+                  return;
+                }
+                const data = await inventarioService.registrarRecepcionOrdenCompra(orden._id, {
+                  numeroRecepcion: numeroFinal,
+                  documentoSoporte: { tipo, numero: numeroFinal },
+                  items,
+                });
+                if (!numeroDigitado || numeroFinal === expected) {
+                  consumeDocNumero(tipo);
+                  const nextRows = loadDocumentoSoporteTipos();
+                  await inventarioService.guardarDocumentosSoporte(nextRows);
+                  setTiposDoc(nextRows.filter((t) => t.activo));
+                }
+                onPreview({
+                  data,
+                  documentoSoporte: { tipo, numero: numeroFinal },
+                });
+              } catch (error) {
+                console.error('Error actualizando consecutivo documento soporte:', error);
+                toast.error(error instanceof Error ? error.message.replace(/^\[\d+\]\s*/, '') : 'No se pudo actualizar el consecutivo.');
+              } finally {
+                setSubmitting(false);
               }
-              const data = buildComprobanteData(orden, numeroFinal);
-              onPreview({
-                data,
-                documentoSoporte: { tipo, numero: numeroFinal },
-              });
             }}
           >
-            Ver comprobante
+            {submitting ? 'Generando...' : 'Ver comprobante'}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -251,4 +293,5 @@ export default function InventarioComprobanteEntradaParamModal({
     </Dialog>
   );
 }
+
 
