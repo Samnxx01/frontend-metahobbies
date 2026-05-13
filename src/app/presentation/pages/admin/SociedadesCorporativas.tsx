@@ -68,10 +68,10 @@ export default function SociedadesCorporativas() {
   };
 
   return (
-    <div className="space-y-6 max-w-2xl mx-auto mt-8">
+    <div className="mx-auto mt-8 max-w-2xl space-y-6">
 
       {/* --- PARTE 1: FORMULARIO DE LECTURA (Persistente) --- */}
-      <Card className="bg-muted/20">
+      <Card>
         <CardHeader>
           <CardTitle className="text-lg">Sociedad Registrada</CardTitle>
         </CardHeader>
@@ -108,7 +108,7 @@ export default function SociedadesCorporativas() {
       </Card>
 
       {/* --- PARTE 2: FORMULARIO DE REGISTRO --- */}
-      <Card className="bg-muted/20">
+      <Card>
         <CardHeader>
           <CardTitle>Configurar Nueva Sociedad</CardTitle>
         </CardHeader>

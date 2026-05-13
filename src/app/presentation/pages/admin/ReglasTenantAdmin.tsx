@@ -1,19 +1,16 @@
-import ParametrosGobernanza from './ParametrosGobernanza';
+import { ReglasTenantGlobalesLista, ReglasTenantGlobalOperaciones } from './ReglasTenantGlobal';
+import { ReglasTenantSuperAdminOperaciones } from './ReglasTenantSuperAdmin';
 
-const REGLAS_ADMIN_IDS = [
-  'tenant-crear-global-reglas',
-  'tenant-listar-reglas',
-  'tenant-crear-dios-reglas',
-  'tenant-actualizar-dios-reglas',
-];
-
+/**
+ * Hub admin: lista de **tenant globales**, operaciones de reglas **por tenant global**, y bloque **individual** para
+ * **tenant super admin (DIOS)**.
+ */
 export default function ReglasTenantAdmin() {
   return (
-    <ParametrosGobernanza
-      mode="full"
-      initialSection="tenant"
-      lockedSection="tenant"
-      allowedEndpointIds={REGLAS_ADMIN_IDS}
-    />
+    <div className="mx-auto flex max-w-6xl flex-col gap-8 p-4 md:p-6">
+      <ReglasTenantGlobalesLista />
+      <ReglasTenantGlobalOperaciones />
+      <ReglasTenantSuperAdminOperaciones />
+    </div>
   );
 }

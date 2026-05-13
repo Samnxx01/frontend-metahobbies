@@ -1,21 +1,15 @@
 import React from 'react';
 import { TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { inventarioTabsDesdeCatalogo, type InventarioTabValue } from '../inventario/inventarioModulosCatalog';
 
-export type InventarioTabValue = 'stock' | 'movimientos' | 'orden-compras' | 'ajustes' | 'bodegas' | 'config';
+export type { InventarioTabValue };
 
 type InventarioMenuTabsProps = {
   activeTab: InventarioTabValue;
   onTabChange: (value: InventarioTabValue) => void;
 };
 
-const INVENTARIO_TABS: Array<{ value: InventarioTabValue; label: string }> = [
-  { value: 'stock', label: 'Stock' },
-  { value: 'movimientos', label: 'Movimientos' },
-  { value: 'orden-compras', label: 'Orden/compras' },
-  { value: 'ajustes', label: 'Ajustes' },
-  { value: 'bodegas', label: 'Bodegas' },
-  { value: 'config', label: 'Configuracion' },
-];
+const INVENTARIO_TABS = inventarioTabsDesdeCatalogo();
 
 export default function InventarioMenuTabs({
   activeTab,

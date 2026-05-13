@@ -9,14 +9,20 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Building2, Plus, RefreshCw } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Loader2, Building2, Globe, Plus, RefreshCw } from 'lucide-react';
 import { apiFetch } from '@/app/services/api';
 import { toast } from 'react-toastify';
 
 interface RolCorporativo {
     _id?: string;
     rol: string;
-    tenantCorporativo?: string | null;
+    tenantCorporativo?: string | { _id?: string } | null;
+}
+
+interface TenantGlobalOpcion {
+    id: string;
+    label: string;
 }
 
 interface RolesCorporativosModalProps {
@@ -29,6 +35,42 @@ export const RolesCorporativosModal = ({ open, onClose }: RolesCorporativosModal
     const [loading, setLoading] = useState(false);
     const [nuevoRol, setNuevoRol] = useState('');
     const [creando, setCreando] = useState(false);
+    const [tenantGlobales, setTenantGlobales] = useState<TenantGlobalOpcion[]>([]);
+    const [cargandoTg, setCargandoTg] = useState(false);
+    const [tenantGlobalId, setTenantGlobalId] = useState('');
+
+    const mapTenantGlobalesRes = (res: any): TenantGlobalOpcion[] => {
+        const raw = Array.isArray(res?.tenantsGlobales) ? res.tenantsGlobales : [];
+        return raw
+            .map((t: any) => {
+                const id = String(t?.iud ?? t?._id ?? '').trim();
+                if (!id) return null;
+                const corp = String(t?.coporativo?.razon_social ?? t?.coporativo?.titulo ?? '').trim();
+                const codigo = String(t?.codigoJerarquia ?? '').trim();
+                const label = corp || codigo || id.slice(-8);
+                return { id, label };
+            })
+            .filter(Boolean) as TenantGlobalOpcion[];
+    };
+
+    const cargarTenantGlobales = async () => {
+        setCargandoTg(true);
+        try {
+            const res: any = await apiFetch('/api/registro/tenants/global/registro', { method: 'GET' });
+            const opts = mapTenantGlobalesRes(res);
+            setTenantGlobales(opts);
+            setTenantGlobalId((prev) => {
+                if (prev && opts.some((o) => o.id === prev)) return prev;
+                if (opts.length === 1) return opts[0].id;
+                return '';
+            });
+        } catch {
+            toast.error('Error al cargar tenant globales');
+            setTenantGlobales([]);
+        } finally {
+            setCargandoTg(false);
+        }
+    };
 
     const cargarRoles = async () => {
         setLoading(true);
@@ -46,18 +88,30 @@ export const RolesCorporativosModal = ({ open, onClose }: RolesCorporativosModal
     };
 
     useEffect(() => {
-        if (open) cargarRoles();
-        else setNuevoRol('');
+        if (open) {
+            void cargarRoles();
+            void cargarTenantGlobales();
+        } else {
+            setNuevoRol('');
+            setTenantGlobalId('');
+        }
     }, [open]);
 
     const handleCrear = async () => {
         const nombre = nuevoRol.trim().toUpperCase();
         if (!nombre) { toast.error('El nombre del rol es obligatorio'); return; }
+        const tg = tenantGlobalId.trim();
+        if (tenantGlobales.length > 0 && !tg) {
+            toast.error('Selecciona el tenant global al que asociar el rol');
+            return;
+        }
         setCreando(true);
         try {
+            const body: Record<string, string> = { rol: nombre };
+            if (tg) body.tenantGlobalId = tg;
             await apiFetch('/api/config/permisos/corporativo/guardar/roles/tenant/corporativo', {
                 method: 'POST',
-                body: { rol: nombre },
+                body,
             });
             toast.success(`Rol corporativo "${nombre}" creado`);
             setNuevoRol('');
@@ -83,6 +137,42 @@ export const RolesCorporativosModal = ({ open, onClose }: RolesCorporativosModal
                     {/* Crear nuevo rol */}
                     <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
                         <p className="text-sm font-semibold">Nuevo rol corporativo</p>
+                        <div className="space-y-2">
+                            <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
+                                <Globe className="h-3.5 w-3.5" /> Tenant global
+                            </Label>
+                            {cargandoTg ? (
+                                <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
+                                    <Loader2 className="h-4 w-4 animate-spin" /> Cargando tenant globales…
+                                </div>
+                            ) : tenantGlobales.length === 0 ? (
+                                <p className="text-xs text-amber-700 dark:text-amber-500 rounded-md border border-dashed border-amber-200 bg-amber-50/50 dark:bg-amber-950/20 px-2 py-2">
+                                    No hay tenant globales en tu alcance, o el servidor usará el corporativo de tu sesión si aplica.
+                                </p>
+                            ) : (
+                                <>
+                                    <Select
+                                        value={tenantGlobalId || undefined}
+                                        onValueChange={setTenantGlobalId}
+                                        disabled={creando}
+                                    >
+                                        <SelectTrigger className="w-full">
+                                            <SelectValue placeholder="Selecciona tenant global" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {tenantGlobales.map((c) => (
+                                                <SelectItem key={c.id} value={c.id}>
+                                                    {c.label}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                    <p className="text-[11px] text-muted-foreground leading-snug">
+                                        El rol se guarda sobre el tenant corporativo raíz (o el primero activo) de ese global.
+                                    </p>
+                                </>
+                            )}
+                        </div>
                         <div className="flex gap-2">
                             <Input
                                 placeholder="Ej: SUPERVISOR"

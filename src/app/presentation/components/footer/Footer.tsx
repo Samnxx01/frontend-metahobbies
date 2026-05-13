@@ -4,6 +4,7 @@ import { Facebook, Instagram, Twitter, Mail, Phone, Clock, Loader2 } from 'lucid
 import { apiFetch } from '@/app/services/api';
 import { useAuth } from '@/app/providers/AuthProvider';
 import { getPublicNavigationRoutes } from '@/app/services/routeService';
+import { appendPublicAttributionToInternalPath } from '@/app/services/publicAttributionParams';
 import type { FooterProps } from '@/types/components';
 
 interface PerfilData {
@@ -198,7 +199,7 @@ export default function Footer({ variant = 'default' }: FooterProps = {}): React
                         <h6 className="text-base md:text-lg font-semibold mb-3 md:mb-4 text-foreground">Enlaces Rapidos</h6>
                         <nav className="flex flex-col gap-2 md:gap-2.5">
                             {linksToRender.map((link) => (
-                                <Link key={`${link.path}-${link.label}`} to={link.path} className="text-sm md:text-base text-muted-foreground hover:text-primary hover:underline transition-colors">
+                                <Link key={`${link.path}-${link.label}`} to={appendPublicAttributionToInternalPath(link.path)} className="text-sm md:text-base text-muted-foreground hover:text-primary hover:underline transition-colors">
                                     {link.label}
                                 </Link>
                             ))}

@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import {
     Dialog,
     DialogContent,
+    DialogTitle,
+    DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 
@@ -83,8 +85,11 @@ export default function WelcomeModal({
             - p-0 remueve el padding por defecto del DialogContent.
             */}
             <DialogContent className="p-0 border-none w-[95%] sm:w-[80%] md:max-w-[800px] max-h-[90vh] overflow-hidden">
+                <div className="sr-only">
+                    <DialogTitle>{modalContent.title}</DialogTitle>
+                    <DialogDescription>{modalContent.body}</DialogDescription>
+                </div>
 
-              
                 {/* Grid Container de MUI se reemplaza por un Grid de Tailwind */}
                 <div className="grid grid-cols-1 md:grid-cols-2">
 

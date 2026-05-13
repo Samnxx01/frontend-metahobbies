@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useAuth } from '@/app/providers/AuthProvider';
 import {
     getJerarquiaUsuarios,
     createUsuarioGlobal,
@@ -16,6 +17,8 @@ import type {
 } from '../services/tenantUsuariosService';
 
 export const useTenantUsuarios = () => {
+    const { token } = useAuth();
+
     // --- Estados de JERARQUÍA ---
     const [jerarquia, setJerarquia] = useState<JerarquiaResponse | null>(null);
     const [loadingJerarquia, setLoadingJerarquia] = useState(true);
@@ -101,7 +104,7 @@ export const useTenantUsuarios = () => {
         try {
             setIsCreatingSuperAdmin(true);
             setErrorCrearSuperAdmin(null);
-            const result = await createUsuarioSuperAdmin(data);
+            const result = await createUsuarioSuperAdmin(data, { useAuth: Boolean(token) });
             await fetchJerarquia();
             return result;
         } catch (err) {

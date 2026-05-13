@@ -90,6 +90,7 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
                 setLogoUrl(null)
             } catch (_error) {
                 if (!active) return
+                // No fallback sin JWT: evita mostrar un logo publico global (otra marca) en rutas admin.
                 setLogoUrl(null)
             } finally {
                 if (active) setLogoLoading(false)
@@ -133,7 +134,6 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
     const cargarMenuDinamico = useCallback(async (): Promise<void> => {
         try {
             const resolvedItems = await getMenuUsuarioRoutes()
-            console.log('[MABS][AdminNavbar][cargarMenuDinamico][resolvedItems]', resolvedItems)
             setDynamicMenuItems(Array.isArray(resolvedItems) ? resolvedItems : [])
         } catch (error) {
             console.error('Error cargando menu dinamico del avatar:', error)
@@ -220,7 +220,7 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
                 align="end"
                 sideOffset={14}
             >
-                <div className="border-b border-primary/10 bg-gradient-to-br from-primary/10 via-background to-amber-50/80 px-4 py-4">
+                <div className="border-b border-primary/10 bg-gradient-to-br from-primary/10 via-background to-secondary/25 px-4 py-4">
                     <div className="flex items-center gap-3">
                         <Avatar className="h-11 w-11 ring-2 ring-primary/15">
                             <AvatarFallback className="bg-primary text-primary-foreground text-sm font-semibold">
@@ -234,7 +234,7 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
                                 <div className="inline-flex items-center rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-medium text-primary">
                                     Panel privado
                                 </div>
-                                <div className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-medium text-amber-700">
+                                <div className="inline-flex items-center rounded-full bg-secondary/25 px-2.5 py-1 text-[11px] font-medium text-secondary-foreground">
                                     {menuItems.length} accesos
                                 </div>
                             </div>
@@ -302,7 +302,7 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
                     </Button>
 
                     <div
-                        className="cursor-pointer flex-shrink-0 hover:opacity-80 transition-opacity dark:bg-white dark:rounded-lg dark:p-1.5 dark:shadow-sm"
+                        className="cursor-pointer flex-shrink-0 hover:opacity-80 transition-opacity dark:rounded-lg dark:bg-card dark:p-1.5 dark:shadow-sm"
                         onClick={() => navigate(adminHomePath)}
                     >
                         {logoLoading ? (

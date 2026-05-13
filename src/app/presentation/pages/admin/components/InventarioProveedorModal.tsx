@@ -85,8 +85,48 @@ type InventarioProveedorModalProps = {
 const getTipoProveedorId = (tipo: InventarioTipoProveedor): string =>
   String(tipo._id || tipo.iud || '');
 
+const DEPARTAMENTO_NOMBRES: Record<string, string> = {
+  '1': 'Amazonas',
+  '2': 'Antioquia',
+  '3': 'Arauca',
+  '4': 'Atlantico',
+  '5': 'Bogota D.C.',
+  '6': 'Bolivar',
+  '7': 'Boyaca',
+  '8': 'Caldas',
+  '9': 'Caqueta',
+  '10': 'Casanare',
+  '11': 'Cauca',
+  '12': 'Cesar',
+  '13': 'Choco',
+  '14': 'Cordoba',
+  '15': 'Cundinamarca',
+  '16': 'Guainia',
+  '17': 'Guaviare',
+  '18': 'Huila',
+  '19': 'La Guajira',
+  '20': 'Magdalena',
+  '21': 'Meta',
+  '22': 'Narino',
+  '23': 'Norte de Santander',
+  '24': 'Putumayo',
+  '25': 'Quindio',
+  '26': 'Risaralda',
+  '27': 'San Andres y Providencia',
+  '28': 'Santander',
+  '29': 'Sucre',
+  '30': 'Tolima',
+  '31': 'Valle del Cauca',
+  '32': 'Vaupes',
+  '33': 'Vichada',
+};
+
 const getDepartamentoNombre = (dep: GeoDepartamento): string =>
-  dep.nombre_departamento || dep.nombre_Dapartamento || dep.nombre_Departamento || `Departamento ${dep.departamentoId}`;
+  dep.nombre_departamento ||
+  dep.nombre_Dapartamento ||
+  dep.nombre_Departamento ||
+  DEPARTAMENTO_NOMBRES[String(dep.departamentoId)] ||
+  `Departamento ${dep.departamentoId}`;
 
 export default function InventarioProveedorModal({
   open,

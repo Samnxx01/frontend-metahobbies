@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronDown, ChevronRight, Users, Edit, Globe } from 'lucide-react';
+import { ChevronDown, ChevronRight, Users, Edit, Globe, Shield } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { NodoCorpCard } from './NodoCorpCard';
@@ -51,11 +51,20 @@ export const NodoTenantGlobalCard = ({
 }: NodoTenantGlobalCardProps): React.ReactElement => {
     const [expanded, setExpanded] = useState(nivel < 2);
 
-    const { tenantGlobal, usuarios, corporativos, subTenantGlobales } = nodo;
+    const {
+        tenantGlobal,
+        tenantSuperAdmin,
+        usuariosTenantSuperAdmin = [],
+        usuarios,
+        corporativos,
+        subTenantGlobales,
+    } = nodo;
 
     const tieneSubGlobales = (subTenantGlobales?.length ?? 0) > 0;
     const tieneCorporativos = corporativos.length > 0;
-    const tieneContenido = usuarios.length > 0 || tieneCorporativos || tieneSubGlobales;
+    const tieneUsuariosSa = usuariosTenantSuperAdmin.length > 0;
+    const tieneContenido =
+        usuarios.length > 0 || tieneCorporativos || tieneSubGlobales || tieneUsuariosSa;
 
     const indentLeft = nivel > 0 ? nivel * 20 : 0;
 
@@ -67,60 +76,98 @@ export const NodoTenantGlobalCard = ({
             {/* Cabecera del TenantGlobal */}
             {tenantGlobal && (
                 <div
-                    className="flex items-center gap-2 cursor-pointer select-none group rounded-lg border border-border bg-card px-3 py-2 text-card-foreground shadow-sm transition-colors hover:bg-muted/30"
+                    className="flex cursor-pointer select-none flex-col gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-card-foreground shadow-sm transition-colors hover:bg-muted/30 group"
                     onClick={() => setExpanded(e => !e)}
                 >
-                    <button
-                        type="button"
-                        className="text-muted-foreground flex-shrink-0"
-                        onClick={e => { e.stopPropagation(); setExpanded(v => !v); }}
-                    >
-                        {tieneContenido
-                            ? (expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />)
-                            : <span className="w-4 inline-block" />
-                        }
-                    </button>
-
-                    <Globe className="h-4 w-4 text-primary flex-shrink-0" />
-
-                    <h2 className="text-base font-semibold">
-                        {tenantGlobal.razon_social ?? tenantGlobal.titulo ?? 'Tenant Global'}
-                    </h2>
-
-                    {tenantGlobal.nit_ruc_rtn && (
-                        <span className="text-xs text-muted-foreground">
-                            NIT: {tenantGlobal.nit_ruc_rtn}
-                        </span>
-                    )}
-
-                    {tenantGlobal.profundidad > 0 && (
-                        <Badge variant="secondary" className="text-xs">
-                            Sub-nivel {tenantGlobal.profundidad}
-                        </Badge>
-                    )}
-
-                    <Badge
-                        variant={tenantGlobal.estado === true || tenantGlobal.estado === 'activo' ? 'default' : 'secondary'}
-                        className="text-xs"
-                    >
-                        {tenantGlobal.estado === true || tenantGlobal.estado === 'activo' ? 'Activo' : 'Inactivo'}
-                    </Badge>
-
-                    {tieneSubGlobales && (
-                        <Badge variant="outline" className="text-xs">
-                            {subTenantGlobales.length} sub-global{subTenantGlobales.length !== 1 ? 'es' : ''}
-                        </Badge>
-                    )}
-
-                    {scope === 'SUPER_ADMIN' && onEditTG && (
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 ml-1 text-foreground/70 hover:bg-primary/10 hover:text-primary"
-                            onClick={e => { e.stopPropagation(); onEditTG(tenantGlobal); }}
+                    <div className="flex flex-wrap items-center gap-2">
+                        <button
+                            type="button"
+                            className="text-muted-foreground flex-shrink-0"
+                            onClick={e => { e.stopPropagation(); setExpanded(v => !v); }}
                         >
-                            <Edit className="h-3.5 w-3.5" />
-                        </Button>
+                            {tieneContenido
+                                ? (expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />)
+                                : <span className="w-4 inline-block" />
+                            }
+                        </button>
+
+                        <Globe className="h-4 w-4 text-primary flex-shrink-0" />
+
+                        <h2 className="text-base font-semibold">
+                            {tenantGlobal.razon_social ?? tenantGlobal.titulo ?? 'Tenant Global'}
+                        </h2>
+
+                        {tenantGlobal.nit_ruc_rtn && (
+                            <span className="text-xs text-muted-foreground">
+                                NIT: {tenantGlobal.nit_ruc_rtn}
+                            </span>
+                        )}
+
+                        {tenantGlobal.codigoJerarquia && (
+                            <Badge variant="outline" className="text-xs font-mono">
+                                {tenantGlobal.codigoJerarquia}
+                            </Badge>
+                        )}
+
+                        {tenantGlobal.profundidad > 0 && (
+                            <Badge variant="secondary" className="text-xs">
+                                Sub-nivel {tenantGlobal.profundidad}
+                            </Badge>
+                        )}
+
+                        <Badge
+                            variant={tenantGlobal.estado === true || tenantGlobal.estado === 'activo' ? 'default' : 'secondary'}
+                            className="text-xs"
+                        >
+                            {tenantGlobal.estado === true || tenantGlobal.estado === 'activo' ? 'Activo' : 'Inactivo'}
+                        </Badge>
+
+                        {tieneSubGlobales && (
+                            <Badge variant="outline" className="text-xs">
+                                {subTenantGlobales.length} sub-global{subTenantGlobales.length !== 1 ? 'es' : ''}
+                            </Badge>
+                        )}
+
+                        {scope === 'SUPER_ADMIN' && onEditTG && (
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 ml-1 text-foreground/70 hover:bg-primary/10 hover:text-primary"
+                                onClick={e => { e.stopPropagation(); onEditTG(tenantGlobal); }}
+                            >
+                                <Edit className="h-3.5 w-3.5" />
+                            </Button>
+                        )}
+                    </div>
+
+                    {tenantSuperAdmin && (
+                        <div
+                            className="flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-border/60 pt-1.5 pl-7 text-xs text-muted-foreground"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <Shield className="h-3.5 w-3.5 shrink-0 text-primary" />
+                            <span className="font-medium text-foreground/90">SuperAdmin (rama)</span>
+                            {tenantSuperAdmin.codigoJerarquia ? (
+                                <Badge variant="outline" className="font-mono text-xs">
+                                    {tenantSuperAdmin.codigoJerarquia}
+                                </Badge>
+                            ) : null}
+                            {tenantSuperAdmin.corporativoPerfil?.razon_social ? (
+                                <span className="max-w-[min(100%,18rem)] truncate" title={tenantSuperAdmin.corporativoPerfil.razon_social}>
+                                    · {tenantSuperAdmin.corporativoPerfil.razon_social}
+                                </span>
+                            ) : null}
+                            <span className="text-[11px] opacity-80">
+                                (
+                                {tenantSuperAdmin.saResueltoPorCountersGlobal
+                                    ? 'SA↔TG materializado en tenantJerarquiaCountersGlobal'
+                                    : 'vínculo SA–corporativo–TG en tenantJerarquiaCounter'}
+                                {tenantSuperAdmin.tenantGlobalPadreId
+                                    ? ` · padre TG …${String(tenantSuperAdmin.tenantGlobalPadreId).slice(-8)}`
+                                    : ''}
+                                )
+                            </span>
+                        </div>
                     )}
                 </div>
             )}
@@ -128,12 +175,35 @@ export const NodoTenantGlobalCard = ({
             {/* Contenido expandido */}
             {expanded && (
                 <div className="space-y-3">
+                    {/* RegisUsu con rol / tenantId en la rama del tenantSuperAdmin vinculado al TG */}
+                    {usuariosTenantSuperAdmin.length > 0 && (
+                        <div className="overflow-hidden rounded-lg border border-border bg-card text-card-foreground shadow-sm">
+                            <div className="px-3 py-2 bg-muted/30 text-xs font-semibold flex items-center gap-1.5">
+                                <Shield className="h-3.5 w-3.5 text-primary" />
+                                RegisUsu · rama SuperAdmin (TG sin rol global aquí) ({usuariosTenantSuperAdmin.length})
+                            </div>
+                            <div className="divide-y divide-border">
+                                {usuariosTenantSuperAdmin.map((u) => (
+                                    <UsuarioRow
+                                        key={u.iud}
+                                        usuario={u}
+                                        onEdit={
+                                            scope === 'SUPER_ADMIN' && onEditUsuario
+                                                ? () => onEditUsuario(u, tenantGlobal)
+                                                : undefined
+                                        }
+                                    />
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
                     {/* Usuarios directos del TenantGlobal */}
                     {usuarios.length > 0 && (
                         <div className="overflow-hidden rounded-lg border border-border bg-card text-card-foreground shadow-sm">
                             <div className="px-3 py-2 bg-muted/30 text-xs font-semibold flex items-center gap-1.5">
                                 <Users className="h-3.5 w-3.5" />
-                                Usuarios del Tenant Global ({usuarios.length})
+                                Usuarios con rol Tenant Global ({usuarios.length})
                             </div>
                             <div className="divide-y divide-border">
                                 {usuarios.map(u => (

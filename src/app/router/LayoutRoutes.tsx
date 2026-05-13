@@ -5,12 +5,12 @@ import { getAuthorizedRoutes, getPrivateHomeRoute, readCachedPrivateHomeRoute } 
 import { resolveCurrentRouteMenuTags } from '@/app/services/routesService';
 import { useLoading } from '@/app/providers/LoadingProvider';
 import { getGovernedPublicHomePath } from '@/app/services/governedNavigation';
-import { obtenerBrandingPublico } from '@/app/services/brandingWidget';
 
 import PublicLayout from '@/app/presentation/layouts/PublicLayout';
 import AuthLayout from '@/app/presentation/layouts/AuthLayout';
 import AdminLayout from '@/app/presentation/layouts/AdminLayout';
 import { MembershipRoutes } from './MembershipRoutes';
+import LoadingScreen from '@/app/presentation/components/common/LoadingScreen';
 
 // Imports directos para rutas especiales fuera del componentMap dinámico
 import CambiarContrasenaProvisional from '@/app/presentation/pages/cambiar-contrasena/CambiarContrasenaProvisional';
@@ -43,7 +43,24 @@ const buildComponentMap = (): ComponentMapType => {
     for (const [filePath, mod] of Object.entries(_pageModules)) {
         const match = filePath.match(/\/([^/]+)\.tsx$/);
         if (match?.[1]) {
-            map[match[1]] = lazy(() => mod().then(m => ({ default: m.default })));
+            const baseName = match[1];
+            map[baseName] = lazy(() =>
+                mod().then((m: Record<string, React.ComponentType<any> | undefined>) => {
+                    const Comp = m.default ?? m[baseName];
+                    if (!Comp) {
+                        console.warn(
+                            `[componentMap] "${baseName}" no tiene default ni export nombrado — ${filePath}`,
+                        );
+                        const Fallback = (): ReactElement => (
+                            <div className="p-4 text-sm text-destructive">
+                                Componente no disponible: {baseName}
+                            </div>
+                        );
+                        return { default: Fallback };
+                    }
+                    return { default: Comp };
+                }),
+            );
         }
     }
 
@@ -91,6 +108,17 @@ const buildComponentMap = (): ComponentMapType => {
         map.RouteUserMenuSettings = map.ParametrizacionMenu;
     }
 
+    // Rutas en BD que apuntan al archivo del modal: sin props el Dialog queda cerrado (pantalla vacía).
+    const modalRouteOverrides: Record<string, string> = {
+        UsuarioSuperAdminModal: 'UsuarioSuperAdminModalPage',
+        UsuarioGlobalModal: 'UsuarioGlobalModalPage',
+    };
+    for (const [routeName, pageName] of Object.entries(modalRouteOverrides)) {
+        if (map[pageName]) {
+            map[routeName] = map[pageName];
+        }
+    }
+
     return map;
 };
 
@@ -126,9 +154,6 @@ function RootRedirect({ user }: { user: any }): ReactElement {
 
     useEffect(() => {
         if (!user) {
-            console.log('[MABS][LayoutRoutes][RootRedirect][public]', {
-                target: getGovernedPublicHomePath(),
-            });
             setTargetPath(getGovernedPublicHomePath());
             return;
         }
@@ -138,16 +163,9 @@ function RootRedirect({ user }: { user: any }): ReactElement {
             try {
                 const nextPath = await getPrivateHomeRoute();
                 if (!active) return;
-                console.log('[MABS][LayoutRoutes][RootRedirect][private]', {
-                    nextPath,
-                    fallback: readCachedPrivateHomeRoute() || getGovernedPublicHomePath(),
-                });
                 setTargetPath(nextPath?.trim() || readCachedPrivateHomeRoute() || getGovernedPublicHomePath());
             } catch {
                 if (!active) return;
-                console.log('[MABS][LayoutRoutes][RootRedirect][catch]', {
-                    fallback: readCachedPrivateHomeRoute() || getGovernedPublicHomePath(),
-                });
                 setTargetPath(readCachedPrivateHomeRoute() || getGovernedPublicHomePath());
             }
         };
@@ -175,16 +193,9 @@ function AdminEntryRedirect(): ReactElement {
             try {
                 const nextPath = await getPrivateHomeRoute();
                 if (!active) return;
-                console.log('[MABS][LayoutRoutes][AdminEntryRedirect]', {
-                    nextPath,
-                    fallback: readCachedPrivateHomeRoute() || getGovernedPublicHomePath(),
-                });
                 setTargetPath(nextPath?.trim() || readCachedPrivateHomeRoute() || getGovernedPublicHomePath());
             } catch (_error) {
                 if (!active) return;
-                console.log('[MABS][LayoutRoutes][AdminEntryRedirect][catch]', {
-                    fallback: readCachedPrivateHomeRoute() || getGovernedPublicHomePath(),
-                });
                 setTargetPath(readCachedPrivateHomeRoute() || getGovernedPublicHomePath());
             }
         };
@@ -211,25 +222,9 @@ export default function LayoutRoutes(): ReactElement {
     const [authorizedRoutes, setAuthorizedRoutes] = useState<AuthorizedRoutes | null>(null);
     const [menuTagRoutes, setMenuTagRoutes] = useState<RouteConfig[]>([]);
     const [routeLoadError, setRouteLoadError] = useState<RouteLoadError | null>(null);
-    const [loadingBackgroundUrl, setLoadingBackgroundUrl] = useState<string>('');
     const { user } = useAuth();
     const { showLoading, hideLoading } = useLoading();
     const location = useLocation();
-
-    useEffect(() => {
-        const cargarFondoLoading = async (): Promise<void> => {
-            try {
-                const branding = await obtenerBrandingPublico();
-                const loadingBackground = branding?.widgets?.loadingBackground;
-                const nextBackgroundUrl = String(loadingBackground?.imageUrl || '').trim();
-                setLoadingBackgroundUrl(loadingBackground?.enabled !== false ? nextBackgroundUrl : '');
-            } catch {
-                setLoadingBackgroundUrl('');
-            }
-        };
-
-        void cargarFondoLoading();
-    }, []);
 
     useEffect(() => {
         showLoading();
@@ -247,13 +242,6 @@ export default function LayoutRoutes(): ReactElement {
                     getAuthorizedRoutes(),
                     user ? resolveCurrentRouteMenuTags({ menuTipo: 'USER_DROPDOWN' }) : Promise.resolve({ data: [] }),
                 ]);
-                console.log('[MABS][LayoutRoutes][loadRoutes]', {
-                    userId: user?._id ?? null,
-                    adminRoots: routes?.adminRoutes?.length ?? 0,
-                    publicRoutes: routes?.publicRoutes?.length ?? 0,
-                    authRoutes: routes?.authRoutes?.length ?? 0,
-                    hybridRoutes: routes?.hybridRoutes?.length ?? 0,
-                });
                 setAuthorizedRoutes(routes as AuthorizedRoutes);
 
                 // Extraer rutas únicas de los menu tags que tengan componente definido
@@ -273,7 +261,7 @@ export default function LayoutRoutes(): ReactElement {
                 const status = error?.status ?? error?.response?.status ?? null;
                 setRouteLoadError({
                     status,
-                    message: error?.message || 'Error al validar la autenticación',
+                    message: error?.message || 'Error al cargar las rutas de la aplicacion',
                 });
                 setAuthorizedRoutes({ publicRoutes: [], adminRoutes: [], authRoutes: [] });
             }
@@ -327,25 +315,7 @@ export default function LayoutRoutes(): ReactElement {
     }
 
     if (!authorizedRoutes) {
-        return (
-            <div
-                className="fixed inset-0 flex flex-col items-center justify-center bg-background bg-center bg-cover gap-4"
-                style={{
-                    backgroundImage: loadingBackgroundUrl
-                        ? `linear-gradient(rgba(255,255,255,.18), rgba(255,255,255,.18)), url("${loadingBackgroundUrl}")`
-                        : undefined
-                }}
-            >
-                {loadingBackgroundUrl && <div className="absolute inset-0 bg-background/20 backdrop-blur-[1px]" />}
-                <div className="relative z-10 w-16 h-16 flex items-center justify-center">
-                    <div className="absolute inset-0 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
-                </div>
-                <div className="relative z-10 text-center space-y-1">
-                    <p className="text-sm font-medium text-foreground">Validando tu autenticación</p>
-                    <p className="text-xs text-muted-foreground">Verificando permisos y contexto de sesión...</p>
-                </div>
-            </div>
-        );
+        return <LoadingScreen />;
     }
 
     const renderFallbackElement = (route: RouteConfig): ReactElement => (

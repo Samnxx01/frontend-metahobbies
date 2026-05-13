@@ -58,9 +58,12 @@ import {
   updateRouteMenuTag,
 } from '@/app/services/routesService';
 import {
+  describeTenantSuperAdminOption,
   getJerarquiaUsuarios,
+  getTenantsSuperAdmin,
   TenantGlobalInfo,
   TenantGlobalNode,
+  TenantSuperAdminOption,
 } from '@/app/services/tenantUsuariosService';
 
 type MenuKey = 'PANEL_ADMIN' | 'MI_MEMBRESIA' | 'MI_PERFIL';
@@ -107,7 +110,7 @@ interface MenuTagFormState {
   iconKey: string;
   order: string;
   estado: boolean;
-  tagTenantSuperAdminId: string | null;
+  tagTenantSuperAdminIds: string[];
   tagTenantGlobalIds: string[];
   tagTenantCorporativoId: string | null;
   permitirSinTenant: boolean;
@@ -153,7 +156,7 @@ const EMPTY_TAG_FORM: MenuTagFormState = {
   iconKey: 'USER',
   order: '0',
   estado: true,
-  tagTenantSuperAdminId: null,
+  tagTenantSuperAdminIds: [],
   tagTenantGlobalIds: [],
   tagTenantCorporativoId: null,
   permitirSinTenant: false,
@@ -189,6 +192,7 @@ export default function ParametrizacionMenu() {
 
   const [tenantsGlobales, setTenantsGlobales] = useState<TenantGlobalInfo[]>([]);
   const [jerarquiaGlobales, setJerarquiaGlobales] = useState<TenantGlobalNode[]>([]);
+  const [superAdminTenants, setSuperAdminTenants] = useState<TenantSuperAdminOption[]>([]);
 
   const tenantScope = user?.auth?.tenantScope || {};
   const actorScope = {
@@ -218,6 +222,13 @@ export default function ParametrizacionMenu() {
       })
       .catch(() => {/* silencioso */});
   }, []);
+
+  useEffect(() => {
+    if (actorScope.tenantCorporativoId) return;
+    getTenantsSuperAdmin(true)
+      .then((res) => setSuperAdminTenants(Array.isArray(res?.tenants) ? res.tenants : []))
+      .catch(() => setSuperAdminTenants([]));
+  }, [actorScope.tenantCorporativoId]);
   const routeOptions = useMemo(
     () =>
       routeCatalog
@@ -242,10 +253,6 @@ export default function ParametrizacionMenu() {
     ),
     [jerarquiaGlobales]
   );
-
-  const superAdminOptions = actorScope.tenantSuperAdminId
-    ? [{ iud: actorScope.tenantSuperAdminId, nombre: 'Mi SuperAdmin' }]
-    : [];
 
   const getAccessTypeCodes = (route: RouteCatalogItem): string[] =>
     Array.isArray((route as any)?.accessType)
@@ -313,13 +320,28 @@ export default function ParametrizacionMenu() {
   );
 
   const derivedScope = (() => {
-    const s = !!tagForm.tagTenantSuperAdminId;
+    const s = tagForm.tagTenantSuperAdminIds.length > 0;
     const g = tagForm.tagTenantGlobalIds.length > 0;
     const c = !!tagForm.tagTenantCorporativoId;
     const multi = tagForm.tagTenantGlobalIds.length > 1;
+    const saMulti = tagForm.tagTenantSuperAdminIds.length > 1;
     if (!s && !g && !c) return { label: 'General', variant: 'secondary' as const, desc: 'Visible para todos los usuarios.' };
-    if (s && !g && !c) return { label: 'Solo SuperAdmin', variant: 'outline' as const, desc: 'Solo para el SuperAdmin asignado.' };
-    if (s && g && !c) return { label: 'Global + SuperAdmin', variant: 'outline' as const, desc: `Para ${multi ? 'varios Globals' : 'ese Global'} y SuperAdmin. No corporativos.` };
+    if (s && !g && !c) {
+      return {
+        label: 'Solo SuperAdmin',
+        variant: 'outline' as const,
+        desc: saMulti
+          ? `Solo para los ${tagForm.tagTenantSuperAdminIds.length} SuperAdmins seleccionados.`
+          : 'Solo para el SuperAdmin asignado.',
+      };
+    }
+    if (s && g && !c) {
+      return {
+        label: 'Global + SuperAdmin',
+        variant: 'outline' as const,
+        desc: `Para ${multi ? 'varios Globals' : 'ese Global'} y ${saMulti ? 'varios SuperAdmins' : 'SuperAdmin'}. No corporativos.`,
+      };
+    }
     if (!s && g && c) return { label: 'Global + Corporativo', variant: 'outline' as const, desc: 'Para ese corporativo y su global.' };
     if (!s && g && !c) return { label: multi ? 'Multi-Global' : 'Solo Global', variant: 'outline' as const, desc: multi ? `Aplica a ${tagForm.tagTenantGlobalIds.length} TenantGlobales.` : 'Solo para ese TenantGlobal.' };
     return { label: 'Personalizado', variant: 'outline' as const, desc: 'Combinacion de tenants.' };
@@ -425,7 +447,13 @@ export default function ParametrizacionMenu() {
   };
 
   const populateTagForm = (tag: RouteMenuTag) => {
-    const tSuperAdmin = tag.tenantSuperAdminId || tag.scope?.tenantSuperAdminId || null;
+    const rawSaIds: string[] = Array.isArray((tag as RouteMenuTag).tenantSuperAdminIds) && (tag as RouteMenuTag).tenantSuperAdminIds!.length > 0
+      ? ((tag as RouteMenuTag).tenantSuperAdminIds as string[])
+      : Array.isArray(tag.scope?.tenantSuperAdminIds) && (tag.scope as { tenantSuperAdminIds?: string[] }).tenantSuperAdminIds!.length > 0
+        ? (tag.scope as { tenantSuperAdminIds: string[] }).tenantSuperAdminIds
+        : (tag.tenantSuperAdminId || tag.scope?.tenantSuperAdminId)
+          ? [String(tag.tenantSuperAdminId || tag.scope?.tenantSuperAdminId)]
+          : [];
     const tCorp = tag.tenantCorporativoId || tag.scope?.tenantCorporativoId || null;
     // Prioridad: tenantGlobalIds array > scope.tenantGlobalIds > tenantGlobalId fallback
     const rawGlobalIds: string[] = Array.isArray((tag as any).tenantGlobalIds) && (tag as any).tenantGlobalIds.length > 0
@@ -445,7 +473,7 @@ export default function ParametrizacionMenu() {
       iconKey: tag.iconKey || 'USER',
       order: String(tag.order ?? 0),
       estado: tag.estado !== false,
-      tagTenantSuperAdminId: tSuperAdmin,
+      tagTenantSuperAdminIds: rawSaIds.filter(Boolean),
       tagTenantGlobalIds: rawGlobalIds.filter(Boolean) as string[],
       tagTenantCorporativoId: tCorp,
       permitirSinTenant: tag.permitirSinTenant === true,
@@ -617,7 +645,7 @@ export default function ParametrizacionMenu() {
 
     setSavingTag(true);
     try {
-      const tenantSuperAdminId = tagForm.tagTenantSuperAdminId || null;
+      const tenantSuperAdminIds = tagForm.tagTenantSuperAdminIds.filter(Boolean);
       const tenantGlobalIds = tagForm.tagTenantGlobalIds.filter(Boolean);
       const tenantCorporativoId = tagForm.tagTenantCorporativoId || null;
 
@@ -638,7 +666,7 @@ export default function ParametrizacionMenu() {
         iconKey: tagForm.iconKey,
         order: Number(tagForm.order || 0),
         estado: tagForm.estado,
-        tenantSuperAdminId,
+        tenantSuperAdminIds,
         tenantGlobalIds,
         tenantCorporativoId,
         permitirSinTenant: tagForm.permitirSinTenant,
@@ -819,24 +847,40 @@ export default function ParametrizacionMenu() {
               <div className="space-y-3">
                 <Label>Aplicacion por alcance</Label>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  {/* SuperAdmin */}
+                  {/* SuperAdmin — multi-selección; sin selección = alcance no restringe por SA */}
                   <div className="space-y-1">
                     <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">SuperAdmin</p>
-                    <Select
-                      value={tagForm.tagTenantSuperAdminId ?? '__none__'}
-                      onValueChange={(v) => setTagForm(prev => ({ ...prev, tagTenantSuperAdminId: v === '__none__' ? null : v }))}
-                      disabled={superAdminOptions.length === 0}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Sin asignar" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">— Sin asignar —</SelectItem>
-                        {superAdminOptions.map(opt => (
-                          <SelectItem key={opt.iud} value={opt.iud}>{opt.nombre}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <div className="border rounded-md p-2 space-y-1 max-h-40 overflow-y-auto bg-background">
+                      {superAdminTenants.length === 0 ? (
+                        <p className="text-xs text-muted-foreground px-1">Sin SuperAdmins disponibles</p>
+                      ) : (
+                        superAdminTenants.map((sa) => {
+                          const { primary } = describeTenantSuperAdminOption(sa);
+                          return (
+                            <label key={sa.iud} className="flex items-center gap-2 cursor-pointer text-sm py-0.5">
+                              <input
+                                type="checkbox"
+                                className="h-4 w-4 rounded border-gray-300 accent-primary"
+                                checked={tagForm.tagTenantSuperAdminIds.includes(sa.iud)}
+                                onChange={(e) => {
+                                  const checked = e.target.checked;
+                                  setTagForm((prev) => {
+                                    const next = checked
+                                      ? [...prev.tagTenantSuperAdminIds.filter((x) => x !== sa.iud), sa.iud]
+                                      : prev.tagTenantSuperAdminIds.filter((x) => x !== sa.iud);
+                                    return { ...prev, tagTenantSuperAdminIds: next };
+                                  });
+                                }}
+                              />
+                              <span className="leading-tight">{primary}</span>
+                            </label>
+                          );
+                        })
+                      )}
+                    </div>
+                    {tagForm.tagTenantSuperAdminIds.length > 0 && (
+                      <p className="text-xs text-muted-foreground">{tagForm.tagTenantSuperAdminIds.length} seleccionado(s)</p>
+                    )}
                   </div>
 
                   {/* Global — multi-selección con checkboxes */}
@@ -1033,7 +1077,15 @@ export default function ParametrizacionMenu() {
                     <p><span className="font-medium">Orden:</span> {tag.order}</p>
                       <div className="flex flex-wrap gap-2 pt-1">
                         {(() => {
-                        const hasSuper = !!(tag.tenantSuperAdminId || tag.scope?.tenantSuperAdminId);
+                        const saIds =
+                          Array.isArray((tag as RouteMenuTag).tenantSuperAdminIds) && (tag as RouteMenuTag).tenantSuperAdminIds!.length > 0
+                            ? (tag as RouteMenuTag).tenantSuperAdminIds!
+                            : Array.isArray(tag.scope?.tenantSuperAdminIds) && (tag.scope as { tenantSuperAdminIds?: string[] }).tenantSuperAdminIds!.length
+                              ? (tag.scope as { tenantSuperAdminIds: string[] }).tenantSuperAdminIds
+                              : tag.tenantSuperAdminId || tag.scope?.tenantSuperAdminId
+                                ? [String(tag.tenantSuperAdminId || tag.scope?.tenantSuperAdminId)]
+                                : [];
+                        const hasSuper = saIds.filter(Boolean).length > 0;
                         const globalIds = Array.isArray((tag as any).tenantGlobalIds) && (tag as any).tenantGlobalIds.length > 0
                           ? (tag as any).tenantGlobalIds
                           : Array.isArray(tag.scope?.tenantGlobalIds) && (tag.scope as any).tenantGlobalIds.length > 0

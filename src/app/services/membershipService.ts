@@ -98,7 +98,6 @@ export const createMembershipParametrization = async (parametrizationData: Membe
  * @returns {Promise<CurrentMembershipData>} The membership data.
  */
 export const getCurrentMembership = async (): Promise<CurrentMembershipData> => {
-    console.log('Fetching current membership data (mocked)');
     // Simulate an API call
     await new Promise(resolve => setTimeout(resolve, 500));
 

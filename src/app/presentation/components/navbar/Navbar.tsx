@@ -19,7 +19,8 @@ import ThemeToggle from "@/app/presentation/components/common/ThemeToggle";
 
 import { apiFetch } from "@/app/services/api";
 import { getPublicNavigationRoutes, getMenuUsuarioRoutes, MenuUsuarioItem } from "@/app/services/routeService";
-import { getGovernedLoginPath, getGovernedLogoutPath } from "@/app/services/governedNavigation";
+import { getGovernedLoginPath, getGovernedLogoutPath, getGovernedPublicHomePath } from "@/app/services/governedNavigation";
+import { appendPublicAttributionToInternalPath } from "@/app/services/publicAttributionParams";
 
 import type { NavbarProps } from '@/types/components';
 
@@ -154,17 +155,44 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
 
     const getUserInitials = (): string => {
         if (!user) return 'U';
-        return user.nombre?.charAt(0)?.toUpperCase() || user.correo?.charAt(0)?.toUpperCase() || 'U';
+        const perfil = user.perfil;
+        const displayName = perfil?.nombreCompleto || [perfil?.nombre, perfil?.apellido].filter(Boolean).join(' ') || user.nombre || user.correo;
+        return displayName?.charAt(0)?.toUpperCase() || 'U';
     };
 
     const getUserName = (): string => {
         if (!user) return 'Usuario';
-        return user.nombre || user.correo?.split('@')[0] || 'Usuario';
+        const perfil = user.perfil;
+        return perfil?.nombreCompleto
+            || [perfil?.nombre, perfil?.apellido].filter(Boolean).join(' ')
+            || user.nombre
+            || user.correo?.split('@')[0]
+            || 'Usuario';
     };
 
     const getUserEmail = (): string => {
         if (!user) return '';
         return user.correo || '';
+    };
+
+    const getUserRoleLabel = (): string => {
+        if (!user) return '';
+        const tenantRole = user.auth?.tenantScope?.rol?.nombre;
+        return String(user.rolInfo?.nombre || tenantRole || user.rol || user.role || '').trim();
+    };
+
+    const getUserProfileLabel = (): string => {
+        if (!user?.perfil) return '';
+        const profileTypeLabels: Record<string, string> = {
+            SUPER_ADMIN: 'Perfil SuperAdmin',
+            TENANT_GLOBAL: 'Perfil TenantGlobal',
+            TENANT_CORPORATIVO: 'Perfil corporativo',
+            CLIENTE: 'Perfil cliente',
+        };
+        const tipo = String(user.perfil.tipo || '').trim().toUpperCase();
+        const base = profileTypeLabels[tipo] || 'Perfil';
+        const detalle = user.perfil.cargo || user.perfil.cc || '';
+        return [base, detalle].filter(Boolean).join(' | ');
     };
 
     const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>): void => {
@@ -233,8 +261,8 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
                             <p className="text-lg font-bold text-primary">${cartTotal.toFixed(2)}</p>
                         </div>
                         <div className="flex gap-2 p-2 pt-0">
-                            <Button variant="outline" className="flex-1" onClick={() => navigate('/carrito')}>Ver Carrito</Button>
-                            <Button className="flex-1" onClick={() => navigate('/checkout')}>Finalizar Compra</Button>
+                            <Button variant="outline" className="flex-1" onClick={() => navigate(appendPublicAttributionToInternalPath('/carrito'))}>Ver Carrito</Button>
+                            <Button className="flex-1" onClick={() => navigate(appendPublicAttributionToInternalPath('/checkout'))}>Finalizar Compra</Button>
                         </div>
                     </>
                 )}
@@ -263,7 +291,7 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
                     </Avatar>
                 </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-56 backdrop-blur-lg border-none shadow-xl" align="end">
+            <DropdownMenuContent className="w-80 backdrop-blur-lg border-none shadow-xl" align="end">
                 <div className="flex items-center gap-2 p-3">
                     <Avatar className="h-9 w-9">
                         <AvatarFallback className="bg-primary text-primary-foreground text-sm">
@@ -273,11 +301,25 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
                     <div className="flex flex-col space-y-0.5">
                         <p className="text-sm font-medium leading-none">{getUserName()}</p>
                         <p className="text-xs leading-none text-muted-foreground">{getUserEmail()}</p>
+                        {(getUserRoleLabel() || getUserProfileLabel()) && (
+                            <div className="flex flex-wrap gap-1 pt-1">
+                                {getUserRoleLabel() && (
+                                    <Badge variant="secondary" className="h-5 rounded-md px-1.5 text-[10px]">
+                                        {getUserRoleLabel()}
+                                    </Badge>
+                                )}
+                                {getUserProfileLabel() && (
+                                    <Badge variant="outline" className="h-5 rounded-md px-1.5 text-[10px]">
+                                        {getUserProfileLabel()}
+                                    </Badge>
+                                )}
+                            </div>
+                        )}
                     </div>
                 </div>
                 <DropdownMenuSeparator />
                 {menuUsuarioItems.map((item) => (
-                    <DropdownMenuItem key={item.key ?? item.path} onClick={() => navigate(item.path)} className="cursor-pointer py-2.5">
+                    <DropdownMenuItem key={item.key ?? item.path} onClick={() => navigate(appendPublicAttributionToInternalPath(item.path))} className="cursor-pointer py-2.5">
                         {resolveIcon(item.icon)} {item.label}
                     </DropdownMenuItem>
                 ))}
@@ -294,7 +336,7 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
             <div className="hidden md:block"><ThemeToggle /></div>
             <div className="hidden md:block relative">{renderCartDropdown}</div>
             {user ? renderProfileDropdown : (
-                <Button variant="default" onClick={() => navigate(getGovernedLoginPath())} className="h-9 px-4 text-sm font-semibold">
+                <Button variant="default" onClick={() => navigate(appendPublicAttributionToInternalPath(getGovernedLoginPath()))} className="h-9 px-4 text-sm font-semibold">
                     <LogIn className="mr-2 h-4 w-4" /> Ingresar
                 </Button>
             )}
@@ -326,7 +368,7 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
                             const isActive = isLinkActive(item.path);
                             return (
                                 <SheetClose asChild key={item.label}>
-                                    <Link to={item.path} className={`flex items-center justify-between px-4 py-3 text-base font-medium rounded-xl transition-all duration-200 border ${isActive ? 'text-primary border-primary shadow-sm' : 'text-foreground border-transparent hover:bg-accent/50 hover:border-accent'}`}>
+                                    <Link to={appendPublicAttributionToInternalPath(item.path)} className={`flex items-center justify-between px-4 py-3 text-base font-medium rounded-xl transition-all duration-200 border ${isActive ? 'text-primary border-primary shadow-sm' : 'text-foreground border-transparent hover:bg-accent/50 hover:border-accent'}`}>
                                         <span className="font-semibold">{item.label}</span>
                                         <ChevronRight className={`h-4 w-4 ${isActive ? 'text-primary' : 'text-muted-foreground'}`} />
                                     </Link>
@@ -335,7 +377,7 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
                         })}
                         {menuUsuarioItems.map((item) => (
                             <SheetClose asChild key={item.key ?? item.path}>
-                                <Link to={item.path} className="flex items-center justify-between px-4 py-3 text-base font-medium rounded-xl transition-all duration-200 border border-transparent hover:bg-accent/50 hover:border-accent text-foreground">
+                                <Link to={appendPublicAttributionToInternalPath(item.path)} className="flex items-center justify-between px-4 py-3 text-base font-medium rounded-xl transition-all duration-200 border border-transparent hover:bg-accent/50 hover:border-accent text-foreground">
                                     <span className="font-semibold flex items-center">{resolveIcon(item.icon)} {item.label}</span>
                                     <ChevronRight className="h-4 w-4 text-muted-foreground" />
                                 </Link>
@@ -348,7 +390,7 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
                             <ThemeToggle />
                         </div>
                         <SheetClose asChild>
-                            <Button variant="outline" onClick={() => navigate('/carrito')} className="w-full justify-between font-semibold py-3 rounded-xl border-border/50 hover:border-primary/50">
+                            <Button variant="outline" onClick={() => navigate(appendPublicAttributionToInternalPath('/carrito'))} className="w-full justify-between font-semibold py-3 rounded-xl border-border/50 hover:border-primary/50">
                                 <span className="flex items-center"><ShoppingCart className="mr-3 h-4 w-4" /> Ver Carrito</span>
                                 <Badge variant="destructive" className="ml-2">{totalItems}</Badge>
                             </Button>
@@ -363,7 +405,7 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
                             </>
                         ) : (
                             <SheetClose asChild>
-                                <Button variant="default" onClick={() => navigate(getGovernedLoginPath())} className="w-full justify-start font-semibold py-3 rounded-xl">
+                                <Button variant="default" onClick={() => navigate(appendPublicAttributionToInternalPath(getGovernedLoginPath()))} className="w-full justify-start font-semibold py-3 rounded-xl">
                                     <LogIn className="mr-3 h-4 w-4" /> Ingresar
                                 </Button>
                             </SheetClose>
@@ -387,13 +429,13 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
                                     src={logoUrl}
                                     alt="Logo"
                                     className="h-7 md:h-8 max-w-[120px] object-contain cursor-pointer flex-shrink-0 hover:opacity-80 transition-opacity"
-                                    onClick={() => navigate("/")}
+                                    onClick={() => navigate(appendPublicAttributionToInternalPath(getGovernedPublicHomePath()))}
                                     onError={handleLogoError}
                                 />
                             ) : (
                                 <span
                                     className="text-xs text-muted-foreground italic px-1 cursor-pointer"
-                                    onClick={() => navigate("/")}
+                                    onClick={() => navigate(appendPublicAttributionToInternalPath(getGovernedPublicHomePath()))}
                                 >
                                     Sin logo
                                 </span>
@@ -404,7 +446,7 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
                             {menuItemsWithoutCart.map((item) => {
                                 const isActive = isLinkActive(item.path);
                                 return (
-                                    <Link key={item.label} to={item.path} className={`text-sm font-medium transition-all duration-200 h-full flex items-center px-4 relative ${isActive ? 'text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'}`}>
+                                    <Link key={item.label} to={appendPublicAttributionToInternalPath(item.path)} className={`text-sm font-medium transition-all duration-200 h-full flex items-center px-4 relative ${isActive ? 'text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'}`}>
                                         {item.label}
                                         {isActive && <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1/4 h-0.5 bg-primary rounded-full"></div>}
                                     </Link>

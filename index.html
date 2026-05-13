@@ -6,6 +6,63 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="X-UA-Compatible" content="ie=edge" />
 
+  <!--
+    Sync con ColorUtils.aplicarPaletaEnApp + DEFAULT_COLORES_APP (fallback si aún no carga el bundle).
+    Sobrescribe las variables antes del primer paint post–CSS crítico.
+  -->
+  <script>
+(function () {
+  function hexToHsl(hex) {
+    var clean = String(hex || '').replace('#', '');
+    if (!clean) return '';
+    var full = clean.length === 3 ? clean.split('').map(function (c) { return c + c; }).join('') : clean;
+    var r = parseInt(full.slice(0, 2), 16) / 255;
+    var g = parseInt(full.slice(2, 4), 16) / 255;
+    var b = parseInt(full.slice(4, 6), 16) / 255;
+    var max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+    var h = 0, s = 0, l = (max + min) / 2;
+    if (d !== 0) {
+      s = d / (1 - Math.abs(2 * l - 1));
+      switch (max) {
+        case r: h = ((g - b) / d + (g < b ? 6 : 0)) / 6; break;
+        case g: h = ((b - r) / d + 2) / 6; break;
+        default: h = ((r - g) / d + 4) / 6; break;
+      }
+    }
+    return '' + Math.round(h * 360) + ' ' + Math.round(s * 100) + '% ' + Math.round(l * 100) + '%';
+  }
+  function apl(c) {
+    var root = document.documentElement;
+    var H = hexToHsl;
+    root.style.setProperty('--background', H(c.COLOR_BG));
+    root.style.setProperty('--primary', H(c.COLOR_PRIMARY));
+    root.style.setProperty('--ring', H(c.COLOR_PRIMARY));
+    root.style.setProperty('--primary-foreground', '0 0% 100%');
+    root.style.setProperty('--accent', H(c.COLOR_ACCENT));
+    root.style.setProperty('--accent-foreground', H(c.COLOR_PRIMARY));
+    root.style.setProperty('--secondary', H(c.COLOR_SUNSET));
+    root.style.setProperty('--secondary-foreground', H(c.COLOR_PRIMARY));
+    root.style.setProperty('--muted', H(c.COLOR_LIGHT));
+    root.style.setProperty('--muted-foreground', H(c.COLOR_PRIMARY));
+    root.style.setProperty('--border', H(c.COLOR_LIGHT));
+    root.style.setProperty('--input', H(c.COLOR_LIGHT));
+    root.style.setProperty('--card', H(c.COLOR_CHAMPAGNE));
+    root.style.setProperty('--card-foreground', '222 84% 5%');
+    root.style.setProperty('--popover', H(c.COLOR_CHAMPAGNE));
+    root.style.setProperty('--popover-foreground', '222 84% 5%');
+    root.style.setProperty('--destructive', H(c.COLOR_PRIMARY));
+    root.style.setProperty('--destructive-foreground', '0 0% 100%');
+  }
+  try {
+    var raw = localStorage.getItem('mabs_paleta_activa');
+    if (!raw) return;
+    var j = JSON.parse(raw);
+    if (!j.COLOR_PRIMARY || !j.COLOR_BG) return;
+    apl(j);
+  } catch (e) {}
+})();
+  </script>
+
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="/assets/favicon.png">
   <script type="text/javascript" src="https://checkout.wompi.co/widget.js"></script>
@@ -13,7 +70,8 @@
 </head>
 
 <body>
-  <div id="root"></div>
+  <!-- Fondo = COLOR_BG por defecto (servidor) mientras llega JS y el fetch de paleta -->
+  <div id="root"><div id="__mabs_boot_shell" style="min-height:100vh;background-color:#FBD9E5"></div></div>
   <script type="module" src="/src/main.tsx"></script>
 </body>
 

@@ -2,11 +2,13 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { toast } from 'react-toastify';
 import {
   AlertTriangle,
+  Barcode,
   CheckCircle2,
   ClipboardList,
   Package,
   Pencil,
   Plus,
+  Printer,
   RefreshCcw,
   RotateCcw,
   Save,
@@ -25,20 +27,34 @@ import inventarioService, {
   type InventarioMovimiento,
   type InventarioOrdenCompra,
   type InventarioProveedor,
+  type RecepcionOrdenCompraResponse,
   type InventarioSaldo,
   type InventarioTipoMovimiento,
+  type InventarioTipoUnidadMedida,
   type InventarioUnidadMedida,
   type MetodoValuacion,
+  type MonedaInventarioConfig,
   type MotivoMovimiento,
   type StockActualItem,
   type TipoAjuste,
 } from '@/app/services/inventarioService';
+import { totalLineaOrdenCompra } from '@/app/presentation/pages/admin/utils/ordenCompraLineaCalculo';
 import productosService, { type BackendProducto } from '@/app/services/productosService';
 import { apiFetch } from '@/app/services/api';
+import { useAuth } from '@/app/providers/AuthProvider';
 import InventarioMenuTabs, { type InventarioTabValue } from './components/InventarioMenuTabs';
+import InventarioAjustesTab from './components/InventarioAjustesTab';
+import InventarioBodegasTab from './components/InventarioBodegasTab';
+import InventarioConciliacionTab from './components/InventarioConciliacionTab';
+import ConfigInventario from './components/ConfigInventario';
+import InventarioTrmConfiguracionTab from './components/InventarioTrmConfiguracionTab';
+import InventarioMovimientosTab from './components/InventarioMovimientosTab';
+import InventarioComprobanteEntradaModal, { type DocumentoSoporte } from './components/InventarioComprobanteEntradaModal';
 import InventarioOrdenCompraModal from './components/InventarioOrdenCompraModal';
+import InventarioOrdenComprasTab from './components/InventarioOrdenComprasTab';
 import InventarioProveedorModal, { type InventarioProveedorDraft } from './components/InventarioProveedorModal';
 import InventarioSkuModal, { type SkuForm } from './components/InventarioSkuModal';
+import InventarioStockTab from './components/InventarioStockTab';
 import InventarioTipoMovimientoModal, { type TipoMovimientoDraft } from './components/InventarioTipoMovimientoModal';
 import InventarioUnidadMedidaModal, { type UnidadMedidaDraft } from './components/InventarioUnidadMedidaModal';
 import {
@@ -56,6 +72,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -69,6 +86,67 @@ const MONEY = new Intl.NumberFormat('es-CO', {
   currency: 'COP',
   maximumFractionDigits: 0,
 });
+
+const EAN13_L: Record<string, string> = {
+  '0': '0001101', '1': '0011001', '2': '0010011', '3': '0111101', '4': '0100011',
+  '5': '0110001', '6': '0101111', '7': '0111011', '8': '0110111', '9': '0001011',
+};
+const EAN13_G: Record<string, string> = {
+  '0': '0100111', '1': '0110011', '2': '0011011', '3': '0100001', '4': '0011101',
+  '5': '0111001', '6': '0000101', '7': '0010001', '8': '0001001', '9': '0010111',
+};
+const EAN13_R: Record<string, string> = {
+  '0': '1110010', '1': '1100110', '2': '1101100', '3': '1000010', '4': '1011100',
+  '5': '1001110', '6': '1010000', '7': '1000100', '8': '1001000', '9': '1110100',
+};
+const EAN13_PARITY: Record<string, string> = {
+  '0': 'LLLLLL', '1': 'LLGLGG', '2': 'LLGGLG', '3': 'LLGGGL', '4': 'LGLLGG',
+  '5': 'LGGLLG', '6': 'LGGGLL', '7': 'LGLGLG', '8': 'LGLGGL', '9': 'LGGLGL',
+};
+
+const buildEan13Bits = (codigo: string): string | null => {
+  const digits = String(codigo || '').replace(/\D/g, '');
+  if (digits.length !== 13) return null;
+  const parity = EAN13_PARITY[digits[0]];
+  const left = digits.slice(1, 7).split('').map((digit, index) => (
+    parity[index] === 'L' ? EAN13_L[digit] : EAN13_G[digit]
+  )).join('');
+  const right = digits.slice(7).split('').map((digit) => EAN13_R[digit]).join('');
+  return `101${left}01010${right}101`;
+};
+
+const BarcodePreview = ({ codigo }: { codigo?: string }): React.ReactElement => {
+  const clean = String(codigo || '').replace(/\D/g, '');
+  const bits = buildEan13Bits(clean);
+  if (!clean) return <span className="text-xs text-muted-foreground">Sin codigo</span>;
+  if (!bits) {
+    return (
+      <div className="space-y-1">
+        <div className="flex h-8 w-36 items-end gap-px rounded bg-white px-2 py-1">
+          {clean.split('').map((digit, index) => (
+            <span
+              key={`${digit}-${index}`}
+              className="block bg-foreground"
+              style={{ width: 1 + (Number(digit) % 3), height: 12 + ((Number(digit) + index) % 18) }}
+            />
+          ))}
+        </div>
+        <p className="font-mono text-[10px] leading-none">{clean}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-1">
+      <svg viewBox={`0 0 ${bits.length} 48`} className="h-10 w-40 rounded bg-white px-1" preserveAspectRatio="none" aria-label={`Codigo de barras ${clean}`}>
+        {bits.split('').map((bit, index) => bit === '1' ? (
+          <rect key={index} x={index} y="4" width="1" height="36" fill="currentColor" />
+        ) : null)}
+      </svg>
+      <p className="font-mono text-[10px] leading-none tracking-[0.18em]">{clean}</p>
+    </div>
+  );
+};
 
 const MOTIVOS: MotivoMovimiento[] = ['COMPRA', 'VENTA', 'MERMA', 'DANO', 'ERROR_CONTEO', 'PERDIDA', 'OTRO'];
 const CAUSALES_AJUSTE = ['MERMA', 'DANO', 'ERROR_CONTEO', 'PERDIDA', 'OTRO'];
@@ -109,6 +187,8 @@ const bodegaFormVacio = (): BodegaFormState => ({
 type MovimientoForm = {
   tipo: 'ENTRADA' | 'SALIDA';
   tipoMovimientoConfigId: string;
+  ordenCompraId: string;
+  ordenCompraItemIndex: string;
   sku: string;
   bodega: string;
   cantidad: string;
@@ -121,6 +201,8 @@ type MovimientoForm = {
 const movimientoInicial: MovimientoForm = {
   tipo: 'ENTRADA',
   tipoMovimientoConfigId: '',
+  ordenCompraId: '',
+  ordenCompraItemIndex: '',
   sku: '',
   bodega: '',
   cantidad: '',
@@ -142,6 +224,7 @@ const ajusteInicial: AjustePayload = {
 
 const skuFormInicial: SkuForm = {
   sku: '',
+  codigoBarras: '',
   nombre: '',
   precio: '1',
   unidadMedida: 'UNIDAD',
@@ -160,8 +243,12 @@ const tipoMovimientoDraftInicial: TipoMovimientoDraft = {
 const unidadMedidaDraftInicial: UnidadMedidaDraft = {
   codigo: '',
   nombre: '',
+  tipoUnidad: '',
   descripcion: '',
   estado: true,
+  esUnidadBaseInventario: true,
+  unidadBaseRelacionadaId: '',
+  factorConversionHaciaBase: '',
 };
 
 const formatDate = (value?: string): string => {
@@ -178,7 +265,11 @@ const estadoBadge = (estado: string): 'default' | 'secondary' | 'destructive' | 
   return 'outline';
 };
 
+const getProductoId = (producto: BackendProducto): string =>
+  String(producto.iud || producto._id || producto.id || '').trim();
+
 export default function Inventario(): React.ReactElement {
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [config, setConfig] = useState<InventarioConfig | null>(null);
@@ -203,15 +294,40 @@ export default function Inventario(): React.ReactElement {
   const [ajusteFiltro, setAjusteFiltro] = useState<EstadoAjuste | ''>('');
   const [activeTab, setActiveTab] = useState<InventarioTabValue>('stock');
   const [skuModalOpen, setSkuModalOpen] = useState(false);
+  const [skuCatalogoOpen, setSkuCatalogoOpen] = useState(false);
+  const [skuCatalogoFiltro, setSkuCatalogoFiltro] = useState('');
+  const [skuBarcodePreview, setSkuBarcodePreview] = useState<BackendProducto | null>(null);
   const [skuForm, setSkuForm] = useState<SkuForm>(skuFormInicial);
   const [tipoModalOpen, setTipoModalOpen] = useState(false);
   const [tipoMovimientoDraft, setTipoMovimientoDraft] = useState<TipoMovimientoDraft>(tipoMovimientoDraftInicial);
   const [unidadModalOpen, setUnidadModalOpen] = useState(false);
   const [unidadMedidaDraft, setUnidadMedidaDraft] = useState<UnidadMedidaDraft>(unidadMedidaDraftInicial);
+  const [unidadDeleteTarget, setUnidadDeleteTarget] = useState<InventarioUnidadMedida | null>(null);
+  const [unidadDeleteBusy, setUnidadDeleteBusy] = useState(false);
+  const [tiposUnidadMedida, setTiposUnidadMedida] = useState<InventarioTipoUnidadMedida[]>([]);
   const [proveedoresCompra, setProveedoresCompra] = useState<InventarioProveedor[]>([]);
   const [proveedorModalOpen, setProveedorModalOpen] = useState(false);
   const [ordenCompraModalOpen, setOrdenCompraModalOpen] = useState(false);
+  const [ordenEditando, setOrdenEditando] = useState<InventarioOrdenCompra | null>(null);
   const [ordenesCompra, setOrdenesCompra] = useState<InventarioOrdenCompra[]>([]);
+  const [comprobanteEntradaOpen, setComprobanteEntradaOpen] = useState(false);
+  const [comprobanteEntradaData, setComprobanteEntradaData] = useState<RecepcionOrdenCompraResponse | null>(null);
+  const [comprobanteEntradaDoc, setComprobanteEntradaDoc] = useState<DocumentoSoporte | null>(null);
+
+  const handleOrdenCompraModalChange = (nextOpen: boolean): void => {
+    setOrdenCompraModalOpen(nextOpen);
+    if (!nextOpen) setOrdenEditando(null);
+  };
+
+  const abrirNuevaOrdenCompra = (): void => {
+    setOrdenEditando(null);
+    setOrdenCompraModalOpen(true);
+  };
+
+  const abrirEditarOrdenCompra = (oc: InventarioOrdenCompra): void => {
+    setOrdenEditando(oc);
+    setOrdenCompraModalOpen(true);
+  };
 
   const resumen = useMemo(() => {
     const valorTotal = stockActual.reduce((acc, item) => {
@@ -240,6 +356,31 @@ export default function Inventario(): React.ReactElement {
       .sort((a, b) => String(a.sku).localeCompare(String(b.sku))),
     [productosSku]
   );
+  const skuCatalogoFiltrado = useMemo(() => {
+    const query = skuCatalogoFiltro.trim().toLowerCase();
+    if (!query) return skuOptions;
+    const queryDigits = query.replace(/\D/g, '');
+    return skuOptions.filter((producto) => {
+      const sku = String(producto.sku || '').toLowerCase();
+      const nombre = String(producto.nombre || '').toLowerCase();
+      const codigoBarras = String(producto.codigoBarras || '').toLowerCase();
+      return sku.includes(query)
+        || nombre.includes(query)
+        || codigoBarras.includes(query)
+      || (!!queryDigits && codigoBarras.includes(queryDigits));
+    });
+  }, [skuCatalogoFiltro, skuOptions]);
+  const tenantScope = user?.auth?.tenantScope || {};
+  const puedeGestionarSku = Boolean(
+    user?.tenantSuperAdminId
+    || user?.tenantGlobalId
+    || tenantScope?.tenantSuperAdminId
+    || tenantScope?.tenantGlobalId
+  );
+  /** Sesión con tenantSuperAdmin: puede editar/eliminar órdenes aunque no estén ABIERTA (alineado al backend). */
+  const esUsuarioTenantSuperAdmin = Boolean(
+    String(user?.tenantSuperAdminId || tenantScope?.tenantSuperAdminId || '').trim()
+  );
 
   const tiposMovimientoActivos = useMemo(
     () => tiposMovimiento.filter((tipo) => tipo.estado),
@@ -247,20 +388,64 @@ export default function Inventario(): React.ReactElement {
   );
 
   const sumSubtotalOrdenCompra = (oc: InventarioOrdenCompra): number =>
-    (oc.items || []).reduce((acc, it) => {
-      const s = Number(it.subtotal);
-      if (!Number.isNaN(s) && s > 0) return acc + s;
-      const q = Number(it.cantidadOrdenada) || 0;
-      const p = Number(it.costoUnitario) || 0;
-      const d = Number(it.descuento) || 0;
-      const im = Number(it.impuestos) || 0;
-      return acc + Math.max(0, Math.round((q * p - d + im + Number.EPSILON) * 100) / 100);
-    }, 0);
+    (oc.items || []).reduce((acc, it) => acc + totalLineaOrdenCompra(it), 0);
+
+  const calcularCostoUnitarioOrdenCompra = (
+    item: InventarioOrdenCompra['items'][number]
+  ): number => {
+    const cantidadOrdenada = Number(item.cantidadOrdenada || 0);
+    const lineTotal = totalLineaOrdenCompra(item);
+    if (cantidadOrdenada > 0 && lineTotal > 0) {
+      return Math.round(((lineTotal / cantidadOrdenada) + Number.EPSILON) * 100) / 100;
+    }
+
+    return Math.round((Number(item.costoUnitario || 0) + Number.EPSILON) * 100) / 100;
+  };
+
+  const seleccionarLineaOrdenCompraMovimiento = (ordenCompraId: string, itemIndexText: string): void => {
+    const orden = ordenesCompra.find((oc) => oc._id === ordenCompraId);
+    const itemIndex = Number(itemIndexText);
+    const item = orden?.items?.[itemIndex];
+    const documentoNumero = orden?.numeroRemision?.trim() || orden?.numeroFacturaElectronico?.trim() || orden?.numeroOrden || '';
+    if (!orden || !item || !Number.isInteger(itemIndex)) {
+      setMovimientoForm((prev) => ({
+        ...prev,
+        ordenCompraId,
+        ordenCompraItemIndex: itemIndexText,
+        sku: '',
+        bodega: '',
+        cantidad: '',
+        costoUnitario: '',
+        motivo: 'COMPRA',
+        documentoTipo: 'RECEPCION_OC',
+        documentoNumero,
+      }));
+      return;
+    }
+    const pendiente = Math.max(0, Number(item.cantidadOrdenada || 0) - Number(item.cantidadRecibida || 0));
+    const cantidadReferencia = pendiente > 0
+      ? pendiente
+      : Number((item as any).cantidadRecibida || 0) || Number(item.cantidadOrdenada || 0);
+    const costoUnitarioCalculado = calcularCostoUnitarioOrdenCompra(item);
+    setMovimientoForm((prev) => ({
+      ...prev,
+      ordenCompraId,
+      ordenCompraItemIndex: itemIndexText,
+      tipo: 'ENTRADA',
+      sku: item.sku,
+      bodega: item.bodega,
+      cantidad: cantidadReferencia > 0 ? String(cantidadReferencia) : '',
+      costoUnitario: String(costoUnitarioCalculado),
+      motivo: 'COMPRA',
+      documentoTipo: 'RECEPCION_OC',
+      documentoNumero,
+    }));
+  };
 
   const loadData = async (): Promise<void> => {
     try {
       setLoading(true);
-      const [configResp, bodegasResp, stockResp, ajustesResp, productosResp, tiposResp, unidadesResp, proveedoresResp, ordenesResp] = await Promise.all([
+      const [configResp, bodegasResp, stockResp, ajustesResp, productosResp, tiposResp, unidadesResp, tiposUnidadResp, proveedoresResp, ordenesResp] = await Promise.all([
         inventarioService.obtenerConfig(),
         inventarioService.listarBodegas(),
         inventarioService.stockActual(),
@@ -268,6 +453,7 @@ export default function Inventario(): React.ReactElement {
         productosService.listarProductosAdmin({ tipo: 'FISICO', estadoCatalogo: 'ACTIVO' }),
         inventarioService.listarTiposMovimientoAdmin(),
         inventarioService.listarUnidadesMedidaAdmin(),
+        inventarioService.listarTiposUnidadMedida(),
         inventarioService.listarProveedoresCompra(),
         inventarioService.listarOrdenesCompra({ limit: 50 }),
       ]);
@@ -278,6 +464,7 @@ export default function Inventario(): React.ReactElement {
       setProductosSku(productosResp.filter((producto) => Boolean(producto.sku)));
       setTiposMovimiento(tiposResp);
       setUnidadesMedida(unidadesResp);
+      setTiposUnidadMedida(tiposUnidadResp);
       setProveedoresCompra(proveedoresResp);
       setOrdenesCompra(ordenesResp);
       if (!movimientoForm.tipoMovimientoConfigId) {
@@ -305,8 +492,14 @@ export default function Inventario(): React.ReactElement {
   };
 
   const refreshOrdenesCompra = async (): Promise<void> => {
-    const data = await inventarioService.listarOrdenesCompra({ limit: 50 });
-    setOrdenesCompra(data);
+    const [ordenes, stock, kardexActualizado] = await Promise.all([
+      inventarioService.listarOrdenesCompra({ limit: 50 }),
+      inventarioService.stockActual(),
+      inventarioService.listarKardex({ limit: 50 }),
+    ]);
+    setOrdenesCompra(ordenes);
+    setStockActual(stock);
+    setKardex(kardexActualizado);
   };
 
   useEffect(() => {
@@ -341,29 +534,35 @@ export default function Inventario(): React.ReactElement {
   };
 
   const refreshKardex = async (): Promise<void> => {
+    const sku = stockFiltro.sku.trim();
+    const bodega = stockFiltro.bodega.trim();
     const data = await inventarioService.listarKardex({
-      sku: stockFiltro.sku,
-      bodega: stockFiltro.bodega,
+      sku: sku || undefined,
+      bodega: bodega || undefined,
       limit: 100,
     });
     setKardex(data);
   };
 
   const consultarStock = async (): Promise<void> => {
-    if (!stockFiltro.sku.trim() || !stockFiltro.bodega.trim()) {
-      toast.error('SKU y bodega son obligatorios para consultar stock.');
+    const sku = stockFiltro.sku.trim();
+    const bodega = stockFiltro.bodega.trim();
+
+    if (!sku && !bodega) {
+      toast.error('Selecciona una bodega o ingresa un SKU para consultar stock.');
       return;
     }
 
     try {
-      const [saldo] = await Promise.all([
-        inventarioService.obtenerStock({
-          sku: stockFiltro.sku.trim(),
-          bodega: stockFiltro.bodega.trim(),
-        }),
+      const [saldo, stockFiltrado] = await Promise.all([
+        sku && bodega
+          ? inventarioService.obtenerStock({ sku, bodega })
+          : Promise.resolve(null),
+        inventarioService.stockActual(bodega || undefined),
         refreshKardex(),
       ]);
       setStockConsulta(saldo);
+      setStockActual(stockFiltrado);
     } catch (error) {
       console.error('Error consultando stock:', error);
       toast.error('No se pudo consultar el stock.');
@@ -399,6 +598,20 @@ export default function Inventario(): React.ReactElement {
     } catch (error) {
       console.error('Error cerrando periodo:', error);
       toast.error('No se pudo cerrar el periodo.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const guardarMonedaInventario = async (payload: MonedaInventarioConfig): Promise<void> => {
+    try {
+      setSaving(true);
+      const data = await inventarioService.actualizarMonedaInventario(payload);
+      setConfig(data);
+      toast.success('Moneda de inventario actualizada.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No se pudo actualizar la moneda de inventario.');
+      throw error;
     } finally {
       setSaving(false);
     }
@@ -545,9 +758,70 @@ export default function Inventario(): React.ReactElement {
       toast.error('El documento soporte es obligatorio.');
       return;
     }
+    if (tipoSeleccionado.naturaleza === 'ENTRADA' && movimientoForm.motivo === 'COMPRA' && movimientoForm.ordenCompraId) {
+      const orden = ordenesCompra.find((oc) => oc._id === movimientoForm.ordenCompraId);
+      const itemIndex = Number(movimientoForm.ordenCompraItemIndex);
+      const item = orden?.items?.[itemIndex];
+      const pendiente = item ? Math.max(0, Number(item.cantidadOrdenada || 0) - Number(item.cantidadRecibida || 0)) : 0;
+      if (!orden || !item || !Number.isInteger(itemIndex)) {
+        toast.error('Selecciona la linea de la orden de compra.');
+        return;
+      }
+      if (
+        movimientoForm.sku.trim().toUpperCase() !== String(item.sku || '').trim().toUpperCase() ||
+        movimientoForm.bodega.trim() !== String(item.bodega || '').trim()
+      ) {
+        toast.error('El SKU y la bodega deben corresponder a la linea seleccionada de la OC.');
+        return;
+      }
+      if (pendiente <= 0) {
+        toast.error('La linea seleccionada de la OC ya no tiene cantidades pendientes por recibir.');
+        return;
+      }
+      if (cantidad > pendiente) {
+        toast.error(`La cantidad excede el pendiente de la OC (${pendiente}).`);
+        return;
+      }
+    }
 
     try {
       setSaving(true);
+      if (tipoSeleccionado.naturaleza === 'ENTRADA' && movimientoForm.motivo === 'COMPRA' && movimientoForm.ordenCompraId) {
+        const itemIndex = Number(movimientoForm.ordenCompraItemIndex);
+        const data = await inventarioService.registrarRecepcionOrdenCompra(movimientoForm.ordenCompraId, {
+          numeroRecepcion: movimientoForm.documentoNumero.trim(),
+          documentoSoporte: {
+            tipo: movimientoForm.documentoTipo.trim(),
+            numero: movimientoForm.documentoNumero.trim(),
+          },
+          items: [{
+            ordenItemIndex: itemIndex,
+            sku: movimientoForm.sku.trim(),
+            cantidadRecibida: cantidad,
+          }],
+        });
+        setComprobanteEntradaData(data);
+        setComprobanteEntradaDoc({
+          tipo: movimientoForm.documentoTipo.trim(),
+          numero: movimientoForm.documentoNumero.trim(),
+        });
+        setComprobanteEntradaOpen(true);
+        setOrdenesCompra((prev) => prev.map((oc) => (oc._id === data.orden._id ? data.orden : oc)));
+        setMovimientoForm((prev) => ({
+          ...movimientoInicial,
+          tipo: tipoSeleccionado.naturaleza,
+          tipoMovimientoConfigId: prev.tipoMovimientoConfigId,
+          bodega: prev.bodega,
+        }));
+        const [stock, kardexActualizado] = await Promise.all([
+          inventarioService.stockActual(),
+          inventarioService.listarKardex({ limit: 100 }),
+        ]);
+        setStockActual(stock);
+        setKardex(kardexActualizado);
+        toast.success('Recepcion registrada en kardex.');
+        return;
+      }
       const payload = {
         sku: movimientoForm.sku.trim(),
         tipoMovimientoConfigId: movimientoForm.tipoMovimientoConfigId,
@@ -645,6 +919,7 @@ export default function Inventario(): React.ReactElement {
       setSaving(true);
       const created = await productosService.crearProductoAdmin({
         sku,
+        codigoBarras: skuForm.codigoBarras.trim() || undefined,
         nombre,
         precio,
         moneda: 'COP',
@@ -655,7 +930,8 @@ export default function Inventario(): React.ReactElement {
         descripcionCorta: nombre,
         estadoCatalogo: 'ACTIVO',
       });
-      setProductosSku((prev) => [...prev.filter((producto) => producto.iud !== created.iud), created]);
+      const createdId = getProductoId(created);
+      setProductosSku((prev) => [...prev.filter((producto) => getProductoId(producto) !== createdId), created]);
       setMovimientoForm((prev) => ({ ...prev, sku: created.sku || sku }));
       setSkuForm(skuFormInicial);
       setSkuModalOpen(false);
@@ -671,6 +947,139 @@ export default function Inventario(): React.ReactElement {
   const abrirModalTiposMovimiento = (): void => {
     setTipoMovimientoDraft(tipoMovimientoDraftInicial);
     setTipoModalOpen(true);
+  };
+
+  const abrirModalSkuCatalogo = (): void => {
+    setSkuCatalogoFiltro('');
+    setSkuCatalogoOpen(true);
+  };
+
+  const seleccionarSkuCatalogo = (producto: BackendProducto): void => {
+    const sku = String(producto.sku || '').trim().toUpperCase();
+    if (!sku) return;
+    setMovimientoForm((prev) => ({ ...prev, sku }));
+    setSkuCatalogoOpen(false);
+    toast.success(`SKU ${sku} seleccionado.`);
+  };
+
+  const desactivarSkuCatalogo = async (producto: BackendProducto): Promise<void> => {
+    const productoId = getProductoId(producto);
+    if (!productoId) {
+      toast.error('No se encontro el ID del SKU.');
+      return;
+    }
+    if (!puedeGestionarSku) {
+      toast.error('Tu scope no permite desactivar SKU.');
+      return;
+    }
+    if (!window.confirm(`Deseas desactivar el SKU ${producto.sku || producto.nombre}?`)) return;
+    try {
+      setSaving(true);
+      await productosService.desactivarProductoAdmin(productoId);
+      setProductosSku((prev) => prev.filter((item) => getProductoId(item) !== productoId));
+      toast.success('SKU desactivado.');
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo desactivar el SKU.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const eliminarSkuCatalogo = async (producto: BackendProducto): Promise<void> => {
+    const productoId = getProductoId(producto);
+    if (!productoId) {
+      toast.error('No se encontro el ID del SKU.');
+      return;
+    }
+    if (!puedeGestionarSku) {
+      toast.error('Tu scope no permite eliminar SKU.');
+      return;
+    }
+    if (!window.confirm(`Esta accion elimina definitivamente el SKU ${producto.sku || producto.nombre}. Deseas continuar?`)) return;
+    try {
+      setSaving(true);
+      await productosService.eliminarProductoAdmin(productoId);
+      setProductosSku((prev) => prev.filter((item) => getProductoId(item) !== productoId));
+      toast.success('SKU eliminado.');
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo eliminar el SKU.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const generarCodigoSkuCatalogo = async (producto: BackendProducto): Promise<void> => {
+    const productoId = getProductoId(producto);
+    if (!productoId) {
+      toast.error('No se encontro el ID del SKU.');
+      return;
+    }
+    if (!puedeGestionarSku) {
+      toast.error('Tu scope no permite generar codigo de barras.');
+      return;
+    }
+    try {
+      setSaving(true);
+      const actualizado = await productosService.actualizarProductoAdmin(productoId, { codigoBarras: '' });
+      setProductosSku((prev) => prev.map((item) => (getProductoId(item) === productoId ? { ...item, ...actualizado } : item)));
+      toast.success('Codigo de barras generado.');
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo generar el codigo de barras.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const imprimirCodigoBarrasSku = (producto: BackendProducto | null): void => {
+    const codigo = String(producto?.codigoBarras || '').replace(/\D/g, '');
+    if (!producto || !codigo) {
+      toast.error('Este SKU no tiene codigo de barras para imprimir.');
+      return;
+    }
+    const bits = buildEan13Bits(codigo);
+    if (!bits) {
+      toast.error('Solo se puede imprimir la zebra EAN-13 para codigos de 13 digitos.');
+      return;
+    }
+    const bars = bits.split('').map((bit, index) => (
+      bit === '1' ? `<rect x="${index}" y="10" width="1" height="70" fill="#111827" />` : ''
+    )).join('');
+    const label = `${producto.sku || ''} ${producto.nombre || ''}`.trim();
+    const printWindow = window.open('', '_blank', 'width=420,height=320');
+    if (!printWindow) {
+      toast.error('No se pudo abrir la ventana de impresion.');
+      return;
+    }
+    printWindow.document.write(`
+      <!doctype html>
+      <html>
+        <head>
+          <title>Codigo de barras ${codigo}</title>
+          <style>
+            body { margin: 0; font-family: Arial, sans-serif; color: #111827; }
+            .label { width: 320px; padding: 18px; text-align: center; }
+            .name { font-size: 12px; font-weight: 700; margin-bottom: 8px; }
+            svg { width: 260px; height: 120px; }
+            .code { font-family: monospace; font-size: 14px; letter-spacing: 4px; margin-top: 4px; }
+            @media print { body { margin: 0; } .label { page-break-inside: avoid; } }
+          </style>
+        </head>
+        <body>
+          <div class="label">
+            <div class="name">${label}</div>
+            <svg viewBox="0 0 ${bits.length} 90" preserveAspectRatio="none">${bars}</svg>
+            <div class="code">${codigo}</div>
+          </div>
+          <script>
+            window.onload = function () {
+              window.focus();
+              window.print();
+            };
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
   };
 
   const editarTipoMovimiento = (tipo: InventarioTipoMovimiento): void => {
@@ -722,12 +1131,24 @@ export default function Inventario(): React.ReactElement {
   };
 
   const editarUnidadMedida = (unidad: InventarioUnidadMedida): void => {
+    const rel = unidad.unidadBaseRelacionada;
+    const relId =
+      rel && typeof rel === 'object' && '_id' in rel && rel._id
+        ? String(rel._id)
+        : '';
     setUnidadMedidaDraft({
       _id: unidad._id,
       codigo: unidad.codigo,
       nombre: unidad.nombre,
+      tipoUnidad: unidad.tipoUnidad || 'UNIDAD',
       descripcion: unidad.descripcion || '',
       estado: unidad.estado,
+      esUnidadBaseInventario: unidad.esUnidadBaseInventario !== false,
+      unidadBaseRelacionadaId: relId,
+      factorConversionHaciaBase:
+        unidad.factorConversionHaciaBase != null && Number.isFinite(Number(unidad.factorConversionHaciaBase))
+          ? String(unidad.factorConversionHaciaBase)
+          : '',
     });
   };
 
@@ -736,12 +1157,42 @@ export default function Inventario(): React.ReactElement {
       toast.error('Codigo y nombre son obligatorios.');
       return;
     }
+    if (!unidadMedidaDraft.tipoUnidad) {
+      toast.error('Seleccione el tipo de unidad.');
+      return;
+    }
+    if (!unidadMedidaDraft.esUnidadBaseInventario) {
+      if (!unidadMedidaDraft.unidadBaseRelacionadaId.trim()) {
+        toast.error('Seleccione la unidad base relacionada.');
+        return;
+      }
+      const factorNum = Number(String(unidadMedidaDraft.factorConversionHaciaBase).replace(',', '.'));
+      if (!Number.isFinite(factorNum) || factorNum <= 0) {
+        toast.error('Indique un factor de conversión válido mayor que 0.');
+        return;
+      }
+    }
+
+    const payload: Partial<Omit<InventarioUnidadMedida, '_id'>> & {
+      unidadBaseRelacionadaId?: string;
+    } = {
+      codigo: unidadMedidaDraft.codigo.trim(),
+      nombre: unidadMedidaDraft.nombre.trim(),
+      descripcion: unidadMedidaDraft.descripcion.trim(),
+      tipoUnidad: unidadMedidaDraft.tipoUnidad,
+      estado: unidadMedidaDraft.estado,
+      esUnidadBaseInventario: unidadMedidaDraft.esUnidadBaseInventario,
+    };
+    if (!unidadMedidaDraft.esUnidadBaseInventario) {
+      payload.unidadBaseRelacionadaId = unidadMedidaDraft.unidadBaseRelacionadaId.trim();
+      payload.factorConversionHaciaBase = Number(String(unidadMedidaDraft.factorConversionHaciaBase).replace(',', '.'));
+    }
 
     try {
       setSaving(true);
       const saved = unidadMedidaDraft._id
-        ? await inventarioService.actualizarUnidadMedida(unidadMedidaDraft._id, unidadMedidaDraft)
-        : await inventarioService.crearUnidadMedida(unidadMedidaDraft);
+        ? await inventarioService.actualizarUnidadMedida(unidadMedidaDraft._id, payload)
+        : await inventarioService.crearUnidadMedida(payload as Omit<InventarioUnidadMedida, '_id'>);
 
       setUnidadesMedida((prev) => {
         const exists = prev.some((unidad) => unidad._id === saved._id);
@@ -761,29 +1212,72 @@ export default function Inventario(): React.ReactElement {
     }
   };
 
-  const eliminarUnidadMedida = async (unidad: InventarioUnidadMedida): Promise<void> => {
+  const crearTipoUnidadMedida = async (payload: {
+    codigo?: string;
+    nombre: string;
+    descripcion?: string;
+  }): Promise<InventarioTipoUnidadMedida> => {
+    const saved = await inventarioService.crearTipoUnidadMedida(payload);
+    setTiposUnidadMedida((prev) => {
+      const exists = prev.some((tipo) => tipo._id === saved._id || tipo.codigo === saved.codigo);
+      const next = exists ? prev.map((tipo) => (tipo._id === saved._id || tipo.codigo === saved.codigo ? saved : tipo)) : [...prev, saved];
+      return next.sort((a, b) => a.nombre.localeCompare(b.nombre));
+    });
+    setUnidadMedidaDraft((prev) => ({ ...prev, tipoUnidad: saved.codigo }));
+    return saved;
+  };
+
+  const inactivarUnidadMedida = async (unidad: InventarioUnidadMedida): Promise<void> => {
+    if (!unidad.estado) return;
     try {
       setSaving(true);
-      await inventarioService.eliminarUnidadMedida(unidad._id);
+      const updated = await inventarioService.actualizarUnidadMedida(unidad._id, { estado: false });
       setUnidadesMedida((prev) => {
-        const next = prev.filter((u) => u._id !== unidad._id);
+        const next = prev
+          .map((u) => (u._id === updated._id ? { ...u, ...updated } : u))
+          .sort((a, b) => a.nombre.localeCompare(b.nombre));
         setSkuForm((p) => {
           if (p.unidadMedida !== unidad.codigo) return p;
-          const first = next.find((u) => u.estado);
+          const first = next.find((x) => x.estado);
           return { ...p, unidadMedida: first?.codigo ?? 'UNIDAD' };
         });
         return next;
       });
-      setUnidadMedidaDraft((d) => (d._id === unidad._id ? unidadMedidaDraftInicial : d));
-      toast.success('Unidad eliminada.');
+      setUnidadMedidaDraft((d) => (d._id === unidad._id ? { ...d, estado: false } : d));
+      toast.success('Unidad inactivada.');
     } catch (error) {
-      console.error('Error eliminando unidad de medida:', error);
+      console.error('Error inactivando unidad de medida:', error);
       const msg =
-        error instanceof Error ? error.message.replace(/^\[\d+\]\s*/, '') : 'No se pudo eliminar la unidad.';
+        error instanceof Error ? error.message.replace(/^\[\d+\]\s*/, '') : 'No se pudo inactivar la unidad.';
       toast.error(msg);
       throw error;
     } finally {
       setSaving(false);
+    }
+  };
+
+  const confirmarEliminarUnidadMedida = async (): Promise<void> => {
+    if (!unidadDeleteTarget) return;
+    try {
+      setUnidadDeleteBusy(true);
+      await inventarioService.eliminarUnidadMedida(unidadDeleteTarget._id);
+      setUnidadesMedida((prev) => {
+        const next = prev.filter((u) => u._id !== unidadDeleteTarget._id);
+        setSkuForm((p) => {
+          if (p.unidadMedida !== unidadDeleteTarget.codigo) return p;
+          const first = next.find((x) => x.estado);
+          return { ...p, unidadMedida: first?.codigo ?? 'UNIDAD' };
+        });
+        return next;
+      });
+      setUnidadMedidaDraft((d) => (d._id === unidadDeleteTarget._id ? unidadMedidaDraftInicial : d));
+      setUnidadDeleteTarget(null);
+      toast.success('Unidad eliminada.');
+    } catch (error) {
+      console.error('Error eliminando unidad de medida:', error);
+      toast.error(error instanceof Error ? error.message.replace(/^\[\d+\]\s*/, '') : 'No se pudo eliminar la unidad.');
+    } finally {
+      setUnidadDeleteBusy(false);
     }
   };
 
@@ -813,7 +1307,7 @@ export default function Inventario(): React.ReactElement {
       </SelectTrigger>
       <SelectContent>
         {skuOptions.map((producto) => (
-          <SelectItem key={producto.iud} value={producto.sku || ''}>
+          <SelectItem key={getProductoId(producto) || producto.sku} value={producto.sku || ''}>
             {producto.sku} | {producto.nombre}
           </SelectItem>
         ))}
@@ -891,743 +1385,120 @@ export default function Inventario(): React.ReactElement {
         <InventarioMenuTabs activeTab={activeTab} onTabChange={setActiveTab} />
 
         <TabsContent value="stock" className="space-y-4">
-          <div className="grid gap-4 lg:grid-cols-[360px_1fr]">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2"><Search className="h-5 w-5" /> Consultar stock</CardTitle>
-                <CardDescription>Busca saldo y kardex por SKU y bodega.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label>SKU</Label>
-                  <Input value={stockFiltro.sku} onChange={(event) => setStockFiltro((prev) => ({ ...prev, sku: event.target.value }))} placeholder="CAM-BAS-M" />
-                </div>
-                <div className="space-y-2">
-                  <Label>Bodega</Label>
-                  {renderBodegaSelect(stockFiltro.bodega, (value) => setStockFiltro((prev) => ({ ...prev, bodega: value })))}
-                </div>
-                <Button className="w-full" onClick={() => void consultarStock()}>
-                  <Search className="mr-2 h-4 w-4" />
-                  Consultar
-                </Button>
-                {stockConsulta && (
-                  <div className="rounded-lg border p-4">
-                    <p className="text-sm text-muted-foreground">Disponible</p>
-                    <p className="text-3xl font-bold">{Number(stockConsulta.cantidadDisponible || 0).toLocaleString('es-CO')}</p>
-                    <p className="mt-2 text-sm text-muted-foreground">Costo promedio</p>
-                    <p className="font-semibold">{MONEY.format(Number(stockConsulta.costoPromedioUnitario || 0))}</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2"><Package className="h-5 w-5" /> Stock actual</CardTitle>
-                <CardDescription>Saldos disponibles registrados por bodega.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>SKU</TableHead>
-                        <TableHead>Bodega</TableHead>
-                        <TableHead className="text-right">Disponible</TableHead>
-                        <TableHead className="text-right">Costo prom.</TableHead>
-                        <TableHead className="text-right">Valor</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {stockActual.slice(0, 20).map((item) => (
-                        <TableRow key={`${item.sku}-${item.bodega}`}>
-                          <TableCell className="font-medium">{item.sku}</TableCell>
-                          <TableCell>{item.bodega}</TableCell>
-                          <TableCell className="text-right">{Number(item.cantidadDisponible || 0).toLocaleString('es-CO')}</TableCell>
-                          <TableCell className="text-right">{MONEY.format(Number(item.costoPromedioUnitario || 0))}</TableCell>
-                          <TableCell className="text-right">{MONEY.format(Number(item.valorTotal ?? Number(item.cantidadDisponible || 0) * Number(item.costoPromedioUnitario || 0)))}</TableCell>
-                        </TableRow>
-                      ))}
-                      {stockActual.length === 0 && (
-                        <TableRow>
-                          <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">No hay saldos disponibles.</TableCell>
-                        </TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2"><ClipboardList className="h-5 w-5" /> Kardex consultado</CardTitle>
-              <CardDescription>Últimos movimientos del filtro seleccionado.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Fecha</TableHead>
-                      <TableHead>Tipo</TableHead>
-                      <TableHead>SKU</TableHead>
-                      <TableHead>Documento</TableHead>
-                      <TableHead className="text-right">Cantidad</TableHead>
-                      <TableHead className="text-right">Costo</TableHead>
-                      <TableHead>Hash</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {kardex.map((mov) => (
-                      <TableRow key={mov._id}>
-                        <TableCell>{formatDate(mov.createdAt)}</TableCell>
-                        <TableCell><Badge variant={mov.tipoMovimiento === 'SALIDA' ? 'secondary' : 'default'}>{getTipoMovimientoLabel(mov)}</Badge></TableCell>
-                        <TableCell>{mov.sku}</TableCell>
-                        <TableCell>{mov.documentoRelacionado?.tipo} {mov.documentoRelacionado?.numero}</TableCell>
-                        <TableCell className="text-right">{Number(mov.cantidad || 0).toLocaleString('es-CO')}</TableCell>
-                        <TableCell className="text-right">{MONEY.format(Number(mov.costoTotal || 0))}</TableCell>
-                        <TableCell className="max-w-[140px] truncate font-mono text-xs">{mov.hashIntegridad}</TableCell>
-                      </TableRow>
-                    ))}
-                    {kardex.length === 0 && (
-                      <TableRow>
-                        <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">Consulta un SKU para ver su kardex.</TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
+          <InventarioStockTab
+            stockFiltro={stockFiltro}
+            setStockFiltro={setStockFiltro}
+            stockConsulta={stockConsulta}
+            stockActual={stockActual}
+            kardex={kardex}
+            money={MONEY}
+            renderBodegaSelect={renderBodegaSelect}
+            consultarStock={consultarStock}
+            formatDate={formatDate}
+            getTipoMovimientoLabel={getTipoMovimientoLabel}
+          />
         </TabsContent>
 
         <TabsContent value="movimientos">
-          <Card>
-            <CardHeader>
-              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                <div>
-                  <CardTitle className="flex items-center gap-2"><Plus className="h-5 w-5" /> Registrar movimiento</CardTitle>
-                  <CardDescription>Entradas y salidas manuales con documento soporte obligatorio.</CardDescription>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button type="button" variant="outline" onClick={abrirModalTiposMovimiento}>
-                    <SlidersHorizontal className="mr-2 h-4 w-4" />
-                    Parametrizar tipo
-                  </Button>
-                  <Button type="button" variant="outline" onClick={() => setSkuModalOpen(true)}>
-                    <Plus className="mr-2 h-4 w-4" />
-                    Crear SKU
-                  </Button>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <div className="space-y-2">
-                <Label>Tipo</Label>
-                <Select value={movimientoForm.tipoMovimientoConfigId} onValueChange={(value) => {
-                  const selected = tiposMovimientoActivos.find((tipo) => tipo._id === value);
-                  setMovimientoForm((prev) => ({
-                    ...prev,
-                    tipoMovimientoConfigId: value,
-                    tipo: selected?.naturaleza || prev.tipo,
-                  }));
-                }}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {tiposMovimientoActivos.map((tipo) => (
-                      <SelectItem key={tipo._id} value={tipo._id}>
-                        {tipo.nombre} ({tipo.naturaleza})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>SKU</Label>
-                {renderSkuSelect(movimientoForm.sku, (value) => setMovimientoForm((prev) => ({ ...prev, sku: value })))}
-              </div>
-              <div className="space-y-2">
-                <Label>Bodega</Label>
-                {renderBodegaSelect(movimientoForm.bodega, (value) => setMovimientoForm((prev) => ({ ...prev, bodega: value })))}
-              </div>
-              <div className="space-y-2">
-                <Label>Cantidad</Label>
-                <Input type="number" min="0" value={movimientoForm.cantidad} onChange={(event) => setMovimientoForm((prev) => ({ ...prev, cantidad: event.target.value }))} />
-              </div>
-              <div className="space-y-2">
-                <Label>Costo unitario</Label>
-                <Input type="number" min="0" value={movimientoForm.costoUnitario} onChange={(event) => setMovimientoForm((prev) => ({ ...prev, costoUnitario: event.target.value }))} disabled={movimientoForm.tipo === 'SALIDA'} />
-              </div>
-              <div className="space-y-2">
-                <Label>Motivo</Label>
-                <Select value={movimientoForm.motivo} onValueChange={(value) => setMovimientoForm((prev) => ({ ...prev, motivo: value as MotivoMovimiento }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {MOTIVOS.map((motivo) => <SelectItem key={motivo} value={motivo}>{motivo}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Tipo documento</Label>
-                <Input value={movimientoForm.documentoTipo} onChange={(event) => setMovimientoForm((prev) => ({ ...prev, documentoTipo: event.target.value }))} />
-              </div>
-              <div className="space-y-2">
-                <Label>Número documento</Label>
-                <Input value={movimientoForm.documentoNumero} onChange={(event) => setMovimientoForm((prev) => ({ ...prev, documentoNumero: event.target.value }))} />
-              </div>
-              <div className="md:col-span-2 xl:col-span-4">
-                <Button onClick={() => void registrarMovimiento()} disabled={saving}>
-                  <Save className="mr-2 h-4 w-4" />
-                  Registrar en kardex
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+          <InventarioMovimientosTab
+            movimientoForm={movimientoForm}
+            setMovimientoForm={setMovimientoForm}
+            ordenesCompra={ordenesCompra}
+            stockActual={stockActual}
+            onOrdenCompraLineChange={seleccionarLineaOrdenCompraMovimiento}
+            tiposMovimientoActivos={tiposMovimientoActivos}
+            motivos={MOTIVOS}
+            saving={saving}
+            renderSkuSelect={renderSkuSelect}
+            renderBodegaSelect={renderBodegaSelect}
+            abrirModalTiposMovimiento={abrirModalTiposMovimiento}
+            abrirModalSkuCatalogo={abrirModalSkuCatalogo}
+            abrirModalSku={() => setSkuModalOpen(true)}
+            registrarMovimiento={registrarMovimiento}
+          />
         </TabsContent>
 
         <TabsContent value="orden-compras" className="space-y-4">
-          <Card className="border-border bg-card">
-            <CardHeader>
-              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                <div>
-                  <CardTitle className="flex items-center gap-2 text-foreground">
-                    <ShoppingCart className="h-5 w-5 text-primary" />
-                    Orden/compras
-                  </CardTitle>
-                  <CardDescription className="text-muted-foreground">
-                    Órdenes de compra, recepciones y conciliación. Usa el catálogo de proveedores al preparar cada OC.
-                  </CardDescription>
-                </div>
-                <div className="flex flex-wrap items-center gap-2 shrink-0">
-                  <InventarioProveedorModal
-                    open={proveedorModalOpen}
-                    saving={saving}
-                    onOpenChange={setProveedorModalOpen}
-                    onSubmit={guardarProveedorCompra}
-                    showTrigger
-                    triggerClassName="shrink-0"
-                  />
-                  <InventarioOrdenCompraModal
-                    open={ordenCompraModalOpen}
-                    saving={saving}
-                    onOpenChange={setOrdenCompraModalOpen}
-                    proveedores={proveedoresCompra}
-                    bodegas={bodegas}
-                    productos={productosSku}
-                    onCreated={refreshOrdenesCompra}
-                    showTrigger
-                    triggerClassName="shrink-0"
-                  />
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <p className="mb-2 text-sm font-medium text-foreground">Órdenes de compra recientes</p>
-                {ordenesCompra.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No hay órdenes registradas. Usa «Nueva orden de compra» para crear la primera.</p>
-                ) : (
-                  <div className="overflow-x-auto rounded-md border border-border">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Número OC</TableHead>
-                          <TableHead>Remisión</TableHead>
-                          <TableHead>Fecha</TableHead>
-                          <TableHead>Proveedor</TableHead>
-                          <TableHead className="text-right">Ítems</TableHead>
-                          <TableHead className="text-right">Total</TableHead>
-                          <TableHead>Estado</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {ordenesCompra.map((oc) => {
-                          const fechaSrc = oc.fechaOrden ?? oc.documentoLegalCompra?.fecha;
-                          const fechaStr = typeof fechaSrc === 'string' ? fechaSrc : fechaSrc ? new Date(fechaSrc).toISOString() : '';
-                          return (
-                            <TableRow key={oc._id}>
-                              <TableCell className="font-medium text-foreground">{oc.numeroOrden}</TableCell>
-                              <TableCell>{oc.numeroRemision || '—'}</TableCell>
-                              <TableCell className="whitespace-nowrap">{formatDate(fechaStr)}</TableCell>
-                              <TableCell>
-                                <span className="text-sm text-foreground">{oc.proveedor?.nombre}</span>
-                                <span className="mt-0.5 block text-xs text-muted-foreground">NIT {oc.proveedor?.nit}</span>
-                              </TableCell>
-                              <TableCell className="text-right">{oc.items?.length ?? 0}</TableCell>
-                              <TableCell className="text-right tabular-nums">{MONEY.format(sumSubtotalOrdenCompra(oc))}</TableCell>
-                              <TableCell><Badge variant="outline">{oc.estado}</Badge></TableCell>
-                            </TableRow>
-                          );
-                        })}
-                      </TableBody>
-                    </Table>
-                  </div>
-                )}
-              </div>
-              <div>
-                <p className="mb-2 text-sm font-medium text-foreground">Proveedores registrados</p>
-                {proveedoresCompra.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">Aún no hay proveedores. Pulsa «Nuevo proveedor» para dar de alta el primero.</p>
-                ) : (
-                  <div className="max-h-72 space-y-2 overflow-auto rounded-md border border-border bg-muted/30 p-3">
-                    {proveedoresCompra.map((proveedor) => (
-                      <div
-                        key={proveedor._id}
-                        className="rounded-lg border border-border bg-card px-3 py-2.5 text-sm shadow-sm"
-                      >
-                        <p className="font-medium text-foreground">{proveedor.nombre}</p>
-                        <p className="text-xs text-muted-foreground">NIT {proveedor.nit}</p>
-                        {(proveedor.tipoProveedorNombre || (proveedor.tipoProveedorId as any)?.nombre) ? (
-                          <p className="mt-1 text-xs text-primary">
-                            {proveedor.tipoProveedorNombre || (proveedor.tipoProveedorId as any)?.nombre}
-                          </p>
-                        ) : null}
-                        {(proveedor.correo || proveedor.telefono) ? (
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            {[proveedor.correo, proveedor.telefono].filter(Boolean).join(' · ')}
-                          </p>
-                        ) : null}
-                        {(proveedor.ciudadNombre || proveedor.departamentoNombre || proveedor.paisNombre) ? (
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            {[proveedor.ciudadNombre, proveedor.departamentoNombre, proveedor.paisNombre].filter(Boolean).join(', ')}
-                          </p>
-                        ) : null}
-                        {proveedor.direccion ? (
-                          <p className="mt-1 text-xs text-muted-foreground line-clamp-2">{proveedor.direccion}</p>
-                        ) : null}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+          <InventarioOrdenComprasTab
+            proveedorModalOpen={proveedorModalOpen}
+            ordenCompraModalOpen={ordenCompraModalOpen}
+            saving={saving}
+            proveedoresCompra={proveedoresCompra}
+            ordenesCompra={ordenesCompra}
+            bodegas={bodegas}
+            productosSku={productosSku}
+            money={MONEY}
+            ordenEdicion={ordenEditando}
+            setProveedorModalOpen={setProveedorModalOpen}
+            onOrdenCompraModalChange={handleOrdenCompraModalChange}
+            abrirNuevaOrdenCompra={abrirNuevaOrdenCompra}
+            abrirEditarOrdenCompra={abrirEditarOrdenCompra}
+            guardarProveedorCompra={guardarProveedorCompra}
+            refreshOrdenesCompra={refreshOrdenesCompra}
+            sumSubtotalOrdenCompra={sumSubtotalOrdenCompra}
+            esTenantSuperAdmin={esUsuarioTenantSuperAdmin}
+          />
         </TabsContent>
 
         <TabsContent value="ajustes" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2"><RotateCcw className="h-5 w-5" /> Solicitar ajuste</CardTitle>
-              <CardDescription>Los ajustes quedan pendientes hasta aprobación.</CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <div className="space-y-2">
-                <Label>SKU</Label>
-                <Input value={ajusteForm.sku} onChange={(event) => setAjusteForm((prev) => ({ ...prev, sku: event.target.value }))} />
-              </div>
-              <div className="space-y-2">
-                <Label>Bodega</Label>
-                {renderBodegaSelect(ajusteForm.bodega, (value) => setAjusteForm((prev) => ({ ...prev, bodega: value })))}
-              </div>
-              <div className="space-y-2">
-                <Label>Tipo ajuste</Label>
-                <Select value={ajusteForm.tipoAjuste} onValueChange={(value) => setAjusteForm((prev) => ({ ...prev, tipoAjuste: value as TipoAjuste }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="POSITIVO">Positivo</SelectItem>
-                    <SelectItem value="NEGATIVO">Negativo</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Causal</Label>
-                <Select value={ajusteForm.causal} onValueChange={(value) => setAjusteForm((prev) => ({ ...prev, causal: value }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {CAUSALES_AJUSTE.map((causal) => <SelectItem key={causal} value={causal}>{causal}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Cantidad</Label>
-                <Input type="number" min="1" value={ajusteForm.cantidad} onChange={(event) => setAjusteForm((prev) => ({ ...prev, cantidad: Number(event.target.value) }))} />
-              </div>
-              <div className="space-y-2">
-                <Label>Costo referencia</Label>
-                <Input type="number" min="0" value={ajusteForm.costoUnitarioReferencia} onChange={(event) => setAjusteForm((prev) => ({ ...prev, costoUnitarioReferencia: Number(event.target.value) }))} />
-              </div>
-              <div className="space-y-2 md:col-span-2">
-                <Label>Observación</Label>
-                <Textarea value={ajusteForm.observacion} onChange={(event) => setAjusteForm((prev) => ({ ...prev, observacion: event.target.value }))} />
-              </div>
-              <div className="md:col-span-2 xl:col-span-4">
-                <Button onClick={() => void solicitarAjuste()} disabled={saving}>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Solicitar ajuste
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+          <InventarioAjustesTab
+            ajusteForm={ajusteForm}
+            setAjusteForm={setAjusteForm}
+            ajusteFiltro={ajusteFiltro}
+            setAjusteFiltro={setAjusteFiltro}
+            ajustes={ajustes}
+            saving={saving}
+            causalesAjuste={CAUSALES_AJUSTE}
+            renderBodegaSelect={renderBodegaSelect}
+            solicitarAjuste={solicitarAjuste}
+            refreshAjustes={refreshAjustes}
+            cambiarEstadoAjuste={cambiarEstadoAjuste}
+            estadoBadge={estadoBadge}
+          />
+        </TabsContent>
 
-          <Card>
-            <CardHeader>
-              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                <div>
-                  <CardTitle>Ajustes registrados</CardTitle>
-                  <CardDescription>Aprueba o rechaza ajustes pendientes.</CardDescription>
-                </div>
-                <Select value={ajusteFiltro || 'TODOS'} onValueChange={(value) => {
-                  const next = value === 'TODOS' ? '' : value as EstadoAjuste;
-                  setAjusteFiltro(next);
-                  void refreshAjustes(next);
-                }}>
-                  <SelectTrigger className="w-full md:w-48"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="TODOS">Todos</SelectItem>
-                    <SelectItem value="SOLICITADO">Solicitados</SelectItem>
-                    <SelectItem value="APROBADO">Aprobados</SelectItem>
-                    <SelectItem value="RECHAZADO">Rechazados</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>SKU</TableHead>
-                      <TableHead>Bodega</TableHead>
-                      <TableHead>Tipo</TableHead>
-                      <TableHead>Causal</TableHead>
-                      <TableHead className="text-right">Cantidad</TableHead>
-                      <TableHead>Estado</TableHead>
-                      <TableHead className="text-right">Acciones</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {ajustes.map((ajuste) => (
-                      <TableRow key={ajuste._id}>
-                        <TableCell className="font-medium">{ajuste.sku}</TableCell>
-                        <TableCell>{ajuste.bodega}</TableCell>
-                        <TableCell>{ajuste.tipoAjuste}</TableCell>
-                        <TableCell>{ajuste.causal}</TableCell>
-                        <TableCell className="text-right">{Number(ajuste.cantidad || 0).toLocaleString('es-CO')}</TableCell>
-                        <TableCell><Badge variant={estadoBadge(ajuste.estado)}>{ajuste.estado}</Badge></TableCell>
-                        <TableCell className="text-right">
-                          {ajuste.estado === 'SOLICITADO' ? (
-                            <div className="flex justify-end gap-2">
-                              <Button size="sm" variant="outline" onClick={() => void cambiarEstadoAjuste(ajuste, 'rechazar')} disabled={saving}>Rechazar</Button>
-                              <Button size="sm" onClick={() => void cambiarEstadoAjuste(ajuste, 'aprobar')} disabled={saving}>Aprobar</Button>
-                            </div>
-                          ) : (
-                            <span className="text-sm text-muted-foreground">Procesado</span>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                    {ajustes.length === 0 && (
-                      <TableRow>
-                        <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">No hay ajustes para mostrar.</TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
+        <TabsContent value="conciliacion" className="space-y-4">
+          <InventarioConciliacionTab />
         </TabsContent>
 
         <TabsContent value="bodegas" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Warehouse className="h-5 w-5" />
-                {editingBodegaId ? 'Editar bodega' : 'Crear bodega'}
-              </CardTitle>
-              <CardDescription className="text-muted-foreground">
-                Ubicación por departamento y ciudad (Colombia). Puedes asociar varios municipios del mismo departamento como subnodos de cobertura.
-                {editingBodegaId ? ' El código interno (nombre) no se puede cambiar si ya está en uso en movimientos de inventario; desactiva la bodega si debe dejar de usarse.' : ''}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                <div className="space-y-2 md:col-span-2">
-                  <Label>Nombre</Label>
-                  <Input
-                    value={bodegaForm.nombre}
-                    onChange={(event) => setBodegaForm((prev) => ({ ...prev, nombre: event.target.value }))}
-                    placeholder="BODEGA-PRINCIPAL"
-                    className="border-input bg-background"
-                    disabled={!!editingBodegaId}
-                    title={editingBodegaId ? 'El nombre se mantiene para no romper referencias en inventario.' : undefined}
-                  />
-                </div>
-                <div className="space-y-2 md:col-span-2">
-                  <Label>Descripción</Label>
-                  <Input
-                    value={bodegaForm.descripcion}
-                    onChange={(event) => setBodegaForm((prev) => ({ ...prev, descripcion: event.target.value }))}
-                    className="border-input bg-background"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Departamento</Label>
-                  <Select
-                    value={bodegaForm.depId || undefined}
-                    onValueChange={(val) => setBodegaForm((prev) => ({ ...prev, depId: val, ciudadId: '', municipiosExtra: [] }))}
-                  >
-                    <SelectTrigger className="border-input bg-background">
-                      <SelectValue placeholder="Selecciona departamento" />
-                    </SelectTrigger>
-                    <SelectContent className="border-border bg-popover text-popover-foreground max-h-72">
-                      {bodegaDepartamentos.map((d) => (
-                        <SelectItem key={d.departamentoId} value={String(d.departamentoId)}>
-                          {DEPARTAMENTO_NOMBRES[String(d.departamentoId)] ?? d.nombre_Departamento ?? d.departamentoId}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Ciudad</Label>
-                  <Select
-                    value={bodegaForm.ciudadId || undefined}
-                    onValueChange={(val) => setBodegaForm((prev) => ({
-                      ...prev,
-                      ciudadId: val,
-                      municipiosExtra: prev.municipiosExtra.filter((id) =>
-                        bodegaCiudades.some((c) => String(c.ciudadId) === String(id))
-                      ),
-                    }))}
-                    disabled={!bodegaForm.depId}
-                  >
-                    <SelectTrigger className="border-input bg-background">
-                      <SelectValue placeholder={bodegaForm.depId ? 'Selecciona ciudad' : 'Primero el departamento'} />
-                    </SelectTrigger>
-                    <SelectContent className="border-border bg-popover text-popover-foreground max-h-72">
-                      {bodegaCiudades.map((c) => (
-                        <SelectItem key={c.ciudadId} value={String(c.ciudadId)}>
-                          {c.nombre_ciudad}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              {bodegaForm.depId && bodegaForm.ciudadId && bodegaCiudades.length > 0 ? (
-                <div className="space-y-2 rounded-md border border-border bg-card p-3">
-                  <p className="text-sm font-medium text-foreground">Municipios de cobertura (subnodos)</p>
-                  <p className="text-xs text-muted-foreground">
-                    Los municipios listados son los del departamento seleccionado (mismo catálogo que la ciudad). La ciudad elegida arriba es la cabecera; marca los demás en los que también opera la bodega.
-                  </p>
-                  <div className="max-h-52 space-y-1 overflow-y-auto overscroll-contain pr-1">
-                    {bodegaCiudades.map((c) => {
-                      const isPrincipal = String(c.ciudadId) === String(bodegaForm.ciudadId);
-                      const checkedExtra = bodegaForm.municipiosExtra.some((id) => String(id) === String(c.ciudadId));
-                      const checked = isPrincipal || checkedExtra;
-                      return (
-                        <label
-                          key={String(c.ciudadId)}
-                          className="flex cursor-pointer items-center gap-2 rounded-md border border-transparent px-2 py-1.5 transition-colors hover:bg-muted/50"
-                        >
-                          <Checkbox
-                            checked={checked}
-                            disabled={isPrincipal}
-                            onCheckedChange={(v) => {
-                              if (isPrincipal) return;
-                              setBodegaForm((prev) => {
-                                if (v === true) {
-                                  if (prev.municipiosExtra.some((id) => String(id) === String(c.ciudadId))) return prev;
-                                  return { ...prev, municipiosExtra: [...prev.municipiosExtra, String(c.ciudadId)] };
-                                }
-                                return {
-                                  ...prev,
-                                  municipiosExtra: prev.municipiosExtra.filter((id) => String(id) !== String(c.ciudadId)),
-                                };
-                              });
-                            }}
-                          />
-                          <span className={`text-sm ${isPrincipal ? 'font-semibold text-foreground' : 'text-foreground'}`}>
-                            {c.nombre_ciudad}
-                            {isPrincipal ? ' · cabecera' : ''}
-                          </span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                </div>
-              ) : null}
-
-              {bodegaForm.depId && bodegaForm.ciudadId ? (
-                <p className="text-xs text-muted-foreground">
-                  Cabecera:{' '}
-                  <span className="font-medium text-foreground">
-                    {DEPARTAMENTO_NOMBRES[bodegaForm.depId] ??
-                      bodegaDepartamentos.find((d) => String(d.departamentoId) === String(bodegaForm.depId))?.nombre_Departamento}
-                    {' · '}
-                    {bodegaCiudades.find((c) => String(c.ciudadId) === String(bodegaForm.ciudadId))?.nombre_ciudad}
-                  </span>
-                  {(() => {
-                    const n = 1 + bodegaForm.municipiosExtra.length;
-                    return n > 1 ? (
-                      <span className="text-foreground"> — Cobertura: {n} municipios</span>
-                    ) : null;
-                  })()}
-                </p>
-              ) : null}
-              {editingBodegaId ? (
-                <div className="flex items-center gap-3 rounded-md border border-border bg-muted/30 px-3 py-2">
-                  <Switch
-                    id="bodega-activa"
-                    checked={bodegaForm.estado}
-                    onCheckedChange={(v) => setBodegaForm((prev) => ({ ...prev, estado: v === true }))}
-                  />
-                  <Label htmlFor="bodega-activa" className="cursor-pointer text-sm font-normal leading-none">
-                    Bodega activa (visible en listados y selectores)
-                  </Label>
-                </div>
-              ) : null}
-              <div className="flex flex-wrap justify-end gap-2">
-                {editingBodegaId ? (
-                  <Button type="button" variant="outline" className="shrink-0" onClick={cancelarEdicionBodega} disabled={saving}>
-                    Cancelar edición
-                  </Button>
-                ) : null}
-                <Button type="button" className="shrink-0" onClick={() => void guardarBodegaForm()} disabled={saving}>
-                  {editingBodegaId ? (
-                    <>
-                      <Save className="mr-2 h-4 w-4" />
-                      Guardar cambios
-                    </>
-                  ) : (
-                    <>
-                      <Plus className="mr-2 h-4 w-4" />
-                      Crear
-                    </>
-                  )}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {bodegas.map((bodega) => (
-              <Card key={bodega._id} className="border-border bg-card">
-                <CardHeader>
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <CardTitle>{bodega.nombre}</CardTitle>
-                      <CardDescription>{bodega.descripcion || 'Sin descripción'}</CardDescription>
-                      {(bodega.departamentoNombre || bodega.ciudadNombre) ? (
-                        <p className="mt-2 text-sm text-foreground">
-                          <span className="text-muted-foreground">Ubicación: </span>
-                          {[bodega.departamentoNombre, bodega.ciudadNombre].filter(Boolean).join(' · ')}
-                        </p>
-                      ) : null}
-                      {bodega.municipiosSubnodo && bodega.municipiosSubnodo.length > 0 ? (
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          <span className="text-foreground/80">Cobertura municipal: </span>
-                          {bodega.municipiosSubnodo.map((m) => m.nombre).join(', ')}
-                        </p>
-                      ) : null}
-                    </div>
-                    <Badge variant={bodega.estado ? 'default' : 'outline'}>{bodega.estado ? 'Activa' : 'Inactiva'}</Badge>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <p className="text-sm text-muted-foreground">Ubicaciones internas: {bodega.ubicaciones?.length ?? 0}</p>
-                  <div className="flex flex-wrap gap-2">
-                    <Button type="button" size="sm" variant="outline" onClick={() => iniciarEdicionBodega(bodega)} disabled={saving}>
-                      <Pencil className="mr-1.5 h-3.5 w-3.5" />
-                      Editar
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="destructive"
-                      onClick={() => setBodegaDeleteTarget(bodega)}
-                      disabled={saving}
-                    >
-                      <Trash2 className="mr-1.5 h-3.5 w-3.5" />
-                      Eliminar
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-
-          <AlertDialog
-            open={!!bodegaDeleteTarget}
-            onOpenChange={(open) => {
-              if (!open && !bodegaDeleteBusy) setBodegaDeleteTarget(null);
-            }}
-          >
-            <AlertDialogContent className="border-border bg-background">
-              <AlertDialogHeader>
-                <AlertDialogTitle className="text-foreground">Eliminar bodega</AlertDialogTitle>
-                <AlertDialogDescription>
-                  {bodegaDeleteTarget ? (
-                    <>
-                      Se eliminará permanentemente <span className="font-semibold text-foreground">{bodegaDeleteTarget.nombre}</span>.
-                      Solo es posible si no hay movimientos, existencias, ajustes ni órdenes de compra asociados a ese nombre.
-                    </>
-                  ) : null}
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-                <AlertDialogCancel disabled={bodegaDeleteBusy}>Cancelar</AlertDialogCancel>
-                <AlertDialogAction
-                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    void confirmarEliminarBodega();
-                  }}
-                  disabled={bodegaDeleteBusy}
-                >
-                  {bodegaDeleteBusy ? 'Eliminando…' : 'Eliminar'}
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
+          <InventarioBodegasTab
+            bodegaForm={bodegaForm}
+            setBodegaForm={setBodegaForm}
+            editingBodegaId={editingBodegaId}
+            saving={saving}
+            bodegas={bodegas}
+            bodegaDepartamentos={bodegaDepartamentos}
+            bodegaCiudades={bodegaCiudades}
+            departamentoNombres={DEPARTAMENTO_NOMBRES}
+            bodegaDeleteTarget={bodegaDeleteTarget}
+            bodegaDeleteBusy={bodegaDeleteBusy}
+            setBodegaDeleteTarget={setBodegaDeleteTarget}
+            cancelarEdicionBodega={cancelarEdicionBodega}
+            guardarBodegaForm={guardarBodegaForm}
+            iniciarEdicionBodega={iniciarEdicionBodega}
+            confirmarEliminarBodega={confirmarEliminarBodega}
+          />
         </TabsContent>
 
         <TabsContent value="config">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2"><CheckCircle2 className="h-5 w-5" /> Configuración contable</CardTitle>
-              <CardDescription>Método de valuación y periodos cerrados.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid gap-4 md:grid-cols-3">
-                <div className="space-y-2">
-                  <Label>Método de valuación</Label>
-                  <Select value={config?.metodoValuacion || 'PROMEDIO'} onValueChange={(value) => void actualizarMetodo(value as MetodoValuacion)}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="PROMEDIO">Promedio ponderado</SelectItem>
-                      <SelectItem value="FIFO">PEPS / FIFO</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Periodo a cerrar</Label>
-                  <Input value={periodo} onChange={(event) => setPeriodo(event.target.value)} placeholder="2026-04" />
-                </div>
-                <div className="flex items-end">
-                  <Button onClick={() => void cerrarPeriodo()} disabled={saving}>
-                    <Save className="mr-2 h-4 w-4" />
-                    Cerrar periodo
-                  </Button>
-                </div>
-              </div>
+          <ConfigInventario
+            config={config}
+            periodo={periodo}
+            saving={saving}
+            setPeriodo={setPeriodo}
+            actualizarMetodo={actualizarMetodo}
+            cerrarPeriodo={cerrarPeriodo}
+            onNavigateTab={setActiveTab}
+          />
+        </TabsContent>
 
-              <div>
-                <p className="mb-2 text-sm font-medium">Periodos cerrados</p>
-                <div className="flex flex-wrap gap-2">
-                  {(config?.periodosCerrados || []).length > 0 ? (
-                    config?.periodosCerrados.map((item) => <Badge key={item} variant="secondary">{item}</Badge>)
-                  ) : (
-                    <p className="text-sm text-muted-foreground">No hay periodos cerrados.</p>
-                  )}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+        <TabsContent value="trm" className="space-y-4">
+          <InventarioTrmConfiguracionTab
+            config={config}
+            saving={saving}
+            onGuardarMonedaInventario={guardarMonedaInventario}
+          />
         </TabsContent>
       </Tabs>
 
@@ -1654,17 +1525,230 @@ export default function Inventario(): React.ReactElement {
         onSubmit={() => void crearSku()}
       />
 
+      <Dialog open={skuCatalogoOpen} onOpenChange={setSkuCatalogoOpen}>
+        <DialogContent className="max-w-5xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Package className="h-5 w-5" />
+              Visualizador de SKU creados
+            </DialogTitle>
+            <DialogDescription>
+              Escanea un codigo de barras o busca manualmente por SKU, codigo o nombre.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="flex flex-col gap-2 md:flex-row md:items-center">
+              <div className="relative flex-1">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  autoFocus
+                  value={skuCatalogoFiltro}
+                  onChange={(event) => setSkuCatalogoFiltro(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key !== 'Enter' || skuCatalogoFiltrado.length !== 1) return;
+                    seleccionarSkuCatalogo(skuCatalogoFiltrado[0]);
+                  }}
+                  className="pl-9"
+                  placeholder="Escanea codigo de barras o escribe nombre/SKU"
+                />
+              </div>
+              <Badge variant="secondary" className="h-9 justify-center rounded-md px-3">
+                {skuCatalogoFiltrado.length} de {skuOptions.length}
+              </Badge>
+            </div>
+
+            <div className="max-h-[58vh] overflow-auto rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>SKU</TableHead>
+                    <TableHead>Codigo de barras</TableHead>
+                    <TableHead>Producto</TableHead>
+                    <TableHead>Unidad</TableHead>
+                    <TableHead>Precio</TableHead>
+                    <TableHead className="text-right">Accion</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {skuCatalogoFiltrado.map((producto) => (
+                    <TableRow key={getProductoId(producto) || producto.sku || producto.nombre}>
+                      <TableCell className="font-mono text-xs font-semibold">{producto.sku || '-'}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <Barcode className="h-4 w-4 shrink-0 text-muted-foreground" />
+                          <div className="space-y-2">
+                            {producto.codigoBarras ? (
+                              <button
+                                type="button"
+                                className="rounded border border-transparent p-1 text-left transition hover:border-primary/40 hover:bg-background/70"
+                                title="Ver e imprimir codigo"
+                                onClick={() => setSkuBarcodePreview(producto)}
+                              >
+                                <BarcodePreview codigo={producto.codigoBarras} />
+                              </button>
+                            ) : (
+                              <BarcodePreview codigo={producto.codigoBarras} />
+                            )}
+                            {!producto.codigoBarras && puedeGestionarSku && (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-7 text-xs"
+                                disabled={saving}
+                                onClick={() => void generarCodigoSkuCatalogo(producto)}
+                              >
+                                Generar codigo
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="space-y-0.5">
+                          <p className="font-medium">{producto.nombre}</p>
+                          <p className="line-clamp-1 text-xs text-muted-foreground">{producto.descripcion || producto.descripcionCorta || 'Sin descripcion'}</p>
+                        </div>
+                      </TableCell>
+                      <TableCell><Badge variant="outline">{producto.unidadMedida || 'UNIDAD'}</Badge></TableCell>
+                      <TableCell>{MONEY.format(Number(producto.precio || 0))}</TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-1">
+                          <Button type="button" size="sm" onClick={() => seleccionarSkuCatalogo(producto)}>
+                            Seleccionar
+                          </Button>
+                          {puedeGestionarSku && (
+                            <>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="icon"
+                                disabled={saving}
+                                title="Desactivar SKU"
+                                onClick={() => void desactivarSkuCatalogo(producto)}
+                              >
+                                <AlertTriangle className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="destructive"
+                                size="icon"
+                                disabled={saving}
+                                title="Eliminar SKU"
+                                onClick={() => void eliminarSkuCatalogo(producto)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {skuCatalogoFiltrado.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
+                        No se encontraron SKU con ese filtro.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(skuBarcodePreview)} onOpenChange={(open) => !open && setSkuBarcodePreview(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Barcode className="h-5 w-5" />
+              Codigo de barras del SKU
+            </DialogTitle>
+            <DialogDescription>
+              Visualiza la etiqueta antes de imprimirla.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="rounded-md border bg-white p-5 text-center text-slate-950">
+              <p className="text-sm font-semibold">{skuBarcodePreview?.sku || 'SKU'}</p>
+              <p className="mb-3 text-xs uppercase text-slate-500">{skuBarcodePreview?.nombre || 'Producto'}</p>
+              <div className="flex justify-center">
+                <BarcodePreview codigo={skuBarcodePreview?.codigoBarras} />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setSkuBarcodePreview(null)}>
+                Cerrar
+              </Button>
+              <Button type="button" variant="outline" onClick={() => seleccionarSkuCatalogo(skuBarcodePreview as BackendProducto)}>
+                Seleccionar
+              </Button>
+              <Button type="button" onClick={() => imprimirCodigoBarrasSku(skuBarcodePreview)}>
+                <Printer className="mr-2 h-4 w-4" />
+                Imprimir
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <InventarioUnidadMedidaModal
         open={unidadModalOpen}
         saving={saving}
         unidades={unidadesMedida}
+        tiposUnidad={tiposUnidadMedida}
         draft={unidadMedidaDraft}
         onOpenChange={setUnidadModalOpen}
         onDraftChange={setUnidadMedidaDraft}
+        onCreateTipoUnidad={crearTipoUnidadMedida}
         onSubmit={() => void guardarUnidadMedida()}
         onEdit={editarUnidadMedida}
         onReset={() => setUnidadMedidaDraft(unidadMedidaDraftInicial)}
-        onDelete={eliminarUnidadMedida}
+        onInactivate={inactivarUnidadMedida}
+        onDelete={setUnidadDeleteTarget}
+      />
+
+      <AlertDialog open={Boolean(unidadDeleteTarget)} onOpenChange={(open) => !open && setUnidadDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Eliminar unidad de medida</AlertDialogTitle>
+            <AlertDialogDescription>
+              {unidadDeleteTarget
+                ? `Se eliminara la unidad ${unidadDeleteTarget.nombre} (${unidadDeleteTarget.codigo}). Esta accion no se puede deshacer.`
+                : 'Esta accion no se puede deshacer.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={unidadDeleteBusy}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={unidadDeleteBusy}
+              onClick={(event) => {
+                event.preventDefault();
+                void confirmarEliminarUnidadMedida();
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {unidadDeleteBusy ? 'Eliminando...' : 'Eliminar'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <InventarioComprobanteEntradaModal
+        open={comprobanteEntradaOpen}
+        data={comprobanteEntradaData}
+        documentoSoporte={comprobanteEntradaDoc}
+        onOpenChange={(open) => {
+          setComprobanteEntradaOpen(open);
+          if (!open) {
+            setComprobanteEntradaData(null);
+            setComprobanteEntradaDoc(null);
+          }
+        }}
       />
 
     </div>

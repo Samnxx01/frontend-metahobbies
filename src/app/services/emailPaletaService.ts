@@ -61,14 +61,17 @@ export type TipoCorreo =
   | 'recuperar-contrasena'
   | 'cambio-contrasena'
   | 'referido-vencimiento'
-  | 'pago-cancelado';
+  | 'pago-cancelado'
+  | 'bienvenida-usuario-global';
 
 export const TIPOS_CORREO: { value: TipoCorreo; label: string }[] = [
   { value: 'activacion-membresia', label: 'Activacion de membresia' },
   { value: 'verificacion-cuenta', label: 'Verificacion de cuenta' },
   { value: 'recuperar-contrasena', label: 'Recuperar contrasena' },
   { value: 'cambio-contrasena', label: 'Cambio de contrasena' },
+  { value: 'referido-vencimiento', label: 'Referido por vencer' },
   { value: 'pago-cancelado', label: 'Pago cancelado' },
+  { value: 'bienvenida-usuario-global', label: 'Bienvenida usuario global' },
 ];
 
 export type ContenidoCorreo = Record<string, string>;
@@ -77,7 +80,7 @@ export interface CampoContenido {
   key: string;
   label: string;
   placeholder: string;
-  type?: 'text' | 'number';
+  type?: 'text' | 'number' | 'textarea';
 }
 
 export const CAMPOS_CONTENIDO: Record<TipoCorreo, CampoContenido[]> = {
@@ -85,7 +88,20 @@ export const CAMPOS_CONTENIDO: Record<TipoCorreo, CampoContenido[]> = {
     { key: 'contrasenaTemporal', label: 'Contrasena temporal (ejemplo)', placeholder: 'Ab3$xR7m' },
   ],
   'verificacion-cuenta': [
-    { key: 'contrasenaTemporal', label: 'Contrasena temporal (ejemplo)', placeholder: 'Ab3$xR7m' },
+    { key: 'enlaceActivacion', label: 'Enlace activacion (ejemplo)', placeholder: 'https://…/api/verificar/token', type: 'text' },
+    { key: 'heroTitle', label: 'Titulo', placeholder: 'Verifica tu cuenta en MABS', type: 'text' },
+    { key: 'heroSub', label: 'Subtitulo', placeholder: 'Tu acceso ya está casi listo.', type: 'text' },
+    {
+      key: 'bodyText',
+      label: 'Texto principal',
+      placeholder:
+        'Para activar tu cuenta y completar el registro, confirma tu correo con el siguiente enlace seguro.',
+      type: 'textarea',
+    },
+    { key: 'ctaText', label: 'Texto del boton', placeholder: 'Activar cuenta', type: 'text' },
+    { key: 'step1', label: 'Paso 1', placeholder: 'Haz clic en «Activar cuenta».', type: 'text' },
+    { key: 'step2', label: 'Paso 2', placeholder: 'Completa la activación en la página que se abre.', type: 'text' },
+    { key: 'step3', label: 'Paso 3', placeholder: 'Accede a tu espacio en MABS.', type: 'text' },
   ],
   'recuperar-contrasena': [],
   'cambio-contrasena': [
@@ -100,6 +116,24 @@ export const CAMPOS_CONTENIDO: Record<TipoCorreo, CampoContenido[]> = {
     { key: 'emailCliente', label: 'Correo del cliente (ejemplo)', placeholder: 'cliente@ejemplo.com' },
     { key: 'referencia', label: 'Referencia de pago (ejemplo)', placeholder: 'MABS-0001-000042' },
     { key: 'enlaceReintento', label: 'Enlace para reintentar (ejemplo)', placeholder: 'https://mabs.com/membresia' },
+  ],
+  'bienvenida-usuario-global': [
+    { key: 'tituloSaludo', label: 'Titulo / saludo', placeholder: 'Hola Juan Pixel', type: 'text' },
+    { key: 'nombreEmpresa', label: 'Nombre empresa (vacío = ocultar)', placeholder: 'MABS BY GABS', type: 'text' },
+    { key: 'etiquetaEmpresa', label: 'Etiqueta empresa', placeholder: 'Empresa:', type: 'text' },
+    { key: 'textoPrincipal', label: 'Mensaje principal (negrita)', placeholder: 'Bienvenido, te acabas de vincular con la empresa.', type: 'textarea' },
+    { key: 'textoSecundario', label: 'Mensaje de cierre', placeholder: 'Gracias por ser parte de la familia.', type: 'textarea' },
+    { key: 'enlaceVerificacion', label: 'Enlace activacion (vacío = sin bloque)', placeholder: 'https://…/api/verificar/token', type: 'text' },
+    {
+      key: 'textoBloqueVerificacion',
+      label: 'Texto antes del boton',
+      placeholder: 'Activa tu cuenta con el siguiente enlace:',
+      type: 'textarea',
+    },
+    { key: 'textoBotonVerificacion', label: 'Texto del boton', placeholder: 'Activar cuenta', type: 'text' },
+    { key: 'footerLine1', label: 'Pie linea 1', placeholder: '© 2026 MABS · Todos los derechos reservados', type: 'text' },
+    { key: 'footerLine2', label: 'Pie linea 2 (opcional)', placeholder: '', type: 'textarea' },
+    { key: 'asuntoReferencia', label: 'Asunto (referencia envío real)', placeholder: 'Bienvenido a MABS', type: 'text' },
   ],
 };
 

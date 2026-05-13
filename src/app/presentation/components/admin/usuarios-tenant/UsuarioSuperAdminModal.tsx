@@ -19,9 +19,15 @@ import {
 } from '@/components/ui/select';
 import { Loader2, RefreshCw, Shield } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
-import type { CreateUsuarioSuperAdminData } from '@/app/services/tenantUsuariosService';
+import {
+    getTenantsSuperAdmin,
+    describeTenantSuperAdminOption,
+    type CreateUsuarioSuperAdminData,
+    type TenantSuperAdminOption,
+} from '@/app/services/tenantUsuariosService';
 import { RH_OPTIONS } from './catalogos';
 import { useAuth } from '@/app/providers/AuthProvider';
+import { toast } from 'react-toastify';
 
 interface UsuarioSuperAdminModalProps {
     open: boolean;
@@ -29,6 +35,7 @@ interface UsuarioSuperAdminModalProps {
     onSubmit: (data: CreateUsuarioSuperAdminData) => Promise<any>;
     isSubmitting?: boolean;
     submitError?: Error | null;
+    renderMode?: 'modal' | 'page';
     /** Scope del usuario autenticado */
     scope: 'SUPER_ADMIN' | 'TENANT_GLOBAL' | 'CORPORATIVO';
     /** Función para sincronizar canReferir globalmente en todos los tenants */
@@ -38,6 +45,7 @@ interface UsuarioSuperAdminModalProps {
 }
 
 interface FormState {
+    tenantSuperAdminId: string;
     correo: string;
     password: string;
     nombre: string;
@@ -51,6 +59,7 @@ interface FormState {
 }
 
 const EMPTY_FORM: FormState = {
+    tenantSuperAdminId: '',
     correo: '',
     password: '',
     nombre: '',
@@ -69,6 +78,7 @@ export const UsuarioSuperAdminModal = ({
     onSubmit,
     isSubmitting = false,
     submitError,
+    renderMode = 'modal',
     scope,
     onSincronizarGlobalCanReferir,
     isSincronizandoGlobal = false,
@@ -76,10 +86,9 @@ export const UsuarioSuperAdminModal = ({
 }: UsuarioSuperAdminModalProps): React.ReactElement => {
     const { token, user } = useAuth();
     const [form, setForm] = useState<FormState>(EMPTY_FORM);
-
-    useEffect(() => {
-        if (!open) { setForm(EMPTY_FORM); return; }
-    }, [open]);
+    const [publicTenants, setPublicTenants] = useState<TenantSuperAdminOption[]>([]);
+    const [loadingPublicTenants, setLoadingPublicTenants] = useState(false);
+    const [publicTenantsError, setPublicTenantsError] = useState(false);
 
     const tenantSuperAdminIdFromJwt = useMemo(() => {
         const fromUser = String(
@@ -107,6 +116,33 @@ export const UsuarioSuperAdminModal = ({
         }
     }, [token, user]);
 
+    useEffect(() => {
+        if (!open) {
+            setForm(EMPTY_FORM);
+            setPublicTenantsError(false);
+            return;
+        }
+
+        const debeElegirTenant =
+            (scope === 'SUPER_ADMIN' && !tenantSuperAdminIdFromJwt) || !token;
+
+        if (!debeElegirTenant) {
+            setPublicTenants([]);
+            setPublicTenantsError(false);
+            return;
+        }
+
+        setLoadingPublicTenants(true);
+        setPublicTenantsError(false);
+        getTenantsSuperAdmin(Boolean(token))
+            .then((res) => setPublicTenants(Array.isArray(res?.tenants) ? res.tenants : []))
+            .catch(() => {
+                setPublicTenants([]);
+                setPublicTenantsError(true);
+            })
+            .finally(() => setLoadingPublicTenants(false));
+    }, [open, token, scope, tenantSuperAdminIdFromJwt]);
+
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         setForm(prev => ({ ...prev, [e.target.name]: e.target.value }));
     };
@@ -129,8 +165,29 @@ export const UsuarioSuperAdminModal = ({
             fecha_nacimiento: form.fecha_nacimiento,
             canReferir: form.canReferir,
         };
-        if (scope === 'SUPER_ADMIN' && tenantSuperAdminIdFromJwt) {
-            payload.tenantSuperAdminId = tenantSuperAdminIdFromJwt;
+
+        const tenantDestino =
+            (tenantSuperAdminIdFromJwt.trim() ? tenantSuperAdminIdFromJwt : '') ||
+            form.tenantSuperAdminId.trim();
+        const esBootstrapDiosPublico =
+            !token &&
+            !loadingPublicTenants &&
+            !publicTenantsError &&
+            publicTenants.length === 0;
+
+        if (!tenantDestino && !esBootstrapDiosPublico) {
+            toast.error(
+                loadingPublicTenants
+                    ? 'Espera a que carguen los tenants activos.'
+                    : publicTenants.length === 0
+                        ? 'No hay tenants SuperAdmin activos disponibles.'
+                        : 'Selecciona el tenant SuperAdmin (corporativo asociado) donde se creará el usuario.',
+            );
+            return;
+        }
+
+        if (tenantDestino) {
+            payload.tenantSuperAdminId = tenantDestino;
         }
         try {
             await onSubmit(payload);
@@ -149,38 +206,93 @@ export const UsuarioSuperAdminModal = ({
         }
     };
 
-    return (
-        <Dialog open={open} onOpenChange={onClose}>
-            <DialogContent className="sm:max-w-lg p-6 max-h-[90vh] overflow-y-auto">
+    const muestraSelectorTenant =
+        (scope === 'SUPER_ADMIN' && !tenantSuperAdminIdFromJwt) || !token;
+
+    const contenidoFormulario = (
+        <>
+            {renderMode === 'modal' ? (
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
                         <Shield className="h-5 w-5 text-primary" />
                         Nuevo Usuario SuperAdmin
                     </DialogTitle>
                 </DialogHeader>
+            ) : (
+                <div className="mb-5 flex items-center justify-between gap-3 border-b pb-4">
+                    <div>
+                        <h1 className="flex items-center gap-2 text-2xl font-bold text-foreground">
+                            <Shield className="h-6 w-6 text-primary" />
+                            Nuevo Usuario SuperAdmin
+                        </h1>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                            Registro jerarquico de usuario tenant.
+                        </p>
+                    </div>
+                </div>
+            )}
 
                 <form onSubmit={handleSubmit}>
                     <div className="py-4 space-y-4">
-                        {/* Tenant SuperAdmin resuelto desde el JWT */}
-                        {/* Selector de Tenant SuperAdmin — solo visible para SUPER_ADMIN */}
-                        {scope === 'SUPER_ADMIN' && (
+                        {muestraSelectorTenant && (
+                            <div className="space-y-2">
+                                <Label>Tenant SuperAdmin activo *</Label>
+                                {loadingPublicTenants ? (
+                                    <p className="text-sm text-muted-foreground">Cargando tenants activos…</p>
+                                ) : publicTenantsError ? (
+                                    <p className="text-sm text-destructive">
+                                        No se pudo cargar la lista de tenants activos. Intenta actualizar antes de crear.
+                                    </p>
+                                ) : publicTenants.length === 0 ? (
+                                    <p className="text-sm text-destructive">
+                                        No hay tenants SuperAdmin activos. Este registro se creara como administrador DIOS inicial.
+                                    </p>
+                                ) : (
+                                    <Select
+                                        value={form.tenantSuperAdminId}
+                                        onValueChange={handleSelect('tenantSuperAdminId')}
+                                        required
+                                    >
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Selecciona el corporativo asociado" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {publicTenants.map((tenant) => {
+                                                const { primary, principalLine } =
+                                                    describeTenantSuperAdminOption(tenant);
+                                                return (
+                                                    <SelectItem key={tenant.iud} value={tenant.iud}>
+                                                        <div className="flex flex-col gap-0.5 py-0.5 text-left">
+                                                            <span className="font-medium leading-tight">{primary}</span>
+                                                            {principalLine ? (
+                                                                <span className="text-xs text-muted-foreground leading-snug">
+                                                                    {principalLine}
+                                                                </span>
+                                                            ) : null}
+                                                        </div>
+                                                    </SelectItem>
+                                                );
+                                            })}
+                                        </SelectContent>
+                                    </Select>
+                                )}
+                            </div>
+                        )}
+
+                        {scope === 'SUPER_ADMIN' && tenantSuperAdminIdFromJwt ? (
                             <div className="space-y-2">
                                 <Label>Tenant SuperAdmin</Label>
                                 <div className="flex min-h-10 items-center rounded-md border border-input bg-muted/40 px-3">
-                                    {tenantSuperAdminIdFromJwt ? (
-                                        <Badge variant="outline" className="max-w-full border-primary/30 bg-primary/10 text-primary">
-                                            <span className="mr-1 font-semibold">tenantSuperAdmin</span>
-                                            <span className="truncate font-mono">{tenantSuperAdminIdFromJwt}</span>
-                                        </Badge>
-                                    ) : (
-                                        <span className="text-sm text-muted-foreground">No se encontro tenantSuperAdminId en el JWT.</span>
-                                    )}
+                                    <Badge variant="outline" className="max-w-full border-primary/30 bg-primary/10 text-primary">
+                                        <span className="mr-1 font-semibold">tenantSuperAdmin</span>
+                                        <span className="truncate font-mono">{tenantSuperAdminIdFromJwt}</span>
+                                    </Badge>
                                 </div>
                                 <p className="text-xs text-muted-foreground">
-                                    Se toma automaticamente desde el scope del usuario autenticado.
+                                    Alcance tomado del JWT: solo puedes crear usuarios en tu rama y sub-ramas de tenant.
                                 </p>
                             </div>
-                        )}
+                        ) : null}
 
                         {/* Correo */}
                         <div className="space-y-2">
@@ -358,6 +470,23 @@ export const UsuarioSuperAdminModal = ({
                         </Button>
                     </DialogFooter>
                 </form>
+        </>
+    );
+
+    if (renderMode === 'page') {
+        return (
+            <div className="min-h-full bg-background px-4 py-6 md:px-6 lg:px-8">
+                <div className="mx-auto w-full max-w-3xl rounded-lg border bg-card p-6 shadow-sm">
+                    {contenidoFormulario}
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <Dialog open={open} onOpenChange={onClose}>
+            <DialogContent className="sm:max-w-lg p-6 max-h-[90vh] overflow-y-auto">
+                {contenidoFormulario}
             </DialogContent>
         </Dialog>
     );

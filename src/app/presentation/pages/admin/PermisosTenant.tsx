@@ -3,7 +3,7 @@ import ParametrosGobernanza from './ParametrosGobernanza';
 const PERMISOS_TENANT_IDS = [
   'perm-usuario-tenant-global',
   'perm-admin-tenant-global-listar',
-  'perm-admin-tenant-global-actualizar',
+  'perm-admin-tenant-global-actualizar-tg',
   'perm-admin-tenant-global-desactivar',
 ];
 

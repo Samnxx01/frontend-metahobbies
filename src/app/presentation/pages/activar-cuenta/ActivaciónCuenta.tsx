@@ -10,7 +10,7 @@ export default function ActivacionCuenta() {
     const [visible, setVisible] = useState(false);
 
     const nombre = params.get('nombre') ?? '';
-    const error = params.get('error');   // 'token-invalido' | 'ya-verificado' | null
+    const error = params.get('error'); // 'token-invalido' | 'ya-verificado' | 'servidor' | null
 
     useEffect(() => {
         const t = setTimeout(() => setVisible(true), 8000);
@@ -19,6 +19,17 @@ export default function ActivacionCuenta() {
 
     if (error) {
         const esYaVerificado = error === 'ya-verificado';
+        const esServidor = error === 'servidor';
+        const titulo = esYaVerificado
+            ? 'Cuenta ya verificada'
+            : esServidor
+              ? 'No pudimos completar la verificación'
+              : 'Enlace inválido o expirado';
+        const descripcion = esYaVerificado
+            ? 'Esta cuenta ya fue activada anteriormente. Puedes iniciar sesión directamente.'
+            : esServidor
+              ? 'Ocurrió un error en el servidor al verificar tu correo. Intenta de nuevo en unos minutos o contacta a soporte.'
+              : 'El enlace de activación no es válido o ha expirado. Contacta a soporte para recibir uno nuevo.';
         return (
             <div className="min-h-screen bg-background flex items-center justify-center px-4 py-16">
                 <div className="w-full max-w-sm text-center space-y-6">
@@ -29,12 +40,10 @@ export default function ActivacionCuenta() {
                     </div>
                     <div className={`space-y-2 transition-all duration-500 delay-100 ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
                         <h1 className="text-xl font-bold text-foreground">
-                            {esYaVerificado ? 'Cuenta ya verificada' : 'Enlace inválido o expirado'}
+                            {titulo}
                         </h1>
                         <p className="text-sm text-muted-foreground leading-relaxed">
-                            {esYaVerificado
-                                ? 'Esta cuenta ya fue activada anteriormente. Puedes iniciar sesión directamente.'
-                                : 'El enlace de activación no es válido o ha expirado. Contacta a soporte para recibir uno nuevo.'}
+                            {descripcion}
                         </p>
                     </div>
                     <div className={`space-y-3 transition-all duration-500 delay-150 ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
