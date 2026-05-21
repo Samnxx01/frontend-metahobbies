@@ -17,7 +17,10 @@ interface LoginResponse extends ApiResponse {
 export const login = async (loginData: LoginData): Promise<LoginResponse> => {
     const resp = await apiFetch('/api/login/cliente', {
         method: 'POST',
-        body: loginData
+        body: {
+            ...loginData,
+            correo: String(loginData.correo || '').trim().toLowerCase(),
+        }
     });
 
     // ⬇️ Si el backend devolvió token, lo guardas

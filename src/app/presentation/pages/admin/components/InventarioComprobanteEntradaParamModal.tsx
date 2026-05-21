@@ -8,11 +8,12 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  FLUJO_COMPRAS_PASOS,
+  mensajeErrorComprasInventario,
+} from '../inventario/inventarioComprasMensajes';
 import InventarioDocumentoSoporteConfigModal, {
-  consumeDocNumero,
-  loadDocumentoSoporteTipos,
   nextDocNumero,
-  saveDocumentoSoporteTipos,
   type DocumentoSoporteTipoConfig,
 } from './InventarioDocumentoSoporteConfigModal';
 
@@ -31,9 +32,11 @@ export type InventarioComprobanteEntradaParamModalProps = {
     data: RecepcionOrdenCompraResponse;
     documentoSoporte: { tipo: string; numero: string };
   }) => void;
+  /** false = solo subproceso manual (comprobante); no mezclar con OC ya recibidas en automatico. */
+  recepcionAutomatica?: boolean;
 };
 
-const buildRecepcionItems = (oc: InventarioOrdenCompra) =>
+export const buildRecepcionItems = (oc: InventarioOrdenCompra) =>
   (oc.items || [])
     .map((it, index) => {
       const cantidadOrdenada = Number(it.cantidadOrdenada || 0);
@@ -47,16 +50,25 @@ const buildRecepcionItems = (oc: InventarioOrdenCompra) =>
     })
     .filter((it) => it.sku && it.cantidadRecibida > 0);
 
+export const ordenCompraTienePendienteRecepcion = (oc: InventarioOrdenCompra): boolean =>
+  buildRecepcionItems(oc).length > 0;
+
 export default function InventarioComprobanteEntradaParamModal({
   open,
   onOpenChange,
   ordenesCompra,
   saving = false,
   onPreview,
+  recepcionAutomatica = false,
 }: InventarioComprobanteEntradaParamModalProps): React.ReactElement {
   const ordenesSorted = useMemo(
     () => [...ordenesCompra].sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')) || String(b.numeroOrden || '').localeCompare(String(a.numeroOrden || ''))),
     [ordenesCompra]
+  );
+
+  const ordenesElegibles = useMemo(
+    () => ordenesSorted.filter((oc) => ordenCompraTienePendienteRecepcion(oc)),
+    [ordenesSorted],
   );
 
   const [values, setValues] = useState<InventarioComprobanteEntradaParamValues>({
@@ -65,6 +77,7 @@ export default function InventarioComprobanteEntradaParamModal({
     documentoNumero: '',
   });
   const [tiposDoc, setTiposDoc] = useState<DocumentoSoporteTipoConfig[]>([]);
+  const [todosTiposDoc, setTodosTiposDoc] = useState<DocumentoSoporteTipoConfig[]>([]);
   const [configOpen, setConfigOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -79,20 +92,16 @@ export default function InventarioComprobanteEntradaParamModal({
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
-    const loaded = loadDocumentoSoporteTipos().filter((t) => t.activo);
-    setTiposDoc(loaded);
-    if (loaded.length && !loaded.some((t) => t.codigo === values.documentoTipo)) {
-      setValues((p) => ({ ...p, documentoTipo: loaded[0].codigo }));
-    }
+    setTiposDoc([]);
+    setTodosTiposDoc([]);
     inventarioService.listarDocumentosSoporte()
       .then((serverRows) => {
         if (cancelled) return;
         const activos = serverRows.filter((t) => t.activo);
-        if (!activos.length) return;
-        saveDocumentoSoporteTipos(serverRows);
+        setTodosTiposDoc(serverRows);
         setTiposDoc(activos);
         if (!activos.some((t) => t.codigo === values.documentoTipo)) {
-          setValues((p) => ({ ...p, documentoTipo: activos[0].codigo, documentoNumero: '' }));
+          setValues((p) => ({ ...p, documentoTipo: activos[0]?.codigo || '', documentoNumero: '' }));
         }
       })
       .catch((error) => {
@@ -107,10 +116,10 @@ export default function InventarioComprobanteEntradaParamModal({
     if (!open) return;
     // Si el número está vacío, sugiere el siguiente consecutivo del tipo
     if (!values.documentoNumero.trim() && values.documentoTipo) {
-      const { numero } = nextDocNumero(values.documentoTipo);
+      const { numero } = nextDocNumero(values.documentoTipo, tiposDoc);
       if (numero) setValues((p) => ({ ...p, documentoNumero: numero }));
     }
-  }, [open, values.documentoTipo]);
+  }, [open, values.documentoTipo, values.documentoNumero, tiposDoc]);
 
   return (
     <Dialog
@@ -131,7 +140,9 @@ export default function InventarioComprobanteEntradaParamModal({
                 Parametrizar comprobante de entrada
               </DialogTitle>
               <DialogDescription className="text-muted-foreground">
-                Define primero el documento soporte y luego selecciona la orden de compra para generar el comprobante.
+                {recepcionAutomatica
+                  ? 'Define el documento soporte y la orden. Las OC sin pendiente (ya recibidas) no aparecen en la lista.'
+                  : 'Recepción manual: OC con pendiente. El comprobante queda en borrador; al confirmar no mueve kardex. Use Movimientos para el subproceso de entrada.'}
               </DialogDescription>
             </div>
             <Button
@@ -183,7 +194,7 @@ export default function InventarioComprobanteEntradaParamModal({
                   variant="outline"
                   disabled={saving || !values.documentoTipo}
                   onClick={() => {
-                    const { numero } = nextDocNumero(values.documentoTipo);
+                    const { numero } = nextDocNumero(values.documentoTipo, tiposDoc);
                     if (numero) setValues((p) => ({ ...p, documentoNumero: numero }));
                   }}
                   title="Sugerir consecutivo"
@@ -198,17 +209,22 @@ export default function InventarioComprobanteEntradaParamModal({
             <Label>Orden de compra</Label>
             <Select value={values.ordenId || undefined} onValueChange={(ordenId) => setValues((p) => ({ ...p, ordenId }))}>
               <SelectTrigger className="border-input bg-background">
-                <SelectValue placeholder={ordenesSorted.length ? 'Selecciona OC' : 'No hay órdenes de compra'} />
+                <SelectValue
+                  placeholder={
+                    ordenesElegibles.length
+                      ? 'Selecciona OC con pendiente'
+                      : ordenesSorted.length
+                        ? 'No hay OC con cantidades pendientes'
+                        : 'No hay órdenes de compra'
+                  }
+                />
               </SelectTrigger>
               <SelectContent className="max-h-72 border-border bg-popover">
-                {ordenesSorted.map((oc) => {
-                  const tienePendiente = buildRecepcionItems(oc).length > 0;
-                  return (
+                {ordenesElegibles.map((oc) => (
                   <SelectItem key={oc._id} value={oc._id}>
-                    {oc.numeroOrden} · {oc.proveedor?.nombre || 'Proveedor'} · {oc.estado}{tienePendiente ? '' : ' · (sin pendiente)'}
+                    {oc.numeroOrden} · {oc.proveedor?.nombre || 'Proveedor'} · {oc.estado}
                   </SelectItem>
-                  );
-                })}
+                ))}
               </SelectContent>
             </Select>
             {orden ? (
@@ -238,35 +254,51 @@ export default function InventarioComprobanteEntradaParamModal({
               const tipo = values.documentoTipo.trim();
               if (!tipo) return;
               const numeroDigitado = values.documentoNumero.trim();
-              const expected = nextDocNumero(tipo).numero;
+              const expected = nextDocNumero(tipo, tiposDoc).numero;
               const numeroFinal = numeroDigitado || expected;
               if (!numeroFinal) return;
 
               try {
                 setSubmitting(true);
-                const items = buildRecepcionItems(orden);
+                const ordenFresh = await inventarioService.obtenerOrdenCompra(orden._id);
+                const items = buildRecepcionItems(ordenFresh);
                 if (!items.length) {
-                  toast.error('La orden no tiene cantidades pendientes por recibir.');
+                  toast.error(
+                    mensajeErrorComprasInventario(
+                      ordenFresh.estado === 'RECIBIDA_TOTAL'
+                        ? new Error(
+                            'Esta orden ya fue recibida por completo (recepcion automatica o comprobante previo).',
+                          )
+                        : new Error('No hay cantidades pendientes por recibir en esta orden.'),
+                    ),
+                    { autoClose: 10000 },
+                  );
                   return;
                 }
-                const data = await inventarioService.registrarRecepcionOrdenCompra(orden._id, {
+                const data = await inventarioService.registrarRecepcionOrdenCompra(ordenFresh._id, {
+                  confirmar: false,
                   numeroRecepcion: numeroFinal,
                   documentoSoporte: { tipo, numero: numeroFinal },
                   items,
                 });
-                if (!numeroDigitado || numeroFinal === expected) {
-                  consumeDocNumero(tipo);
-                  const nextRows = loadDocumentoSoporteTipos();
-                  await inventarioService.guardarDocumentosSoporte(nextRows);
-                  setTiposDoc(nextRows.filter((t) => t.activo));
-                }
+                const serverRows = await inventarioService.listarDocumentosSoporte();
+                const activos = serverRows.filter((t) => t.activo);
+                setTodosTiposDoc(serverRows);
+                setTiposDoc(activos);
+                toast.info(
+                  `Borrador ${numeroFinal} creado. Confirme el comprobante para mover inventario y ocupar la secuencia.`,
+                  { autoClose: 10000 },
+                );
                 onPreview({
                   data,
                   documentoSoporte: { tipo, numero: numeroFinal },
                 });
               } catch (error) {
-                console.error('Error actualizando consecutivo documento soporte:', error);
-                toast.error(error instanceof Error ? error.message.replace(/^\[\d+\]\s*/, '') : 'No se pudo actualizar el consecutivo.');
+                console.error('Error registrando comprobante de entrada:', error);
+                toast.error(
+                  mensajeErrorComprasInventario(error, 'No se pudo registrar el comprobante de entrada.'),
+                  { autoClose: 10000 },
+                );
               } finally {
                 setSubmitting(false);
               }
@@ -282,6 +314,7 @@ export default function InventarioComprobanteEntradaParamModal({
         onOpenChange={setConfigOpen}
         onSaved={(next) => {
           const activos = next.filter((t) => t.activo);
+          setTodosTiposDoc(next);
           setTiposDoc(activos);
           if (activos.length && !activos.some((t) => t.codigo === values.documentoTipo)) {
             setValues((p) => ({ ...p, documentoTipo: activos[0].codigo, documentoNumero: '' }));

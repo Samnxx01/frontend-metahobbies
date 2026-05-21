@@ -113,9 +113,100 @@ export const INVENTARIO_MODULOS_CATALOGO: InventarioModuloCatalogo[] = [
 export const inventarioModulosOrdenados = (): InventarioModuloCatalogo[] =>
   [...INVENTARIO_MODULOS_CATALOGO].sort((a, b) => a.orden - b.orden);
 
-/** Pestañas del menú superior (todas las del catálogo con orden). */
+/** Contexto mínimo del usuario/JWT para filtrar pestañas (evita import circular con `User`). */
+export type InventarioJwtScopeUserLike = {
+  tenantSuperAdminId?: string | null;
+  tenantGlobalId?: string | null;
+  tenantCorporativoId?: string | null;
+  auth?: {
+    tenantScope?: {
+      tenantSuperAdminId?: string | null;
+      tenantGlobalId?: string | null;
+      tenantCorporativoId?: string | null;
+    };
+  };
+};
+
+/** Hay al menos un ancla de tenant en sesión (JWT + perfil). */
+export const inventarioUsuarioTieneAnclaScope = (user: InventarioJwtScopeUserLike | null | undefined): boolean => {
+  const ts = user?.auth?.tenantScope || {};
+  return Boolean(
+    String(user?.tenantSuperAdminId || ts.tenantSuperAdminId || '').trim()
+    || String(user?.tenantGlobalId || ts.tenantGlobalId || '').trim()
+    || String(user?.tenantCorporativoId || ts.tenantCorporativoId || '').trim()
+  );
+};
+
+/**
+ * Pestaña visible según alcance del JWT (`auth.tenantScope` y campos espejo en el usuario).
+ * Hoy: `trm` (Configuración TRM) solo con contexto Global o SuperAdmin (parametrización sensible).
+ */
+export const inventarioTabVisibleSegunJwt = (
+  tab: InventarioTabValue,
+  user: InventarioJwtScopeUserLike | null | undefined,
+): boolean => {
+  if (tab !== 'trm') return true;
+  const ts = user?.auth?.tenantScope || {};
+  const superAdmin = String(user?.tenantSuperAdminId || ts.tenantSuperAdminId || '').trim();
+  const global = String(user?.tenantGlobalId || ts.tenantGlobalId || '').trim();
+  return Boolean(superAdmin || global);
+};
+
+/**
+ * Pestañas visibles en el menú superior (orden del catálogo).
+ * Excluye `config`: la parametrización amplia de inventario no se muestra en la barra de pestañas.
+ */
 export const inventarioTabsDesdeCatalogo = (): Array<{ value: InventarioTabValue; label: string }> =>
-  inventarioModulosOrdenados().map(({ tab, label }) => ({ value: tab, label }));
+  inventarioModulosOrdenados()
+    .filter((m) => m.tab !== 'config')
+    .map(({ tab, label }) => ({ value: tab, label }));
+
+/** Pestañas del menú superior filtradas por JWT (`trm` u otras reglas futuras). */
+export const inventarioTabsParaMenuConJwt = (
+  user: InventarioJwtScopeUserLike | null | undefined,
+): Array<{ value: InventarioTabValue; label: string }> =>
+  inventarioTabsDesdeCatalogo().filter((t) => inventarioTabVisibleSegunJwt(t.value, user));
+
+/** `tenantSuperAdminId` del JWT para GET de tarjetas dinámicas (`/config/tarjetas`). */
+export const inventarioTenantSuperAdminIdDesdeUsuario = (
+  user: InventarioJwtScopeUserLike | null | undefined,
+): string | undefined => {
+  const ts = user?.auth?.tenantScope || {};
+  const sa = String(user?.tenantSuperAdminId || ts.tenantSuperAdminId || '').trim();
+  return /^[0-9a-fA-F]{24}$/.test(sa) ? sa : undefined;
+};
+
+const TAB_VALUES = new Set<InventarioTabValue>([
+  'stock', 'movimientos', 'orden-compras', 'ajustes', 'bodegas', 'conciliacion', 'config', 'trm',
+]);
+
+const tabValueDesdeTarjeta = (tab: string | null | undefined): InventarioTabValue => {
+  const t = String(tab || '').trim() as InventarioTabValue;
+  return TAB_VALUES.has(t) ? t : 'stock';
+};
+
+/**
+ * Pestañas del menú superior desde GET `/api/inventario/config/tarjetas`
+ * (misma fuente que ConfigInventario). Sin duplicar `tab`; respeta JWT (`trm`, etc.).
+ */
+export const inventarioTabsDesdeTarjetasDinamicas = (
+  tarjetas: Array<{ tab?: string | null; titulo: string; orden?: number }>,
+  user: InventarioJwtScopeUserLike | null | undefined,
+): Array<{ value: InventarioTabValue; label: string }> => {
+  const sorted = [...tarjetas]
+    .filter((t) => String(t.titulo || '').trim())
+    .sort((a, b) => Number(a.orden || 0) - Number(b.orden || 0) || a.titulo.localeCompare(b.titulo));
+
+  const seen = new Set<InventarioTabValue>();
+  const tabs: Array<{ value: InventarioTabValue; label: string }> = [];
+  for (const tarjeta of sorted) {
+    const value = tabValueDesdeTarjeta(tarjeta.tab);
+    if (!inventarioTabVisibleSegunJwt(value, user) || seen.has(value)) continue;
+    seen.add(value);
+    tabs.push({ value, label: String(tarjeta.titulo).trim() });
+  }
+  return tabs;
+};
 
 /**
  * Tarjetas de acceso rápido en ConfigInventario.

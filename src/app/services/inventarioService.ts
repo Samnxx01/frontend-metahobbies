@@ -1,9 +1,34 @@
 import { apiFetch } from './api';
+import type { ApiResponsePayload } from '@/app/utils/apiErrorMessage';
 import type { UsuarioOption } from './routesService';
 
+export type InventarioApiResult<T> = {
+  data: T;
+  msg?: string;
+};
+
 export type MetodoValuacion = 'PROMEDIO' | 'FIFO';
+
+export type MetodoValuacionOpcion = {
+  codigo: MetodoValuacion;
+  label: string;
+  descripcion?: string;
+  orden: number;
+};
+
+export type MetodosValuacionParametrizacion = {
+  metodoActivo: MetodoValuacion;
+  metodoBloqueadoDesdeAnioFiscal?: number | null;
+  opciones: MetodoValuacionOpcion[];
+};
 export type TipoMovimiento = 'ENTRADA' | 'SALIDA' | 'AJUSTE' | 'REVERSA';
-export type MotivoMovimiento = 'COMPRA' | 'VENTA' | 'MERMA' | 'DANO' | 'ERROR_CONTEO' | 'PERDIDA' | 'REVERSA' | 'OTRO';
+/** Código de causal parametrizada (ajustes/causales) usada como motivo en kardex. */
+export type MotivoMovimiento = string;
+
+export interface InventarioMotivoMovimiento {
+  codigo: string;
+  nombre: string;
+}
 export type TipoAjuste = 'POSITIVO' | 'NEGATIVO';
 export type EstadoAjuste = 'SOLICITADO' | 'APROBADO' | 'RECHAZADO';
 
@@ -13,7 +38,45 @@ export type InventarioFormularioRutaOpcion = {
   path: string;
   tipoNodo: string;
   component?: string | null;
+  formulariosConfig?: {
+    habilitado?: boolean;
+    modoAsignacion?: 'TENANT' | 'USUARIO' | 'NINGUNO' | string;
+    tenantIds?: string[];
+    usuarioIds?: string[];
+    soloDios?: boolean;
+  };
 };
+
+export type InventarioConfigTarjeta = {
+  id: string;
+  tenantSuperAdminId?: string | null;
+  rutaId: string | null;
+  tab?: string | null;
+  moduloPath?: string | null;
+  titulo: string;
+  descripcion: string;
+  path: string;
+  iconKey?: string | null;
+  orden: number;
+  contenido?: Record<string, unknown>;
+};
+
+export type InventarioConfigTarjetaInput = {
+  titulo?: string;
+  descripcion?: string;
+  path?: string;
+  tab?: string | null;
+  moduloPath?: string | null;
+  iconKey?: string | null;
+  orden?: number;
+  rutaId?: string | null;
+  contenido?: Record<string, unknown>;
+};
+
+const tarjetasConfigQuery = (tenantSuperAdminId?: string): string =>
+  tenantSuperAdminId && /^[0-9a-fA-F]{24}$/.test(tenantSuperAdminId)
+    ? `?tenantSuperAdminId=${encodeURIComponent(tenantSuperAdminId)}`
+    : '';
 
 /** Tenant global visible segun JWT o tenantSuperAdminId (DIOS). */
 export type InventarioTenantGlobalOpcion = {
@@ -38,30 +101,93 @@ export type InventarioFormulariosAutorizacionPolicy = {
 export interface InventarioConfig {
   _id?: string;
   metodoValuacion: MetodoValuacion;
+  metodoValuacionConfigId?: string | null;
+  metodoValuacionDetalle?: {
+    id: string | null;
+    codigo: MetodoValuacion;
+    label: string;
+    descripcion?: string;
+    orden?: number;
+  };
   metodoBloqueadoDesdeAnioFiscal?: number | null;
   periodosCerrados: string[];
+  compras?: InventarioComprasConfig;
   documentosSoporte?: DocumentoSoporteTipoConfig[];
   monedaInventario?: MonedaInventarioConfig;
 }
 
+export interface EstadoOrdenCompraConfig {
+  codigo: string;
+  nombre: string;
+  descripcion?: string;
+  orden: number;
+  activo: boolean;
+  esEstadoInicial?: boolean;
+  permiteEditarOrden?: boolean;
+  permiteConfirmarOrden?: boolean;
+  estadoDestinoConfirmacion?: string;
+  permiteComprobanteEntrada?: boolean;
+  generaComprobanteContable?: boolean;
+}
+
+export interface InventarioComprasConfig {
+  recepcionAutomatica: boolean;
+  estadosOrdenCompra?: EstadoOrdenCompraConfig[];
+}
+
 export interface MonedaInventarioConfig {
   monedaBase: string;
+  monedaBaseId?: string | null;
   monedaCompra: string;
+  monedaCompraId?: string | null;
   simbolo: string;
   decimales: number;
   formato: string;
   convertirPorTrm: boolean;
+  conversionGrupoId?: string | null;
   conversionesMoneda?: ConversionMonedaConfig[];
 }
 
 export interface ConversionMonedaConfig {
   id: string;
   monedaOrigen: string;
+  monedaOrigenId?: string | null;
   monedaDestino: string;
+  monedaDestinoId?: string | null;
   tasa: number;
   fuente: string;
   fechaVigencia?: string | null;
   activo: boolean;
+}
+
+export interface InventarioTrmHistorico {
+  id: string;
+  monedaBase: string;
+  monedaOrigen: string;
+  valor: number;
+  fechaVigencia: string;
+  fuente: string;
+  sincronizacionAutomatica: boolean;
+  estado: 'ACTIVA' | 'HISTORICA';
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface InventarioTrmHistoricoPayload {
+  monedaBase: string;
+  monedaOrigen: string;
+  valor: number;
+  fechaVigencia: string;
+  fuente: string;
+  sincronizacionAutomatica?: boolean;
+}
+
+export interface MonedaCopOption {
+  _id?: string;
+  iud?: string;
+  monedas: string;
+  estadoMoneda: boolean;
+  activosInventory?: boolean;
 }
 
 export interface DocumentoSoporteTipoConfig {
@@ -70,6 +196,33 @@ export interface DocumentoSoporteTipoConfig {
   prefijo: string;
   padding: number;
   siguiente: number;
+  activo: boolean;
+  totalRecepciones?: number;
+  puedeReiniciarSecuencia?: boolean;
+}
+
+export interface InventarioLibroFiscalConfig {
+  id: string;
+  iud?: string | null;
+  codigo: string;
+  nombre: string;
+  tipoLibro: string;
+  periodicidad: string;
+  formato: 'PDF' | 'EXCEL' | 'XML' | 'CSV';
+  prefijo: string;
+  padding: number;
+  siguiente: number;
+  anioFiscal: number;
+  descripcion?: string;
+  activo: boolean;
+}
+
+export interface InventarioLibroFiscalCatalogoHijo {
+  id?: string;
+  iud?: string | null;
+  codigo: string;
+  nombre: string;
+  descripcion?: string;
   activo: boolean;
 }
 
@@ -163,6 +316,11 @@ export interface OrdenCompraItemLinea {
 export interface RecepcionOrdenCompraPayload {
   numeroRecepcion: string;
   documentoSoporte: { tipo: string; numero: string };
+  /** true = confirma y ocupa secuencia; false = borrador PENDIENTE_APROBACION sin kardex. */
+  confirmar?: boolean;
+  /** En subproceso manual: true fuerza kardex aunque recepción no sea automática. */
+  aplicarKardex?: boolean;
+  estado?: boolean;
   items: Array<{
     ordenItemIndex?: number;
     sku: string;
@@ -171,10 +329,16 @@ export interface RecepcionOrdenCompraPayload {
 }
 
 export interface RecepcionOrdenCompraResponse {
+  /** Indica si al confirmar se registró kardex (recepción automática o estado explícito true). */
+  aplicoKardex?: boolean;
+  aplicoContable?: boolean;
+  msg?: string;
   orden: InventarioOrdenCompra;
   recepcion: {
     _id: string;
     numeroRecepcion: string;
+    estado?: 'PENDIENTE_APROBACION' | 'APROBADA' | 'RECHAZADA' | 'ANULADA';
+    documentoSoporte?: { tipo: string; numero: string };
     items: Array<{
       sku: string;
       cantidadRecibida: number;
@@ -188,6 +352,14 @@ export interface RecepcionOrdenCompraResponse {
   };
 }
 
+export interface EliminarOrdenCompraResponse {
+  eliminado: boolean;
+  id: string;
+  recepcionesAnuladas?: number;
+  reversionAutomatica?: boolean;
+  modoRecepcion?: 'AUTOMATICA' | 'MANUAL';
+}
+
 export interface InventarioOrdenCompra {
   _id: string;
   numeroOrden: string;
@@ -199,6 +371,16 @@ export interface InventarioOrdenCompra {
   proveedor: { nombre: string; nit: string };
   documentoLegalCompra: { tipo: string; numero: string; fecha: string };
   estado: string;
+  comprobanteContable?: {
+    numero?: string;
+    documentoSoporteId?: string | null;
+    confirmadoEn?: string;
+    confirmadoPor?: string | null;
+  } | null;
+  procesoCompra?: {
+    recepcionAutomatica?: boolean;
+    modoRecepcion?: 'AUTOMATICA' | 'MANUAL';
+  };
   items: Array<OrdenCompraItemLinea & { cantidadRecibida?: number }>;
   createdAt?: string;
   updatedAt?: string;
@@ -280,11 +462,81 @@ export interface BodegaInventario {
   municipiosSubnodo?: Array<{ ciudadId: string; nombre: string }>;
 }
 
+export interface InventarioTipoAjuste {
+  _id?: string;
+  iud?: string;
+  codigo: string;
+  nombre: string;
+  direccion: TipoAjuste;
+  descripcion?: string;
+  estado: boolean;
+}
+
+export interface InventarioCausalAjuste {
+  _id?: string;
+  iud?: string;
+  codigo: string;
+  nombre: string;
+  descripcion?: string;
+  estado: boolean;
+}
+
+export interface ComprobanteEntradaAjusteItem {
+  lineaKey?: string;
+  sku: string;
+  bodega: string;
+  cantidadRecibida: number;
+  costoUnitario: number;
+  disponibleKardex?: number;
+  costoPromedioKardex?: number;
+  movimientoKardexId?: string | null;
+  movimientoLedgerId?: string | null;
+  estadoKardex?: 'CONFIRMADO' | 'NO_CONFIRMADO';
+  puedeSalida?: boolean;
+}
+
+export interface ComprobanteEntradaAjuste {
+  recepcionId: string;
+  numeroRecepcion: string;
+  estado?: string;
+  documentoSoporteId?: string | null;
+  documentoSoporte?: { tipo: string; numero: string };
+  ordenCompraId?: string | null;
+  numeroOrden?: string | null;
+  proveedorNombre?: string | null;
+  proveedorNit?: string | null;
+  bodega: string | null;
+  bodegas: string[];
+  items: ComprobanteEntradaAjusteItem[];
+  createdAt?: string;
+  tieneLineasSalida?: boolean;
+  puedeSalidaComprobante?: boolean;
+}
+
+export interface ComprobanteEntradaDetalle {
+  recepcionId: string;
+  numeroRecepcion: string;
+  estado: string;
+  documentoSoporte: { tipo: string; numero: string };
+  orden: {
+    _id: string;
+    numeroOrden: string;
+    estado: string;
+    proveedor?: { nombre?: string; nit?: string } | null;
+  } | null;
+  items: ComprobanteEntradaAjusteItem[];
+  createdAt?: string;
+  updatedAt?: string;
+  puedeSalidaComprobante?: boolean;
+}
+
 export interface AjusteInventario {
   _id: string;
   sku: string;
   bodega: string;
+  tipoAjusteCodigo?: string;
   tipoAjuste: TipoAjuste;
+  recepcionCompraId?: string | null;
   causal: string;
   cantidad: number;
   costoUnitarioReferencia?: number;
@@ -295,9 +547,10 @@ export interface AjusteInventario {
 }
 
 export interface AjustePayload {
+  recepcionCompraId?: string;
   sku: string;
   bodega: string;
-  tipoAjuste: TipoAjuste;
+  tipoAjusteCodigo: string;
   causal: string;
   cantidad: number;
   costoUnitarioReferencia?: number;
@@ -326,15 +579,21 @@ export interface InventoryLedgerMovement {
   referenceDocument: {
     type: string;
     number: string;
+    comprobanteId?: string | null;
+    ordenCompraId?: string | null;
     invoiceId?: string | null;
     issuedAt?: string | null;
   };
-  cufe: string;
   parentTransactionId?: string | null;
   reason: string;
   transactionHash: string;
   previousHash?: string | null;
-  audit?: { userId?: string; ipOrigen?: string; timestamp?: string };
+  audit?: {
+    usuarioId?: string;
+    usuarioCorreo?: string | null;
+    ipOrigen?: string;
+    timestamp?: string;
+  };
   createdAt?: string;
   updatedAt?: string;
   parent?: InventoryLedgerMovement | null;
@@ -352,6 +611,54 @@ export interface LedgerByInvoiceResponse {
   movements: InventoryLedgerMovement[];
 }
 
+export interface InventarioComprobanteContable {
+  id: string;
+  tipo: string;
+  numero: string;
+  comprobanteId?: string | null;
+  documentoSoporteId?: string | null;
+  invoiceId?: string | null;
+  fechaPrimera?: string;
+  fechaUltima?: string;
+  totalMovimientos: number;
+  totalProductos: number;
+  tiposMovimiento: string[];
+  direcciones: string[];
+  cantidadEntrada: number;
+  cantidadSalida: number;
+  valorEntrada: number;
+  valorSalida: number;
+  ultimoHash?: string | null;
+  razonUltima?: string | null;
+  usuarioEjecutorId?: string | null;
+  usuarioEjecutorCorreo?: string | null;
+  ipOrigenEjecutor?: string | null;
+  ejecutadoEn?: string | null;
+}
+
+export interface CrearComprobanteContablePayload {
+  sku: string;
+  direction: 'IN' | 'OUT';
+  quantity: number;
+  unitCost?: number;
+  reason: string;
+  documentoCodigo?: string;
+  usarSecuenciaAutomatica?: boolean;
+  referenceDocument: {
+    type?: string;
+    number?: string;
+    issuedAt?: string | null;
+  };
+}
+
+export interface SiguienteNumeroComprobantePreview {
+  codigo: string;
+  prefijo: string;
+  padding: number;
+  siguiente: number;
+  siguienteFormateado: string;
+}
+
 const buildQuery = (params: Record<string, string | number | undefined | null>): string => {
   const query = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
@@ -363,24 +670,93 @@ const buildQuery = (params: Record<string, string | number | undefined | null>):
   return text ? `?${text}` : '';
 };
 
+/** Respuestas `{ ok, data }`; si `data` no es arreglo, devuelve `[]` para no romper `.length` / `.map` en UI. */
+const listaDesdeResp = <T>(resp: unknown): T[] => {
+  if (!resp || typeof resp !== 'object') return [];
+  const d = (resp as { data?: unknown }).data;
+  return Array.isArray(d) ? (d as T[]) : [];
+};
+
 const inventarioService = {
   async obtenerConfig(): Promise<InventarioConfig> {
     const resp = await apiFetch('/api/inventario/config', { method: 'GET' });
     return resp?.data as InventarioConfig;
   },
 
-  async actualizarMetodoValuacion(metodoValuacion: MetodoValuacion): Promise<InventarioConfig> {
+  async obtenerMetodosValuacionOpciones(): Promise<MetodosValuacionParametrizacion> {
+    const resp = await apiFetch('/api/inventario/config/metodo-valuacion/opciones', { method: 'GET' });
+    return resp?.data as MetodosValuacionParametrizacion;
+  },
+
+  async guardarMetodoValuacion(
+    metodoValuacion: MetodoValuacion,
+    params: { anioFiscal?: number | string | null } = {},
+  ): Promise<InventarioConfig> {
     const resp = await apiFetch('/api/inventario/config/metodo-valuacion', {
       method: 'PUT',
-      body: { metodoValuacion },
+      body: {
+        metodoValuacion,
+        ...(params.anioFiscal != null && params.anioFiscal !== '' ? { anioFiscal: Number(params.anioFiscal) } : {}),
+      },
     });
     return resp?.data as InventarioConfig;
+  },
+
+  /** @deprecated Preferir guardarMetodoValuacion (PUT). */
+  async actualizarMetodoValuacion(metodoValuacion: MetodoValuacion): Promise<InventarioConfig> {
+    return this.guardarMetodoValuacion(metodoValuacion);
   },
 
   async actualizarMonedaInventario(monedaInventario: MonedaInventarioConfig): Promise<InventarioConfig> {
     const resp = await apiFetch('/api/inventario/config/moneda', {
       method: 'PUT',
       body: monedaInventario,
+    });
+    return resp?.data as InventarioConfig;
+  },
+
+  async listarTrmHistorico(): Promise<InventarioTrmHistorico[]> {
+    const resp = await apiFetch('/api/inventario/config/trm/historico', { method: 'GET' });
+    return (resp?.data ?? []) as InventarioTrmHistorico[];
+  },
+
+  async guardarTrmHistorico(payload: InventarioTrmHistoricoPayload): Promise<InventarioTrmHistorico> {
+    const resp = await apiFetch('/api/inventario/config/trm/historico', {
+      method: 'POST',
+      body: payload,
+    });
+    return resp?.data as InventarioTrmHistorico;
+  },
+
+  async listarMonedasCop(): Promise<MonedaCopOption[]> {
+    const resp = await apiFetch('/api/monedas/seguridad/listar/monedas', { method: 'GET' });
+    const rows = Array.isArray(resp?.monedas) ? resp.monedas : [];
+    return rows as MonedaCopOption[];
+  },
+
+  async sincronizarMonedasInventory(): Promise<MonedaCopOption[]> {
+    const resp = await apiFetch('/api/inventario/config/monedas-inventory/sincronizar', { method: 'PUT' });
+    const rows = Array.isArray(resp?.data?.monedas) ? resp.data.monedas : [];
+    return rows as MonedaCopOption[];
+  },
+
+  async listarEstadosOrdenCompra(): Promise<EstadoOrdenCompraConfig[]> {
+    const resp = await apiFetch('/api/inventario/config/compras/estados-orden', { method: 'GET' });
+    return (resp?.data ?? []) as EstadoOrdenCompraConfig[];
+  },
+
+  async guardarEstadosOrdenCompra(estados: EstadoOrdenCompraConfig[]): Promise<EstadoOrdenCompraConfig[]> {
+    const resp = await apiFetch('/api/inventario/config/compras/estados-orden', {
+      method: 'PUT',
+      body: { estados },
+    });
+    return (resp?.data ?? []) as EstadoOrdenCompraConfig[];
+  },
+
+  async actualizarConfigCompras(compras: InventarioComprasConfig): Promise<InventarioConfig> {
+    const resp = await apiFetch('/api/inventario/config/compras', {
+      method: 'PUT',
+      body: compras,
     });
     return resp?.data as InventarioConfig;
   },
@@ -396,6 +772,95 @@ const inventarioService = {
       body: { documentos },
     });
     return (resp?.data ?? []) as DocumentoSoporteTipoConfig[];
+  },
+
+  async sincronizarSecuenciaDocumentoSoporte(codigo: string): Promise<{
+    codigo: string;
+    prefijo: string;
+    padding: number;
+    maxUsado: number;
+    siguiente: number;
+    siguienteFormateado: string;
+    recepcionesConsultadas: string;
+  }> {
+    const resp = await apiFetch('/api/inventario/config/documentos-soporte/sincronizar-secuencia', {
+      method: 'POST',
+      body: { codigo },
+    });
+    return resp?.data as {
+      codigo: string;
+      prefijo: string;
+      padding: number;
+      maxUsado: number;
+      siguiente: number;
+      siguienteFormateado: string;
+      recepcionesConsultadas: string;
+    };
+  },
+
+  async listarTiposLibroFiscalCatalogo(): Promise<InventarioLibroFiscalCatalogoHijo[]> {
+    const resp = await apiFetch('/api/inventario/config/libros-fiscales/catalogos/tipos-libro', { method: 'GET' });
+    return (resp?.data ?? []) as InventarioLibroFiscalCatalogoHijo[];
+  },
+
+  async guardarTiposLibroFiscalCatalogo(tipos: InventarioLibroFiscalCatalogoHijo[]): Promise<InventarioLibroFiscalCatalogoHijo[]> {
+    const resp = await apiFetch('/api/inventario/config/libros-fiscales/catalogos/tipos-libro', {
+      method: 'PUT',
+      body: { tipos },
+    });
+    return (resp?.data ?? []) as InventarioLibroFiscalCatalogoHijo[];
+  },
+
+  async listarPeriodicidadesLibroFiscalCatalogo(): Promise<InventarioLibroFiscalCatalogoHijo[]> {
+    const resp = await apiFetch('/api/inventario/config/libros-fiscales/catalogos/periodicidades', { method: 'GET' });
+    return (resp?.data ?? []) as InventarioLibroFiscalCatalogoHijo[];
+  },
+
+  async guardarPeriodicidadesLibroFiscalCatalogo(periodicidades: InventarioLibroFiscalCatalogoHijo[]): Promise<InventarioLibroFiscalCatalogoHijo[]> {
+    const resp = await apiFetch('/api/inventario/config/libros-fiscales/catalogos/periodicidades', {
+      method: 'PUT',
+      body: { periodicidades },
+    });
+    return (resp?.data ?? []) as InventarioLibroFiscalCatalogoHijo[];
+  },
+
+  async listarLibrosFiscales(): Promise<InventarioLibroFiscalConfig[]> {
+    const resp = await apiFetch('/api/inventario/config/libros-fiscales', { method: 'GET' });
+    return (resp?.data ?? []) as InventarioLibroFiscalConfig[];
+  },
+
+  async guardarLibrosFiscales(libros: InventarioLibroFiscalConfig[]): Promise<InventarioLibroFiscalConfig[]> {
+    const resp = await apiFetch('/api/inventario/config/libros-fiscales', {
+      method: 'PUT',
+      body: { libros },
+    });
+    return (resp?.data ?? []) as InventarioLibroFiscalConfig[];
+  },
+
+  async listarPeriodicidadesLibroFiscal(libroFiscalConfigId: string): Promise<InventarioLibroFiscalCatalogoHijo[]> {
+    const resp = await apiFetch(`/api/inventario/config/libros-fiscales/${encodeURIComponent(libroFiscalConfigId)}/periodicidades`, { method: 'GET' });
+    return (resp?.data ?? []) as InventarioLibroFiscalCatalogoHijo[];
+  },
+
+  async guardarPeriodicidadesLibroFiscal(libroFiscalConfigId: string, periodicidades: InventarioLibroFiscalCatalogoHijo[]): Promise<InventarioLibroFiscalCatalogoHijo[]> {
+    const resp = await apiFetch(`/api/inventario/config/libros-fiscales/${encodeURIComponent(libroFiscalConfigId)}/periodicidades`, {
+      method: 'PUT',
+      body: { periodicidades },
+    });
+    return (resp?.data ?? []) as InventarioLibroFiscalCatalogoHijo[];
+  },
+
+  async listarFormatosLibroFiscal(libroFiscalConfigId: string): Promise<InventarioLibroFiscalCatalogoHijo[]> {
+    const resp = await apiFetch(`/api/inventario/config/libros-fiscales/${encodeURIComponent(libroFiscalConfigId)}/formatos`, { method: 'GET' });
+    return (resp?.data ?? []) as InventarioLibroFiscalCatalogoHijo[];
+  },
+
+  async guardarFormatosLibroFiscal(libroFiscalConfigId: string, formatos: InventarioLibroFiscalCatalogoHijo[]): Promise<InventarioLibroFiscalCatalogoHijo[]> {
+    const resp = await apiFetch(`/api/inventario/config/libros-fiscales/${encodeURIComponent(libroFiscalConfigId)}/formatos`, {
+      method: 'PUT',
+      body: { formatos },
+    });
+    return (resp?.data ?? []) as InventarioLibroFiscalCatalogoHijo[];
   },
 
   async obtenerFormulariosAutorizacionOpciones(tenantSuperAdminId?: string): Promise<{
@@ -436,11 +901,45 @@ const inventarioService = {
     };
   },
 
+  async listarTarjetasConfig(tenantSuperAdminId?: string): Promise<InventarioConfigTarjeta[]> {
+    const resp = await apiFetch(`/api/inventario/config/tarjetas${tarjetasConfigQuery(tenantSuperAdminId)}`, {
+      method: 'GET',
+    });
+    return (resp?.data ?? []) as InventarioConfigTarjeta[];
+  },
+
+  async actualizarTarjetaConfig(
+    id: string,
+    body: InventarioConfigTarjetaInput,
+    tenantSuperAdminId?: string,
+  ): Promise<InventarioConfigTarjeta> {
+    const resp = await apiFetch(
+      `/api/inventario/config/tarjetas/${encodeURIComponent(id)}${tarjetasConfigQuery(tenantSuperAdminId)}`,
+      { method: 'PUT', body },
+    );
+    return resp?.data as InventarioConfigTarjeta;
+  },
+
+  async eliminarTarjetaConfig(id: string, tenantSuperAdminId?: string): Promise<{ id: string; eliminada: boolean }> {
+    const resp = await apiFetch(
+      `/api/inventario/config/tarjetas/${encodeURIComponent(id)}${tarjetasConfigQuery(tenantSuperAdminId)}`,
+      { method: 'DELETE' },
+    );
+    return (resp?.data ?? { id, eliminada: true }) as { id: string; eliminada: boolean };
+  },
+
   async aplicarFormulariosAutorizacion(body: {
     rutaIds: string[];
     tenantIds: string[];
     usuarioIds: string[];
     tenantSuperAdminId?: string;
+    tarjetaConfig?: {
+      tab?: string | null;
+      moduloPath?: string | null;
+      tituloModulo?: string | null;
+      descripcionModulo?: string | null;
+      iconKey?: string | null;
+    };
   }): Promise<{ actualizadas: number; resultados: Array<{ rutaId: string; ok: boolean; error?: string }> }> {
     const resp = await apiFetch('/api/inventario/config/formularios-autorizacion', {
       method: 'PUT',
@@ -473,6 +972,27 @@ const inventarioService = {
   async obtenerLedgerPorInvoice(invoiceId: string): Promise<LedgerByInvoiceResponse> {
     const resp = await apiFetch(`/api/inventario/ledger/by-invoice/${encodeURIComponent(invoiceId)}`, { method: 'GET' });
     return resp?.data as LedgerByInvoiceResponse;
+  },
+
+  async listarComprobantesContables(): Promise<InventarioComprobanteContable[]> {
+    const resp = await apiFetch('/api/inventario/config/comprobantes-contables', { method: 'GET' });
+    return (resp?.data ?? []) as InventarioComprobanteContable[];
+  },
+
+  async previewSiguienteNumeroComprobante(codigo: string): Promise<SiguienteNumeroComprobantePreview> {
+    const resp = await apiFetch(
+      `/api/inventario/config/comprobantes-contables/siguiente-numero${buildQuery({ codigo })}`,
+      { method: 'GET' }
+    );
+    return resp?.data as SiguienteNumeroComprobantePreview;
+  },
+
+  async crearComprobanteContable(payload: CrearComprobanteContablePayload): Promise<InventoryLedgerMovement> {
+    const resp = await apiFetch('/api/inventario/config/comprobantes-contables', {
+      method: 'POST',
+      body: payload,
+    });
+    return resp?.data as InventoryLedgerMovement;
   },
 
   async registrarEntrada(payload: MovimientoPayload): Promise<InventarioMovimiento> {
@@ -559,7 +1079,7 @@ const inventarioService = {
 
   async listarProveedoresCompra(): Promise<InventarioProveedor[]> {
     const resp = await apiFetch('/api/inventario/compras/proveedores', { method: 'GET' });
-    return (resp?.data ?? []) as InventarioProveedor[];
+    return listaDesdeResp<InventarioProveedor>(resp);
   },
 
   async listarTiposProveedor(): Promise<InventarioTipoProveedor[]> {
@@ -590,7 +1110,19 @@ const inventarioService = {
 
   async listarOrdenesCompra(params: { limit?: number } = {}): Promise<InventarioOrdenCompra[]> {
     const resp = await apiFetch(`/api/inventario/compras/ordenes${buildQuery(params)}`, { method: 'GET' });
-    return (resp?.data ?? []) as InventarioOrdenCompra[];
+    return listaDesdeResp<InventarioOrdenCompra>(resp);
+  },
+
+  /** GET /api/inventario/compras/ordenes/:id */
+  async obtenerOrdenCompra(id: string): Promise<InventarioOrdenCompra> {
+    const resp = await apiFetch(`/api/inventario/compras/ordenes/${id}`, { method: 'GET' });
+    return resp?.data as InventarioOrdenCompra;
+  },
+
+  /** GET /api/inventario/compras/ordenes/:id/conciliacion */
+  async obtenerConciliacionOrdenCompra(id: string): Promise<unknown> {
+    const resp = await apiFetch(`/api/inventario/compras/ordenes/${id}/conciliacion`, { method: 'GET' });
+    return resp?.data;
   },
 
   async obtenerSiguienteNumeroOrdenCompra(): Promise<SiguienteNumeroOrdenCompra> {
@@ -624,8 +1156,32 @@ const inventarioService = {
     return resp?.data as InventarioOrdenCompra;
   },
 
-  async eliminarOrdenCompra(id: string, payload: { justificacion: string }): Promise<void> {
-    await apiFetch(`/api/inventario/compras/ordenes/${id}`, { method: 'DELETE', body: payload });
+  async confirmarOrdenCompra(id: string): Promise<{
+    orden: InventarioOrdenCompra;
+    comprobanteContable: {
+      numero: string;
+      tipo: string;
+      documentoSoporteId?: string | null;
+      comprobanteId: string;
+      totalMovimientos: number;
+    };
+  }> {
+    const resp = await apiFetch(`/api/inventario/compras/ordenes/${id}/confirmar`, { method: 'POST' });
+    return resp?.data as {
+      orden: InventarioOrdenCompra;
+      comprobanteContable: {
+        numero: string;
+        tipo: string;
+        documentoSoporteId?: string | null;
+        comprobanteId: string;
+        totalMovimientos: number;
+      };
+    };
+  },
+
+  async eliminarOrdenCompra(id: string, payload: { justificacion: string }): Promise<EliminarOrdenCompraResponse> {
+    const resp = await apiFetch(`/api/inventario/compras/ordenes/${id}`, { method: 'DELETE', body: payload });
+    return resp?.data as EliminarOrdenCompraResponse;
   },
 
   async registrarRecepcionOrdenCompra(
@@ -634,6 +1190,22 @@ const inventarioService = {
   ): Promise<RecepcionOrdenCompraResponse> {
     const resp = await apiFetch(`/api/inventario/compras/ordenes/${id}/recepciones`, { method: 'POST', body: payload });
     return resp?.data as RecepcionOrdenCompraResponse;
+  },
+
+  async confirmarRecepcionOrdenCompra(
+    recepcionId: string,
+    payload: { estado?: boolean; confirmar?: boolean } = {}
+  ): Promise<RecepcionOrdenCompraResponse> {
+    const resp = await apiFetch(`/api/inventario/compras/recepciones/${recepcionId}/confirmar`, {
+      method: 'POST',
+      body: payload,
+    });
+    const data = (resp?.data || {}) as RecepcionOrdenCompraResponse;
+    return {
+      ...data,
+      aplicoKardex: data.aplicoKardex,
+      msg: typeof resp?.msg === 'string' ? resp.msg : data.msg,
+    };
   },
 
   async crearProveedorCompra(payload: {
@@ -686,27 +1258,144 @@ const inventarioService = {
     await apiFetch(`/api/inventario/bodegas/${id}`, { method: 'DELETE' });
   },
 
+  async listarComprobantesEntradaAjustes(limit = 200): Promise<ComprobanteEntradaAjuste[]> {
+    const resp = await apiFetch(`/api/inventario/ajustes/comprobantes-entrada${buildQuery({ limit })}`, { method: 'GET' });
+    return (resp?.data ?? []) as ComprobanteEntradaAjuste[];
+  },
+
+  /** Comprobantes aprobados con kardex confirmado y stock disponible (salidas / traslados). */
+  async listarComprobantesEntradaMovimientos(limit = 200): Promise<ComprobanteEntradaAjuste[]> {
+    const resp = await apiFetch(`/api/inventario/compras/comprobantes-entrada${buildQuery({ limit })}`, { method: 'GET' });
+    return (resp?.data ?? []) as ComprobanteEntradaAjuste[];
+  },
+
+  async obtenerDetalleComprobanteEntrada(recepcionId: string): Promise<ComprobanteEntradaDetalle> {
+    const resp = await apiFetch(`/api/inventario/compras/recepciones/${encodeURIComponent(recepcionId)}/detalle`, {
+      method: 'GET',
+    });
+    return resp?.data as ComprobanteEntradaDetalle;
+  },
+
+  async registrarTraslado(payload: {
+    sku: string;
+    bodegaOrigen: string;
+    bodegaDestino: string;
+    cantidad: number;
+    tipoMovimientoConfigId?: string;
+    motivo?: string;
+    documentoRelacionado?: { tipo: string; numero: string };
+  }): Promise<{ salida: InventarioMovimiento; entrada: InventarioMovimiento }> {
+    const resp = await apiFetch('/api/inventario/movimientos/traslado', { method: 'POST', body: payload });
+    return resp?.data as { salida: InventarioMovimiento; entrada: InventarioMovimiento };
+  },
+
+  async listarTiposAjuste(): Promise<InventarioTipoAjuste[]> {
+    const resp = await apiFetch('/api/inventario/ajustes/tipos', { method: 'GET' });
+    return (resp?.data ?? []) as InventarioTipoAjuste[];
+  },
+
+  async listarTiposAjusteAdmin(): Promise<InventarioTipoAjuste[]> {
+    const resp = await apiFetch('/api/inventario/ajustes/tipos/admin', { method: 'GET' });
+    return (resp?.data ?? []) as InventarioTipoAjuste[];
+  },
+
+  async crearTipoAjuste(payload: {
+    codigo?: string;
+    nombre: string;
+    direccion: TipoAjuste;
+    descripcion?: string;
+    estado?: boolean;
+  }): Promise<InventarioApiResult<InventarioTipoAjuste>> {
+    const resp = await apiFetch('/api/inventario/ajustes/tipos', { method: 'POST', body: payload }) as ApiResponsePayload<InventarioTipoAjuste>;
+    return { data: resp.data as InventarioTipoAjuste, msg: resp.msg };
+  },
+
+  async actualizarTipoAjuste(
+    codigo: string,
+    payload: {
+      nombre?: string;
+      direccion?: TipoAjuste;
+      descripcion?: string;
+      estado?: boolean;
+    }
+  ): Promise<InventarioApiResult<InventarioTipoAjuste>> {
+    const resp = await apiFetch(`/api/inventario/ajustes/tipos/${encodeURIComponent(codigo)}`, {
+      method: 'PUT',
+      body: payload,
+    }) as ApiResponsePayload<InventarioTipoAjuste>;
+    return { data: resp.data as InventarioTipoAjuste, msg: resp.msg };
+  },
+
+  async eliminarTipoAjuste(codigo: string): Promise<InventarioApiResult<{ codigo: string }>> {
+    const resp = await apiFetch(`/api/inventario/ajustes/tipos/${encodeURIComponent(codigo)}`, {
+      method: 'DELETE',
+    }) as ApiResponsePayload<{ codigo: string }>;
+    return { data: resp.data as { codigo: string }, msg: resp.msg };
+  },
+
+  async listarCausalesAjuste(): Promise<InventarioCausalAjuste[]> {
+    const resp = await apiFetch('/api/inventario/ajustes/causales', { method: 'GET' });
+    return (resp?.data ?? []) as InventarioCausalAjuste[];
+  },
+
+  async listarCausalesAjusteAdmin(): Promise<InventarioCausalAjuste[]> {
+    const resp = await apiFetch('/api/inventario/ajustes/causales/admin', { method: 'GET' });
+    return (resp?.data ?? []) as InventarioCausalAjuste[];
+  },
+
+  async crearCausalAjuste(payload: {
+    codigo?: string;
+    nombre: string;
+    descripcion?: string;
+    estado?: boolean;
+  }): Promise<InventarioApiResult<InventarioCausalAjuste>> {
+    const resp = await apiFetch('/api/inventario/ajustes/causales', { method: 'POST', body: payload }) as ApiResponsePayload<InventarioCausalAjuste>;
+    return { data: resp.data as InventarioCausalAjuste, msg: resp.msg };
+  },
+
+  async actualizarCausalAjuste(
+    codigo: string,
+    payload: {
+      nombre?: string;
+      descripcion?: string;
+      estado?: boolean;
+    }
+  ): Promise<InventarioApiResult<InventarioCausalAjuste>> {
+    const resp = await apiFetch(`/api/inventario/ajustes/causales/${encodeURIComponent(codigo)}`, {
+      method: 'PUT',
+      body: payload,
+    }) as ApiResponsePayload<InventarioCausalAjuste>;
+    return { data: resp.data as InventarioCausalAjuste, msg: resp.msg };
+  },
+
+  async eliminarCausalAjuste(codigo: string): Promise<InventarioApiResult<{ codigo: string }>> {
+    const resp = await apiFetch(`/api/inventario/ajustes/causales/${encodeURIComponent(codigo)}`, {
+      method: 'DELETE',
+    }) as ApiResponsePayload<{ codigo: string }>;
+    return { data: resp.data as { codigo: string }, msg: resp.msg };
+  },
+
   async listarAjustes(params: { estado?: EstadoAjuste | ''; sku?: string } = {}): Promise<AjusteInventario[]> {
     const resp = await apiFetch(`/api/inventario/ajustes${buildQuery(params)}`, { method: 'GET' });
     return (resp?.data ?? []) as AjusteInventario[];
   },
 
-  async solicitarAjuste(payload: AjustePayload): Promise<AjusteInventario> {
-    const resp = await apiFetch('/api/inventario/ajustes', { method: 'POST', body: payload });
-    return resp?.data as AjusteInventario;
+  async solicitarAjuste(payload: AjustePayload): Promise<InventarioApiResult<AjusteInventario>> {
+    const resp = await apiFetch('/api/inventario/ajustes', { method: 'POST', body: payload }) as ApiResponsePayload<AjusteInventario>;
+    return { data: resp.data as AjusteInventario, msg: resp.msg };
   },
 
-  async aprobarAjuste(id: string): Promise<AjusteInventario> {
-    const resp = await apiFetch(`/api/inventario/ajustes/${id}/aprobar`, { method: 'POST' });
-    return resp?.data as AjusteInventario;
+  async aprobarAjuste(id: string): Promise<InventarioApiResult<AjusteInventario>> {
+    const resp = await apiFetch(`/api/inventario/ajustes/${id}/aprobar`, { method: 'POST' }) as ApiResponsePayload<AjusteInventario>;
+    return { data: resp.data as AjusteInventario, msg: resp.msg };
   },
 
-  async rechazarAjuste(id: string, motivoRechazo: string): Promise<AjusteInventario> {
+  async rechazarAjuste(id: string, motivoRechazo: string): Promise<InventarioApiResult<AjusteInventario>> {
     const resp = await apiFetch(`/api/inventario/ajustes/${id}/rechazar`, {
       method: 'POST',
       body: { motivoRechazo },
-    });
-    return resp?.data as AjusteInventario;
+    }) as ApiResponsePayload<AjusteInventario>;
+    return { data: resp.data as AjusteInventario, msg: resp.msg };
   },
 
   async stockActual(bodega?: string): Promise<StockActualItem[]> {

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { toast } from 'react-toastify';
+import { invalidateSidebarCache } from '@/app/services/routeService';
 import {
   getAllRoutes,
   createRoute,
@@ -14,6 +15,7 @@ import {
   createCatalogoCodigo,
   getAccessTypes,
   getAccionesCatalogo,
+  getRouteById,
   createAccessType,
   updateAccessType,
   deactivateAccessType,
@@ -69,8 +71,30 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { ChevronDown, ChevronRight, Edit, Eye, Loader2, Network, Plus, RefreshCw, Trash2, Users } from 'lucide-react';
+import { ChevronDown, ChevronRight, Edit, Loader2, RefreshCw, Trash2 } from 'lucide-react';
 import { apiFetch } from '@/app/services/api';
+import { getJerarquiaUsuarios, type JerarquiaResponse } from '@/app/services/tenantUsuariosService';
+import { GestionRutasUsuariosOrganigrama } from '@/app/presentation/pages/admin/components/GestionRutasUsuariosOrganigrama';
+import { OrganigramaLegendaInfoButton } from '@/app/presentation/components/admin/usuarios-tenant/JerarquiaOrganigrama';
+import {
+  GestionRutasToolbarParametrizacion,
+  type GestionRutasToolbarDraft,
+  type GestionRutasToolbarMode,
+} from '@/app/presentation/pages/admin/components/GestionRutasToolbarParametrizacion';
+import {
+  buildJerarquiaUsuariosListaParaModal,
+  type JerarquiaUsuariosListaMeta,
+} from '@/app/presentation/utils/jerarquiaUsuariosFlatten';
+import { contarUsuariosPoolJerarquia } from '@/app/presentation/utils/gestionRutasOrganigramaTree';
+import {
+  ParameterizedActionBar,
+  ParameterizedToolbarActionBar,
+  buildGestionRutasToolbarCatalog,
+  buildRouteRowActionCatalog,
+  GESTION_RUTAS_TOOLBAR_ACTION_IDS,
+  resolveRouteRowAllowedIds,
+} from '@/app/presentation/actions';
+import type { ActionId } from '@/app/presentation/actions';
 
 type NodeTypeRef = string;
 
@@ -115,6 +139,14 @@ interface NodeTypeCodeOption {
   perfilCorporativoId?: string | null;
 }
 
+interface GestionRutasToolbarPolicy {
+  mode?: GestionRutasToolbarMode | string;
+  actionIds?: string[];
+  canList?: boolean;
+  canCreate?: boolean;
+  canManage?: boolean;
+}
+
 export default function GestionRutas(): React.ReactElement {
   const [routes, setRoutes] = useState<Route[]>([]);
   const [nodeTypes, setNodeTypes] = useState<TipoNodoRuta[]>([]);
@@ -122,6 +154,8 @@ export default function GestionRutas(): React.ReactElement {
   const [accessTypes, setAccessTypes] = useState<AccessTypeOption[]>([]);
   const [accionesCatalogo, setAccionesCatalogo] = useState<AccionOption[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [toolbarPolicy, setToolbarPolicy] = useState<GestionRutasToolbarPolicy | null>(null);
+  const [toolbarDraft, setToolbarDraft] = useState<GestionRutasToolbarDraft | null>(null);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [isTreeModalOpen, setIsTreeModalOpen] = useState<boolean>(false);
   const [isNodeTypeModalOpen, setIsNodeTypeModalOpen] = useState<boolean>(false);
@@ -153,7 +187,8 @@ export default function GestionRutas(): React.ReactElement {
 
   // Modal edición de usuarios
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
-  const [usuarios, setUsuarios] = useState<any[]>([]);
+  const [usuariosJerarquiaMeta, setUsuariosJerarquiaMeta] = useState<JerarquiaUsuariosListaMeta | null>(null);
+  const [jerarquiaUsuariosRaw, setJerarquiaUsuariosRaw] = useState<JerarquiaResponse | null>(null);
   const [usuariosLoading, setUsuariosLoading] = useState(false);
   const [usuarioSearch, setUsuarioSearch] = useState('');
   const [editingUser, setEditingUser] = useState<any | null>(null);
@@ -215,29 +250,59 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
 
   const resolveRouteId = (route: Route): string =>
     String((route as any)?._id || route?.iud || '');
-  const resolveNodeTypeId = (nodeType: TipoNodoRuta | any): string =>
-    String(nodeType?.iud || nodeType?._id || '');
-  const resolveAccessTypeIds = (route: Route): string[] => {
-    const raw = (route as any)?.accessType;
-    if (!raw) return [];
-    if (Array.isArray(raw)) {
-      return raw
-        .map((item) => String((item as any)?._id || (item as any)?.iud || item || '').trim())
-        .filter(Boolean);
+  const normalizeMongoId = (value: unknown): string => {
+    if (!value) return '';
+    if (typeof value === 'string' || typeof value === 'number') return String(value).trim();
+    if (typeof value === 'object') {
+      const obj = value as { _id?: string; iud?: string };
+      return String(obj?._id || obj?.iud || '').trim();
     }
-    if (typeof raw === 'string') return [String(raw)];
-    return [String(raw?._id || raw?.iud || '')].filter(Boolean);
+    return '';
+  };
+  const resolveNodeTypeId = (nodeType: TipoNodoRuta | any): string =>
+    normalizeMongoId(nodeType);
+  const resolveAccessTypeIds = (route: Route, catalog: AccessTypeOption[] = accessTypes): string[] => {
+    const raw = (route as any)?.accessType;
+    let ids: string[] = [];
+    if (Array.isArray(raw)) {
+      ids = raw.map((item) => normalizeMongoId(item)).filter(Boolean);
+    } else if (typeof raw === 'string') {
+      ids = [String(raw).trim()].filter(Boolean);
+    } else if (raw) {
+      ids = [normalizeMongoId(raw)].filter(Boolean);
+    }
+
+    if (ids.length > 0) return [...new Set(ids)];
+
+    const layoutNorm = String(route?.layout || '')
+      .replace(/\//g, '')
+      .trim()
+      .toUpperCase();
+    if (!layoutNorm || !catalog.length) return [];
+
+    const matched = catalog
+      .filter((item) => {
+        const candidates = [
+          String(item?.layout || '').replace(/\//g, '').trim().toUpperCase(),
+          String(item?.accessType || '').trim().toUpperCase(),
+        ].filter(Boolean);
+        return candidates.some((c) => c === layoutNorm || layoutNorm.includes(c) || c.includes(layoutNorm));
+      })
+      .map((item) => normalizeMongoId(item))
+      .filter(Boolean);
+
+    return [...new Set(matched)];
   };
   const resolveActionIds = (route: Route): string[] => {
     const raw = (route as any)?.acciones;
     if (!raw) return [];
     if (Array.isArray(raw)) {
       return raw
-        .map((item) => String((item as any)?._id || (item as any)?.iud || item || '').trim())
+        .map((item) => normalizeMongoId(item))
         .filter(Boolean);
     }
-    if (typeof raw === 'string') return [String(raw)];
-    return [String(raw?._id || raw?.iud || '')].filter(Boolean);
+    if (typeof raw === 'string') return [String(raw).trim()].filter(Boolean);
+    return [normalizeMongoId(raw)].filter(Boolean);
   };
 
   const resolveParentId = (route: Route): string | null => {
@@ -263,8 +328,16 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
   const getTypeByCode = (code?: string | null): TipoNodoRuta | undefined =>
     nodeTypes.find((t) => String(t.codigo || '').toUpperCase() === String(code || '').toUpperCase());
 
-  const getTypeById = (id?: string | null): TipoNodoRuta | undefined =>
-    nodeTypes.find((t) => resolveNodeTypeId(t) === String(id || ''));
+  const getTypeById = (id?: string | null): TipoNodoRuta | undefined => {
+    const normalized = String(id || '').trim();
+    if (!normalized) return undefined;
+    return nodeTypes.find((t) => {
+      const typeId = resolveNodeTypeId(t);
+      return typeId === normalized
+        || String((t as any)?._id || '').trim() === normalized
+        || String(t?.iud || '').trim() === normalized;
+    });
+  };
 
   const getTypeByName = (name?: string | null): TipoNodoRuta | undefined =>
     nodeTypes.find((t) => String(t.nombre || '').toUpperCase() === String(name || '').toUpperCase());
@@ -288,7 +361,9 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
     || getTypeByCode('SUBFORMULARIO');
 
   const selectedTypeDoc = getTypeById(String(formData.tipoNodoId || creationType || ''))
-    || getTypeByCode(String(formData.tipoNodo || ''));
+    || getTypeByCode(String(formData.tipoNodo || ''))
+    || (editingRoute ? getTypeByCode(String(editingRoute.tipoNodo || '')) : undefined)
+    || (editingRoute && String(editingRoute.component || '').trim() ? formularioType : undefined);
   const selectedTypeOrder = Number(selectedTypeDoc?.order ?? 0);
   const suiteOrder = Number(suiteType?.order ?? 1);
 
@@ -391,11 +466,55 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
   };
 
   const resolveTypeIdForRoute = (route: Route): string => {
-    const routeTypeId = String((route as any)?.tipoNodoId?._id || (route as any)?.tipoNodoId?.iud || route?.tipoNodoId || '').trim();
-    if (routeTypeId && getTypeById(routeTypeId)) return routeTypeId;
-    const byCode = getTypeByCode(String(route?.tipoNodo || ''));
-    return String(byCode ? resolveNodeTypeId(byCode) : '');
+    const populatedTipo = (route as any)?.tipoNodoId;
+    const routeTypeId = normalizeMongoId(populatedTipo) || normalizeMongoId(route?.tipoNodoId);
+    if (routeTypeId) return routeTypeId;
+
+    const codigoFromPopulate = typeof populatedTipo === 'object'
+      ? String(populatedTipo?.codigo || '').trim()
+      : '';
+    const tipoText = codigoFromPopulate || String(route?.tipoNodo || '').trim();
+    if (tipoText) {
+      const byCode = getTypeByCode(tipoText);
+      if (byCode) return resolveNodeTypeId(byCode);
+    }
+
+    const orderFromPopulate = typeof populatedTipo === 'object'
+      ? Number(populatedTipo?.order ?? 0)
+      : 0;
+    if (orderFromPopulate > 0) {
+      const byOrder = nodeTypes.find((t) => Number(t.order) === orderFromPopulate);
+      if (byOrder) return resolveNodeTypeId(byOrder);
+    }
+
+    if (String(route?.component || '').trim()) {
+      return resolveNodeTypeId(formularioType || getTypeByCode('FORMULARIO') || subFormularioType);
+    }
+
+    return '';
   };
+
+  const resolveTypeOrderForRoute = (route: Route, routeTypeId = ''): number => {
+    const typeId = routeTypeId || resolveTypeIdForRoute(route);
+    const byId = getTypeById(typeId);
+    if (byId) return Number(byId.order ?? 0);
+    const populatedTipo = (route as any)?.tipoNodoId;
+    if (typeof populatedTipo === 'object' && populatedTipo?.order != null) {
+      return Number(populatedTipo.order);
+    }
+    return getTypeOrderByCode(String(route?.tipoNodo || ''));
+  };
+
+  const nodeTypesForEditSelect = useMemo(() => {
+    const active = nodeTypes.filter((t) => t.estado !== false);
+    if (!editingRoute) return active;
+    const currentId = resolveTypeIdForRoute(editingRoute);
+    if (!currentId) return active;
+    const current = getTypeById(currentId);
+    if (!current) return active;
+    const exists = active.some((t) => resolveNodeTypeId(t) === currentId);
+    return exists ? active : [...active, current];
+  }, [nodeTypes, editingRoute]);
 
   const getRouteType = (route: Route): string => {
     const byId = getTypeById(resolveTypeIdForRoute(route));
@@ -410,8 +529,27 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
   const getRouteTypeOrder = (route: Route): number => {
     const byId = getTypeById(resolveTypeIdForRoute(route));
     if (byId) return Number(byId.order ?? 0);
+    const populatedTipo = (route as any)?.tipoNodoId;
+    if (typeof populatedTipo === 'object' && populatedTipo?.order != null) {
+      return Number(populatedTipo.order);
+    }
     return getTypeOrderByCode(String(route?.tipoNodo || ''));
   };
+
+  const inferSuiteIdFromPath = (path: string): string => {
+    const norm = normalizePath(path);
+    if (!norm) return '';
+    const suiteOrderValue = Number(suiteType?.order ?? 1);
+    const candidates = routes
+      .filter((r) => getRouteTypeOrder(r) === suiteOrderValue)
+      .filter((r) => {
+        const suitePath = normalizePath(r.path || '');
+        return suitePath && suitePath !== '/' && norm.startsWith(`${suitePath}/`);
+      })
+      .sort((a, b) => normalizePath(b.path || '').length - normalizePath(a.path || '').length);
+    return candidates[0] ? resolveRouteId(candidates[0]) : '';
+  };
+
   const isFormularioRoute = (route: Route): boolean => {
     const ownOrder = getRouteTypeOrder(route);
     if (ownOrder === formularioOrder) return true;
@@ -499,7 +637,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
     return ids
       .map((id) => {
         const normalized = String(id || '').trim();
-        const found = accessTypes.find((a) => String(a?._id || '') === normalized);
+        const found = accessTypes.find((a) => normalizeMongoId(a) === normalized);
         return String(found?.layout || found?.accessType || '');
       })
       .filter(Boolean);
@@ -509,7 +647,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
     return ids
       .map((id) => {
         const normalized = String(id || '').trim();
-        const found = accionesCatalogo.find((a) => String(a?._id || a?.iud || '').trim() === normalized);
+        const found = accionesCatalogo.find((a) => normalizeMongoId(a) === normalized);
         if (!found) return '';
         const method = String(found.method || '').trim().toUpperCase();
         const etiqueta = String(found.etiquetas || '').trim();
@@ -631,11 +769,24 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
   );
 
   const parentOptionsForSelectedType = useMemo(() => {
-    if (isFormularioType) return moduloOptionsBySuite;
-    if (isSubFormularioType) return subFormParentOptions;
-    return getParentOptions(String(formData.tipoNodoId || ''));
+    let options: Route[] = [];
+    if (isFormularioType) options = moduloOptionsBySuite;
+    else if (isSubFormularioType) options = subFormParentOptions;
+    else options = getParentOptions(String(formData.tipoNodoId || ''));
+
+    const padreId = String(formData.padreId || '').trim();
+    if (editingRoute && padreId) {
+      const currentParent = findRouteByAnyId(padreId);
+      if (currentParent) {
+        const currentParentKey = resolveRouteId(currentParent);
+        const exists = options.some((r) => resolveRouteId(r) === currentParentKey);
+        if (!exists) options = [currentParent, ...options];
+      }
+    }
+    return options;
   }, [
     formData.tipoNodoId,
+    formData.padreId,
     isFormularioType,
     isSubFormularioType,
     moduloOptionsBySuite,
@@ -644,6 +795,30 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
     nodeTypes,
     editingRoute,
   ]);
+
+  const tipoNodoSelectValue = useMemo(() => {
+    const fromForm = String(formData.tipoNodoId || '').trim();
+    if (fromForm) return fromForm;
+    if (editingRoute) {
+      const inferred = resolveTypeIdForRoute(editingRoute);
+      return inferred || undefined;
+    }
+    return undefined;
+  }, [formData.tipoNodoId, editingRoute, nodeTypes]);
+
+  const padreSelectValue = useMemo(() => {
+    const padreId = String(formData.padreId || '').trim();
+    if (!padreId) return undefined;
+    const found = findRouteByAnyId(padreId);
+    return found ? resolveRouteId(found) : padreId;
+  }, [formData.padreId, routes]);
+
+  const suiteSelectValue = useMemo(() => {
+    const suiteId = String(selectedSuiteIdForForm || '').trim();
+    if (!suiteId) return undefined;
+    const found = findRouteByAnyId(suiteId);
+    return found ? resolveRouteId(found) : suiteId;
+  }, [selectedSuiteIdForForm, routes]);
 
   const filteredParentOptionsForSelectedType = useMemo(
     () => parentOptionsForSelectedType.filter((route) => matchesRouteSearch(route, parentSelectSearch)),
@@ -782,21 +957,39 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
     setExpandedTableNodes((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
+  const cargarUsuariosJerarquia = async (force = false): Promise<void> => {
+    if (!force && jerarquiaUsuariosRaw) return;
+    setUsuariosLoading(true);
+    try {
+      const jerarquia = await getJerarquiaUsuarios();
+      const { meta } = buildJerarquiaUsuariosListaParaModal(jerarquia);
+      setJerarquiaUsuariosRaw(jerarquia);
+      setUsuariosJerarquiaMeta({
+        ...meta,
+        total: contarUsuariosPoolJerarquia(jerarquia),
+      });
+      if (!meta.total) {
+        toast.info(meta.mensajeAlcance);
+      }
+    } catch (error) {
+      console.error('Error cargando usuarios por jerarquía:', error);
+      toast.error(
+        error instanceof Error
+          ? error.message.replace(/^\[\d+\]\s*/, '')
+          : 'Error cargando usuarios de la jerarquía',
+      );
+      setJerarquiaUsuariosRaw(null);
+      setUsuariosJerarquiaMeta(null);
+    } finally {
+      setUsuariosLoading(false);
+    }
+  };
+
   const openUserModal = async (): Promise<void> => {
     setIsUserModalOpen(true);
     setUsuarioSearch('');
     setEditingUser(null);
-    if (usuarios.length) return;
-    setUsuariosLoading(true);
-    try {
-      const res = await apiFetch('/api/registro/listarRegistro', { method: 'GET' });
-      const list = (res as any)?.data ?? (res as any)?.usuarios ?? (Array.isArray(res) ? res : []);
-      setUsuarios(list);
-    } catch {
-      toast.error('Error cargando usuarios');
-    } finally {
-      setUsuariosLoading(false);
-    }
+    await cargarUsuariosJerarquia(true);
   };
 
   const openEditUser = (u: any): void => {
@@ -820,11 +1013,8 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
     try {
       await apiFetch(`/api/seguridad/pruebas/actualizar/registro/${id}`, { method: 'PUT', body: JSON.stringify(body) });
       toast.success('Usuario actualizado');
-      setUsuarios((prev) => prev.map((u) => {
-        const uid = String(u?._id || u?.iud || u?.id || '');
-        return uid === id ? { ...u, ...body } : u;
-      }));
       setEditingUser(null);
+      await cargarUsuariosJerarquia(true);
     } catch (e: any) {
       toast.error(String(e?.message || 'Error al actualizar'));
     } finally {
@@ -833,6 +1023,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
   };
 
   const notifyRoutesUpdated = (): void => {
+    invalidateSidebarCache();
     window.dispatchEvent(new CustomEvent('admin-routes-updated'));
   };
 
@@ -872,6 +1063,8 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
         setRoutes(Array.isArray(response.data) ? response.data : []);
         setRoutesActorTipo(String(response.actorTipo || 'UNKNOWN'));
         setRoutesSourceCollection(String(response.sourceCollection || ''));
+        setToolbarPolicy(response.toolbarPolicy ?? null);
+        setToolbarDraft(null);
       } else {
         toast.error('Error loading routes');
       }
@@ -879,6 +1072,8 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
       console.error('Error loading routes:', error);
       setRoutesActorTipo('UNKNOWN');
       setRoutesSourceCollection('');
+      setToolbarPolicy(null);
+      setToolbarDraft(null);
       toast.error('Error loading routes');
     } finally {
       setLoading(false);
@@ -963,52 +1158,110 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
     });
   };
 
-  const openRouteModal = (route?: Route, forceTypeId?: string): void => {
+  const applyRouteToForm = (route: Route): void => {
+    const routeTypeId = resolveTypeIdForRoute(route);
+    const routeTypeOrder = resolveTypeOrderForRoute(route, routeTypeId);
+    const routeParentId = resolveParentId(route);
+    const parentRoute = routeParentId ? findRouteByAnyId(routeParentId) : undefined;
+    const moduloOrder = Number(moduloType?.order ?? 2);
+    const formularioOrderValue = Number(formularioType?.order ?? 3);
+    const subFormOrder = Number(subFormularioType?.order ?? 4);
+
+    let suiteForForm = '';
+    let padreForForm = routeParentId;
+
+    if (routeTypeOrder === moduloOrder) {
+      suiteForForm = routeParentId || '';
+    } else if (routeTypeOrder === formularioOrderValue) {
+      padreForForm = routeParentId;
+      suiteForForm = parentRoute ? (resolveParentId(parentRoute) || '') : '';
+      if (!suiteForForm) suiteForForm = inferSuiteIdFromPath(route.path || '');
+    } else if (routeTypeOrder === subFormOrder) {
+      const formulario = parentRoute;
+      const modulo = formulario ? findRouteByAnyId(resolveParentId(formulario) || '') : undefined;
+      suiteForForm = modulo ? (resolveParentId(modulo) || '') : '';
+      if (!suiteForForm) suiteForForm = inferSuiteIdFromPath(route.path || '');
+    }
+
+    if (suiteForForm) {
+      const suiteRoute = findRouteByAnyId(suiteForForm);
+      if (suiteRoute) suiteForForm = resolveRouteId(suiteRoute);
+    }
+    if (padreForForm && parentRoute) {
+      padreForForm = resolveRouteId(parentRoute);
+    }
+
+    setSelectedSuiteIdForForm(suiteForForm);
+    if (routeTypeOrder === formularioOrderValue) {
+      setFormularioPadreId(padreForForm || '');
+    } else {
+      setFormularioPadreId('');
+    }
+
+    const typeDoc = getTypeById(routeTypeId);
+    setFormData({
+      name: route.name,
+      path: resolveHierarchyPathForDraft(route.name, padreForForm, routeTypeOrder, route.path),
+      component: String(route.component || ''),
+      layout: route.layout,
+      tipoNodo: String(typeDoc?.codigo || route.tipoNodo || ''),
+      tipoNodoId: routeTypeId,
+      padreId: padreForForm,
+      heredaDeRuta: resolveInheritedRouteId(route),
+      mostrarEnNavbarPublico: route?.mostrarEnNavbarPublico === true,
+      mostrarEnSidebar: route?.mostrarEnSidebar === true,
+      mostrarEnMenuUsuario: route?.mostrarEnMenuUsuario === true,
+      tiquetaNavb: route?.tiquetaNavb || null,
+      menuUsuarioLabel: route?.menuUsuarioLabel || '',
+      menuUsuarioOrder: Number(route?.menuUsuarioOrder ?? 0),
+      accessType: resolveAccessTypeIds(route),
+      acciones: resolveActionIds(route),
+    });
+  };
+
+  const openRouteModal = async (route?: Route, forceTypeId?: string): Promise<void> => {
     setParentSelectSearch('');
     if (route) {
-      const routeTypeId = resolveTypeIdForRoute(route);
-      const routeTypeOrder = Number(getTypeById(routeTypeId)?.order ?? 0);
-      const routeParentId = resolveParentId(route);
-      let suiteForForm = '';
-      if (routeTypeOrder === Number(moduloType?.order ?? 2)) {
-        suiteForForm = routeParentId || '';
-      } else if (routeTypeOrder === Number(formularioType?.order ?? 3)) {
-        const modulo = routes.find((r) => resolveRouteId(r) === String(routeParentId || ''));
-        suiteForForm = resolveParentId(modulo as Route) || '';
-      } else if (routeTypeOrder === Number(subFormularioType?.order ?? 4)) {
-        const formulario = routes.find((r) => resolveRouteId(r) === String(routeParentId || ''));
-        const modulo = routes.find((r) => resolveRouteId(r) === String(resolveParentId(formulario as Route) || ''));
-        suiteForForm = resolveParentId(modulo as Route) || '';
-      }
-      setSelectedSuiteIdForForm(suiteForForm);
+      setIsModalOpen(true);
       setEditingRoute(route);
-      setFormData({
-        name: route.name,
-        path: resolveHierarchyPathForDraft(route.name, resolveParentId(route), routeTypeOrder, route.path),
-        component: route.component,
-        layout: route.layout,
-        tipoNodo: String(getTypeById(routeTypeId)?.codigo || route.tipoNodo || ''),
-        tipoNodoId: routeTypeId,
-        padreId: resolveParentId(route),
-        heredaDeRuta: resolveInheritedRouteId(route),
-        mostrarEnNavbarPublico: route?.mostrarEnNavbarPublico === true,
-        mostrarEnSidebar: route?.mostrarEnSidebar === true,
-        mostrarEnMenuUsuario: route?.mostrarEnMenuUsuario === true,
-        tiquetaNavb: route?.tiquetaNavb || null,
-        menuUsuarioLabel: route?.menuUsuarioLabel || '',
-        menuUsuarioOrder: Number(route?.menuUsuarioOrder ?? 0),
-        accessType: resolveAccessTypeIds(route),
-        acciones: resolveActionIds(route),
-      });
-    } else {
-      const typeId = String(forceTypeId || resolveNodeTypeId(formularioType) || '');
-      setCreationType(typeId);
-      setEditingRoute(null);
-      setSelectedSuiteIdForForm('');
-      resetRouteForm(typeId);
+      applyRouteToForm(route);
+      const routeId = resolveRouteId(route);
+      if (routeId) {
+        try {
+          const detail = await getRouteById(routeId);
+          if (detail?.success && detail?.data) {
+            const merged = { ...route, ...detail.data } as Route;
+            setEditingRoute(merged);
+            applyRouteToForm(merged);
+          }
+        } catch (error) {
+          console.error('Error loading route detail:', error);
+        }
+      }
+      return;
     }
+    const typeId = String(forceTypeId || resolveNodeTypeId(formularioType) || '');
+    setCreationType(typeId);
+    setEditingRoute(null);
+    setSelectedSuiteIdForForm('');
+    resetRouteForm(typeId);
     setIsModalOpen(true);
   };
+
+  useEffect(() => {
+    if (!isModalOpen || !editingRoute) return;
+    const needsTipo = !String(formData.tipoNodoId || '').trim();
+    const needsPadre = !String(formData.padreId || '').trim()
+      && resolveTypeOrderForRoute(editingRoute) > Number(suiteType?.order ?? 1);
+    const needsAccess = !Array.isArray(formData.accessType) || formData.accessType.length === 0;
+    const catalogsReady = nodeTypes.length > 0 && routes.length > 0;
+    if (
+      catalogsReady
+      && ((needsTipo && nodeTypes.length > 0) || needsPadre || (needsAccess && accessTypes.length > 0))
+    ) {
+      applyRouteToForm(editingRoute);
+    }
+  }, [isModalOpen, editingRoute, nodeTypes.length, accessTypes.length, routes.length]);
 
   const closeRouteModal = (): void => {
     setIsModalOpen(false);
@@ -1076,9 +1329,9 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
 
       const resolvedLayout = (() => {
         const selectedAtIds = Array.isArray(formData.accessType) ? formData.accessType : [];
-        const firstAt = accessTypes.find((a) => selectedAtIds.includes(String(a._id || '')));
+        const firstAt = accessTypes.find((a) => selectedAtIds.includes(normalizeMongoId(a)));
         if (firstAt?.layout) return firstAt.layout;
-        return parentRoute?.layout || formData.layout || '';
+        return parentRoute?.layout || formData.layout || editingRoute?.layout || '';
       })();
 
       const payload: CreateRouteDto = {
@@ -1144,8 +1397,8 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
       }
 
       closeRouteModal();
-      await loadRoutes();
       notifyRoutesUpdated();
+      await loadRoutes();
 
     } catch (error: any) {
       console.error('Error saving route:', error);
@@ -1195,8 +1448,8 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
     try {
       const response = await deleteRoute(resolveRouteId(route), { accion: accionSeleccionada });
       toast.success(response?.message || 'Action completed successfully');
-      await loadRoutes();
       notifyRoutesUpdated();
+      await loadRoutes();
     } catch (error: any) {
       console.error('Error deleting route:', error);
       const fallbackMessage = accionSeleccionada === 'ELIMINAR' ? 'Error deleting route' : 'Error deactivating route';
@@ -1208,13 +1461,93 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
     try {
       await toggleRouteStatus(resolveRouteId(route), !route.estadoRuta);
       toast.success(`Route ${!route.estadoRuta ? 'enabled' : 'disabled'}`);
-      await loadRoutes();
       notifyRoutesUpdated();
+      await loadRoutes();
     } catch (error: any) {
       console.error('Error toggling route:', error);
       toast.error(error?.message || 'Error changing route status');
     }
   };
+
+  const routeRowActionCatalog = useMemo(
+    () =>
+      buildRouteRowActionCatalog({
+        onPreview: handlePreviewRoute,
+        onEdit: (route) => { void openRouteModal(route); },
+        onDelete: handleDeleteRoute,
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- handlers estables por flujo de pantalla
+    [],
+  );
+
+  const toolbarPresetOptions = useMemo(() => [
+    {
+      mode: 'all' as const,
+      label: 'Todos los botones',
+      ids: undefined,
+    },
+    {
+      mode: 'consulta' as const,
+      label: 'Solo consulta',
+      ids: [
+        GESTION_RUTAS_TOOLBAR_ACTION_IDS.REFRESCAR,
+        GESTION_RUTAS_TOOLBAR_ACTION_IDS.USUARIOS,
+        GESTION_RUTAS_TOOLBAR_ACTION_IDS.VER_ARBOL,
+      ],
+    },
+    {
+      mode: 'parametrizacion' as const,
+      label: 'Solo parametrización',
+      ids: [
+        GESTION_RUTAS_TOOLBAR_ACTION_IDS.REFRESCAR,
+        GESTION_RUTAS_TOOLBAR_ACTION_IDS.PARAM_TIPOS,
+        GESTION_RUTAS_TOOLBAR_ACTION_IDS.PARAM_ACCESOS,
+      ],
+    },
+    {
+      mode: 'crear' as const,
+      label: 'Solo crear nodos',
+      ids: [
+        GESTION_RUTAS_TOOLBAR_ACTION_IDS.REFRESCAR,
+        GESTION_RUTAS_TOOLBAR_ACTION_IDS.NUEVA_SUITE,
+        GESTION_RUTAS_TOOLBAR_ACTION_IDS.NUEVO_MODULO,
+        GESTION_RUTAS_TOOLBAR_ACTION_IDS.NUEVO_FORMULARIO,
+        GESTION_RUTAS_TOOLBAR_ACTION_IDS.NUEVO_SUBFORMULARIO,
+      ],
+    },
+  ], []);
+
+  const tenantToolbarDraft = useMemo((): GestionRutasToolbarDraft => {
+    const mode = String(toolbarPolicy?.mode || '').trim() as GestionRutasToolbarMode;
+    const policyIds = Array.isArray(toolbarPolicy?.actionIds)
+      ? toolbarPolicy.actionIds.map((id) => String(id || '').trim()).filter(Boolean) as ActionId[]
+      : [];
+
+    if (['all', 'consulta', 'parametrizacion', 'crear'].includes(mode)) {
+      return {
+        mode,
+        actionIds: policyIds.length > 0 ? policyIds : toolbarPresetOptions.find((item) => item.mode === mode)?.ids,
+      };
+    }
+
+    const actor = String(routesActorTipo || '').trim().toUpperCase();
+    const fallbackMode: GestionRutasToolbarMode = actor === 'SUPERADMIN'
+      ? 'all'
+      : (actor === 'GLOBAL' && toolbarPolicy?.canCreate)
+        ? 'crear'
+        : (actor === 'GLOBAL' && toolbarPolicy?.canManage)
+          ? 'parametrizacion'
+          : 'consulta';
+
+    return {
+      mode: fallbackMode,
+      actionIds: toolbarPresetOptions.find((item) => item.mode === fallbackMode)?.ids,
+    };
+  }, [routesActorTipo, toolbarPolicy, toolbarPresetOptions]);
+
+  const effectiveToolbarDraft = toolbarDraft ?? tenantToolbarDraft;
+  const toolbarMode = effectiveToolbarDraft.mode;
+  const toolbarParametrizedIds = effectiveToolbarDraft.actionIds;
 
   const resetNodeTypeForm = (): void => {
     setNodeTypeForm({ codigoCatalogoId: '', codigo: '', nombre: '', descripcion: '' });
@@ -1581,8 +1914,8 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
       });
       toast.success('SubFormulario creado correctamente');
       closeSubFormModal();
-      await loadRoutes();
       notifyRoutesUpdated();
+      await loadRoutes();
     } catch (error: any) {
       console.error('Error creando SubFormulario:', error);
       toast.error(error?.message || 'Error creando SubFormulario');
@@ -1590,6 +1923,23 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
       setSubFormSubmitting(false);
     }
   };
+
+  const gestionRutasToolbarCatalog = useMemo(
+    () =>
+      buildGestionRutasToolbarCatalog({
+        onRefrescar: () => void loadRoutes(),
+        onUsuarios: () => void openUserModal(),
+        onVerArbol: () => setIsTreeModalOpen(true),
+        onParamTipos: () => setIsNodeTypeModalOpen(true),
+        onParamAccesos: handleOpenAccessTypeModal,
+        onNuevaSuite: () => openRouteModal(undefined, resolveNodeTypeId(suiteType) || ''),
+        onNuevoModulo: () => openRouteModal(undefined, resolveNodeTypeId(moduloType) || ''),
+        onNuevoFormulario: () => openRouteModal(undefined, resolveNodeTypeId(formularioType) || ''),
+        onNuevoSubFormulario: () => openRouteModal(undefined, resolveNodeTypeId(subFormularioType) || ''),
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- handlers de pantalla
+    [suiteType, moduloType, formularioType, subFormularioType],
+  );
 
   const renderTree = (nodes: RouteTreeNode[], level = 0): React.ReactNode => {
     return nodes.map((node) => (
@@ -1613,42 +1963,19 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
               Parametriza suite, modulo y formulario de forma jerarquica y dinamica
             </p>
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline" size="icon" onClick={() => void loadRoutes()} disabled={loading}>
-              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            </Button>
-            <Button variant="outline" onClick={() => void openUserModal()}>
-              <Users className="h-4 w-4 mr-2" />
-              Usuarios
-            </Button>
-            <Button variant="outline" onClick={() => setIsTreeModalOpen(true)}>
-              <Network className="h-4 w-4 mr-2" />
-              Ver Arbol
-            </Button>
-            <Button variant="outline" onClick={() => setIsNodeTypeModalOpen(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              Param. Tipos
-            </Button>
-            <Button variant="outline" onClick={handleOpenAccessTypeModal}>
-              <Plus className="h-4 w-4 mr-2" />
-              Param. Accesos
-            </Button>
-            <Button variant="outline" onClick={() => openRouteModal(undefined, resolveNodeTypeId(suiteType) || '')}>
-              <Plus className="h-4 w-4 mr-2" />
-              Nueva Suite
-            </Button>
-            <Button variant="outline" onClick={() => openRouteModal(undefined, resolveNodeTypeId(moduloType) || '')}>
-              <Plus className="h-4 w-4 mr-2" />
-              Nuevo Modulo
-            </Button>
-            <Button onClick={() => openRouteModal(undefined, resolveNodeTypeId(formularioType) || '')}>
-              <Plus className="h-4 w-4 mr-2" />
-              Nuevo Formulario
-            </Button>
-            <Button variant="outline" onClick={() => openRouteModal(undefined, resolveNodeTypeId(subFormularioType) || '')}>
-              <Plus className="h-4 w-4 mr-2" />
-              Nuevo SubFormulario
-            </Button>
+          <div className="flex flex-col items-end gap-2 sm:flex-row sm:items-center">
+            <GestionRutasToolbarParametrizacion
+              catalog={gestionRutasToolbarCatalog}
+              value={effectiveToolbarDraft}
+              tenantValue={tenantToolbarDraft}
+              presets={toolbarPresetOptions}
+              onChange={setToolbarDraft}
+            />
+            <ParameterizedToolbarActionBar
+              catalog={gestionRutasToolbarCatalog}
+              parametrizedIds={toolbarParametrizedIds}
+              context={{ loading }}
+            />
           </div>
         </CardHeader>
         <CardContent>
@@ -1787,30 +2114,15 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
                           />
                         </TableCell>
                         <TableCell className="text-right">
-                          <div className="flex justify-end gap-2">
-                            <Button variant="ghost" size="icon" onClick={() => void handlePreviewRoute(route)} title="Previsualizar">
-                              <Eye className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              disabled={!resolveCanEditRoute(route)}
-                              onClick={() => openRouteModal(route)}
-                              title={resolveCanEditRoute(route) ? 'Editar' : 'Tu scope actual no puede editar esta ruta'}
-                            >
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            {resolveCanManageBaja(route) && (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => void handleDeleteRoute(route)}
-                                title={String(route.accionBajaPermitida || '').toUpperCase() === 'ELIMINAR' ? 'Eliminar' : 'Desactivar'}
-                              >
-                                <Trash2 className="h-4 w-4 text-destructive" />
-                              </Button>
-                            )}
-                          </div>
+                          <ParameterizedActionBar
+                            catalog={routeRowActionCatalog}
+                            allowedIds={resolveRouteRowAllowedIds(route, {
+                              canEdit: resolveCanEditRoute,
+                              canManageBaja: resolveCanManageBaja,
+                            })}
+                            context={route}
+                            className="gap-2"
+                          />
                         </TableCell>
                       </TableRow>
                     ))
@@ -1836,30 +2148,40 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
                 <div className="space-y-2">
                   <Label htmlFor="tipoNodo">Tipo de nodo *</Label>
                   <Select
-                    value={formData.tipoNodoId || undefined}
+                    value={tipoNodoSelectValue}
                     onValueChange={(value) => {
                       setParentSelectSearch('');
                       const nextType = getTypeById(value);
                       const nextOrder = Number(nextType?.order ?? 0);
+                      const formularioOrderValue = Number(formularioType?.order ?? 3);
+                      const nextPadreId = nextOrder <= 1 ? null : formData.padreId;
+                      if (nextOrder === formularioOrderValue && nextPadreId) {
+                        const modulo = findRouteByAnyId(String(nextPadreId));
+                        const suiteId = modulo ? resolveParentId(modulo) : '';
+                        if (suiteId) {
+                          const suiteRoute = findRouteByAnyId(suiteId);
+                          setSelectedSuiteIdForForm(suiteRoute ? resolveRouteId(suiteRoute) : suiteId);
+                        }
+                      } else if (nextOrder !== formularioOrderValue) {
+                        setSelectedSuiteIdForForm('');
+                        setFormularioPadreId('');
+                      }
                       setFormData((prev) => ({
                         ...prev,
                         tipoNodo: String(nextType?.codigo || ''),
                         tipoNodoId: String(nextType ? resolveNodeTypeId(nextType) : ''),
-                        padreId: nextOrder <= 1 ? null : prev.padreId,
+                        padreId: nextPadreId,
                         path: nextOrder <= 1
                           ? prev.path
-                          : resolveHierarchyPathForDraft(prev.name, prev.padreId, nextOrder, prev.path),
+                          : resolveHierarchyPathForDraft(prev.name, nextPadreId, nextOrder, prev.path),
                       }));
-                      if (nextOrder !== Number(formularioType?.order ?? 3)) {
-                        setSelectedSuiteIdForForm('');
-                      }
                     }}
                   >
                     <SelectTrigger id="tipoNodo">
                       <SelectValue placeholder="Selecciona tipo" />
                     </SelectTrigger>
                     <SelectContent>
-                      {nodeTypes.filter((t) => t.estado !== false).map((tipo) => (
+                      {nodeTypesForEditSelect.map((tipo) => (
                         <SelectItem key={resolveNodeTypeId(tipo)} value={resolveNodeTypeId(tipo)}>
                           {String(tipo.nombre || tipo.codigo)}
                         </SelectItem>
@@ -1881,10 +2203,11 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
                 <div className="space-y-2">
                   <Label htmlFor="suiteSelector">Suite asociada *</Label>
                   <Select
-                    value={selectedSuiteIdForForm || undefined}
+                    value={suiteSelectValue}
                     onValueChange={(value) => {
                       setParentSelectSearch('');
                       setSelectedSuiteIdForForm(value);
+                      setFormularioPadreId('');
                       setFormData((prev) => ({
                         ...prev,
                         padreId: null,
@@ -1916,9 +2239,10 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
                         : 'Modulo padre *'}
                   </Label>
                   <Select
-                    value={formData.padreId ? String(formData.padreId) : undefined}
+                    value={padreSelectValue}
                     onValueChange={(value) => {
                       setParentSelectSearch('');
+                      if (isFormularioType) setFormularioPadreId(value);
                       setFormData((prev) => ({
                         ...prev,
                         padreId: value,
@@ -2061,7 +2385,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
                   value={(() => {
                     const selectedAtIds = Array.isArray(formData.accessType) ? formData.accessType : [];
                     const layouts = accessTypes
-                      .filter((a) => selectedAtIds.includes(String(a._id || '')) && a.layout)
+                      .filter((a) => selectedAtIds.includes(normalizeMongoId(a)) && a.layout)
                       .map((a) => String(a.layout));
                     if (layouts.length > 0) return layouts.join(', ');
                     return 'Se derivara de los tipos de acceso seleccionados';
@@ -2080,7 +2404,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
                     {accessTypes
                       .filter((item) => item.estadoAcces !== false)
                       .map((item) => {
-                      const id = String(item._id || '');
+                      const id = normalizeMongoId(item);
                       const selected = Array.isArray(formData.accessType) && formData.accessType.includes(id);
                       return (
                         <label key={id} className="flex items-center gap-2 text-sm cursor-pointer">
@@ -2118,7 +2442,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
                       <p className="text-sm text-muted-foreground">No hay acciones disponibles.</p>
                     ) : (
                       accionesCatalogo.map((accion) => {
-                        const id = String(accion?._id || accion?.iud || '').trim();
+                        const id = normalizeMongoId(accion);
                         const method = String(accion?.method || '').trim().toUpperCase();
                         const etiqueta = String(accion?.etiquetas || '').trim();
                         const label = etiqueta ? `${method} | ${etiqueta}` : method;
@@ -2882,23 +3206,31 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
 
       {/* ── Modal Editar Usuario ─────────────────────────────────── */}
       <Dialog open={isUserModalOpen} onOpenChange={setIsUserModalOpen}>
-        <DialogContent className="max-w-4xl max-h-[85vh] flex flex-col">
+        <DialogContent className="max-w-5xl max-h-[90vh] flex flex-col">
           <DialogHeader>
-            <DialogTitle>Gestión de Usuarios</DialogTitle>
-            <DialogDescription>Busca y edita cualquier usuario del sistema.</DialogDescription>
+            <div className="flex flex-wrap items-start justify-between gap-2 pr-8">
+              <div className="min-w-0 flex-1">
+                <DialogTitle>Gestión de Usuarios</DialogTitle>
+                <DialogDescription>
+                  Organigrama de usuarios según tu sesión (JWT) y tenantJerarquiaCounter /
+                  tenantJerarquiaCountersGlobal.
+                </DialogDescription>
+              </div>
+              <OrganigramaLegendaInfoButton label="Organigrama · orden" />
+            </div>
           </DialogHeader>
 
-          <div className="flex gap-2 mb-3">
-            <Input
-              placeholder="Buscar por nombre, correo o rol..."
-              value={usuarioSearch}
-              onChange={(e) => setUsuarioSearch(e.target.value)}
-              className="flex-1"
-            />
-            <Button variant="outline" size="icon" onClick={() => { setUsuarios([]); void openUserModal(); }}>
-              <RefreshCw className="h-4 w-4" />
-            </Button>
-          </div>
+          {usuariosJerarquiaMeta ? (
+            <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+              <span className="font-medium text-foreground">
+                Alcance: {usuariosJerarquiaMeta.scope ?? 'sin sesión'}
+                {usuariosJerarquiaMeta.vistaDios ? ' (DIOS)' : ''}
+                {' · '}
+                {usuariosJerarquiaMeta.total} usuario(s)
+              </span>
+              <p className="mt-1">{usuariosJerarquiaMeta.mensajeAlcance}</p>
+            </div>
+          ) : null}
 
           {editingUser ? (
             <div className="flex flex-col gap-4 py-2">
@@ -2941,59 +3273,26 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
               </DialogFooter>
             </div>
           ) : (
-            <div className="overflow-auto flex-1">
-              {usuariosLoading ? (
-                <div className="flex justify-center py-10"><Loader2 className="h-6 w-6 animate-spin text-rose-500" /></div>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Nombre</TableHead>
-                      <TableHead>Correo</TableHead>
-                      <TableHead>Rol</TableHead>
-                      <TableHead>Estado</TableHead>
-                      <TableHead className="text-right">Editar</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {usuarios
-                      .filter((u) => {
-                        const q = usuarioSearch.trim().toLowerCase();
-                        if (!q) return true;
-                        return (
-                          String(u?.nombre || '').toLowerCase().includes(q) ||
-                          String(u?.correo || u?.email || '').toLowerCase().includes(q) ||
-                          String(u?.rol || '').toLowerCase().includes(q)
-                        );
-                      })
-                      .map((u, i) => {
-                        const uid = String(u?._id || u?.iud || u?.id || i);
-                        return (
-                          <TableRow key={uid}>
-                            <TableCell className="font-medium">{String(u?.nombre || u?.name || '-')}</TableCell>
-                            <TableCell className="text-xs text-slate-500">{String(u?.correo || u?.email || '-')}</TableCell>
-                            <TableCell><Badge variant="outline">{String(u?.rol || '-')}</Badge></TableCell>
-                            <TableCell>
-                              <Badge variant={u?.estado !== false ? 'outline' : 'secondary'}>
-                                {u?.estado !== false ? 'Activo' : 'Inactivo'}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <Button variant="ghost" size="icon" onClick={() => openEditUser(u)}>
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    {!usuariosLoading && usuarios.length === 0 && (
-                      <TableRow>
-                        <TableCell colSpan={5} className="text-center text-slate-400 py-6">Sin usuarios cargados</TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              )}
+            <div className="flex min-h-0 flex-1 flex-col">
+              <div className="mb-3 flex gap-2">
+                <Input
+                  placeholder="Buscar en el organigrama..."
+                  value={usuarioSearch}
+                  onChange={(e) => setUsuarioSearch(e.target.value)}
+                  className="flex-1"
+                />
+                <Button variant="outline" size="icon" onClick={() => void cargarUsuariosJerarquia(true)} disabled={usuariosLoading}>
+                  <RefreshCw className={`h-4 w-4 ${usuariosLoading ? 'animate-spin' : ''}`} />
+                </Button>
+              </div>
+              <div className="min-h-0 flex-1 overflow-auto">
+                <GestionRutasUsuariosOrganigrama
+                  jerarquia={jerarquiaUsuariosRaw}
+                  loading={usuariosLoading}
+                  busqueda={usuarioSearch}
+                  onEditUsuario={(u) => openEditUser(u)}
+                />
+              </div>
             </div>
           )}
         </DialogContent>

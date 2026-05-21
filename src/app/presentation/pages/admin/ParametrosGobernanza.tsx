@@ -25,13 +25,32 @@ import {
 import {
   cardPathClassForDesign,
   cardShellClassForDesign,
+  DEFAULT_GOBERNANZA_CARD_DESIGN,
   loadAllCardDesigns,
+  persistAllCardDesigns,
   type GobernanzaCardDesign,
 } from './gobernanza/gobernanzaCardDesignTypes';
+import { GobernanzaCardDesignForm } from './gobernanza/GobernanzaCardDesignForm';
+import { GobernanzaModuloDinamico } from './gobernanza/GobernanzaModuloDinamico';
+import { useParametrosGobernanzaModuloMenu } from './gobernanza/useParametrosGobernanzaModuloMenu';
+import {
+  getGobernanzaModuloBySlug,
+  GOBERNANZA_MODULO_TENANT,
+  moduloEndpointIdSet,
+  type GobernanzaModuloConfig,
+} from './gobernanza/gobernanzaModuloConfig';
+import { getGobernanzaModuloCatalogoLocal } from './gobernanza/gobernanzaModulosCatalog';
 import {
   computeGobernanzaEndpointCapabilities,
   type GobernanzaCapabilityContext,
 } from './gobernanza/gobernanzaEndpointCapabilities';
+import {
+  ActualizarTenantGlobalActionCard,
+  CrearTenantGlobalActionCard,
+  DesactivarTenantGlobalActionCard,
+  EliminarTenantGlobalActionCard,
+  ListarTenantGlobalActionCard,
+} from './gobernanza/GobernanzaTenantActionCards';
 import { ParametrosGobernanzaEndpointDesignMenu } from './gobernanza/ParametrosGobernanzaEndpointDesignMenu';
 import { ParametrosGobernanzaModalFormLayout } from './gobernanza/ParametrosGobernanzaModalFormLayout';
 import {
@@ -39,6 +58,12 @@ import {
   filtrarTenantGlobalesPorJerarquiaSuperAdmin,
   tenantGlobalOptionsFromJerarquiaUsuarios,
 } from './gobernanza/tenantGlobalJerarquiaHelpers';
+import {
+  buildTenantGlobalSelectsEnriched,
+  mergeSelectOptionForValue,
+  tenantGlobalFormularioToFieldMap,
+  type TenantGlobalFormularioDetalle,
+} from './gobernanza/tenantGlobalSelectHelpers';
 import { getJerarquiaUsuarios, type JerarquiaResponse } from '@/app/services/tenantUsuariosService';
 
 /** Tiempo máximo para refrescar GET jerarquía usuarios (evita UI colgada en «Cargando…»). */
@@ -493,7 +518,6 @@ const ENDPOINTS: EndpointSpec[] = [
     fields: [
       { name: 'id', label: 'ID tenant global', type: 'id', required: true, pathParam: true },
       { name: 'tipo_tenant', label: 'Tipo tenant', type: 'id' },
-      { name: 'ownerType', label: 'Owner type', type: 'id' },
       { name: 'apisDominios', label: 'Apis dominios', type: 'id' },
       { name: 'accionesUsu', label: 'Accion usuario', type: 'id' },
       { name: 'rolesMabs', label: 'Rol mabs', type: 'id' },
@@ -1078,6 +1102,8 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
   onRouteEndpointClear,
   cardDesignQueryParam = 'diseno',
   enableCardDesignEditor = true,
+  inlineModuloConfig: inlineModuloConfigProp = null,
+  inlineModuloSlug,
 }) => {
   const isRulesMode = mode === 'rules' || mode === 'superAdminRules';
   const initialResolvedSection = lockedSection ?? initialSection;
@@ -1087,6 +1113,14 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
   const [cardDesignById, setCardDesignById] = useState<Record<string, GobernanzaCardDesign>>(() =>
     typeof window !== 'undefined' ? loadAllCardDesigns() : {}
   );
+
+  const updateCardDesignForEndpoint = useCallback((endpointId: string, next: GobernanzaCardDesign) => {
+    setCardDesignById((prev) => {
+      const merged = { ...prev, [endpointId]: next };
+      persistAllCardDesigns(merged);
+      return merged;
+    });
+  }, []);
   const [endpointSearch, setEndpointSearch] = useState('');
   const [reglasSearch, setReglasSearch] = useState('');
   const [vistaSearchByEndpoint, setVistaSearchByEndpoint] = useState<Record<string, string>>({});
@@ -1132,6 +1166,9 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
   const [bulkAllMode, setBulkAllMode] = useState<Record<string, boolean>>({});
   const [tenantCorporativos, setTenantCorporativos] = useState<TenantCorporativoOption[]>([]);
   const [tenantGlobalSelects, setTenantGlobalSelects] = useState<Record<string, GenericSelectOption[]>>({});
+  const [tenantActualizarPrefillLoading, setTenantActualizarPrefillLoading] = useState(false);
+  const tenantActualizarLoadedIdRef = useRef('');
+  const tenantActualizarLabelsRef = useRef<Partial<Record<string, string>>>({});
   const [tenantGlobalActor, setTenantGlobalActor] = useState<{
     rol?: string;
     tenantGlobalId?: string | null;
@@ -1418,6 +1455,45 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
     [mode, tenantGlobalActor, saJerarquiaConCorporativo]
   );
 
+  const inlineModuloResolved = useMemo((): GobernanzaModuloConfig | null => {
+    if (inlineModuloConfigProp) return inlineModuloConfigProp;
+    if (inlineModuloSlug) {
+      const reg = getGobernanzaModuloBySlug(inlineModuloSlug);
+      if (reg) return reg;
+      const local = getGobernanzaModuloCatalogoLocal(inlineModuloSlug);
+      if (local) {
+        return {
+          slug: local.slug,
+          section: local.section,
+          label: local.label,
+          description: local.description,
+          endpointIds: [],
+          defaultActionId: '',
+        };
+      }
+      return null;
+    }
+    if (mode === 'full' && !allowedEndpointIds && !lockedSection && !isRulesMode && activeSection === 'tenant') {
+      return GOBERNANZA_MODULO_TENANT;
+    }
+    return null;
+  }, [inlineModuloConfigProp, inlineModuloSlug, mode, allowedEndpointIds, lockedSection, isRulesMode, activeSection]);
+
+  const useModuloInlineFlow = Boolean(
+    inlineModuloResolved && activeSection === inlineModuloResolved.section
+  );
+
+  const inlineModuloMenu = useParametrosGobernanzaModuloMenu({
+    moduloSlug: inlineModuloResolved?.slug,
+    enabled: useModuloInlineFlow,
+    syncDefaultAction: true,
+  });
+
+  const inlineModuloEndpointIds = useMemo(
+    () => (inlineModuloResolved ? moduloEndpointIdSet(inlineModuloResolved) : new Set<string>()),
+    [inlineModuloResolved]
+  );
+
   const clearDesignRoute = useCallback(() => {
     setSearchParams(
       (prev) => {
@@ -1558,90 +1634,10 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
             ? data.actor.corporativoIdsJerarquia.map((x: unknown) => String(x)).filter(Boolean)
             : undefined,
         });
-        const mapOptions = (rows: any[] | undefined, fallbackKey: string): GenericSelectOption[] =>
-          (Array.isArray(rows) ? rows : [])
-            .map((row: any) => {
-              const id = String(row?.id || row?._id || '').trim();
-              if (!id) return null;
-              const label = String(row?.label || row?.[fallbackKey] || id);
-              return { id, label };
-            })
-            .filter(Boolean) as GenericSelectOption[];
-
-        const rawRolesMabs = Array.isArray(data.rolesMabs)
-          ? data.rolesMabs
-          : Array.isArray(data.roles)
-          ? data.roles
-          : [];
-        setTenantGlobalSelects({
-          tipo_tenant: mapOptions(data.tiposTenant, 'tipo_acceso_apis'),
-          ownerType: mapOptions(data.ownerTypes, 'tipo_comprador'),
-          nvlGeneracionTenant: (Array.isArray(data.nivelesGlobales) ? data.nivelesGlobales : [])
-            .map((row: any) => {
-              const id = String(row?.id || row?._id || '').trim();
-              if (!id) return null;
-              const nvl = String(row?.nvl ?? '').trim();
-              const generationTenant = String(row?.generation_tenant || '').trim();
-              const secuencia = Number(row?.secuencia ?? row?.orden ?? 0);
-              const securityPlatform = row?.securityPlatform === true;
-              return {
-                id,
-                label: String(
-                  row?.label ||
-                  `Secuencia ${secuencia || '-'} Â· NVL ${nvl || '-'} Â· ${generationTenant || id}${securityPlatform ? ' Â· Acceso libre' : ''}`
-                ),
-                meta: {
-                  nvl,
-                  generationTenant,
-                  secuencia,
-                  securityPlatform: securityPlatform ? 'true' : 'false',
-                },
-              };
-            })
-            .filter(Boolean) as GenericSelectOption[],
-          apisDominios: mapOptions(data.dominios, 'dominio'),
-          apis: mapOptions(data.dominios, 'dominio'),
-          accionesUsu: mapOptions(data.acciones, 'method'),
-          rolesMabs: rawRolesMabs
-            .map((row: any) => {
-              const id = String(row?.id || row?._id || '').trim();
-              if (!id) return null;
-              const rol = String(row?.rol || '').trim();
-              const label = String(row?.label || rol || id);
-              return { id, label, rol };
-            })
-            .filter(Boolean) as GenericSelectOption[],
-          coporativo: mapOptions(data.corporativosDisponibles, 'razon_social'),
-          tenantGlobalRef: (() => {
-            const jerRaw = Array.isArray(data.tenantGlobalesDesdeJerarquiaCounters)
-              ? data.tenantGlobalesDesdeJerarquiaCounters
-              : [];
-            const jer = jerRaw
-              .map((row: any) => {
-                const id = String(row?.id || '').trim();
-                if (!id) return null;
-                return { id, label: String(row?.label || id) };
-              })
-              .filter(Boolean) as GenericSelectOption[];
-
-            if (jer.length > 0) {
-              return jer;
-            }
-
-            return (Array.isArray(data.tenantGlobalesRegistrados) ? data.tenantGlobalesRegistrados : [])
-              .map((row: any) => {
-                const id = String(row?.id || row?._id || '').trim();
-                if (!id) return null;
-                const rol = String(row?.rol || 'TENANT').trim();
-                const corp = String(row?.coporativoNombre || '').trim();
-                const suffix = corp ? ` | ${corp}` : '';
-                return { id, label: `${rol} | ${id}${suffix}` };
-              })
-              .filter(Boolean) as GenericSelectOption[];
-          })(),
-        });
+        const enrichedSelects = await buildTenantGlobalSelectsEnriched(data);
+        setTenantGlobalSelects(enrichedSelects);
         setTenantGlobalSelectsDebug(
-          `Selects: niveles-config=${Array.isArray(data.nivelesGlobales) ? data.nivelesGlobales.length : 0}, tipos=${Array.isArray(data.tiposTenant) ? data.tiposTenant.length : 0}, dominios=${Array.isArray(data.dominios) ? data.dominios.length : 0}, acciones=${Array.isArray(data.acciones) ? data.acciones.length : 0}, roles=${rawRolesMabs.length}, corporativos=${Array.isArray(data.corporativosDisponibles) ? data.corporativosDisponibles.length : 0}`
+          `Selects: niveles-config=${Array.isArray(data.nivelesGlobales) ? data.nivelesGlobales.length : 0}, tipos=${Array.isArray(data.tiposTenant) ? data.tiposTenant.length : 0}, dominios=${Array.isArray(data.dominios) ? data.dominios.length : 0}, dominiosScope=${Array.isArray(data.dominiosScope) ? data.dominiosScope.length : 0}, ownerTypes=${Array.isArray(data.ownerTypes) ? data.ownerTypes.length : 0}, acciones=${Array.isArray(data.acciones) ? data.acciones.length : 0}, roles=${Array.isArray(data.rolesMabs) ? data.rolesMabs.length : 0}, corporativos=${Array.isArray(data.corporativosDisponibles) ? data.corporativosDisponibles.length : 0}`
         );
         setTenantSuperAdminsJerarquiaCounters(
           Array.isArray(data.tenantSuperAdminsDesdeJerarquiaCounters) ? data.tenantSuperAdminsDesdeJerarquiaCounters : []
@@ -2153,6 +2149,68 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
     if (tenantUpdateTargets.some((opt) => opt.id === selectedId)) return;
     setFieldValue(endpointId, 'id', '');
   }, [formData, tenantUpdateTargets]);
+
+  /** Precarga tipo tenant, owner, dominios, rol y acciones al elegir ID en PUT actualizar tenant global. */
+  useEffect(() => {
+    const endpointId = 'tenant-actualizar-global';
+    if (endpointModal?.id !== endpointId) {
+      tenantActualizarLoadedIdRef.current = '';
+      return;
+    }
+    const selectedId = String(formData?.[endpointId]?.id || '').trim();
+    if (!selectedId) {
+      tenantActualizarLoadedIdRef.current = '';
+      return;
+    }
+    if (!/^[0-9a-fA-F]{24}$/.test(selectedId)) return;
+    if (selectedId === tenantActualizarLoadedIdRef.current) return;
+
+    let cancelled = false;
+    (async () => {
+      setTenantActualizarPrefillLoading(true);
+      try {
+        const res: { data?: TenantGlobalFormularioDetalle } = await apiFetch(
+          `/api/config/global/creacion/usu/tenant/global/${selectedId}/formulario`,
+          { method: 'GET' },
+        );
+        const detalle = (res?.data ?? res) as TenantGlobalFormularioDetalle;
+        if (cancelled) return;
+        tenantActualizarLabelsRef.current = detalle?.labels ?? {};
+        const fields = tenantGlobalFormularioToFieldMap(detalle);
+        tenantActualizarLoadedIdRef.current = selectedId;
+        setFormData((prev) => ({
+          ...prev,
+          [endpointId]: {
+            ...(prev[endpointId] || {}),
+            id: selectedId,
+            ...fields,
+          },
+        }));
+      } catch (error) {
+        if (!cancelled) {
+          tenantActualizarLoadedIdRef.current = '';
+          toast.error(
+            error instanceof Error
+              ? error.message.replace(/^\[\d+\]\s*/, '')
+              : 'No se pudo cargar los datos del tenant seleccionado.',
+          );
+        }
+      } finally {
+        if (!cancelled) setTenantActualizarPrefillLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [endpointModal?.id, formData?.['tenant-actualizar-global']?.id]);
+
+  useEffect(() => {
+    if (endpointModal?.id === 'tenant-actualizar-global') return;
+    tenantActualizarLoadedIdRef.current = '';
+    tenantActualizarLabelsRef.current = {};
+    setTenantActualizarPrefillLoading(false);
+  }, [endpointModal?.id]);
 
   /**
    * Alineado al select Contexto en crear/actualizar reglas globales: solo reglas con contexto `view`
@@ -6664,24 +6722,51 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
     }
   };
 
-  const renderFormResultSlot = (endpoint: EndpointSpec) =>
-    endpoint.id === 'tenant-listar-reglas'
-      ? renderReglasTable()
-      : endpoint.id === 'tenant-actualizar-dios-reglas'
-        ? renderActualizarReglaDiosResultado()
-        : endpoint.id === 'tenant-listar-libres' ||
-            endpoint.id === 'tenant-listar-libres-superadmin' ||
-            endpoint.id === 'tenant-listar-libres-tenantglobal'
-          ? renderTenantLibresTable(endpoint.id)
-          : endpoint.id === 'perm-listar-herencias'
-            ? renderHerenciasUsuarioTable()
-            : endpoint.id === 'perm-admin-tenant-global-listar'
-              ? renderHerenciasAdminTable()
-              : (
-                  <pre className="max-h-48 overflow-auto rounded-lg border border-border bg-muted/50 p-3 text-xs text-foreground">
-                    {result[endpoint.id] || 'Aun sin respuesta'}
-                  </pre>
-                );
+  const inlineExecuteLabel = (endpoint: EndpointSpec): string => {
+    if (endpoint.method === 'GET') return 'Consultar';
+    if (endpoint.method === 'POST') return 'Guardar';
+    if (endpoint.method === 'PUT') return 'Actualizar';
+    if (endpoint.method === 'DELETE') return 'Confirmar';
+    return 'Ejecutar';
+  };
+
+  const renderFormResultSlot = (endpoint: EndpointSpec) => {
+    const fallbackJson = result[endpoint.id];
+    const genericPre = (
+      <pre className="max-h-48 overflow-auto rounded-lg border border-border bg-muted/50 p-3 text-xs text-foreground">
+        {fallbackJson || (useModuloInlineFlow ? '' : 'Aun sin respuesta')}
+      </pre>
+    );
+    const inlineEmpty = useModuloInlineFlow && !fallbackJson;
+
+    const body =
+      endpoint.id === 'tenant-listar-reglas'
+        ? renderReglasTable()
+        : endpoint.id === 'tenant-actualizar-dios-reglas'
+          ? renderActualizarReglaDiosResultado()
+          : endpoint.id === 'tenant-listar-libres' ||
+              endpoint.id === 'tenant-listar-libres-superadmin' ||
+              endpoint.id === 'tenant-listar-libres-tenantglobal'
+            ? renderTenantLibresTable(endpoint.id)
+            : endpoint.id === 'perm-listar-herencias'
+              ? renderHerenciasUsuarioTable()
+              : endpoint.id === 'perm-admin-tenant-global-listar'
+                ? renderHerenciasAdminTable()
+                : genericPre;
+
+    if (!useModuloInlineFlow) return body;
+
+    return (
+      <div className="space-y-2">
+        {inlineEmpty ? (
+          <p className="rounded-lg border border-dashed border-border bg-muted/20 px-4 py-6 text-center text-sm text-muted-foreground">
+            Sin resultados todavía. Usa «{inlineExecuteLabel(endpoint)}» para cargar la información.
+          </p>
+        ) : null}
+        {inlineEmpty ? null : body}
+      </div>
+    );
+  };
 
   const renderFormFieldsInner = (endpoint: EndpointSpec) => (
     <>
@@ -7732,7 +7817,10 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
               <select
                 className="mt-1 h-11 w-full rounded-xl border border-input bg-card px-3 text-sm shadow-sm"
                 value={getFieldValue(endpoint.id, field.name)}
-                onChange={(e) => setFieldValue(endpoint.id, field.name, e.target.value)}
+                onChange={(e) => {
+                  tenantActualizarLoadedIdRef.current = '';
+                  setFieldValue(endpoint.id, field.name, e.target.value);
+                }}
               >
                 <option value="">
                   {loadingData ? 'Cargando opciones...' : 'Selecciona tenant a actualizar'}
@@ -7751,6 +7839,12 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
               {!loadingData && !tenantUpdateTargets.length ? (
                 <p className="mt-1 text-xs text-amber-700">
                   No hay tenants disponibles para actualizar con tu scope actual.
+                </p>
+              ) : null}
+              {tenantActualizarPrefillLoading ? (
+                <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Cargando parametros del tenant...
                 </p>
               ) : null}
             </div>
@@ -7858,6 +7952,15 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
           const selectedMultiValues = isAccionUsuarioMulti
             ? getFieldValue(endpoint.id, field.name).split(',').map((v) => v.trim()).filter(Boolean)
             : [];
+          const currentFieldValue = getFieldValue(endpoint.id, field.name);
+          const prefillLabels = tenantActualizarLabelsRef.current;
+          const optionsRender =
+            endpoint.id === 'tenant-actualizar-global' &&
+            ['tipo_tenant', 'apisDominios', 'rolesMabs', 'nvlGeneracionTenant'].includes(field.name)
+              ? mergeSelectOptionForValue(optionsFiltradas, currentFieldValue, prefillLabels[field.name])
+              : optionsFiltradas;
+          const selectsLoading =
+            loadingData || (endpoint.id === 'tenant-actualizar-global' && tenantActualizarPrefillLoading);
           return (
             <div key={field.name}>
               <Label>{field.label} {field.required ? '*' : ''}</Label>
@@ -7868,7 +7971,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
                       type="button"
                       size="sm"
                       variant="outline"
-                      onClick={() => setFieldValue(endpoint.id, field.name, optionsFiltradas.map((opt) => opt.id).join(','))}
+                      onClick={() => setFieldValue(endpoint.id, field.name, optionsRender.map((opt) => opt.id).join(','))}
                     >
                       Seleccionar todas
                     </Button>
@@ -7885,7 +7988,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
                     </span>
                   </div>
                   <div className="max-h-40 overflow-auto rounded-md border border-border bg-muted/50 p-2">
-                    {optionsFiltradas.map((opt) => {
+                    {optionsRender.map((opt) => {
                       const checked = selectedMultiValues.includes(opt.id);
                       return (
                         <label key={opt.id} className="mb-1 flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm hover:bg-card">
@@ -7941,9 +8044,9 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
                   disabled={disabled}
                 >
                   <option value="">
-                    {loadingData ? 'Cargando opciones...' : `Selecciona ${field.label.toLowerCase()}`}
+                    {selectsLoading ? 'Cargando opciones...' : `Selecciona ${field.label.toLowerCase()}`}
                   </option>
-                  {optionsFiltradas.map((opt) => (
+                  {optionsRender.map((opt) => (
                     <option key={opt.id} value={opt.id}>{opt.label}</option>
                   ))}
                 </select>
@@ -7954,7 +8057,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
                 </p>
               ) : null}
               {isAccionUsuarioMulti ? <p className="mt-1 text-xs text-muted-foreground">Selecciona una o varias acciones.</p> : null}
-              {!loadingData && optionsFiltradas.length === 0 ? (
+              {!selectsLoading && optionsRender.length === 0 ? (
                 <p className="mt-1 text-xs text-amber-700">
                   {field.name === 'coporativo' && nvlEsLibre && !actorEsTenantSuperAdminScope
                     ? 'NVL 0 / LIBRE: con scope solo tenantGlobal no se asocia corporativo aquí; sube a tenantSuperAdmin o usa la ruta con código de jerarquía.'
@@ -7965,7 +8068,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
                         : 'Sin opciones para este campo. Verifica rol `tenantSuperAdmin` o la configuracion del nivel.'}
                 </p>
               ) : null}
-              {field.name === 'coporativo' && nvlMetaEsCero && actorEsTenantSuperAdminScope && optionsFiltradas.length > 0 ? (
+              {field.name === 'coporativo' && nvlMetaEsCero && actorEsTenantSuperAdminScope && optionsRender.length > 0 ? (
                 <p className="mt-1 text-xs text-emerald-800">
                   NVL 0: corporativo opcional. Si eliges uno, debe ser coherente con tu rama; el alta sigue validando codigo de jerarquia en backend según scope.
                 </p>
@@ -8769,6 +8872,8 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
     return (
       <ParametrosGobernanzaModalFormLayout
         path={endpoint.path}
+        showApiPath={!useModuloInlineFlow}
+        executeLabel={useModuloInlineFlow ? inlineExecuteLabel(endpoint) : 'Ejecutar'}
         actorLabel={endpoint.actor}
         running={
           runningMain ||
@@ -8839,6 +8944,23 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
       >
         {renderFormFieldsInner(endpoint)}
       </ParametrosGobernanzaModalFormLayout>
+    );
+  };
+
+  const renderDesignPanel = (endpoint: EndpointSpec) => {
+    const capabilities = computeGobernanzaEndpointCapabilities(endpoint, gobernanzaCapabilityContext);
+    const readOnly = !capabilities.canEditCardDesign;
+    const design = { ...DEFAULT_GOBERNANZA_CARD_DESIGN, ...cardDesignById[endpoint.id] };
+
+    return (
+      <GobernanzaCardDesignForm
+        endpoint={endpoint}
+        value={design}
+        onChange={(next) => updateCardDesignForEndpoint(endpoint.id, next)}
+        readOnly={readOnly}
+        capabilities={capabilities}
+        embeddedApiForm={renderForm(endpoint)}
+      />
     );
   };
 
@@ -8951,28 +9073,36 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
                 </span>
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-foreground">
-                    {isRulesMode ? 'Flujo de reglas' : activeSectionMeta.label}
+                    {isRulesMode
+                      ? 'Flujo de reglas'
+                      : useModuloInlineFlow
+                      ? inlineModuloMenu.panelTitle
+                      : activeSectionMeta.label}
                   </p>
                   <p className="text-sm text-muted-foreground">
                     {isRulesMode
                       ? 'Flujo guiado solo para reglas de tenant'
                       : lockedSection === 'permisos'
                       ? 'Flujo guiado solo para gobernanza de permisos'
+                      : useModuloInlineFlow
+                      ? inlineModuloMenu.panelHint
                       : `${activeSectionMeta.description} ${endpointsBySection.length} endpoints visibles.`}
                   </p>
                 </div>
               </div>
-              <div className="relative w-full lg:max-w-md">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/90" />
-                <Input
-                  value={endpointSearch}
-                  onChange={(e) => setEndpointSearch(e.target.value)}
-                  placeholder="Buscar endpoint por nombre, ruta o metodo"
-                  className="pl-9"
-                />
-              </div>
+              {!useModuloInlineFlow ? (
+                <div className="relative w-full lg:max-w-md">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/90" />
+                  <Input
+                    value={endpointSearch}
+                    onChange={(e) => setEndpointSearch(e.target.value)}
+                    placeholder="Buscar endpoint por nombre, ruta o metodo"
+                    className="pl-9"
+                  />
+                </div>
+              ) : null}
             </div>
-            {enableCardDesignEditor ? (
+            {enableCardDesignEditor && !useModuloInlineFlow ? (
               <ParametrosGobernanzaEndpointDesignMenu
                 endpoints={endpointNavItems}
                 designQueryParam={cardDesignQueryParam}
@@ -8981,82 +9111,49 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
                 }
               />
             ) : null}
+            {useModuloInlineFlow && inlineModuloResolved ? (
+              <GobernanzaModuloDinamico
+                variant="operational"
+                menuState={inlineModuloMenu}
+                renderForm={renderForm}
+                getCapabilities={(ep) =>
+                  computeGobernanzaEndpointCapabilities(ep, gobernanzaCapabilityContext)
+                }
+              />
+            ) : null}
           </CardContent>
         </Card>
 
-        {activeSection === 'tenant' && visibleTenantPrimaryForms.length > 0 && (
+        {!useModuloInlineFlow && activeSection === 'tenant' && visibleTenantPrimaryForms.length > 0 && (
           <div className={`grid gap-6 ${visibleTenantPrimaryForms.length > 1 ? 'xl:grid-cols-2' : ''}`}>
             {visibleTenantPrimaryForms.map((tenantForm) => {
               const esFlujoSA = tenantForm.id === 'tenant-crear-global-admin';
               const disponible = endpointDisponibleParaScope(tenantForm);
-              const badgeClass = esFlujoSA
-                ? 'border-border bg-muted text-foreground'
-                : 'border-sky-200 bg-sky-50 text-sky-700';
+              const unavailableText = esFlujoSA
+                ? 'Ejecutable solo con sesi\u00f3n tenantSuperAdmin en el JWT. El API valida scope y reglas de corporativo (tenantjerarquiacounters).'
+                : 'Tu sesi\u00f3n actual no ejecuta este formulario; el endpoint admite JWT tenantSuperAdmin o tenantGlobal.';
 
               return (
-                <Card
+                <CrearTenantGlobalActionCard
                   key={tenantForm.id}
-                  className={cn(
-                    'border-border bg-card shadow-sm',
-                    !disponible && 'opacity-75',
-                    enableCardDesignEditor && cardShellClassForDesign(tenantForm.id, cardDesignById)
-                  )}
-                >
-                  <CardHeader className="border-b border-border/80 p-5">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <CardTitle className="text-lg font-semibold text-foreground">
-                        {isRulesMode ? 'Formulario principal recomendado' : tenantForm.title}
-                      </CardTitle>
-                      <Badge className={`border ${METHOD_STYLE[tenantForm.method]}`}>{tenantForm.method}</Badge>
-                      {!isRulesMode ? <Badge className={`border ${badgeClass}`}>{esFlujoSA ? 'tenantSuperAdmin' : 'Descendencia'}</Badge> : null}
-                      {!disponible ? <Badge variant="outline">Solo visible</Badge> : null}
-                    </div>
-                    <CardDescription>{isRulesMode ? tenantForm.title : tenantForm.description}</CardDescription>
-                    {!isRulesMode && !disponible ? (
-                      <p className="text-xs font-medium text-amber-600">
-                        {esFlujoSA
-                          ? 'Ejecutable solo con sesi\u00f3n tenantSuperAdmin en el JWT. El API valida scope y reglas de corporativo (tenantjerarquiacounters).'
-                          : 'Tu sesi\u00f3n actual no ejecuta este formulario; el endpoint admite JWT tenantSuperAdmin o tenantGlobal.'}
-                      </p>
-                    ) : null}
-                    <p
-                      className={cn(
-                        'rounded-md border border-border bg-muted/50 p-2 font-mono text-xs text-muted-foreground',
-                        enableCardDesignEditor && cardPathClassForDesign(tenantForm.id, cardDesignById)
-                      )}
-                    >
-                      {tenantForm.path}
-                    </p>
-                  </CardHeader>
-                  <CardContent className="space-y-4 p-5 pt-0">
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      <Button variant="outline" onClick={() => setEndpointModal(tenantForm)}>
-                        <Settings2 className="mr-2 h-4 w-4" />
-                        Configurar
-                      </Button>
-                      <Button
-                        type="button"
-                        onClick={() =>
-                          tenantForm.fields.length === 0 ? runEndpoint(tenantForm) : setEndpointModal(tenantForm)
-                        }
-                        disabled={!!running[tenantForm.id] || !disponible}
-                      >
-                        {running[tenantForm.id] ? (
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        ) : (
-                          <Play className="mr-2 h-4 w-4" />
-                        )}
-                        Ejecutar
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
+                  endpoint={tenantForm}
+                  disponible={disponible}
+                  running={!!running[tenantForm.id]}
+                  title={isRulesMode ? 'Formulario principal recomendado' : tenantForm.title}
+                  description={isRulesMode ? tenantForm.title : tenantForm.description}
+                  secondaryBadge={!isRulesMode ? (esFlujoSA ? 'tenantSuperAdmin' : 'Descendencia') : undefined}
+                  unavailableText={unavailableText}
+                  shellClassName={enableCardDesignEditor ? cardShellClassForDesign(tenantForm.id, cardDesignById) : undefined}
+                  pathClassName={enableCardDesignEditor ? cardPathClassForDesign(tenantForm.id, cardDesignById) : undefined}
+                  onConfigure={setEndpointModal}
+                  onExecute={(endpoint) => endpoint.fields.length === 0 ? runEndpoint(endpoint) : setEndpointModal(endpoint)}
+                />
               );
             })}
           </div>
         )}
 
-        {endpointsBySection.length === 0 ? (
+        {useModuloInlineFlow ? null : endpointsBySection.length === 0 ? (
           <Card className="border-dashed border-input bg-card shadow-sm">
             <CardContent className="flex min-h-40 flex-col items-center justify-center gap-2 p-6 text-center">
               <Search className="h-5 w-5 text-muted-foreground/90" />
@@ -9070,6 +9167,33 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {endpointsBySection.map((endpoint) => {
               const disponible = endpointDisponibleParaScope(endpoint);
+              const actionProps = {
+                endpoint,
+                disponible,
+                running: !!running[endpoint.id],
+                actorLabel: actorBadge(endpoint.actor),
+                shellClassName: enableCardDesignEditor ? cardShellClassForDesign(endpoint.id, cardDesignById) : undefined,
+                pathClassName: enableCardDesignEditor ? cardPathClassForDesign(endpoint.id, cardDesignById) : undefined,
+                spanClassName: endpoint.method === 'GET' ? 'md:col-span-2 xl:col-span-3' : undefined,
+                onConfigure: setEndpointModal,
+                onExecute: (ep: EndpointSpec) => ep.fields.length === 0 ? runEndpoint(ep) : setEndpointModal(ep),
+              };
+
+              if (endpoint.id === 'tenant-listar-libres-tenantglobal' || endpoint.id === 'tenant-listar-libres-superadmin') {
+                return <ListarTenantGlobalActionCard key={endpoint.id} {...actionProps} />;
+              }
+
+              if (endpoint.id === 'tenant-actualizar-global') {
+                return <ActualizarTenantGlobalActionCard key={endpoint.id} {...actionProps} />;
+              }
+
+              if (endpoint.id === 'tenant-desactivar-global') {
+                return <DesactivarTenantGlobalActionCard key={endpoint.id} {...actionProps} />;
+              }
+
+              if (endpoint.id === 'tenant-eliminar-global') {
+                return <EliminarTenantGlobalActionCard key={endpoint.id} {...actionProps} />;
+              }
 
               return (
                 <Card
@@ -9214,6 +9338,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
         </DialogContent>
       </Dialog>
 
+      {!useModuloInlineFlow ? (
       <Dialog
         open={Boolean(enableCardDesignEditor && designRouteEndpoint)}
         onOpenChange={(open) => {
@@ -9227,7 +9352,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
                 <DialogTitle className="text-base text-foreground">{designRouteEndpoint.title}</DialogTitle>
                 <p className="font-mono text-xs text-muted-foreground">{designRouteEndpoint.path}</p>
               </DialogHeader>
-              <div className="min-h-0 flex-1 overflow-auto px-6 py-5">{renderForm(designRouteEndpoint)}</div>
+                <div className="min-h-0 flex-1 overflow-auto px-6 py-5">{renderDesignPanel(designRouteEndpoint)}</div>
               <div className="flex flex-wrap justify-end gap-2 border-t border-border px-6 py-4">
                 <Button type="button" size="sm" onClick={clearDesignRoute}>
                   Cerrar
@@ -9237,8 +9362,14 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
           ) : null}
         </DialogContent>
       </Dialog>
+      ) : null}
 
-      <Dialog open={!!endpointModal} onOpenChange={(open) => {
+      <Dialog
+        open={
+          !!endpointModal &&
+          !(useModuloInlineFlow && endpointModal && inlineModuloEndpointIds.has(endpointModal.id))
+        }
+        onOpenChange={(open) => {
         if (!open) {
           if (endpointModal?.id === 'tenant-actualizar-global-reglas') {
             setTenantFilterByEndpoint((prev) => { const next = { ...prev }; delete next['tenant-actualizar-global-reglas']; return next; });

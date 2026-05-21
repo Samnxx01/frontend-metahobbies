@@ -69,7 +69,6 @@ export const ENDPOINTS: EndpointSpec[] = [
     fields: [
       { name: 'id', label: 'ID tenant global', type: 'id', required: true, pathParam: true },
       { name: 'tipo_tenant', label: 'Tipo tenant', type: 'id' },
-      { name: 'ownerType', label: 'Owner type', type: 'id' },
       { name: 'apisDominios', label: 'Apis dominios', type: 'id' },
       { name: 'accionesUsu', label: 'Accion usuario', type: 'id' },
       { name: 'rolesMabs', label: 'Rol mabs', type: 'id' },

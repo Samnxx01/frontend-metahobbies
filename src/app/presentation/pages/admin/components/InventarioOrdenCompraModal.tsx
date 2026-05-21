@@ -21,7 +21,11 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { descuentoMontoFijo, descuentoMontoLinea } from '@/app/presentation/pages/admin/utils/ordenCompraLineaCalculo';
+import { descuentoMontoLinea, totalLineaOrdenCompra } from '@/app/presentation/pages/admin/utils/ordenCompraLineaCalculo';
+import {
+  mensajeErrorComprasInventario,
+  mensajeExitoCrearOrden,
+} from '../inventario/inventarioComprasMensajes';
 
 const moneyCo = (n: number): string =>
   new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(n);
@@ -46,25 +50,22 @@ const newLineId = (): string =>
 
 const round2 = (n: number): number => Math.round((n + Number.EPSILON) * 100) / 100;
 
-const baseNetaLinea = (line: OcLineDraft): number => {
-  const q = Number(line.cantidad) || 0;
-  const p = Number(line.precioUnitario) || 0;
-  const base = q * p;
-  const d = descuentoMontoFijo(base, Number(line.descuento) || 0);
-  return Math.max(0, round2(base - d));
-};
-
-const calcSubtotalLinea = (line: OcLineDraft): number => {
-  const taxPercent = Number(line.impuestoPorcentaje) || 0;
-  const baseNeta = baseNetaLinea(line);
-  const taxAmount = baseNeta * (taxPercent / 100);
-  return Math.max(0, round2(baseNeta - taxAmount));
-};
+/** Misma formula que backend: (cantidad x precio) + impuesto % sobre bruto - descuento. */
+const calcSubtotalLinea = (line: OcLineDraft): number =>
+  totalLineaOrdenCompra({
+    cantidadOrdenada: Number(line.cantidad) || 0,
+    costoUnitario: Number(line.precioUnitario) || 0,
+    descuento: Number(line.descuento) || 0,
+    descuentoPorcentaje: 0,
+    impuestoPorcentaje: Number(line.impuestoPorcentaje) || 0,
+    impuestos: 0,
+    subtotal: 0,
+  });
 
 const calcImpuestoLinea = (line: OcLineDraft): number => {
+  const base = round2((Number(line.cantidad) || 0) * (Number(line.precioUnitario) || 0));
   const taxPercent = Number(line.impuestoPorcentaje) || 0;
-  const baseNeta = baseNetaLinea(line);
-  return Math.max(0, round2(baseNeta * (taxPercent / 100)));
+  return taxPercent > 0 ? round2(base * (taxPercent / 100)) : 0;
 };
 
 const getProveedorId = (proveedor: InventarioProveedor): string =>
@@ -84,6 +85,7 @@ export type InventarioOrdenCompraModalProps = {
   triggerClassName?: string;
   /** Al pulsar «Nueva orden» desde el trigger (limpia modo edición). */
   onAntesNuevaOrden?: () => void;
+  recepcionAutomatica?: boolean;
 };
 
 export default function InventarioOrdenCompraModal({
@@ -98,6 +100,7 @@ export default function InventarioOrdenCompraModal({
   showTrigger = false,
   triggerClassName = '',
   onAntesNuevaOrden,
+  recepcionAutomatica = false,
 }: InventarioOrdenCompraModalProps): React.ReactElement {
   const bodegasActivas = useMemo(() => bodegas.filter((b) => b.estado !== false), [bodegas]);
   const productosConSku = useMemo(
@@ -321,13 +324,17 @@ export default function InventarioOrdenCompraModal({
           proveedor: { nombre: prov.nombre.trim(), nit: prov.nit.trim() },
           items,
         });
-        toast.success(`Orden registrada: ${creada.numeroOrden}`);
+        const estado = String(creada.estado || '').toUpperCase();
+        toast.success(
+          mensajeExitoCrearOrden(creada.numeroOrden, estado, recepcionAutomatica),
+          { autoClose: 9000 },
+        );
       }
       onOpenChange(false);
       await onCreated();
     } catch (error) {
       console.error('Error creando orden de compra:', error);
-      toast.error(error instanceof Error ? error.message.replace(/^\[\d+\]\s*/, '') : 'No se pudo crear la orden.');
+      toast.error(mensajeErrorComprasInventario(error, 'No se pudo guardar la orden de compra.'));
     } finally {
       setEnviando(false);
     }
@@ -542,7 +549,7 @@ export default function InventarioOrdenCompraModal({
                         />
                         <p className="mt-1 text-right text-[10px] text-muted-foreground">
                           {Number(line.impuestoPorcentaje) > 0
-                            ? `− ${moneyCo(calcImpuestoLinea(line))}`
+                            ? `+ ${moneyCo(calcImpuestoLinea(line))}`
                             : '—'}
                         </p>
                       </TableCell>
@@ -577,7 +584,7 @@ export default function InventarioOrdenCompraModal({
               Total orden: <span className="tabular-nums">{moneyCo(totalOrden)}</span>
             </p>
             <p className="text-xs text-muted-foreground">
-              Subtotal por línea = (cantidad × precio) − descuento en pesos (entero, máx. esa base) − impuesto % calculado sobre esa base neta.
+              Subtotal por línea = (cantidad × precio) + impuesto % sobre el bruto − descuento en pesos (entero, máx. el bruto de la línea).
             </p>
           </div>
 

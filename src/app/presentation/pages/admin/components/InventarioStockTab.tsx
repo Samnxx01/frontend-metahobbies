@@ -24,8 +24,9 @@ type InventarioStockTabProps = {
   stockActual: StockActualItem[];
   kardex: InventarioMovimiento[];
   money: Intl.NumberFormat;
-  renderBodegaSelect: (value: string, onChange: (value: string) => void) => React.ReactElement;
+  renderBodegaStockSelect: () => React.ReactElement;
   consultarStock: () => Promise<void>;
+  bodegaSeleccionada?: string;
   formatDate: (value?: string) => string;
   getTipoMovimientoLabel: (mov: InventarioMovimiento) => string;
 };
@@ -37,18 +38,23 @@ export default function InventarioStockTab({
   stockActual,
   kardex,
   money,
-  renderBodegaSelect,
+  renderBodegaStockSelect,
   consultarStock,
   formatDate,
   getTipoMovimientoLabel,
+  bodegaSeleccionada = '',
 }: InventarioStockTabProps): React.ReactElement {
+  const etiquetaBodega = bodegaSeleccionada.trim() || 'Todas las bodegas';
+
   return (
     <div className="space-y-4">
       <div className="grid gap-4 lg:grid-cols-[360px_1fr]">
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><Search className="h-5 w-5" /> Consultar stock</CardTitle>
-            <CardDescription>Busca saldos por bodega y, si ingresas SKU, consulta su saldo puntual.</CardDescription>
+            <CardDescription>
+              Selecciona una bodega para actualizar resumen, tabla y kardex. Opcional: filtra por SKU y pulsa Consultar.
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
@@ -61,7 +67,7 @@ export default function InventarioStockTab({
             </div>
             <div className="space-y-2">
               <Label>Bodega</Label>
-              {renderBodegaSelect(stockFiltro.bodega, (value) => setStockFiltro((prev) => ({ ...prev, bodega: value })))}
+              {renderBodegaStockSelect()}
             </div>
             <Button className="w-full" onClick={() => void consultarStock()}>
               <Search className="mr-2 h-4 w-4" />
@@ -81,7 +87,9 @@ export default function InventarioStockTab({
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><Package className="h-5 w-5" /> Stock actual</CardTitle>
-            <CardDescription>Saldos disponibles registrados por bodega.</CardDescription>
+            <CardDescription>
+              Saldos en <span className="font-medium text-foreground">{etiquetaBodega}</span>.
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
@@ -96,7 +104,7 @@ export default function InventarioStockTab({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {stockActual.slice(0, 20).map((item) => (
+                  {stockActual.map((item) => (
                     <TableRow key={`${item.sku}-${item.bodega}`}>
                       <TableCell className="font-medium">{item.sku}</TableCell>
                       <TableCell>{item.bodega}</TableCell>
@@ -122,7 +130,10 @@ export default function InventarioStockTab({
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2"><ClipboardList className="h-5 w-5" /> Kardex consultado</CardTitle>
-          <CardDescription>Ultimos movimientos del filtro seleccionado.</CardDescription>
+          <CardDescription>
+            Movimientos en <span className="font-medium text-foreground">{etiquetaBodega}</span>
+            {stockFiltro.sku.trim() ? ` · SKU ${stockFiltro.sku.trim()}` : ''}.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">

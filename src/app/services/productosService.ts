@@ -4,12 +4,25 @@ import type { Product as ComponentProduct } from '../../types/components';
 // ── Tipos del backend ──────────────────────────────────────────────────────
 
 export interface BackendCategoria {
-  iud: string;
+  _id?: string;
+  iud?: string;
+  id?: string;
   nombre: string;
   descripcion?: string;
   nivel: number;
-  padre?: string;
+  padre?: string | BackendCategoria | null;
   estado: boolean;
+}
+
+export interface BackendTipoProducto {
+  _id?: string;
+  iud?: string;
+  id?: string;
+  codigo: string;
+  nombre: string;
+  descripcion?: string;
+  estado: boolean;
+  base?: boolean;
 }
 
 export interface CategoriaPayload {
@@ -18,9 +31,15 @@ export interface CategoriaPayload {
   padre?: string | null;
 }
 
+export interface TipoProductoPayload {
+  nombre: string;
+  codigo?: string;
+  descripcion?: string;
+}
+
 export interface BackendProducto {
   _id?: string;
-  iud: string;
+  iud?: string;
   id?: string;
   sku?: string;
   codigoBarras?: string;
@@ -50,7 +69,7 @@ export function mapProducto(p: BackendProducto): ComponentProduct {
     : (typeof p.categoria === 'string' ? p.categoria : p.tipo);
 
   return {
-    id: p.iud,
+    id: String(p.iud || p._id || p.id || ''),
     name: p.nombre,
     description: p.descripcionCorta || p.descripcion || '',
     price: p.precio,
@@ -93,12 +112,25 @@ const productosService = {
     return (resp?.data ?? []) as BackendCategoria[];
   },
 
+  async listarTiposProducto(): Promise<BackendTipoProducto[]> {
+    const resp = await apiFetchPublic('/api/productos/tipos');
+    return (resp?.data ?? []) as BackendTipoProducto[];
+  },
+
   async crearCategoria(payload: CategoriaPayload): Promise<BackendCategoria> {
     const resp = await apiFetch('/api/productos/categorias', {
       method: 'POST',
       body: payload,
     });
     return resp?.data as BackendCategoria;
+  },
+
+  async crearTipoProducto(payload: TipoProductoPayload): Promise<BackendTipoProducto> {
+    const resp = await apiFetch('/api/productos/tipos', {
+      method: 'POST',
+      body: payload,
+    });
+    return resp?.data as BackendTipoProducto;
   },
 
   /** Lista productos con filtros opcionales */

@@ -5,7 +5,9 @@ import productosService, {
   type AdminProductoPayload,
   type BackendCategoria,
   type BackendProducto,
+  type BackendTipoProducto,
   type CategoriaPayload,
+  type TipoProductoPayload,
 } from '@/app/services/productosService';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -35,16 +37,33 @@ interface ProductRow {
 }
 
 const PLACEHOLDER = 'https://placehold.co/80x80/f3f4f6/a3a3a3?text=IMG';
-const PRODUCT_TYPES = ['FISICO', 'DIGITAL', 'MEMBRESIA', 'SERVICIO', 'SUSCRIPCION', 'PLAN', 'PRODUCTO'];
+
+const backendId = (row: { _id?: string; iud?: string; id?: string } | null | undefined): string =>
+  String(row?.iud || row?._id || row?.id || '');
+
+const tiposPersistidosUnicos = (tipos: BackendTipoProducto[]): BackendTipoProducto[] => {
+  const vistos = new Set<string>();
+  return tipos
+    .filter((tipo) => backendId(tipo) && !tipo.base)
+    .filter((tipo) => {
+      const key = String(tipo.nombre || '').trim().toUpperCase();
+      if (!key || vistos.has(key)) return false;
+      vistos.add(key);
+      return true;
+    });
+};
+
+const errorMessage = (error: unknown, fallback: string): string =>
+  error instanceof Error ? error.message.replace(/^\[\d+\]\s*/, '') : fallback;
 
 const categoriaId = (categoria: BackendProducto['categoria']): string =>
-  typeof categoria === 'object' && categoria !== null ? String(categoria.iud || '') : typeof categoria === 'string' ? categoria : '';
+  typeof categoria === 'object' && categoria !== null ? backendId(categoria) : typeof categoria === 'string' ? categoria : '';
 
 const categoriaLabel = (categoria: BackendProducto['categoria']): string =>
   typeof categoria === 'object' && categoria !== null ? String(categoria.nombre || '') : typeof categoria === 'string' ? categoria : 'Sin categoría';
 
 const mapProduct = (producto: BackendProducto): ProductRow => ({
-  id: String(producto.iud || ''),
+  id: backendId(producto),
   sku: String(producto.sku || ''),
   nombre: String(producto.nombre || ''),
   categoriaId: categoriaId(producto.categoria),
@@ -66,7 +85,7 @@ const toPayload = (product: ProductRow): AdminProductoPayload => ({
   descripcionCorta: product.descripcionCorta || '',
   precio: Number(product.precio || 0),
   moneda: product.moneda || 'COP',
-  tipo: product.tipo || 'PRODUCTO',
+  tipo: product.tipo,
   categoria: product.categoriaId || null,
   imagenes: product.imagen && product.imagen !== PLACEHOLDER ? [product.imagen] : [],
   estadoCatalogo: product.publicado ? 'ACTIVO' : 'INACTIVO',
@@ -78,7 +97,7 @@ const EMPTY_PRODUCT: ProductRow = {
   nombre: '',
   categoriaId: '',
   categoria: '',
-  tipo: 'PRODUCTO',
+  tipo: '',
   moneda: 'COP',
   precio: 0,
   descripcion: '',
@@ -95,29 +114,39 @@ export default function GestionProductos(): React.ReactElement {
   const [dialogType, setDialogType] = useState<DialogType>('view');
   const [openDialog, setOpenDialog] = useState(false);
   const [openCategoryDialog, setOpenCategoryDialog] = useState(false);
+  const [openTypeDialog, setOpenTypeDialog] = useState(false);
   const [productos, setProductos] = useState<ProductRow[]>([]);
   const [categorias, setCategorias] = useState<BackendCategoria[]>([]);
+  const [tiposProducto, setTiposProducto] = useState<BackendTipoProducto[]>([]);
   const [selected, setSelected] = useState<ProductRow | null>(null);
   const [form, setForm] = useState<ProductRow>(EMPTY_PRODUCT);
   const [categorySaving, setCategorySaving] = useState(false);
+  const [typeSaving, setTypeSaving] = useState(false);
   const [categoryForm, setCategoryForm] = useState<CategoriaPayload>({
     nombre: '',
     descripcion: '',
     padre: null,
   });
+  const [typeForm, setTypeForm] = useState<TipoProductoPayload>({
+    nombre: '',
+    codigo: '',
+    descripcion: '',
+  });
 
   const loadData = async (): Promise<void> => {
     try {
       setLoading(true);
-      const [productosResp, categoriasResp] = await Promise.all([
+      const [productosResp, categoriasResp, tiposResp] = await Promise.all([
         productosService.listarProductosAdmin(),
         productosService.listarCategorias(),
+        productosService.listarTiposProducto(),
       ]);
       setProductos(productosResp.map(mapProduct));
       setCategorias(categoriasResp);
+      setTiposProducto(tiposPersistidosUnicos(tiposResp));
     } catch (error) {
       console.error('Error cargando productos:', error);
-      toast.error('No se pudieron cargar los productos.');
+      toast.error(errorMessage(error, 'No se pudieron cargar los productos.'));
     } finally {
       setLoading(false);
     }
@@ -137,6 +166,13 @@ export default function GestionProductos(): React.ReactElement {
     );
   }), [productos, query]);
 
+  const productosConSku = useMemo(
+    () => productos
+      .filter((producto) => producto.sku.trim())
+      .sort((a, b) => a.nombre.localeCompare(b.nombre)),
+    [productos],
+  );
+
   const closeDialog = (): void => {
     setOpenDialog(false);
     setSelected(null);
@@ -151,6 +187,39 @@ export default function GestionProductos(): React.ReactElement {
       descripcion: '',
       padre: null,
     });
+  };
+
+  const closeTypeDialog = (): void => {
+    setOpenTypeDialog(false);
+    setTypeForm({
+      nombre: '',
+      codigo: '',
+      descripcion: '',
+    });
+  };
+
+  const onSelectProductSku = (value: string): void => {
+    const producto = productos.find((item) => item.sku === value);
+    if (!producto) {
+      setForm((prev) => ({ ...prev, sku: value }));
+      return;
+    }
+
+    setForm((prev) => ({
+      ...prev,
+      sku: producto.sku,
+      nombre: producto.nombre,
+      categoriaId: producto.categoriaId,
+      categoria: producto.categoria,
+      tipo: producto.tipo,
+      moneda: producto.moneda,
+      precio: producto.precio,
+      descripcion: producto.descripcion,
+      descripcionCorta: producto.descripcionCorta,
+      imagen: producto.imagen,
+      publicado: producto.publicado,
+      estadoCatalogo: producto.estadoCatalogo,
+    }));
   };
 
   const openAdd = (): void => {
@@ -173,7 +242,7 @@ export default function GestionProductos(): React.ReactElement {
       setOpenDialog(true);
     } catch (error) {
       console.error('Error cargando detalle del producto:', error);
-      toast.error('No se pudo cargar el detalle del producto.');
+      toast.error(errorMessage(error, 'No se pudo cargar el detalle del producto.'));
     }
   };
 
@@ -192,13 +261,17 @@ export default function GestionProductos(): React.ReactElement {
       toast.success(`Producto ${producto.publicado ? 'despublicado' : 'publicado'} exitosamente`);
     } catch (error) {
       console.error('Error actualizando publicación:', error);
-      toast.error('No se pudo actualizar el estado del producto.');
+      toast.error(errorMessage(error, 'No se pudo actualizar el estado del producto.'));
     }
   };
 
   const onSave = async (): Promise<void> => {
     if (!form.nombre.trim() || !form.precio) {
       toast.error('Nombre y precio son obligatorios.');
+      return;
+    }
+    if (!form.tipo.trim()) {
+      toast.error('Selecciona o crea un tipo de producto.');
       return;
     }
 
@@ -216,7 +289,7 @@ export default function GestionProductos(): React.ReactElement {
       closeDialog();
     } catch (error) {
       console.error('Error guardando producto:', error);
-      toast.error('No se pudo guardar el producto.');
+      toast.error(errorMessage(error, 'No se pudo guardar el producto.'));
     } finally {
       setSaving(false);
     }
@@ -240,7 +313,7 @@ export default function GestionProductos(): React.ReactElement {
         closeDialog();
       } catch (error) {
         console.error('Error desactivando producto:', error);
-        toast.error('No se pudo desactivar el producto.');
+        toast.error(errorMessage(error, 'No se pudo desactivar el producto.'));
       }
     });
   };
@@ -260,14 +333,41 @@ export default function GestionProductos(): React.ReactElement {
       });
       const nextCategorias = [...categorias, created].sort((a, b) => String(a.nombre || '').localeCompare(String(b.nombre || '')));
       setCategorias(nextCategorias);
-      setForm((prev) => ({ ...prev, categoriaId: created.iud, categoria: created.nombre }));
+      setForm((prev) => ({ ...prev, categoriaId: backendId(created), categoria: created.nombre }));
       toast.success('Categoría creada correctamente');
       closeCategoryDialog();
     } catch (error) {
       console.error('Error creando categoría:', error);
-      toast.error('No se pudo crear la categoría.');
+      toast.error(errorMessage(error, 'No se pudo crear la categoría.'));
     } finally {
       setCategorySaving(false);
+    }
+  };
+
+  const onCreateType = async (): Promise<void> => {
+    if (!typeForm.nombre?.trim()) {
+      toast.error('El nombre del tipo es obligatorio.');
+      return;
+    }
+
+    try {
+      setTypeSaving(true);
+      const created = await productosService.crearTipoProducto({
+        nombre: typeForm.nombre,
+        codigo: typeForm.codigo || undefined,
+        descripcion: typeForm.descripcion || '',
+      });
+      const nextTipos = tiposPersistidosUnicos([...tiposProducto, created])
+        .sort((a, b) => String(a.nombre || '').localeCompare(String(b.nombre || '')));
+      setTiposProducto(nextTipos);
+      setForm((prev) => ({ ...prev, tipo: created.nombre }));
+      toast.success('Tipo de producto creado correctamente');
+      closeTypeDialog();
+    } catch (error) {
+      console.error('Error creando tipo de producto:', error);
+      toast.error(errorMessage(error, 'No se pudo crear el tipo de producto.'));
+    } finally {
+      setTypeSaving(false);
     }
   };
 
@@ -364,7 +464,7 @@ export default function GestionProductos(): React.ReactElement {
         </Table>
       </div>
 
-      <Dialog open={openDialog} onOpenChange={setOpenDialog}>
+      <Dialog open={openDialog} onOpenChange={(open) => (open ? setOpenDialog(true) : closeDialog())}>
         <DialogContent className="sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>
@@ -384,17 +484,58 @@ export default function GestionProductos(): React.ReactElement {
                   <Input id="nombre" value={current.nombre} disabled={dialogType === 'view'} onChange={(e) => setForm((prev) => ({ ...prev, nombre: e.target.value }))} />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="sku">SKU</Label>
-                  <Input id="sku" value={current.sku} disabled={dialogType === 'view'} onChange={(e) => setForm((prev) => ({ ...prev, sku: e.target.value }))} />
+                  <Label htmlFor="sku">Producto</Label>
+                  {dialogType === 'view' ? (
+                    <Input id="sku" value={current.sku} disabled />
+                  ) : productosConSku.length > 0 ? (
+                    <select
+                      id="sku"
+                      value={form.sku}
+                      onChange={(e) => onSelectProductSku(e.target.value)}
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    >
+                      <option value="">Selecciona producto</option>
+                      {productosConSku.map((producto) => (
+                        <option key={producto.id} value={producto.sku}>
+                          {producto.nombre}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <Input id="sku" value={current.sku} onChange={(e) => setForm((prev) => ({ ...prev, sku: e.target.value }))} />
+                  )}
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="tipo">Tipo</Label>
                   {dialogType === 'view' ? (
-                    <Input id="tipo" value={current.tipo} disabled />
+                    current.tipo ? (
+                      <>
+                        <Label htmlFor="tipo">Tipo</Label>
+                        <Input id="tipo" value={current.tipo} disabled />
+                      </>
+                    ) : null
                   ) : (
-                    <select id="tipo" value={form.tipo} onChange={(e) => setForm((prev) => ({ ...prev, tipo: e.target.value }))} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
-                      {PRODUCT_TYPES.map((tipo) => <option key={tipo} value={tipo}>{tipo}</option>)}
-                    </select>
+                    <>
+                      {tiposProducto.length > 0 && (
+                        <>
+                          <Label htmlFor="tipo">Tipo</Label>
+                          <select id="tipo" value={form.tipo} onChange={(e) => setForm((prev) => ({ ...prev, tipo: e.target.value }))} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
+                            <option value="">Selecciona tipo</option>
+                            {tiposProducto.map((tipo) => (
+                              <option key={backendId(tipo) || tipo.codigo || tipo.nombre} value={tipo.nombre}>
+                                {tipo.nombre}
+                              </option>
+                            ))}
+                          </select>
+                        </>
+                      )}
+                      <button
+                        type="button"
+                        className="text-xs text-primary underline underline-offset-4"
+                        onClick={() => setOpenTypeDialog(true)}
+                      >
+                        Crear tipo nuevo
+                      </button>
+                    </>
                   )}
                 </div>
                 <div className="space-y-2">
@@ -407,13 +548,15 @@ export default function GestionProductos(): React.ReactElement {
                       value={form.categoriaId}
                       onChange={(e) => {
                         const id = e.target.value;
-                        const categoria = categorias.find((item) => item.iud === id);
+                        const categoria = categorias.find((item) => backendId(item) === id);
                         setForm((prev) => ({ ...prev, categoriaId: id, categoria: categoria?.nombre || '' }));
                       }}
                       className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                     >
                       <option value="">Sin categoría</option>
-                      {categorias.map((categoria) => <option key={categoria.iud} value={categoria.iud}>{categoria.nombre}</option>)}
+                      {categorias.map((categoria) => (
+                        <option key={backendId(categoria)} value={backendId(categoria)}>{categoria.nombre}</option>
+                      ))}
                     </select>
                   )}
                   {dialogType !== 'view' && (
@@ -454,7 +597,7 @@ export default function GestionProductos(): React.ReactElement {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={openCategoryDialog} onOpenChange={setOpenCategoryDialog}>
+      <Dialog open={openCategoryDialog} onOpenChange={(open) => (open ? setOpenCategoryDialog(true) : closeCategoryDialog())}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Crear Categoría</DialogTitle>
@@ -483,7 +626,7 @@ export default function GestionProductos(): React.ReactElement {
                 {categorias
                   .filter((categoria) => Number(categoria.nivel) === 1)
                   .map((categoria) => (
-                    <option key={categoria.iud} value={categoria.iud}>
+                    <option key={backendId(categoria)} value={backendId(categoria)}>
                       {categoria.nombre}
                     </option>
                   ))}
@@ -506,6 +649,54 @@ export default function GestionProductos(): React.ReactElement {
             <Button variant="outline" onClick={closeCategoryDialog}>Cancelar</Button>
             <Button onClick={() => { void onCreateCategory(); }} disabled={categorySaving}>
               {categorySaving ? 'Guardando...' : 'Crear Categoría'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={openTypeDialog} onOpenChange={(open) => (open ? setOpenTypeDialog(true) : closeTypeDialog())}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Crear Tipo de Producto</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="tipo-nombre">Nombre</Label>
+              <Input
+                id="tipo-nombre"
+                value={typeForm.nombre || ''}
+                onChange={(e) => setTypeForm((prev) => ({ ...prev, nombre: e.target.value }))}
+                placeholder="Ej: BONO"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="tipo-codigo">Codigo</Label>
+              <Input
+                id="tipo-codigo"
+                value={typeForm.codigo || ''}
+                onChange={(e) => setTypeForm((prev) => ({ ...prev, codigo: e.target.value.toUpperCase() }))}
+                placeholder="Se genera desde el nombre si lo dejas vacio"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="tipo-descripcion">Descripcion</Label>
+              <Textarea
+                id="tipo-descripcion"
+                value={typeForm.descripcion || ''}
+                onChange={(e) => setTypeForm((prev) => ({ ...prev, descripcion: e.target.value }))}
+                rows={3}
+                placeholder="Descripcion opcional del tipo"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={closeTypeDialog}>Cancelar</Button>
+            <Button onClick={() => { void onCreateType(); }} disabled={typeSaving}>
+              {typeSaving ? 'Guardando...' : 'Crear Tipo'}
             </Button>
           </DialogFooter>
         </DialogContent>
