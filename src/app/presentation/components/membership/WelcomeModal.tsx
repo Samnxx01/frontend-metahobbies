@@ -1,13 +1,17 @@
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
     Dialog,
     DialogContent,
-    DialogTitle,
     DialogDescription,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-
+    DialogTitle,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import {
+    getPublicidadImageUrl,
+    obtenerPublicidadModalActiva,
+    type PublicidadModal,
+} from '@/app/services/publicidadService';
 import type { WelcomeModalProps } from '@/types/components';
 
 interface ModalContent {
@@ -20,35 +24,64 @@ interface ModalContent {
     imageUrl: string;
 }
 
+const toModalContent = (publicidad: PublicidadModal): ModalContent => ({
+    title: String(publicidad.tittle || '').trim(),
+    subtitle: String(publicidad.subtittle || '').trim(),
+    body: String(publicidad.body || '').trim(),
+    price: publicidad.price ? String(publicidad.price) : '',
+    buttonText: String(publicidad.buttonText || '').trim(),
+    buttonLink: String(publicidad.buttonLink || '').trim(),
+    imageUrl: getPublicidadImageUrl(publicidad),
+});
+
 export default function WelcomeModal({
     open: controlledOpen,
     onClose,
-    membershipType = "estándar"
 }: Partial<WelcomeModalProps> = {}): React.ReactElement {
     const navigate = useNavigate();
-    const [internalOpen, setInternalOpen] = useState<boolean>(true);
+    const location = useLocation();
+    const [internalOpen, setInternalOpen] = useState<boolean>(false);
     const [modalContent, setModalContent] = useState<ModalContent | null>(null);
-    
-    // Use controlled open state if provided, otherwise use internal state
+
     const isOpen = controlledOpen !== undefined ? controlledOpen : internalOpen;
 
     useEffect(() => {
-        // Simular obtención de datos (hardcoded)
-        const fetchModalContent = () => {
-            const content: ModalContent = {
-                title: "🎉 ¡Oferta Especial de Lanzamiento!",
-                subtitle: "Obtén <span class='text-primary font-bold'>50% de descuento</span> en tu primera membresía",
-                body: `Aprovecha esta promoción exclusiva por tiempo limitado. Únete ahora a nuestra membresía ${membershipType} y empieza a disfrutar de todos los beneficios desde el primer día.`,
-                price: "COP $100,000",
-                buttonText: "Aprovechar Oferta Ahora",
-                buttonLink: "/productos",
-                imageUrl: "/public/assets/images/products/product2.png"
-            };
-            setModalContent(content);
+        let mounted = true;
+
+        const fetchModalContent = async (): Promise<void> => {
+            try {
+                const publicidad = await obtenerPublicidadModalActiva({ path: location.pathname });
+                if (!mounted) return;
+
+                if (!publicidad?.estado) {
+                    setModalContent(null);
+                    setInternalOpen(false);
+                    return;
+                }
+
+                const content = toModalContent(publicidad);
+                if (!content.title || !content.body) {
+                    setModalContent(null);
+                    setInternalOpen(false);
+                    return;
+                }
+
+                setModalContent(content);
+                setInternalOpen(true);
+            } catch (error) {
+                if (!mounted) return;
+                console.error('No se pudo cargar el modal publicitario activo:', error);
+                setModalContent(null);
+                setInternalOpen(false);
+            }
         };
 
-        fetchModalContent();
-    }, [membershipType]);
+        void fetchModalContent();
+
+        return () => {
+            mounted = false;
+        };
+    }, [location.pathname]);
 
     const handleClose = (): void => {
         if (onClose) {
@@ -60,9 +93,14 @@ export default function WelcomeModal({
 
     const handleAcquire = (): void => {
         handleClose();
-        if (modalContent?.buttonLink) {
-            navigate(modalContent.buttonLink);
+        if (!modalContent?.buttonLink) return;
+
+        if (/^https?:\/\//i.test(modalContent.buttonLink)) {
+            window.location.assign(modalContent.buttonLink);
+            return;
         }
+
+        navigate(modalContent.buttonLink);
     };
 
     const handleOpenChange = (open: boolean): void => {
@@ -75,65 +113,53 @@ export default function WelcomeModal({
         return <></>;
     }
 
-    // La lógica de Modal, Backdrop, y Transitions se maneja de forma nativa por Dialog
     return (
         <Dialog open={isOpen} onOpenChange={handleOpenChange}>
-            {/* Reemplaza Modal. 
-            DialogContent es el cuerpo real del modal.
-            - w-[95%] sm:w-[80%] md:max-w-[800px] reemplaza width responsivo.
-            - max-h-[90vh] reemplaza maxHeight.
-            - p-0 remueve el padding por defecto del DialogContent.
-            */}
-            <DialogContent className="p-0 border-none w-[95%] sm:w-[80%] md:max-w-[800px] max-h-[90vh] overflow-hidden">
+            <DialogContent className="w-[95%] max-h-[90vh] overflow-hidden border-none p-0 sm:w-[80%] md:max-w-[800px]">
                 <div className="sr-only">
                     <DialogTitle>{modalContent.title}</DialogTitle>
                     <DialogDescription>{modalContent.body}</DialogDescription>
                 </div>
 
-                {/* Grid Container de MUI se reemplaza por un Grid de Tailwind */}
                 <div className="grid grid-cols-1 md:grid-cols-2">
-
-                    {/* Imagen lado izquierdo - Reemplaza Grid item md={6} xs={12} y Box */}
-                    <div className="h-[200px] md:h-[400px] w-full bg-cover bg-center"
+                    <div
+                        className="h-[200px] w-full bg-muted bg-contain bg-center bg-no-repeat md:h-[400px]"
                         style={{
-                            backgroundImage: `url(${modalContent.imageUrl})`,
+                            backgroundImage: modalContent.imageUrl ? `url(${modalContent.imageUrl})` : undefined,
                         }}
                     />
 
-                    {/* Contenido lado derecho - Reemplaza Grid item md={6} xs={12} y Box */}
-                    <div className="p-6 sm:p-8 flex flex-col justify-center">
-
-                        {/* Título Principal */}
+                    <div className="flex flex-col justify-center p-6 sm:p-8">
                         <h2 className="mb-3 text-3xl font-bold text-primary">
                             {modalContent.title}
                         </h2>
 
-                        {/* Subtítulo */}
-                        <p 
-                            className="mb-3 text-lg font-medium"
-                            dangerouslySetInnerHTML={{ __html: modalContent.subtitle }}
-                        />
+                        {modalContent.subtitle ? (
+                            <p className="mb-3 text-lg font-semibold">
+                                {modalContent.subtitle}
+                            </p>
+                        ) : null}
 
-                        {/* Descripción */}
-                        <p className="mb-4 text-muted-foreground text-lg">
+                        <p className="mb-4 text-lg text-muted-foreground">
                             {modalContent.body}
                         </p>
 
-                        {/* Precio */}
-                        <p className="mb-6 text-2xl font-semibold text-primary">
-                            {modalContent.price}
-                        </p>
+                        {modalContent.price ? (
+                            <p className="mb-6 text-2xl font-semibold text-primary">
+                                {modalContent.price}
+                            </p>
+                        ) : null}
 
-                        {/* Botón */}
-                        <Button
-                            onClick={handleAcquire}
-                            className="w-full py-6 text-lg font-semibold rounded-lg"
-                        >
-                            {modalContent.buttonText}
-                        </Button>
+                        {modalContent.buttonText && modalContent.buttonLink ? (
+                            <Button
+                                onClick={handleAcquire}
+                                className="w-full rounded-lg py-6 text-lg font-semibold"
+                            >
+                                {modalContent.buttonText}
+                            </Button>
+                        ) : null}
                     </div>
                 </div>
-
             </DialogContent>
         </Dialog>
     );

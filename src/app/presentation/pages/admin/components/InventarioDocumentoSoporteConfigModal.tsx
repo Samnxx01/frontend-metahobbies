@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Plus, Save, Trash2 } from 'lucide-react';
+import { Plus, RotateCcw, Save, Trash2 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import inventarioService from '@/app/services/inventarioService';
 import { Button } from '@/components/ui/button';
@@ -15,9 +15,9 @@ export type DocumentoSoporteTipoConfig = {
   padding: number; // digitos de la secuencia, ej. 6 => REC-000001
   siguiente: number; // ej. 123
   activo: boolean;
+  totalRecepciones?: number;
+  puedeReiniciarSecuencia?: boolean;
 };
-
-const STORAGE_KEY = 'mabs.inventario.documentoSoporteTipos.v1';
 
 const newId = (): string =>
   typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
@@ -37,29 +37,6 @@ export const defaultDocumentoSoporteTipos = (): DocumentoSoporteTipoConfig[] => 
   },
 ];
 
-export const loadDocumentoSoporteTipos = (): DocumentoSoporteTipoConfig[] => {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return defaultDocumentoSoporteTipos();
-    const parsed = JSON.parse(raw) as DocumentoSoporteTipoConfig[];
-    if (!Array.isArray(parsed) || parsed.length === 0) return defaultDocumentoSoporteTipos();
-    return parsed.map((r) => ({
-      id: String((r as any).id || newId()),
-      codigo: String((r as any).codigo || '').trim() || 'RECEPCION_OC',
-      prefijo: String((r as any).prefijo || '').trim() || 'REC',
-      padding: clampSequenceDigits((r as any).padding ?? 6),
-      siguiente: Math.max(1, Number((r as any).siguiente ?? 1) || 1),
-      activo: (r as any).activo !== false,
-    }));
-  } catch {
-    return defaultDocumentoSoporteTipos();
-  }
-};
-
-export const saveDocumentoSoporteTipos = (rows: DocumentoSoporteTipoConfig[]): void => {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(rows));
-};
-
 export const formatDocNumero = (cfg: Pick<DocumentoSoporteTipoConfig, 'prefijo' | 'padding'>, n: number): string => {
   const pref = String(cfg.prefijo || '').trim();
   const pad = clampSequenceDigits(cfg.padding);
@@ -67,22 +44,27 @@ export const formatDocNumero = (cfg: Pick<DocumentoSoporteTipoConfig, 'prefijo' 
   return `${pref}-${String(num).padStart(pad, '0')}`;
 };
 
-export const nextDocNumero = (codigo: string): { numero: string; tipo: DocumentoSoporteTipoConfig | null } => {
-  const all = loadDocumentoSoporteTipos();
+export const nextDocNumero = (
+  codigo: string,
+  rows: DocumentoSoporteTipoConfig[],
+): { numero: string; tipo: DocumentoSoporteTipoConfig | null } => {
+  const all = Array.isArray(rows) ? rows : [];
   const tipo = all.find((t) => t.codigo === codigo && t.activo) ?? all.find((t) => t.codigo === codigo) ?? null;
   if (!tipo) return { numero: '', tipo: null };
   return { numero: formatDocNumero(tipo, tipo.siguiente), tipo };
 };
 
-export const consumeDocNumero = (codigo: string): { numero: string } => {
-  const all = loadDocumentoSoporteTipos();
+export const consumeDocNumero = (
+  codigo: string,
+  rows: DocumentoSoporteTipoConfig[],
+): { numero: string; rows: DocumentoSoporteTipoConfig[] } => {
+  const all = Array.isArray(rows) ? rows.map((row) => ({ ...row })) : [];
   const idx = all.findIndex((t) => t.codigo === codigo);
-  if (idx < 0) return { numero: '' };
+  if (idx < 0) return { numero: '', rows: all };
   const tipo = all[idx];
   const numero = formatDocNumero(tipo, tipo.siguiente);
   all[idx] = { ...tipo, siguiente: Math.max(1, Number(tipo.siguiente || 1)) + 1 };
-  saveDocumentoSoporteTipos(all);
-  return { numero };
+  return { numero, rows: all };
 };
 
 type Draft = Omit<DocumentoSoporteTipoConfig, 'id'> & { id?: string };
@@ -109,21 +91,21 @@ export default function InventarioDocumentoSoporteConfigModal({
   const [rows, setRows] = useState<DocumentoSoporteTipoConfig[]>([]);
   const [draft, setDraft] = useState<Draft>(blankDraft());
   const [savingConfig, setSavingConfig] = useState(false);
+  const [syncingCodigo, setSyncingCodigo] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
-    setRows(loadDocumentoSoporteTipos());
+    setRows([]);
     setDraft(blankDraft());
     inventarioService.listarDocumentosSoporte()
       .then((serverRows) => {
-        if (cancelled || !serverRows.length) return;
-        saveDocumentoSoporteTipos(serverRows);
+        if (cancelled) return;
         setRows(serverRows);
       })
       .catch((error) => {
         console.error('Error cargando documentos soporte:', error);
-        toast.error('No se pudo cargar la parametrizacion del servidor. Se muestra la copia local.');
+        toast.error('No se pudo cargar la parametrizacion del servidor.');
       });
     return () => {
       cancelled = true;
@@ -172,6 +154,35 @@ export default function InventarioDocumentoSoporteConfigModal({
     setRows((prev) => prev.map((r) => (r.id === id ? { ...r, activo: !r.activo } : r)));
   };
 
+  const reiniciarSecuencia = async (row: DocumentoSoporteTipoConfig): Promise<void> => {
+    const codigoNorm = row.codigo.trim().toUpperCase();
+    if (!codigoNorm) return;
+    if (row.puedeReiniciarSecuencia === false || (row.totalRecepciones ?? 0) > 0) {
+      toast.error(
+        `No se puede reiniciar: hay ${row.totalRecepciones ?? 1} recepcion(es) en inventarioRecepcionCompra para ${codigoNorm}.`,
+      );
+      return;
+    }
+    try {
+      setSyncingCodigo(codigoNorm);
+      const result = await inventarioService.sincronizarSecuenciaDocumentoSoporte(codigoNorm);
+      const serverRows = await inventarioService.listarDocumentosSoporte();
+      setRows(serverRows);
+      onSaved?.(serverRows);
+      if (draft.codigo === codigoNorm) {
+        setDraft((p) => ({ ...p, siguiente: result.siguiente }));
+      }
+      toast.success(`Secuencia reiniciada para ${codigoNorm}. Siguiente consecutivo: ${result.siguienteFormateado}.`);
+    } catch (error) {
+      console.error('Error sincronizando secuencia documento soporte:', error);
+      toast.error(
+        error instanceof Error ? error.message.replace(/^\[\d+\]\s*/, '') : 'No se pudo reiniciar la secuencia.',
+      );
+    } finally {
+      setSyncingCodigo(null);
+    }
+  };
+
   const save = async (): Promise<void> => {
     if (rows.length === 0) {
       toast.error('Debes tener al menos un tipo.');
@@ -184,7 +195,6 @@ export default function InventarioDocumentoSoporteConfigModal({
     try {
       setSavingConfig(true);
       const savedRows = await inventarioService.guardarDocumentosSoporte(rows);
-      saveDocumentoSoporteTipos(savedRows);
       onSaved?.(savedRows);
       toast.success('Tipos de documento soporte guardados.');
       onOpenChange(false);
@@ -256,8 +266,9 @@ export default function InventarioDocumentoSoporteConfigModal({
                   type="number"
                   min="1"
                   value={String(draft.siguiente ?? 1)}
-                  onChange={(e) => setDraft((p) => ({ ...p, siguiente: Number(e.target.value) }))}
-                  className="border-input bg-background"
+                  readOnly
+                  className="border-input bg-muted/50"
+                  title="Calculado desde inventarioRecepcionCompra al guardar o reiniciar secuencia"
                 />
               </div>
               <div className="space-y-2">
@@ -292,7 +303,7 @@ export default function InventarioDocumentoSoporteConfigModal({
                     <TableHead className="text-right">Digitos</TableHead>
                     <TableHead className="text-right">Siguiente</TableHead>
                     <TableHead>Estado</TableHead>
-                    <TableHead className="w-[120px] text-right">Acciones</TableHead>
+                    <TableHead className="w-[200px] text-right">Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -304,7 +315,27 @@ export default function InventarioDocumentoSoporteConfigModal({
                       <TableCell className="text-right font-mono text-xs">{formatDocNumero(r, r.siguiente)}</TableCell>
                       <TableCell className="text-sm text-foreground">{r.activo ? 'Activo' : 'Inactivo'}</TableCell>
                       <TableCell className="text-right">
-                        <div className="flex justify-end gap-1">
+                        <div className="flex flex-wrap justify-end gap-1">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            disabled={
+                              savingConfig
+                              || syncingCodigo === r.codigo
+                              || r.puedeReiniciarSecuencia === false
+                              || (r.totalRecepciones ?? 0) > 0
+                            }
+                            onClick={() => void reiniciarSecuencia(r)}
+                            title={
+                              (r.totalRecepciones ?? 0) > 0 || r.puedeReiniciarSecuencia === false
+                                ? `Bloqueado: hay ${r.totalRecepciones ?? 1} recepcion(es) registradas para este tipo`
+                                : 'Reiniciar secuencia a 000001 (solo sin recepciones en inventarioRecepcionCompra)'
+                            }
+                          >
+                            <RotateCcw className={`mr-1 h-3.5 w-3.5 ${syncingCodigo === r.codigo ? 'animate-spin' : ''}`} />
+                            Reiniciar
+                          </Button>
                           <Button
                             type="button"
                             variant="ghost"
@@ -344,7 +375,8 @@ export default function InventarioDocumentoSoporteConfigModal({
               </Table>
             </div>
             <p className="text-xs text-muted-foreground">
-              El consecutivo se guarda en la configuracion de inventario del servidor y se conserva una copia local para sugerencias rapidas.
+              El consecutivo es unico por tipo y solo lo ocupan recepciones confirmadas (estado APROBADA) en inventarioRecepcionCompra.
+              Los borradores PENDIENTE_APROBACION no consumen secuencia. Reiniciar solo si no hay recepciones confirmadas.
             </p>
           </div>
         </div>

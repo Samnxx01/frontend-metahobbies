@@ -139,6 +139,33 @@ type DashboardUser = {
     estado?: boolean;
 };
 
+type DashboardTextConfig = {
+    titulo: string;
+    descripcion: string;
+};
+
+const DASHBOARD_TEXT_CONFIG_KEY = 'dashboard-admin-text-config';
+
+const DEFAULT_DASHBOARD_TEXT_CONFIG: DashboardTextConfig = {
+    titulo: 'Dashboard Admin',
+    descripcion: 'Centraliza la gestion de usuarios y la parametrizacion multinivel del tenant activo.',
+};
+
+const loadDashboardTextConfig = (): DashboardTextConfig => {
+    if (typeof window === 'undefined') return DEFAULT_DASHBOARD_TEXT_CONFIG;
+    try {
+        const raw = window.localStorage.getItem(DASHBOARD_TEXT_CONFIG_KEY);
+        if (!raw) return DEFAULT_DASHBOARD_TEXT_CONFIG;
+        const parsed = JSON.parse(raw) as Partial<DashboardTextConfig>;
+        return {
+            titulo: String(parsed?.titulo || DEFAULT_DASHBOARD_TEXT_CONFIG.titulo).trim(),
+            descripcion: String(parsed?.descripcion || DEFAULT_DASHBOARD_TEXT_CONFIG.descripcion).trim(),
+        };
+    } catch {
+        return DEFAULT_DASHBOARD_TEXT_CONFIG;
+    }
+};
+
 export default function Dashboard(): React.ReactElement {
     const { user } = useAuth();
 
@@ -164,6 +191,9 @@ export default function Dashboard(): React.ReactElement {
     const [paletaColores, setPaletaColores] = useState<PaletaColores>(() => fusionarColoresApp());
     const [paletaLoading, setPaletaLoading] = useState(false);
     const [paletaSaving, setPaletaSaving] = useState(false);
+    const [textoDashboard, setTextoDashboard] = useState<DashboardTextConfig>(() => loadDashboardTextConfig());
+    const [textoDashboardDraft, setTextoDashboardDraft] = useState<DashboardTextConfig>(() => loadDashboardTextConfig());
+    const [textoDashboardOpen, setTextoDashboardOpen] = useState(false);
 
     // ── Roles y scope ─────────────────────────────────────────────────────────
     const tenantScope = user?.auth?.tenantScope || {};
@@ -357,14 +387,36 @@ export default function Dashboard(): React.ReactElement {
         finally { setPaletaSaving(false); }
     };
 
+    const abrirTextoDashboard = (): void => {
+        setTextoDashboardDraft(textoDashboard);
+        setTextoDashboardOpen(true);
+    };
+
+    const guardarTextoDashboard = (): void => {
+        const next = {
+            titulo: textoDashboardDraft.titulo.trim() || DEFAULT_DASHBOARD_TEXT_CONFIG.titulo,
+            descripcion: textoDashboardDraft.descripcion.trim() || DEFAULT_DASHBOARD_TEXT_CONFIG.descripcion,
+        };
+        setTextoDashboard(next);
+        window.localStorage.setItem(DASHBOARD_TEXT_CONFIG_KEY, JSON.stringify(next));
+        setTextoDashboardOpen(false);
+        toast.success('Texto del dashboard actualizado.');
+    };
+
     // ── Render ────────────────────────────────────────────────────────────────
     return (
         <div className="p-4 md:p-6 lg:p-8 flex-1 space-y-8">
-            <div>
-                <h1 className="text-2xl md:text-3xl font-bold text-foreground">Dashboard Admin</h1>
-                <p className="mt-1 text-sm text-muted-foreground">
-                    Centraliza la gestion de usuarios y la parametrizacion multinivel del tenant activo.
-                </p>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                    <h1 className="text-2xl md:text-3xl font-bold text-foreground">{textoDashboard.titulo}</h1>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                        {textoDashboard.descripcion}
+                    </p>
+                </div>
+                <Button type="button" variant="outline" size="sm" onClick={abrirTextoDashboard}>
+                    <Edit className="h-4 w-4" />
+                    Parametrizar texto
+                </Button>
             </div>
 
             {/* ── Paleta de colores ─────────────────────────────────────────── */}
@@ -620,6 +672,43 @@ export default function Dashboard(): React.ReactElement {
             {/* ═══════════════════════════════════════════════════════════════
                 MODAL: Paleta de colores
             ════════════════════════════════════════════════════════════════ */}
+            <Dialog open={textoDashboardOpen} onOpenChange={setTextoDashboardOpen}>
+                <DialogContent className="max-w-lg">
+                    <DialogHeader>
+                        <DialogTitle>Texto del dashboard</DialogTitle>
+                        <DialogDescription>
+                            Parametriza el titulo y la descripcion principal que se muestran en Dashboard Admin.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                        <div className="space-y-2">
+                            <Label>Titulo</Label>
+                            <Input
+                                value={textoDashboardDraft.titulo}
+                                onChange={(event) => setTextoDashboardDraft((prev) => ({ ...prev, titulo: event.target.value }))}
+                                placeholder={DEFAULT_DASHBOARD_TEXT_CONFIG.titulo}
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Descripcion</Label>
+                            <Input
+                                value={textoDashboardDraft.descripcion}
+                                onChange={(event) => setTextoDashboardDraft((prev) => ({ ...prev, descripcion: event.target.value }))}
+                                placeholder={DEFAULT_DASHBOARD_TEXT_CONFIG.descripcion}
+                            />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button type="button" variant="outline" onClick={() => setTextoDashboardOpen(false)}>
+                            Cancelar
+                        </Button>
+                        <Button type="button" onClick={guardarTextoDashboard}>
+                            Guardar texto
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
             <Dialog open={paletaModalOpen} onOpenChange={(open) => { if (!open) cerrarModalPaleta(); }}>
                 <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                     <DialogHeader>

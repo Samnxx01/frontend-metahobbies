@@ -1,5 +1,7 @@
 /** Tipos compartidos de la pantalla ParametrosGobernanza (exportados para envoltorios y pruebas). */
 
+import type { GobernanzaModuloConfig } from './gobernanzaModuloConfig';
+
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE';
 export type EndpointSection = 'tenant' | 'permisos' | 'corporativo';
 export type EndpointActor = 'tenantSuperAdmin' | 'tenantGlobal' | 'ambos';
@@ -44,6 +46,13 @@ export interface ParametrosGobernanzaProps {
   cardDesignQueryParam?: string;
   /** Menú horizontal + diálogo de diseño por endpoint (default true). */
   enableCardDesignEditor?: boolean;
+  /**
+   * Flujo inline parametrizado (submenú + formulario por `?accion=`).
+   * Si no se pasa, en sección tenant + modo full se usa el módulo `tenant` por defecto.
+   */
+  inlineModuloConfig?: GobernanzaModuloConfig | null;
+  /** Resuelve módulo desde registro por slug de ruta (p. ej. `tenant`). */
+  inlineModuloSlug?: string;
 }
 
 /** Dominio UI / catálogos (solo usados dentro de ParametrosGobernanza). */

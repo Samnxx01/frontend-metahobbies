@@ -500,7 +500,14 @@ const debeAplicarFiltroHerenciaSuperAdmin = async (
     return true;
 };
 
-const fetchAllSecurityRoutes = async (useAuth: boolean): Promise<RouteResponse | null> => {
+const SECURITY_ROUTES_CACHE_TTL_MS = 30_000;
+let _securityRoutesCache: {
+    promise: Promise<RouteResponse | null>;
+    at: number;
+    useAuth: boolean;
+} | null = null;
+
+const _fetchAllSecurityRoutesRaw = async (useAuth: boolean): Promise<RouteResponse | null> => {
     try {
         const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "/api";
         const endpoint = useAuth
@@ -521,6 +528,28 @@ const fetchAllSecurityRoutes = async (useAuth: boolean): Promise<RouteResponse |
         console.error("Error al obtener rutas de seguridad:", error);
         return null;
     }
+};
+
+/** Catálogo admin/público con deduplicación de peticiones concurrentes (TTL 30s). */
+export const fetchAllSecurityRoutes = async (useAuth: boolean): Promise<RouteResponse | null> => {
+    const now = Date.now();
+    if (
+        _securityRoutesCache &&
+        _securityRoutesCache.useAuth === useAuth &&
+        now - _securityRoutesCache.at < SECURITY_ROUTES_CACHE_TTL_MS
+    ) {
+        return _securityRoutesCache.promise;
+    }
+
+    const promise = _fetchAllSecurityRoutesRaw(useAuth).catch((err) => {
+        if (_securityRoutesCache?.promise === promise) {
+            _securityRoutesCache = null;
+        }
+        throw err;
+    });
+
+    _securityRoutesCache = { promise, at: now, useAuth };
+    return promise;
 };
 
 type AdminSecurityRouteRow = RouteResponse['data'][number];
@@ -604,16 +633,9 @@ export const shouldShowAdminHerenciaSinPermisoAlert = async (pathname: string): 
 
 export const getRouteCatalog = async (): Promise<RouteCatalogItem[]> => {
     try {
-        const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "/api";
+        const result = await fetchAllSecurityRoutes(true);
 
-        const result: RouteResponse = await apiFetch(`${API_BASE_URL}/seguridad/rutas/listarRutas/admin`, {
-            method: "GET",
-            headers: {
-                "x-token": localStorage.getItem("token") || ""
-            }
-        });
-
-        if (!result.success || !result.data) {
+        if (!result?.success || !result?.data) {
             return [];
         }
 
@@ -732,25 +754,15 @@ export const getUserShortcutRoutes = async (): Promise<UserShortcutRoutes> => {
 
 export const getAuthorizedRoutes = async (): Promise<AuthorizedRoutes> => {
     try {
-        const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "/api";
         const token = localStorage.getItem("token");
         const hasToken = Boolean(token);
         const actorTipo = resolveAdminActorTipoFromToken();
-        const endpoint = hasToken
-            ? `${API_BASE_URL}/seguridad/rutas/listarRutas/admin`
-            : `${API_BASE_URL}/seguridad/rutas/listarRutas/public`;
 
-        const result: RouteResponse = hasToken
-            ? await apiFetch(endpoint, {
-                method: "GET",
-                useAuth: true,
-                logoutOn401: true
-            })
-            : await apiFetchPublic(endpoint, {
-                method: "GET"
-            });
+        const result: RouteResponse | null = hasToken
+            ? await fetchAllSecurityRoutes(true)
+            : await fetchAllSecurityRoutes(false);
 
-        if (!result.success || !result.data) {
+        if (!result?.success || !result?.data) {
             return { publicRoutes: [], adminRoutes: [], authRoutes: [] };
         }
 
@@ -803,10 +815,9 @@ export const getAuthorizedRoutes = async (): Promise<AuthorizedRoutes> => {
         // entre sidebar y rutas registradas en React Router.
         let adminRoutes: AdminRouteConfig[] = [];
         if (hasToken) {
-            const { tree } = await getAdminSidebarTreeWithContext();
-            const [resultTreeFallback, herencia] = await Promise.all([
-                fetchAllSecurityRoutes(true),
-                getHerenciaAdminPermitida()
+            const [{ tree }, herencia] = await Promise.all([
+                getAdminSidebarTreeWithContext(),
+                getHerenciaAdminPermitida(),
             ]);
 
             const mapNode = (node: AdminNavTreeItem): AdminRouteConfig => ({
@@ -819,9 +830,7 @@ export const getAuthorizedRoutes = async (): Promise<AuthorizedRoutes> => {
                 adminRoutes = tree.map(mapNode);
             }
 
-            const adminSource = (resultTreeFallback?.success && Array.isArray(resultTreeFallback?.data))
-                ? resultTreeFallback.data.filter((r) => r.estadoRuta && isAdminLayout(r.layout))
-                : result.data.filter((r) => r.estadoRuta && isAdminLayout(r.layout));
+            const adminSource = result.data.filter((r) => r.estadoRuta && isAdminLayout(r.layout));
             const hasHerenciaAdmin = herencia.idsPermitidos.size > 0 || herencia.pathsPermitidos.size > 0;
             const aplicarHerencia = await debeAplicarFiltroHerenciaSuperAdmin(actorTipo, hasHerenciaAdmin);
             let adminFiltrado = aplicarHerencia
@@ -1230,6 +1239,7 @@ let _sidebarCache: { promise: Promise<AdminSidebarTreeContext>; at: number } | n
 
 export const invalidateSidebarCache = (): void => {
     _sidebarCache = null;
+    _securityRoutesCache = null;
 };
 
 // Limpia todos los caches de sesión al hacer logout.
@@ -1240,6 +1250,7 @@ export const clearSessionCaches = (): void => {
         window.localStorage.removeItem(PRIVATE_HOME_ROUTE_CACHE_KEY);
     }
     _sidebarCache = null;
+    _securityRoutesCache = null;
     _saJerarquiaCorpSelectsCache = null;
 };
 

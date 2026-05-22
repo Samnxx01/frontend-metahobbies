@@ -2,20 +2,15 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { toast } from 'react-toastify';
 import {
   AlertTriangle,
-  Barcode,
   CheckCircle2,
   ClipboardList,
-  Package,
   Pencil,
   Plus,
-  Printer,
   RefreshCcw,
   RotateCcw,
   Save,
-  Search,
   ShoppingCart,
   SlidersHorizontal,
-  Trash2,
   Warehouse,
 } from 'lucide-react';
 import inventarioService, {
@@ -34,26 +29,35 @@ import inventarioService, {
   type InventarioUnidadMedida,
   type MetodoValuacion,
   type MonedaInventarioConfig,
+  type ComprobanteEntradaAjuste,
+  type InventarioMotivoMovimiento,
   type MotivoMovimiento,
   type StockActualItem,
-  type TipoAjuste,
 } from '@/app/services/inventarioService';
 import { totalLineaOrdenCompra } from '@/app/presentation/pages/admin/utils/ordenCompraLineaCalculo';
 import productosService, { type BackendProducto } from '@/app/services/productosService';
 import { apiFetch } from '@/app/services/api';
 import { useAuth } from '@/app/providers/AuthProvider';
 import InventarioMenuTabs, { type InventarioTabValue } from './components/InventarioMenuTabs';
+import { useInventarioTarjetasDinamicas } from './inventario/useInventarioTarjetasDinamicas';
+import {
+  FLUJO_COMPRAS_PASOS,
+  mensajeErrorComprasInventario,
+} from './inventario/inventarioComprasMensajes';
 import InventarioAjustesTab from './components/InventarioAjustesTab';
 import InventarioBodegasTab from './components/InventarioBodegasTab';
 import InventarioConciliacionTab from './components/InventarioConciliacionTab';
-import ConfigInventario from './components/ConfigInventario';
 import InventarioTrmConfiguracionTab from './components/InventarioTrmConfiguracionTab';
 import InventarioMovimientosTab from './components/InventarioMovimientosTab';
 import InventarioComprobanteEntradaModal, { type DocumentoSoporte } from './components/InventarioComprobanteEntradaModal';
+import InventarioComprobanteEntradaVistaModal from './components/InventarioComprobanteEntradaVistaModal';
+import InventarioCausalAjusteModal from './components/InventarioCausalAjusteModal';
 import InventarioOrdenCompraModal from './components/InventarioOrdenCompraModal';
 import InventarioOrdenComprasTab from './components/InventarioOrdenComprasTab';
 import InventarioProveedorModal, { type InventarioProveedorDraft } from './components/InventarioProveedorModal';
+import InventarioSkuCatalogoModal from './components/InventarioSkuCatalogoModal';
 import InventarioSkuModal, { type SkuForm } from './components/InventarioSkuModal';
+import { getProductoId } from './inventario/inventarioBarcodeUtils';
 import InventarioStockTab from './components/InventarioStockTab';
 import InventarioTipoMovimientoModal, { type TipoMovimientoDraft } from './components/InventarioTipoMovimientoModal';
 import InventarioUnidadMedidaModal, { type UnidadMedidaDraft } from './components/InventarioUnidadMedidaModal';
@@ -81,76 +85,20 @@ import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 
+/** Valor interno del select cuando no hay bodega filtrada (Radix Select no admite value vacío). */
+const BODEGA_TODAS = '__TODAS__';
+
 const MONEY = new Intl.NumberFormat('es-CO', {
   style: 'currency',
   currency: 'COP',
   maximumFractionDigits: 0,
 });
 
-const EAN13_L: Record<string, string> = {
-  '0': '0001101', '1': '0011001', '2': '0010011', '3': '0111101', '4': '0100011',
-  '5': '0110001', '6': '0101111', '7': '0111011', '8': '0110111', '9': '0001011',
-};
-const EAN13_G: Record<string, string> = {
-  '0': '0100111', '1': '0110011', '2': '0011011', '3': '0100001', '4': '0011101',
-  '5': '0111001', '6': '0000101', '7': '0010001', '8': '0001001', '9': '0010111',
-};
-const EAN13_R: Record<string, string> = {
-  '0': '1110010', '1': '1100110', '2': '1101100', '3': '1000010', '4': '1011100',
-  '5': '1001110', '6': '1010000', '7': '1000100', '8': '1001000', '9': '1110100',
-};
-const EAN13_PARITY: Record<string, string> = {
-  '0': 'LLLLLL', '1': 'LLGLGG', '2': 'LLGGLG', '3': 'LLGGGL', '4': 'LGLLGG',
-  '5': 'LGGLLG', '6': 'LGGGLL', '7': 'LGLGLG', '8': 'LGLGGL', '9': 'LGGLGL',
-};
-
-const buildEan13Bits = (codigo: string): string | null => {
-  const digits = String(codigo || '').replace(/\D/g, '');
-  if (digits.length !== 13) return null;
-  const parity = EAN13_PARITY[digits[0]];
-  const left = digits.slice(1, 7).split('').map((digit, index) => (
-    parity[index] === 'L' ? EAN13_L[digit] : EAN13_G[digit]
-  )).join('');
-  const right = digits.slice(7).split('').map((digit) => EAN13_R[digit]).join('');
-  return `101${left}01010${right}101`;
-};
-
-const BarcodePreview = ({ codigo }: { codigo?: string }): React.ReactElement => {
-  const clean = String(codigo || '').replace(/\D/g, '');
-  const bits = buildEan13Bits(clean);
-  if (!clean) return <span className="text-xs text-muted-foreground">Sin codigo</span>;
-  if (!bits) {
-    return (
-      <div className="space-y-1">
-        <div className="flex h-8 w-36 items-end gap-px rounded bg-white px-2 py-1">
-          {clean.split('').map((digit, index) => (
-            <span
-              key={`${digit}-${index}`}
-              className="block bg-foreground"
-              style={{ width: 1 + (Number(digit) % 3), height: 12 + ((Number(digit) + index) % 18) }}
-            />
-          ))}
-        </div>
-        <p className="font-mono text-[10px] leading-none">{clean}</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-1">
-      <svg viewBox={`0 0 ${bits.length} 48`} className="h-10 w-40 rounded bg-white px-1" preserveAspectRatio="none" aria-label={`Codigo de barras ${clean}`}>
-        {bits.split('').map((bit, index) => bit === '1' ? (
-          <rect key={index} x={index} y="4" width="1" height="36" fill="currentColor" />
-        ) : null)}
-      </svg>
-      <p className="font-mono text-[10px] leading-none tracking-[0.18em]">{clean}</p>
-    </div>
-  );
-};
-
-const MOTIVOS: MotivoMovimiento[] = ['COMPRA', 'VENTA', 'MERMA', 'DANO', 'ERROR_CONTEO', 'PERDIDA', 'OTRO'];
-const CAUSALES_AJUSTE = ['MERMA', 'DANO', 'ERROR_CONTEO', 'PERDIDA', 'OTRO'];
-
+const MOTIVOS_FALLBACK: InventarioMotivoMovimiento[] = [
+  { codigo: 'COMPRA', nombre: 'Compra' },
+  { codigo: 'VENTA', nombre: 'Venta' },
+  { codigo: 'OTRO', nombre: 'Otro' },
+];
 /** Nombres de departamento (DANE) — alineado con DireccionCorporativa / catálogo paisId=1 */
 const DEPARTAMENTO_NOMBRES: Record<string, string> = {
   '1': 'Amazonas', '2': 'Antioquia', '3': 'Arauca', '4': 'Atlántico', '5': 'Bogotá D.C.',
@@ -189,11 +137,15 @@ type MovimientoForm = {
   tipoMovimientoConfigId: string;
   ordenCompraId: string;
   ordenCompraItemIndex: string;
+  recepcionCompraId: string;
+  recepcionLineaKey: string;
   sku: string;
   bodega: string;
+  bodegaDestino: string;
   cantidad: string;
   costoUnitario: string;
   motivo: MotivoMovimiento;
+  motivoPersonalizado: string;
   documentoTipo: string;
   documentoNumero: string;
 };
@@ -203,19 +155,27 @@ const movimientoInicial: MovimientoForm = {
   tipoMovimientoConfigId: '',
   ordenCompraId: '',
   ordenCompraItemIndex: '',
+  recepcionCompraId: '',
+  recepcionLineaKey: '',
   sku: '',
   bodega: '',
+  bodegaDestino: '',
   cantidad: '',
   costoUnitario: '',
   motivo: 'COMPRA',
+  motivoPersonalizado: '',
   documentoTipo: 'DOCUMENTO_SOPORTE',
   documentoNumero: '',
 };
 
+const esTipoTrasladoBodega = (codigo?: string): boolean =>
+  String(codigo || '').trim().toUpperCase() === 'TRASLADO_BODEGA';
+
 const ajusteInicial: AjustePayload = {
+  recepcionCompraId: '',
   sku: '',
   bodega: '',
-  tipoAjuste: 'POSITIVO',
+  tipoAjusteCodigo: 'AJUSTE_POSITIVO',
   causal: 'OTRO',
   cantidad: 1,
   costoUnitarioReferencia: 0,
@@ -265,11 +225,15 @@ const estadoBadge = (estado: string): 'default' | 'secondary' | 'destructive' | 
   return 'outline';
 };
 
-const getProductoId = (producto: BackendProducto): string =>
-  String(producto.iud || producto._id || producto.id || '').trim();
+export type InventarioPageProps = {
+  /** Rutas dinámicas que deben abrir una pestaña concreta al montar (p. ej. wrapper `InventarioOrdenComprasTab.tsx`). */
+  initialActiveTab?: InventarioTabValue;
+};
 
-export default function Inventario(): React.ReactElement {
+export default function Inventario(props: InventarioPageProps = {}): React.ReactElement {
+  const { initialActiveTab } = props;
   const { user } = useAuth();
+  const { menuTabs: inventarioMenuTabs, loading: loadingInventarioTabs } = useInventarioTarjetasDinamicas(user);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [config, setConfig] = useState<InventarioConfig | null>(null);
@@ -292,11 +256,13 @@ export default function Inventario(): React.ReactElement {
   const [movimientoForm, setMovimientoForm] = useState<MovimientoForm>(movimientoInicial);
   const [ajusteForm, setAjusteForm] = useState<AjustePayload>(ajusteInicial);
   const [ajusteFiltro, setAjusteFiltro] = useState<EstadoAjuste | ''>('');
-  const [activeTab, setActiveTab] = useState<InventarioTabValue>('stock');
+  const [activeTab, setActiveTab] = useState<InventarioTabValue>(() => {
+    const t = initialActiveTab ?? 'stock';
+    if (t === 'config') return 'stock';
+    return t;
+  });
   const [skuModalOpen, setSkuModalOpen] = useState(false);
   const [skuCatalogoOpen, setSkuCatalogoOpen] = useState(false);
-  const [skuCatalogoFiltro, setSkuCatalogoFiltro] = useState('');
-  const [skuBarcodePreview, setSkuBarcodePreview] = useState<BackendProducto | null>(null);
   const [skuForm, setSkuForm] = useState<SkuForm>(skuFormInicial);
   const [tipoModalOpen, setTipoModalOpen] = useState(false);
   const [tipoMovimientoDraft, setTipoMovimientoDraft] = useState<TipoMovimientoDraft>(tipoMovimientoDraftInicial);
@@ -310,6 +276,11 @@ export default function Inventario(): React.ReactElement {
   const [ordenCompraModalOpen, setOrdenCompraModalOpen] = useState(false);
   const [ordenEditando, setOrdenEditando] = useState<InventarioOrdenCompra | null>(null);
   const [ordenesCompra, setOrdenesCompra] = useState<InventarioOrdenCompra[]>([]);
+  const [motivosMovimiento, setMotivosMovimiento] = useState<InventarioMotivoMovimiento[]>(MOTIVOS_FALLBACK);
+  const [comprobantesEntradaMov, setComprobantesEntradaMov] = useState<ComprobanteEntradaAjuste[]>([]);
+  const [comprobanteVistaOpen, setComprobanteVistaOpen] = useState(false);
+  const [comprobanteVistaId, setComprobanteVistaId] = useState<string | null>(null);
+  const [causalMotivoModalOpen, setCausalMotivoModalOpen] = useState(false);
   const [comprobanteEntradaOpen, setComprobanteEntradaOpen] = useState(false);
   const [comprobanteEntradaData, setComprobanteEntradaData] = useState<RecepcionOrdenCompraResponse | null>(null);
   const [comprobanteEntradaDoc, setComprobanteEntradaDoc] = useState<DocumentoSoporte | null>(null);
@@ -356,21 +327,19 @@ export default function Inventario(): React.ReactElement {
       .sort((a, b) => String(a.sku).localeCompare(String(b.sku))),
     [productosSku]
   );
-  const skuCatalogoFiltrado = useMemo(() => {
-    const query = skuCatalogoFiltro.trim().toLowerCase();
-    if (!query) return skuOptions;
-    const queryDigits = query.replace(/\D/g, '');
-    return skuOptions.filter((producto) => {
-      const sku = String(producto.sku || '').toLowerCase();
-      const nombre = String(producto.nombre || '').toLowerCase();
-      const codigoBarras = String(producto.codigoBarras || '').toLowerCase();
-      return sku.includes(query)
-        || nombre.includes(query)
-        || codigoBarras.includes(query)
-      || (!!queryDigits && codigoBarras.includes(queryDigits));
-    });
-  }, [skuCatalogoFiltro, skuOptions]);
   const tenantScope = user?.auth?.tenantScope || {};
+  const nombreCorporativoImpresion = useMemo(() => {
+    const currentUser = user as Record<string, any> | null;
+    return String(
+      currentUser?.corporativo?.razon_social
+      || currentUser?.tenantCorporativo?.razon_social
+      || currentUser?.perfil?.corporativo?.razon_social
+      || currentUser?.perfil?.razon_social
+      || currentUser?.empresa
+      || currentUser?.nombreEmpresa
+      || 'Mabs by Gabs'
+    ).trim();
+  }, [user]);
   const puedeGestionarSku = Boolean(
     user?.tenantSuperAdminId
     || user?.tenantGlobalId
@@ -400,6 +369,49 @@ export default function Inventario(): React.ReactElement {
     }
 
     return Math.round((Number(item.costoUnitario || 0) + Number.EPSILON) * 100) / 100;
+  };
+
+  const recargarComprobantesEntrada = async (): Promise<void> => {
+    try {
+      const data = await inventarioService.listarComprobantesEntradaMovimientos(200);
+      setComprobantesEntradaMov(data);
+      toast.success('Lista de comprobantes actualizada.');
+    } catch (error) {
+      console.error('Error recargando comprobantes:', error);
+      toast.error('No se pudieron cargar los comprobantes de entrada.');
+    }
+  };
+
+  const seleccionarLineaComprobanteSalida = (recepcionCompraId: string, lineaKey: string): void => {
+    const comprobante = comprobantesEntradaMov.find((c) => c.recepcionId === recepcionCompraId);
+    const linea = comprobante?.items.find((item) => (item.lineaKey || `${item.sku}::${item.bodega}`) === lineaKey);
+    const doc = comprobante?.documentoSoporte;
+    if (!comprobante || !linea) {
+      setMovimientoForm((prev) => ({
+        ...prev,
+        recepcionCompraId,
+        recepcionLineaKey: lineaKey,
+        sku: '',
+        bodega: '',
+        cantidad: '',
+        costoUnitario: '',
+        documentoTipo: doc?.tipo || 'RECEPCION_OC',
+        documentoNumero: doc?.numero || comprobante?.numeroRecepcion || '',
+      }));
+      return;
+    }
+    const disponible = Number(linea.disponibleKardex || 0);
+    setMovimientoForm((prev) => ({
+      ...prev,
+      recepcionCompraId,
+      recepcionLineaKey: lineaKey,
+      sku: linea.sku,
+      bodega: linea.bodega,
+      cantidad: disponible > 0 ? String(disponible) : '',
+      costoUnitario: String(linea.costoPromedioKardex ?? linea.costoUnitario ?? ''),
+      documentoTipo: doc?.tipo || 'RECEPCION_OC',
+      documentoNumero: doc?.numero || comprobante.numeroRecepcion,
+    }));
   };
 
   const seleccionarLineaOrdenCompraMovimiento = (ordenCompraId: string, itemIndexText: string): void => {
@@ -445,7 +457,7 @@ export default function Inventario(): React.ReactElement {
   const loadData = async (): Promise<void> => {
     try {
       setLoading(true);
-      const [configResp, bodegasResp, stockResp, ajustesResp, productosResp, tiposResp, unidadesResp, tiposUnidadResp, proveedoresResp, ordenesResp] = await Promise.all([
+      const [configResp, bodegasResp, stockResp, ajustesResp, productosResp, tiposResp, unidadesResp, tiposUnidadResp, proveedoresResp, ordenesResp, causalesResp, comprobantesEntradaResp] = await Promise.all([
         inventarioService.obtenerConfig(),
         inventarioService.listarBodegas(),
         inventarioService.stockActual(),
@@ -456,6 +468,8 @@ export default function Inventario(): React.ReactElement {
         inventarioService.listarTiposUnidadMedida(),
         inventarioService.listarProveedoresCompra(),
         inventarioService.listarOrdenesCompra({ limit: 50 }),
+        inventarioService.listarCausalesAjuste(),
+        inventarioService.listarComprobantesEntradaMovimientos(200),
       ]);
       setConfig(configResp);
       setBodegas(bodegasResp);
@@ -467,6 +481,8 @@ export default function Inventario(): React.ReactElement {
       setTiposUnidadMedida(tiposUnidadResp);
       setProveedoresCompra(proveedoresResp);
       setOrdenesCompra(ordenesResp);
+      aplicarMotivosDesdeCausales(causalesResp || []);
+      setComprobantesEntradaMov(comprobantesEntradaResp || []);
       if (!movimientoForm.tipoMovimientoConfigId) {
         const first = tiposResp.find((tipo) => tipo.estado);
         if (first) {
@@ -506,6 +522,41 @@ export default function Inventario(): React.ReactElement {
     void loadData();
   }, []);
 
+  /** Al entrar en «Orden/compras» vuelve a pedir catálogo (GET) por si el montaje inicial falló o cambió el tenant. */
+  useEffect(() => {
+    if (activeTab !== 'orden-compras' || loading) return;
+    let cancelled = false;
+    const run = async (): Promise<void> => {
+      try {
+        const [proveedoresResp, ordenesResp] = await Promise.all([
+          inventarioService.listarProveedoresCompra(),
+          inventarioService.listarOrdenesCompra({ limit: 50 }),
+        ]);
+        if (cancelled) return;
+        setProveedoresCompra(proveedoresResp);
+        setOrdenesCompra(ordenesResp);
+      } catch (error) {
+        if (cancelled) return;
+        console.error('Error cargando catalogo de compras:', error);
+        toast.error(
+          error instanceof Error ? error.message.replace(/^\[\d+\]\s*/, '') : 'No se pudo cargar proveedores y ordenes de compra.'
+        );
+      }
+    };
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, loading]);
+
+  /** Pestaña TRM solo con contexto JWT Global o SuperAdmin; si no aplica, evita quedar en TRM sin trigger. */
+  /** Si el menú dinámico (GET tarjetas) no incluye la pestaña activa, ir a la primera visible. */
+  useEffect(() => {
+    if (!inventarioMenuTabs.length) return;
+    if (inventarioMenuTabs.some((t) => t.value === activeTab)) return;
+    setActiveTab(inventarioMenuTabs[0].value);
+  }, [activeTab, inventarioMenuTabs]);
+
   useEffect(() => {
     const loadGeo = async (): Promise<void> => {
       try {
@@ -533,15 +584,40 @@ export default function Inventario(): React.ReactElement {
     setAjustes(data);
   };
 
-  const refreshKardex = async (): Promise<void> => {
-    const sku = stockFiltro.sku.trim();
-    const bodega = stockFiltro.bodega.trim();
+  const refreshKardex = async (filtro?: { sku?: string; bodega?: string }): Promise<void> => {
+    const sku = (filtro?.sku ?? stockFiltro.sku).trim();
+    const bodega = (filtro?.bodega ?? stockFiltro.bodega).trim();
     const data = await inventarioService.listarKardex({
       sku: sku || undefined,
       bodega: bodega || undefined,
       limit: 100,
     });
     setKardex(data);
+  };
+
+  const aplicarFiltroStock = async (filtro?: { sku?: string; bodega?: string }): Promise<void> => {
+    const sku = (filtro?.sku ?? stockFiltro.sku).trim();
+    const bodega = (filtro?.bodega ?? stockFiltro.bodega).trim();
+
+    try {
+      const [saldo, stockFiltrado, kardexData] = await Promise.all([
+        sku && bodega
+          ? inventarioService.obtenerStock({ sku, bodega })
+          : Promise.resolve(null),
+        inventarioService.stockActual(bodega || undefined),
+        inventarioService.listarKardex({
+          sku: sku || undefined,
+          bodega: bodega || undefined,
+          limit: 100,
+        }),
+      ]);
+      setStockConsulta(saldo);
+      setStockActual(stockFiltrado);
+      setKardex(kardexData);
+    } catch (error) {
+      console.error('Error consultando stock:', error);
+      toast.error('No se pudo consultar el stock.');
+    }
   };
 
   const consultarStock = async (): Promise<void> => {
@@ -553,26 +629,18 @@ export default function Inventario(): React.ReactElement {
       return;
     }
 
-    try {
-      const [saldo, stockFiltrado] = await Promise.all([
-        sku && bodega
-          ? inventarioService.obtenerStock({ sku, bodega })
-          : Promise.resolve(null),
-        inventarioService.stockActual(bodega || undefined),
-        refreshKardex(),
-      ]);
-      setStockConsulta(saldo);
-      setStockActual(stockFiltrado);
-    } catch (error) {
-      console.error('Error consultando stock:', error);
-      toast.error('No se pudo consultar el stock.');
-    }
+    await aplicarFiltroStock({ sku, bodega });
   };
 
-  const actualizarMetodo = async (metodoValuacion: MetodoValuacion): Promise<void> => {
+  const handleBodegaStockChange = (bodega: string): void => {
+    setStockFiltro((prev) => ({ ...prev, bodega }));
+    void aplicarFiltroStock({ bodega });
+  };
+
+  const actualizarMetodo = async (metodoValuacion: MetodoValuacion, anioFiscal?: number): Promise<void> => {
     try {
       setSaving(true);
-      const data = await inventarioService.actualizarMetodoValuacion(metodoValuacion);
+      const data = await inventarioService.guardarMetodoValuacion(metodoValuacion, { anioFiscal });
       setConfig(data);
       toast.success('Método de valuación actualizado.');
     } catch (error) {
@@ -742,6 +810,11 @@ export default function Inventario(): React.ReactElement {
     const cantidad = Number(movimientoForm.cantidad);
     const costoUnitario = Number(movimientoForm.costoUnitario || 0);
     const tipoSeleccionado = tiposMovimientoActivos.find((tipo) => tipo._id === movimientoForm.tipoMovimientoConfigId);
+    const esTraslado = esTipoTrasladoBodega(tipoSeleccionado?.codigo);
+    const esSalidaConComprobante = tipoSeleccionado?.naturaleza === 'SALIDA' && !esTraslado;
+    const motivoRegistro = movimientoForm.motivo === 'OTRO'
+      ? movimientoForm.motivoPersonalizado.trim().toUpperCase()
+      : movimientoForm.motivo;
     if (!movimientoForm.sku.trim() || !movimientoForm.bodega.trim() || !cantidad || cantidad <= 0) {
       toast.error('SKU, bodega y cantidad mayor a 0 son obligatorios.');
       return;
@@ -754,8 +827,29 @@ export default function Inventario(): React.ReactElement {
       toast.error('El costo unitario no puede ser negativo.');
       return;
     }
-    if (!movimientoForm.documentoTipo.trim() || !movimientoForm.documentoNumero.trim()) {
+    if (esTraslado) {
+      if (!movimientoForm.bodega.trim() || !movimientoForm.bodegaDestino.trim()) {
+        toast.error('Selecciona bodega origen y bodega destino.');
+        return;
+      }
+      if (movimientoForm.bodega.trim() === movimientoForm.bodegaDestino.trim()) {
+        toast.error('La bodega destino debe ser distinta a la origen.');
+        return;
+      }
+    } else if (!movimientoForm.documentoTipo.trim() || !movimientoForm.documentoNumero.trim()) {
       toast.error('El documento soporte es obligatorio.');
+      return;
+    }
+    if (esSalidaConComprobante && !movimientoForm.recepcionCompraId) {
+      toast.error('Selecciona el comprobante de entrada asociado.');
+      return;
+    }
+    if (esSalidaConComprobante && movimientoForm.recepcionCompraId && !movimientoForm.recepcionLineaKey) {
+      toast.error('Selecciona el SKU / línea del comprobante.');
+      return;
+    }
+    if (!esTraslado && movimientoForm.motivo === 'OTRO' && !movimientoForm.motivoPersonalizado.trim()) {
+      toast.error('Escribe el motivo del movimiento.');
       return;
     }
     if (tipoSeleccionado.naturaleza === 'ENTRADA' && movimientoForm.motivo === 'COMPRA' && movimientoForm.ordenCompraId) {
@@ -775,11 +869,19 @@ export default function Inventario(): React.ReactElement {
         return;
       }
       if (pendiente <= 0) {
-        toast.error('La linea seleccionada de la OC ya no tiene cantidades pendientes por recibir.');
+        toast.error(
+          mensajeErrorComprasInventario(new Error('No hay cantidades pendientes por recibir en esta orden.')),
+          { autoClose: 9000 },
+        );
         return;
       }
       if (cantidad > pendiente) {
-        toast.error(`La cantidad excede el pendiente de la OC (${pendiente}).`);
+        toast.error(
+          mensajeErrorComprasInventario(
+            new Error(`Cantidad recibida para ${movimientoForm.sku.trim()} excede el pendiente (${pendiente}).`),
+          ),
+          { autoClose: 9000 },
+        );
         return;
       }
     }
@@ -789,6 +891,8 @@ export default function Inventario(): React.ReactElement {
       if (tipoSeleccionado.naturaleza === 'ENTRADA' && movimientoForm.motivo === 'COMPRA' && movimientoForm.ordenCompraId) {
         const itemIndex = Number(movimientoForm.ordenCompraItemIndex);
         const data = await inventarioService.registrarRecepcionOrdenCompra(movimientoForm.ordenCompraId, {
+          confirmar: true,
+          aplicarKardex: true,
           numeroRecepcion: movimientoForm.documentoNumero.trim(),
           documentoSoporte: {
             tipo: movimientoForm.documentoTipo.trim(),
@@ -819,35 +923,66 @@ export default function Inventario(): React.ReactElement {
         ]);
         setStockActual(stock);
         setKardex(kardexActualizado);
-        toast.success('Recepcion registrada en kardex.');
+        toast.success(
+          FLUJO_COMPRAS_PASOS.comprobanteOk(
+            data.orden?.numeroOrden || 'OC',
+            String(data.orden?.estado || 'actualizada'),
+            true,
+          ),
+          { autoClose: 9000 },
+        );
         return;
       }
-      const payload = {
-        sku: movimientoForm.sku.trim(),
-        tipoMovimientoConfigId: movimientoForm.tipoMovimientoConfigId,
-        bodega: movimientoForm.bodega.trim(),
-        cantidad,
-        costoUnitario,
-        motivo: movimientoForm.motivo,
-        documentoRelacionado: {
-          tipo: movimientoForm.documentoTipo.trim(),
-          numero: movimientoForm.documentoNumero.trim(),
-        },
-      };
-      const movimiento = tipoSeleccionado.naturaleza === 'ENTRADA'
-        ? await inventarioService.registrarEntrada(payload)
-        : await inventarioService.registrarSalida(payload);
+      if (esTraslado) {
+        const traslado = await inventarioService.registrarTraslado({
+          sku: movimientoForm.sku.trim(),
+          bodegaOrigen: movimientoForm.bodega.trim(),
+          bodegaDestino: movimientoForm.bodegaDestino.trim(),
+          cantidad,
+          tipoMovimientoConfigId: movimientoForm.tipoMovimientoConfigId,
+          motivo: motivoRegistro || movimientoForm.motivo,
+          documentoRelacionado: {
+            tipo: movimientoForm.documentoTipo.trim() || 'TRASLADO_BODEGA',
+            numero: movimientoForm.documentoNumero.trim() || `TR-${Date.now()}`,
+          },
+        });
+        setKardex((prev) => [traslado.entrada, traslado.salida, ...prev].slice(0, 100));
+        toast.success('Traslado registrado: salida en origen y entrada en destino (kardex + contable).');
+      } else {
+        const payload = {
+          sku: movimientoForm.sku.trim(),
+          tipoMovimientoConfigId: movimientoForm.tipoMovimientoConfigId,
+          bodega: movimientoForm.bodega.trim(),
+          cantidad,
+          costoUnitario,
+          motivo: motivoRegistro,
+          documentoRelacionado: {
+            tipo: movimientoForm.documentoTipo.trim(),
+            numero: movimientoForm.documentoNumero.trim(),
+            ...(movimientoForm.recepcionCompraId
+              ? { idExterno: movimientoForm.recepcionCompraId }
+              : {}),
+          },
+        };
+        const movimiento = tipoSeleccionado.naturaleza === 'ENTRADA'
+          ? await inventarioService.registrarEntrada(payload)
+          : await inventarioService.registrarSalida(payload);
 
-      setKardex((prev) => [movimiento, ...prev].slice(0, 100));
+        setKardex((prev) => [movimiento, ...prev].slice(0, 100));
+        toast.success('Movimiento registrado en kardex y comprobante contable.');
+      }
       setMovimientoForm((prev) => ({
         ...movimientoInicial,
         tipo: tipoSeleccionado.naturaleza,
         tipoMovimientoConfigId: prev.tipoMovimientoConfigId,
         bodega: prev.bodega,
       }));
-      const stock = await inventarioService.stockActual();
+      const [stock, comprobantesActualizados] = await Promise.all([
+        inventarioService.stockActual(),
+        inventarioService.listarComprobantesEntradaMovimientos(200),
+      ]);
       setStockActual(stock);
-      toast.success('Movimiento registrado en kardex.');
+      setComprobantesEntradaMov(comprobantesActualizados);
     } catch (error) {
       console.error('Error registrando movimiento:', error);
       toast.error('No se pudo registrar el movimiento.');
@@ -857,14 +992,15 @@ export default function Inventario(): React.ReactElement {
   };
 
   const solicitarAjuste = async (): Promise<void> => {
-    if (!ajusteForm.sku.trim() || !ajusteForm.bodega.trim() || !ajusteForm.cantidad || ajusteForm.cantidad <= 0) {
-      toast.error('SKU, bodega y cantidad son obligatorios.');
+    if (!ajusteForm.recepcionCompraId?.trim() || !ajusteForm.sku.trim() || !ajusteForm.bodega.trim()
+      || !ajusteForm.tipoAjusteCodigo?.trim() || !ajusteForm.cantidad || ajusteForm.cantidad <= 0) {
+      toast.error('Comprobante, SKU, bodega, tipo de ajuste y cantidad son obligatorios.');
       return;
     }
 
     try {
       setSaving(true);
-      const created = await inventarioService.solicitarAjuste({
+      const { data: created, msg } = await inventarioService.solicitarAjuste({
         ...ajusteForm,
         sku: ajusteForm.sku.trim(),
         bodega: ajusteForm.bodega.trim(),
@@ -873,10 +1009,10 @@ export default function Inventario(): React.ReactElement {
       });
       setAjustes((prev) => [created, ...prev]);
       setAjusteForm(ajusteInicial);
-      toast.success('Ajuste solicitado.');
+      toast.success(msg || 'Ajuste solicitado correctamente. Queda pendiente de aprobación.');
     } catch (error) {
       console.error('Error solicitando ajuste:', error);
-      toast.error('No se pudo solicitar el ajuste.');
+      toast.error(error instanceof Error ? error.message.replace(/^\[\d+\]\s*/, '') : 'No se pudo solicitar el ajuste.');
     } finally {
       setSaving(false);
     }
@@ -885,16 +1021,19 @@ export default function Inventario(): React.ReactElement {
   const cambiarEstadoAjuste = async (ajuste: AjusteInventario, accion: 'aprobar' | 'rechazar'): Promise<void> => {
     try {
       setSaving(true);
-      const updated = accion === 'aprobar'
+      const resultado = accion === 'aprobar'
         ? await inventarioService.aprobarAjuste(ajuste._id)
         : await inventarioService.rechazarAjuste(ajuste._id, 'Rechazado desde panel de inventario');
-      setAjustes((prev) => prev.map((item) => item._id === ajuste._id ? updated : item));
+      setAjustes((prev) => prev.map((item) => item._id === ajuste._id ? resultado.data : item));
       const stock = await inventarioService.stockActual();
       setStockActual(stock);
-      toast.success(accion === 'aprobar' ? 'Ajuste aprobado.' : 'Ajuste rechazado.');
+      toast.success(
+        resultado.msg
+        || (accion === 'aprobar' ? 'Ajuste aprobado y movimiento registrado en kardex.' : 'Ajuste rechazado correctamente.'),
+      );
     } catch (error) {
       console.error('Error cambiando ajuste:', error);
-      toast.error('No se pudo actualizar el ajuste.');
+      toast.error(error instanceof Error ? error.message.replace(/^\[\d+\]\s*/, '') : 'No se pudo actualizar el ajuste.');
     } finally {
       setSaving(false);
     }
@@ -944,13 +1083,34 @@ export default function Inventario(): React.ReactElement {
     }
   };
 
+  const aplicarMotivosDesdeCausales = (causales: Awaited<ReturnType<typeof inventarioService.listarCausalesAjuste>>): void => {
+    const motivosDesdeCausales = (causales || []).map((c) => ({
+      codigo: c.codigo,
+      nombre: c.nombre,
+    }));
+    setMotivosMovimiento(motivosDesdeCausales.length ? motivosDesdeCausales : MOTIVOS_FALLBACK);
+    const codigosValidos = new Set(motivosDesdeCausales.map((m) => m.codigo));
+    setMovimientoForm((prev) => {
+      if (!prev.motivo || codigosValidos.has(prev.motivo)) return prev;
+      return { ...prev, motivo: motivosDesdeCausales[0]?.codigo || 'OTRO' };
+    });
+  };
+
+  const recargarMotivosMovimiento = async (): Promise<void> => {
+    const causales = await inventarioService.listarCausalesAjuste();
+    aplicarMotivosDesdeCausales(causales);
+  };
+
   const abrirModalTiposMovimiento = (): void => {
     setTipoMovimientoDraft(tipoMovimientoDraftInicial);
     setTipoModalOpen(true);
   };
 
+  const abrirModalCausalesMotivo = (): void => {
+    setCausalMotivoModalOpen(true);
+  };
+
   const abrirModalSkuCatalogo = (): void => {
-    setSkuCatalogoFiltro('');
     setSkuCatalogoOpen(true);
   };
 
@@ -1028,58 +1188,6 @@ export default function Inventario(): React.ReactElement {
     } finally {
       setSaving(false);
     }
-  };
-
-  const imprimirCodigoBarrasSku = (producto: BackendProducto | null): void => {
-    const codigo = String(producto?.codigoBarras || '').replace(/\D/g, '');
-    if (!producto || !codigo) {
-      toast.error('Este SKU no tiene codigo de barras para imprimir.');
-      return;
-    }
-    const bits = buildEan13Bits(codigo);
-    if (!bits) {
-      toast.error('Solo se puede imprimir la zebra EAN-13 para codigos de 13 digitos.');
-      return;
-    }
-    const bars = bits.split('').map((bit, index) => (
-      bit === '1' ? `<rect x="${index}" y="10" width="1" height="70" fill="#111827" />` : ''
-    )).join('');
-    const label = `${producto.sku || ''} ${producto.nombre || ''}`.trim();
-    const printWindow = window.open('', '_blank', 'width=420,height=320');
-    if (!printWindow) {
-      toast.error('No se pudo abrir la ventana de impresion.');
-      return;
-    }
-    printWindow.document.write(`
-      <!doctype html>
-      <html>
-        <head>
-          <title>Codigo de barras ${codigo}</title>
-          <style>
-            body { margin: 0; font-family: Arial, sans-serif; color: #111827; }
-            .label { width: 320px; padding: 18px; text-align: center; }
-            .name { font-size: 12px; font-weight: 700; margin-bottom: 8px; }
-            svg { width: 260px; height: 120px; }
-            .code { font-family: monospace; font-size: 14px; letter-spacing: 4px; margin-top: 4px; }
-            @media print { body { margin: 0; } .label { page-break-inside: avoid; } }
-          </style>
-        </head>
-        <body>
-          <div class="label">
-            <div class="name">${label}</div>
-            <svg viewBox="0 0 ${bits.length} 90" preserveAspectRatio="none">${bars}</svg>
-            <div class="code">${codigo}</div>
-          </div>
-          <script>
-            window.onload = function () {
-              window.focus();
-              window.print();
-            };
-          </script>
-        </body>
-      </html>
-    `);
-    printWindow.document.close();
   };
 
   const editarTipoMovimiento = (tipo: InventarioTipoMovimiento): void => {
@@ -1288,11 +1396,35 @@ export default function Inventario(): React.ReactElement {
   };
 
   const renderBodegaSelect = (value: string, onChange: (value: string) => void): React.ReactElement => (
-    <Select value={value} onValueChange={onChange}>
+    <Select
+      value={value || BODEGA_TODAS}
+      onValueChange={(next) => onChange(next === BODEGA_TODAS ? '' : next)}
+    >
       <SelectTrigger>
         <SelectValue placeholder="Selecciona bodega" />
       </SelectTrigger>
       <SelectContent>
+        <SelectItem value={BODEGA_TODAS}>Todas las bodegas</SelectItem>
+        {bodegaOptions.map((nombre) => (
+          <SelectItem key={nombre} value={nombre}>{nombre}</SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+
+  const renderBodegaStockSelect = (): React.ReactElement => (
+    <Select
+      value={stockFiltro.bodega || BODEGA_TODAS}
+      onValueChange={(next) => {
+        const bodega = next === BODEGA_TODAS ? '' : next;
+        handleBodegaStockChange(bodega);
+      }}
+    >
+      <SelectTrigger className="border-input bg-background">
+        <SelectValue placeholder={bodegaOptions.length ? 'Selecciona bodega' : 'Sin bodegas activas'} />
+      </SelectTrigger>
+      <SelectContent className="max-h-72 border-border bg-popover">
+        <SelectItem value={BODEGA_TODAS}>Todas las bodegas</SelectItem>
         {bodegaOptions.map((nombre) => (
           <SelectItem key={nombre} value={nombre}>{nombre}</SelectItem>
         ))}
@@ -1336,10 +1468,16 @@ export default function Inventario(): React.ReactElement {
             Gestiona stock, movimientos inmutables, bodegas, cierres contables y ajustes con documento soporte.
           </p>
         </div>
-        <Button variant="outline" onClick={() => void loadData()} disabled={saving}>
-          <RefreshCcw className="mr-2 h-4 w-4" />
-          Actualizar
-        </Button>
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-end">
+          <div className="min-w-[200px] space-y-1">
+            <p className="text-xs font-medium text-muted-foreground">Vista por bodega</p>
+            {renderBodegaStockSelect()}
+          </div>
+          <Button variant="outline" onClick={() => void loadData()} disabled={saving} className="shrink-0">
+            <RefreshCcw className="mr-2 h-4 w-4" />
+            Actualizar
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-4">
@@ -1377,12 +1515,28 @@ export default function Inventario(): React.ReactElement {
         </AlertDescription>
       </Alert>
 
-      <Tabs
+      {!loadingInventarioTabs && inventarioMenuTabs.length === 0 ? (
+        <Alert>
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Sin pestañas parametrizadas</AlertTitle>
+          <AlertDescription>
+            Autoriza o parametriza formularios de inventario para construir este menú dinámicamente.
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
+      {inventarioMenuTabs.length > 0 ? (
+        <Tabs
         value={activeTab}
         onValueChange={(value) => setActiveTab(value as InventarioTabValue)}
         className="space-y-4"
       >
-        <InventarioMenuTabs activeTab={activeTab} onTabChange={setActiveTab} />
+        <InventarioMenuTabs
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          user={user}
+          tabs={inventarioMenuTabs}
+        />
 
         <TabsContent value="stock" className="space-y-4">
           <InventarioStockTab
@@ -1392,10 +1546,11 @@ export default function Inventario(): React.ReactElement {
             stockActual={stockActual}
             kardex={kardex}
             money={MONEY}
-            renderBodegaSelect={renderBodegaSelect}
+            renderBodegaStockSelect={renderBodegaStockSelect}
             consultarStock={consultarStock}
             formatDate={formatDate}
             getTipoMovimientoLabel={getTipoMovimientoLabel}
+            bodegaSeleccionada={stockFiltro.bodega}
           />
         </TabsContent>
 
@@ -1404,14 +1559,23 @@ export default function Inventario(): React.ReactElement {
             movimientoForm={movimientoForm}
             setMovimientoForm={setMovimientoForm}
             ordenesCompra={ordenesCompra}
+            comprobantesEntrada={comprobantesEntradaMov}
             stockActual={stockActual}
             onOrdenCompraLineChange={seleccionarLineaOrdenCompraMovimiento}
+            onComprobanteSalidaLineChange={seleccionarLineaComprobanteSalida}
+            onVerComprobante={(recepcionId) => {
+              setComprobanteVistaId(recepcionId);
+              setComprobanteVistaOpen(true);
+            }}
+            onRecargarComprobantes={recargarComprobantesEntrada}
             tiposMovimientoActivos={tiposMovimientoActivos}
-            motivos={MOTIVOS}
+            motivos={motivosMovimiento}
+            metodoValuacion={config?.metodoValuacion}
             saving={saving}
             renderSkuSelect={renderSkuSelect}
             renderBodegaSelect={renderBodegaSelect}
             abrirModalTiposMovimiento={abrirModalTiposMovimiento}
+            abrirModalCausalesMotivo={abrirModalCausalesMotivo}
             abrirModalSkuCatalogo={abrirModalSkuCatalogo}
             abrirModalSku={() => setSkuModalOpen(true)}
             registrarMovimiento={registrarMovimiento}
@@ -1437,6 +1601,8 @@ export default function Inventario(): React.ReactElement {
             refreshOrdenesCompra={refreshOrdenesCompra}
             sumSubtotalOrdenCompra={sumSubtotalOrdenCompra}
             esTenantSuperAdmin={esUsuarioTenantSuperAdmin}
+            config={config}
+            nombreCorporativo={nombreCorporativoImpresion}
           />
         </TabsContent>
 
@@ -1448,8 +1614,6 @@ export default function Inventario(): React.ReactElement {
             setAjusteFiltro={setAjusteFiltro}
             ajustes={ajustes}
             saving={saving}
-            causalesAjuste={CAUSALES_AJUSTE}
-            renderBodegaSelect={renderBodegaSelect}
             solicitarAjuste={solicitarAjuste}
             refreshAjustes={refreshAjustes}
             cambiarEstadoAjuste={cambiarEstadoAjuste}
@@ -1481,18 +1645,6 @@ export default function Inventario(): React.ReactElement {
           />
         </TabsContent>
 
-        <TabsContent value="config">
-          <ConfigInventario
-            config={config}
-            periodo={periodo}
-            saving={saving}
-            setPeriodo={setPeriodo}
-            actualizarMetodo={actualizarMetodo}
-            cerrarPeriodo={cerrarPeriodo}
-            onNavigateTab={setActiveTab}
-          />
-        </TabsContent>
-
         <TabsContent value="trm" className="space-y-4">
           <InventarioTrmConfiguracionTab
             config={config}
@@ -1501,6 +1653,20 @@ export default function Inventario(): React.ReactElement {
           />
         </TabsContent>
       </Tabs>
+      ) : null}
+
+      <InventarioCausalAjusteModal
+        open={causalMotivoModalOpen}
+        onOpenChange={setCausalMotivoModalOpen}
+        saving={saving}
+        title="Catálogo de motivos (causales)"
+        description="Parametrice los motivos que aparecen en el select al registrar movimientos en kardex. Solo las causales activas se listan en el formulario."
+        onCausalesActualizadas={() => {
+          void recargarMotivosMovimiento().then(() => {
+            toast.success('Catálogo de motivos actualizado.');
+          });
+        }}
+      />
 
       <InventarioTipoMovimientoModal
         open={tipoModalOpen}
@@ -1525,176 +1691,17 @@ export default function Inventario(): React.ReactElement {
         onSubmit={() => void crearSku()}
       />
 
-      <Dialog open={skuCatalogoOpen} onOpenChange={setSkuCatalogoOpen}>
-        <DialogContent className="max-w-5xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Package className="h-5 w-5" />
-              Visualizador de SKU creados
-            </DialogTitle>
-            <DialogDescription>
-              Escanea un codigo de barras o busca manualmente por SKU, codigo o nombre.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4">
-            <div className="flex flex-col gap-2 md:flex-row md:items-center">
-              <div className="relative flex-1">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  autoFocus
-                  value={skuCatalogoFiltro}
-                  onChange={(event) => setSkuCatalogoFiltro(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key !== 'Enter' || skuCatalogoFiltrado.length !== 1) return;
-                    seleccionarSkuCatalogo(skuCatalogoFiltrado[0]);
-                  }}
-                  className="pl-9"
-                  placeholder="Escanea codigo de barras o escribe nombre/SKU"
-                />
-              </div>
-              <Badge variant="secondary" className="h-9 justify-center rounded-md px-3">
-                {skuCatalogoFiltrado.length} de {skuOptions.length}
-              </Badge>
-            </div>
-
-            <div className="max-h-[58vh] overflow-auto rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>SKU</TableHead>
-                    <TableHead>Codigo de barras</TableHead>
-                    <TableHead>Producto</TableHead>
-                    <TableHead>Unidad</TableHead>
-                    <TableHead>Precio</TableHead>
-                    <TableHead className="text-right">Accion</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {skuCatalogoFiltrado.map((producto) => (
-                    <TableRow key={getProductoId(producto) || producto.sku || producto.nombre}>
-                      <TableCell className="font-mono text-xs font-semibold">{producto.sku || '-'}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-3">
-                          <Barcode className="h-4 w-4 shrink-0 text-muted-foreground" />
-                          <div className="space-y-2">
-                            {producto.codigoBarras ? (
-                              <button
-                                type="button"
-                                className="rounded border border-transparent p-1 text-left transition hover:border-primary/40 hover:bg-background/70"
-                                title="Ver e imprimir codigo"
-                                onClick={() => setSkuBarcodePreview(producto)}
-                              >
-                                <BarcodePreview codigo={producto.codigoBarras} />
-                              </button>
-                            ) : (
-                              <BarcodePreview codigo={producto.codigoBarras} />
-                            )}
-                            {!producto.codigoBarras && puedeGestionarSku && (
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                className="h-7 text-xs"
-                                disabled={saving}
-                                onClick={() => void generarCodigoSkuCatalogo(producto)}
-                              >
-                                Generar codigo
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="space-y-0.5">
-                          <p className="font-medium">{producto.nombre}</p>
-                          <p className="line-clamp-1 text-xs text-muted-foreground">{producto.descripcion || producto.descripcionCorta || 'Sin descripcion'}</p>
-                        </div>
-                      </TableCell>
-                      <TableCell><Badge variant="outline">{producto.unidadMedida || 'UNIDAD'}</Badge></TableCell>
-                      <TableCell>{MONEY.format(Number(producto.precio || 0))}</TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-1">
-                          <Button type="button" size="sm" onClick={() => seleccionarSkuCatalogo(producto)}>
-                            Seleccionar
-                          </Button>
-                          {puedeGestionarSku && (
-                            <>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="icon"
-                                disabled={saving}
-                                title="Desactivar SKU"
-                                onClick={() => void desactivarSkuCatalogo(producto)}
-                              >
-                                <AlertTriangle className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="destructive"
-                                size="icon"
-                                disabled={saving}
-                                title="Eliminar SKU"
-                                onClick={() => void eliminarSkuCatalogo(producto)}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {skuCatalogoFiltrado.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
-                        No se encontraron SKU con ese filtro.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={Boolean(skuBarcodePreview)} onOpenChange={(open) => !open && setSkuBarcodePreview(null)}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Barcode className="h-5 w-5" />
-              Codigo de barras del SKU
-            </DialogTitle>
-            <DialogDescription>
-              Visualiza la etiqueta antes de imprimirla.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4">
-            <div className="rounded-md border bg-white p-5 text-center text-slate-950">
-              <p className="text-sm font-semibold">{skuBarcodePreview?.sku || 'SKU'}</p>
-              <p className="mb-3 text-xs uppercase text-slate-500">{skuBarcodePreview?.nombre || 'Producto'}</p>
-              <div className="flex justify-center">
-                <BarcodePreview codigo={skuBarcodePreview?.codigoBarras} />
-              </div>
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => setSkuBarcodePreview(null)}>
-                Cerrar
-              </Button>
-              <Button type="button" variant="outline" onClick={() => seleccionarSkuCatalogo(skuBarcodePreview as BackendProducto)}>
-                Seleccionar
-              </Button>
-              <Button type="button" onClick={() => imprimirCodigoBarrasSku(skuBarcodePreview)}>
-                <Printer className="mr-2 h-4 w-4" />
-                Imprimir
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <InventarioSkuCatalogoModal
+        open={skuCatalogoOpen}
+        saving={saving}
+        productos={skuOptions}
+        puedeGestionarSku={puedeGestionarSku}
+        onOpenChange={setSkuCatalogoOpen}
+        onSelectSku={seleccionarSkuCatalogo}
+        onDesactivarSku={desactivarSkuCatalogo}
+        onEliminarSku={eliminarSkuCatalogo}
+        onGenerarCodigoBarras={generarCodigoSkuCatalogo}
+      />
 
       <InventarioUnidadMedidaModal
         open={unidadModalOpen}
@@ -1738,10 +1745,21 @@ export default function Inventario(): React.ReactElement {
         </AlertDialogContent>
       </AlertDialog>
 
+      <InventarioComprobanteEntradaVistaModal
+        open={comprobanteVistaOpen}
+        recepcionId={comprobanteVistaId}
+        onOpenChange={(open) => {
+          setComprobanteVistaOpen(open);
+          if (!open) setComprobanteVistaId(null);
+        }}
+      />
+
       <InventarioComprobanteEntradaModal
         open={comprobanteEntradaOpen}
         data={comprobanteEntradaData}
         documentoSoporte={comprobanteEntradaDoc}
+        nombreCorporativo={nombreCorporativoImpresion}
+        recepcionAutomatica={config?.compras?.recepcionAutomatica === true}
         onOpenChange={(open) => {
           setComprobanteEntradaOpen(open);
           if (!open) {

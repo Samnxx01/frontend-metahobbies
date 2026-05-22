@@ -1,6 +1,11 @@
-import React from 'react';
-import { Plus, RotateCcw } from 'lucide-react';
-import type { AjusteInventario, AjustePayload, EstadoAjuste, TipoAjuste } from '@/app/services/inventarioService';
+import React, { useState } from 'react';
+import { Plus, RotateCcw, Settings2 } from 'lucide-react';
+import type { AjusteInventario, AjustePayload, EstadoAjuste } from '@/app/services/inventarioService';
+import InventarioComprobanteEntradaSelect, { type ComprobanteEntradaSeleccion } from './InventarioComprobanteEntradaSelect';
+import InventarioCausalAjusteModal from './InventarioCausalAjusteModal';
+import InventarioCausalAjusteSelect from './InventarioCausalAjusteSelect';
+import InventarioTipoAjusteModal from './InventarioTipoAjusteModal';
+import InventarioTipoAjusteSelect from './InventarioTipoAjusteSelect';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -17,8 +22,6 @@ type InventarioAjustesTabProps = {
   setAjusteFiltro: React.Dispatch<React.SetStateAction<EstadoAjuste | ''>>;
   ajustes: AjusteInventario[];
   saving: boolean;
-  causalesAjuste: string[];
-  renderBodegaSelect: (value: string, onChange: (value: string) => void) => React.ReactElement;
   solicitarAjuste: () => Promise<void>;
   refreshAjustes: (estado?: EstadoAjuste | '') => Promise<void>;
   cambiarEstadoAjuste: (ajuste: AjusteInventario, accion: 'aprobar' | 'rechazar') => Promise<void>;
@@ -32,60 +35,110 @@ export default function InventarioAjustesTab({
   setAjusteFiltro,
   ajustes,
   saving,
-  causalesAjuste,
-  renderBodegaSelect,
   solicitarAjuste,
   refreshAjustes,
   cambiarEstadoAjuste,
   estadoBadge,
 }: InventarioAjustesTabProps): React.ReactElement {
+  const [tipoAjusteModalOpen, setTipoAjusteModalOpen] = useState(false);
+  const [causalAjusteModalOpen, setCausalAjusteModalOpen] = useState(false);
+  const [tiposAjusteRefreshKey, setTiposAjusteRefreshKey] = useState(0);
+  const [causalesAjusteRefreshKey, setCausalesAjusteRefreshKey] = useState(0);
+
+  const handleComprobanteSelect = (seleccion: ComprobanteEntradaSeleccion | null): void => {
+    if (!seleccion) {
+      setAjusteForm((prev) => ({
+        ...prev,
+        recepcionCompraId: '',
+        sku: '',
+        bodega: '',
+        costoUnitarioReferencia: 0,
+      }));
+      return;
+    }
+    setAjusteForm((prev) => ({
+      ...prev,
+      recepcionCompraId: seleccion.recepcionId,
+      sku: seleccion.sku,
+      bodega: seleccion.bodega,
+      costoUnitarioReferencia: seleccion.costoUnitario,
+    }));
+  };
+
   return (
     <div className="space-y-4">
+      <InventarioTipoAjusteModal
+        open={tipoAjusteModalOpen}
+        onOpenChange={setTipoAjusteModalOpen}
+        saving={saving}
+        onTiposActualizados={() => setTiposAjusteRefreshKey((prev) => prev + 1)}
+      />
+      <InventarioCausalAjusteModal
+        open={causalAjusteModalOpen}
+        onOpenChange={setCausalAjusteModalOpen}
+        saving={saving}
+        onCausalesActualizadas={() => setCausalesAjusteRefreshKey((prev) => prev + 1)}
+      />
+
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2"><RotateCcw className="h-5 w-5" /> Solicitar ajuste</CardTitle>
-          <CardDescription>Los ajustes quedan pendientes hasta aprobacion.</CardDescription>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2"><RotateCcw className="h-5 w-5" /> Solicitar ajuste</CardTitle>
+              <CardDescription>
+                Vincula un comprobante de entrada aprobado y confirmado en kardex. La bodega se obtiene del comprobante seleccionado.
+              </CardDescription>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="outline" onClick={() => setCausalAjusteModalOpen(true)} disabled={saving}>
+                <Settings2 className="mr-2 h-4 w-4" />
+                Causales
+              </Button>
+              <Button type="button" variant="outline" onClick={() => setTipoAjusteModalOpen(true)} disabled={saving}>
+                <Settings2 className="mr-2 h-4 w-4" />
+                Tipos de ajuste
+              </Button>
+            </div>
+          </div>
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <div className="space-y-2">
-            <Label>SKU</Label>
-            <Input value={ajusteForm.sku} onChange={(event) => setAjusteForm((prev) => ({ ...prev, sku: event.target.value }))} />
-          </div>
-          <div className="space-y-2">
-            <Label>Bodega</Label>
-            {renderBodegaSelect(ajusteForm.bodega, (value) => setAjusteForm((prev) => ({ ...prev, bodega: value })))}
-          </div>
-          <div className="space-y-2">
-            <Label>Tipo ajuste</Label>
-            <Select value={ajusteForm.tipoAjuste} onValueChange={(value) => setAjusteForm((prev) => ({ ...prev, tipoAjuste: value as TipoAjuste }))}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="POSITIVO">Positivo</SelectItem>
-                <SelectItem value="NEGATIVO">Negativo</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label>Causal</Label>
-            <Select value={ajusteForm.causal} onValueChange={(value) => setAjusteForm((prev) => ({ ...prev, causal: value }))}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {causalesAjuste.map((causal) => <SelectItem key={causal} value={causal}>{causal}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
+          <InventarioComprobanteEntradaSelect
+            recepcionCompraId={ajusteForm.recepcionCompraId || ''}
+            sku={ajusteForm.sku}
+            bodega={ajusteForm.bodega}
+            onSelect={handleComprobanteSelect}
+            disabled={saving}
+          />
+
+          <InventarioTipoAjusteSelect
+            value={ajusteForm.tipoAjusteCodigo}
+            onChange={(codigo) => setAjusteForm((prev) => ({ ...prev, tipoAjusteCodigo: codigo }))}
+            disabled={saving}
+            refreshKey={tiposAjusteRefreshKey}
+          />
+
+          <InventarioCausalAjusteSelect
+            value={ajusteForm.causal}
+            onChange={(codigo) => setAjusteForm((prev) => ({ ...prev, causal: codigo }))}
+            disabled={saving}
+            refreshKey={causalesAjusteRefreshKey}
+          />
+
           <div className="space-y-2">
             <Label>Cantidad</Label>
             <Input type="number" min="1" value={ajusteForm.cantidad} onChange={(event) => setAjusteForm((prev) => ({ ...prev, cantidad: Number(event.target.value) }))} />
           </div>
+
           <div className="space-y-2">
             <Label>Costo referencia</Label>
             <Input type="number" min="0" value={ajusteForm.costoUnitarioReferencia} onChange={(event) => setAjusteForm((prev) => ({ ...prev, costoUnitarioReferencia: Number(event.target.value) }))} />
           </div>
+
           <div className="space-y-2 md:col-span-2">
             <Label>Observacion</Label>
             <Textarea value={ajusteForm.observacion} onChange={(event) => setAjusteForm((prev) => ({ ...prev, observacion: event.target.value }))} />
           </div>
+
           <div className="md:col-span-2 xl:col-span-4">
             <Button onClick={() => void solicitarAjuste()} disabled={saving}>
               <Plus className="mr-2 h-4 w-4" />
@@ -136,7 +189,7 @@ export default function InventarioAjustesTab({
                   <TableRow key={ajuste._id}>
                     <TableCell className="font-medium">{ajuste.sku}</TableCell>
                     <TableCell>{ajuste.bodega}</TableCell>
-                    <TableCell>{ajuste.tipoAjuste}</TableCell>
+                    <TableCell>{ajuste.tipoAjusteCodigo || ajuste.tipoAjuste}</TableCell>
                     <TableCell>{ajuste.causal}</TableCell>
                     <TableCell className="text-right">{Number(ajuste.cantidad || 0).toLocaleString('es-CO')}</TableCell>
                     <TableCell><Badge variant={estadoBadge(ajuste.estado)}>{ajuste.estado}</Badge></TableCell>
@@ -165,4 +218,3 @@ export default function InventarioAjustesTab({
     </div>
   );
 }
-

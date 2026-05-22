@@ -55,7 +55,7 @@ const CREDENTIAL_ERROR_MESSAGE = 'Credenciales inválidas. Verifica tu correo y 
 const CRITICAL_ERROR_TITLE = 'Error de Conexión';
 
 const loginSchema = z.object({
-    correo: z.string().email('Correo electrónico inválido').min(1, 'Este campo es obligatorio'),
+    correo: z.string().trim().toLowerCase().email('Correo electrónico inválido').min(1, 'Este campo es obligatorio'),
     password: z.string().min(1, 'La contraseña es obligatoria'),
 });
 
@@ -144,9 +144,7 @@ export default function Login(): React.ReactElement {
 
         try {
             // Map correo to email for the login service
-            const response = await login({ correo: data.correo, password: data.password }) as LoginResponse;
-            console.log('[MABS][Login][response]', response);
-
+            const response = await login({ correo: data.correo.trim().toLowerCase(), password: data.password }) as LoginResponse;
             if (response?.token && response?.usuario) {
                 // Verificar si requiere actualización de contraseña
                 if (response.requiereActualizacion === true) {
@@ -172,13 +170,6 @@ export default function Login(): React.ReactElement {
                         const adminPath = await getAdminHomeRoute();
                         targetPath = adminPath ?? governedPath;
                     }
-                    console.log('[MABS][Login][post-auth-redirect]', {
-                        governedPath,
-                        governedConfigured,
-                        targetPath,
-                        userId: response?.usuario?._id ?? null,
-                        correo: response?.usuario?.correo ?? null,
-                    });
                     navigate(targetPath);
                 }, 1000);
                 return;

@@ -11,7 +11,7 @@ import { toast } from 'react-toastify';
 import { useTenantUsuarios } from '@/app/hooks/useTenantUsuarios';
 import { NodoTenantGlobalCard } from '@/app/presentation/components/admin/usuarios-tenant/NodoTenantGlobalCard';
 import {
-    OrganigramaLegenda,
+    OrganigramaLegendaInfoButton,
     OrganigramaColumn,
     OrganigramaConector,
 } from '@/app/presentation/components/admin/usuarios-tenant/JerarquiaOrganigrama';
@@ -520,6 +520,7 @@ export default function UsuariosTenant(): React.ReactElement {
                             {scope}
                         </Badge>
                     )}
+                    <OrganigramaLegendaInfoButton />
                     {scope && (
                         <Button variant="outline" size="sm" onClick={refetch}>
                             <RefreshCw className="h-4 w-4 mr-2" />
@@ -551,8 +552,6 @@ export default function UsuariosTenant(): React.ReactElement {
                     )}
                 </div>
             </div>
-
-            <OrganigramaLegenda />
 
             <div className="mx-auto flex max-w-5xl flex-col">
                 {showSuperAdmins && (

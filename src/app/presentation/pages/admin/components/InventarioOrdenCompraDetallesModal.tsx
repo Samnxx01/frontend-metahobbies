@@ -1,9 +1,16 @@
-import React, { useMemo } from 'react';
-import { Eye } from 'lucide-react';
-import type { InventarioOrdenCompra } from '@/app/services/inventarioService';
+import React, { useMemo, useState } from 'react';
+import { CheckCircle2, Eye, Loader2 } from 'lucide-react';
+import { toast } from 'react-toastify';
+import inventarioService, { type EstadoOrdenCompraConfig, type InventarioOrdenCompra } from '@/app/services/inventarioService';
 import { descuentoMontoLinea, totalLineaOrdenCompra } from '@/app/presentation/pages/admin/utils/ordenCompraLineaCalculo';
+import {
+  estadoOrdenBadgeClass,
+  labelEstadoOrdenCompra,
+  puedeConfirmarOrdenCompra,
+} from '@/app/presentation/pages/admin/utils/estadoOrdenCompraUi';
 import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 const moneyCo = (n: number): string =>
@@ -34,23 +41,71 @@ export type InventarioOrdenCompraDetallesModalProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   orden: InventarioOrdenCompra | null;
+  estadosOrden?: EstadoOrdenCompraConfig[];
+  onOrdenActualizada?: (orden: InventarioOrdenCompra) => void;
 };
 
 export default function InventarioOrdenCompraDetallesModal({
   open,
   onOpenChange,
-  orden,
+  orden: ordenProp,
+  estadosOrden = [],
+  onOrdenActualizada,
 }: InventarioOrdenCompraDetallesModalProps): React.ReactElement {
+  const [ordenLocal, setOrdenLocal] = useState<InventarioOrdenCompra | null>(null);
+  const [confirmando, setConfirmando] = useState(false);
+
+  const orden = ordenLocal ?? ordenProp;
+  const mostrarConfirmar = Boolean(orden && puedeConfirmarOrdenCompra(orden.estado, estadosOrden));
   const total = useMemo(() => (orden?.items ?? []).reduce((acc, it) => acc + calcSubtotalLinea(it), 0), [orden]);
+
+  React.useEffect(() => {
+    if (open) setOrdenLocal(ordenProp);
+  }, [open, ordenProp]);
+
+  const confirmarOrden = async (): Promise<void> => {
+    if (!orden?._id || !mostrarConfirmar) return;
+    setConfirmando(true);
+    try {
+      const data = await inventarioService.confirmarOrdenCompra(orden._id);
+      const base = data?.orden ?? orden;
+      const actualizada: InventarioOrdenCompra = {
+        ...base,
+        estado: 'CONFIRMADO',
+        comprobanteContable: base.comprobanteContable ?? {
+          numero: data?.comprobanteContable?.numero,
+          documentoSoporteId: data?.comprobanteContable?.documentoSoporteId ?? null,
+          confirmadoEn: new Date().toISOString(),
+        },
+      };
+      setOrdenLocal(actualizada);
+      onOrdenActualizada?.(actualizada);
+      toast.success(
+        `Orden ${orden.numeroOrden} confirmada. Comprobante contable ${data?.comprobanteContable?.numero || ''} generado.`
+      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message.replace(/^\[\d+\]\s*/, '') : 'No se pudo confirmar la orden.');
+    } finally {
+      setConfirmando(false);
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[min(1120px,calc(100vw-2rem))] max-w-none border-border bg-background text-foreground">
         <DialogHeader className="space-y-1">
-          <DialogTitle className="flex items-center gap-2">
-            <Eye className="h-5 w-5 text-primary" />
-            Detalles orden de compra
-          </DialogTitle>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <DialogTitle className="flex items-center gap-2">
+              <Eye className="h-5 w-5 text-primary" />
+              Detalles orden de compra
+            </DialogTitle>
+            {mostrarConfirmar ? (
+              <Button type="button" size="sm" onClick={() => void confirmarOrden()} disabled={confirmando}>
+                {confirmando ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
+                Confirmar orden
+              </Button>
+            ) : null}
+          </div>
         </DialogHeader>
 
         {!orden ? (
@@ -64,8 +119,8 @@ export default function InventarioOrdenCompraDetallesModal({
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Estado</p>
-                <Badge variant="outline" className="mt-1">
-                  {orden.estado}
+                <Badge variant="outline" className={`mt-1 ${estadoOrdenBadgeClass(orden.estado)}`} title={orden.estado}>
+                  {labelEstadoOrdenCompra(orden.estado, estadosOrden)}
                 </Badge>
               </div>
               <div className="sm:col-span-2">
@@ -92,6 +147,18 @@ export default function InventarioOrdenCompraDetallesModal({
                 <p className="text-sm text-foreground">{orden.updatedAt ? new Date(orden.updatedAt).toLocaleString('es-CO') : '—'}</p>
               </div>
             </div>
+
+            {orden.comprobanteContable?.numero ? (
+              <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 p-3">
+                <p className="text-xs text-muted-foreground">Comprobante contable vinculado</p>
+                <p className="font-mono text-sm font-semibold text-foreground">{orden.comprobanteContable.numero}</p>
+                {orden.comprobanteContable.confirmadoEn ? (
+                  <p className="text-xs text-muted-foreground">
+                    Confirmado: {new Date(orden.comprobanteContable.confirmadoEn).toLocaleString('es-CO')}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
 
             {orden.concepto ? (
               <div className="rounded-md border border-border bg-card p-3">
@@ -132,7 +199,7 @@ export default function InventarioOrdenCompraDetallesModal({
                         </TableCell>
                         <TableCell className="text-sm text-foreground">{it.bodega}</TableCell>
                         <TableCell className="text-right tabular-nums">{Number(it.cantidadOrdenada ?? 0)}</TableCell>
-                        <TableCell className="text-right tabular-nums">{Number((it as any).cantidadRecibida ?? 0)}</TableCell>
+                        <TableCell className="text-right tabular-nums">{Number((it as { cantidadRecibida?: number }).cantidadRecibida ?? 0)}</TableCell>
                         <TableCell className="text-right tabular-nums">{moneyCo(Number(it.costoUnitario ?? 0))}</TableCell>
                         <TableCell className="text-right tabular-nums">{textoDescuentoLinea(it)}</TableCell>
                         <TableCell className="text-right tabular-nums">{Number(it.impuestoPorcentaje ?? 0)}</TableCell>
@@ -152,8 +219,13 @@ export default function InventarioOrdenCompraDetallesModal({
             </div>
           </div>
         )}
+
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={confirmando}>
+            Cerrar
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
-

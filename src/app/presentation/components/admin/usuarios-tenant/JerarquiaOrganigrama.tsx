@@ -1,5 +1,8 @@
 import React from 'react';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, Info } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { cn } from '@/lib/utils';
 
 const PASOS = [
     { id: 'sa', label: 'Super Admin', desc: 'tenantJerarquiaCounter sin campo corporativo' },
@@ -9,9 +12,18 @@ const PASOS = [
 ];
 
 /** Leyenda horizontal / vertical según pantalla: orden del organigrama */
-export function OrganigramaLegenda(): React.ReactElement {
+type OrganigramaLegendaProps = {
+    className?: string;
+};
+
+export function OrganigramaLegenda({ className }: OrganigramaLegendaProps = {}): React.ReactElement {
     return (
-        <div className="mb-6 rounded-xl border border-primary/20 bg-gradient-to-br from-primary/[0.06] via-background to-primary/[0.04] px-3 py-4 shadow-sm">
+        <div
+            className={cn(
+                'mb-6 rounded-xl border border-primary/20 bg-gradient-to-br from-primary/[0.06] via-background to-primary/[0.04] px-3 py-4 shadow-sm',
+                className,
+            )}
+        >
             <p className="mb-3 text-center text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                 Organigrama · orden jerárquico
             </p>
@@ -42,6 +54,40 @@ export function OrganigramaLegenda(): React.ReactElement {
                 ))}
             </div>
         </div>
+    );
+}
+
+type OrganigramaLegendaInfoButtonProps = {
+    className?: string;
+    label?: string;
+};
+
+export function OrganigramaLegendaInfoButton({
+    className,
+    label = 'Orden jerárquico',
+}: OrganigramaLegendaInfoButtonProps): React.ReactElement {
+    return (
+        <Popover>
+            <PopoverTrigger asChild>
+                <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className={cn('h-8 shrink-0 gap-1.5 text-xs', className)}
+                    aria-label="Ver orden jerárquico del organigrama"
+                >
+                    <Info className="h-3.5 w-3.5" />
+                    {label}
+                </Button>
+            </PopoverTrigger>
+            <PopoverContent
+                className="w-auto max-w-[min(calc(100vw-2rem),32rem)] border-0 p-0 shadow-lg"
+                align="end"
+                sideOffset={8}
+            >
+                <OrganigramaLegenda className="mb-0 border-0 shadow-none" />
+            </PopoverContent>
+        </Popover>
     );
 }
 

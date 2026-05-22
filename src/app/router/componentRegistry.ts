@@ -1,8 +1,12 @@
 // src/app/router/componentRegistry.ts
 import { lazy } from 'react';
 
-// Usamos import.meta.glob para cargar todos los componentes de páginas de forma lazy
-const modules = import.meta.glob('../presentation/pages/**/*.tsx', { eager: false });
+// Páginas lazy por nombre de archivo. Excluye `**/components/**`: son subcomponentes (p. ej. pestañas)
+// que no deben registrarse como ruta; si se montan solos, no reciben props ni `loadData` del padre.
+const modules = import.meta.glob(
+  ['../presentation/pages/**/*.tsx', '!../presentation/pages/**/components/**'],
+  { eager: false },
+);
 
 // Función para obtener el componente lazy por nombre
 export function getLazyComponent(componentName: string): React.LazyExoticComponent<any> | null {

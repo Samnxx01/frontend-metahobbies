@@ -94,6 +94,11 @@ const buildComponentMap = (): ComponentMapType => {
         GestionInventario:             'Inventario',
         KardexInventario:              'Inventario',
         InventarioKardex:              'Inventario',
+        // Gobernanza: shell interno; la ruta debe usar ParametrosGobernanza o default de GobernanzaModuloDinamico
+        GobernanzaModuloPorRuta:       'ParametrosGobernanza',
+        MarcoPermisosAfiliado:         'MarcoPermisosAfiliadoParametrizacion',
+        TechoPermisosAfiliado:         'MarcoPermisosAfiliadoParametrizacion',
+        ParametrizacionMarcoAfiliado:  'MarcoPermisosAfiliadoParametrizacion',
     };
 
     for (const [alias, target] of Object.entries(aliases)) {

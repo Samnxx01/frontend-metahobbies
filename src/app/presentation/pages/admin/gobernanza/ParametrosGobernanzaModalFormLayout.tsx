@@ -6,6 +6,10 @@ export type ParametrosGobernanzaModalFormLayoutProps = {
   /** Metadatos mínimos para path + aviso de scope */
   path: string;
   actorLabel: string;
+  /** Oculta la ruta API en la barra de acciones (flujo inline tipo Inventario). */
+  showApiPath?: boolean;
+  /** Etiqueta del botón principal (p. ej. Consultar / Guardar). */
+  executeLabel?: string;
   running: boolean;
   disponible: boolean;
   /** Deshabilita solo el botón Ejecutar (p. ej. modo solo lectura por jerarquía corporativa). */
@@ -35,6 +39,8 @@ export function ParametrosGobernanzaModalFormLayout({
   actorLabel,
   running,
   disponible,
+  showApiPath = true,
+  executeLabel = 'Ejecutar',
   executeDisabled = false,
   executeDisabledReason,
   extraToolbar,
@@ -46,28 +52,30 @@ export function ParametrosGobernanzaModalFormLayout({
 }: ParametrosGobernanzaModalFormLayoutProps): React.ReactElement {
   const ejecutarBloqueado = !disponible || executeDisabled;
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       {children}
       {extraToolbar ? <div className="flex flex-wrap items-center gap-2">{extraToolbar}</div> : null}
       {executeDisabledReason && disponible && executeDisabled ? (
         <p className="text-xs font-medium text-amber-700">{executeDisabledReason}</p>
       ) : null}
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center gap-2 border-t border-border/60 pt-4">
         <Button type="button" onClick={onExecute} disabled={running || ejecutarBloqueado}>
           {running ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-          Ejecutar
+          {executeLabel}
         </Button>
         {clearFormReplacement != null ? (
           clearFormReplacement
         ) : (
           <Button type="button" variant="outline" onClick={onClearForm}>
-            Limpiar formulario
+            Limpiar
           </Button>
         )}
-        <code className="rounded bg-slate-100 px-2 py-1 text-xs">{path}</code>
+        {showApiPath ? (
+          <code className="rounded bg-muted px-2 py-1 text-xs text-muted-foreground">{path}</code>
+        ) : null}
       </div>
-      {!disponible ? (
-        <p className="mt-2 text-xs font-medium text-amber-600">
+      {!disponible && showApiPath ? (
+        <p className="text-xs font-medium text-amber-600">
           Visible solo como referencia. Este flujo se habilita cuando el JWT corresponda al scope `{actorLabel}`.
         </p>
       ) : null}

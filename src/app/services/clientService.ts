@@ -95,6 +95,7 @@ export const fetchProfileImageBlob = async (): Promise<Blob> => {
         throw new Error("INVALID_RESPONSE");
     }
 
+    if (response.status === 204) throw new Error("NO_IMAGE");
     if (response.status === 404) throw new Error("NO_IMAGE");
     if (!response.ok) throw new Error("IMAGE_FETCH_ERROR");
 

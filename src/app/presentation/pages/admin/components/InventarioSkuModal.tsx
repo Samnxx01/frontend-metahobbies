@@ -1,7 +1,6 @@
 import React from 'react';
-import { Barcode, Package, RefreshCw, Save, SlidersHorizontal } from 'lucide-react';
+import { RefreshCw, Save, SlidersHorizontal } from 'lucide-react';
 import type { InventarioUnidadMedida } from '@/app/services/inventarioService';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -60,10 +59,6 @@ export default function InventarioSkuModal({
     const base = `${timestamp}${random}`.slice(0, 12).padStart(12, '0');
     update('codigoBarras', `${base}${calcularDigitoEan13(base)}`);
   };
-  const unidadSeleccionada = unidadesMedida.find((unidad) => unidad.codigo === form.unidadMedida);
-  const precioPreview = Number(form.precio || 0);
-  const stockMinimoPreview = Number(form.stockMinimo || 0);
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
@@ -128,48 +123,6 @@ export default function InventarioSkuModal({
           <div className="space-y-2 md:col-span-2">
             <Label>Descripcion</Label>
             <Textarea value={form.descripcion} onChange={(event) => update('descripcion', event.target.value)} placeholder="Detalle interno del producto" />
-          </div>
-        </div>
-
-        <div className="rounded-md border border-border bg-muted/30 px-3 py-3">
-          <div className="mb-2 flex items-center gap-2">
-            <Package className="h-4 w-4" />
-            <p className="text-sm font-medium">Visualizador de creacion</p>
-          </div>
-          <div className="grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
-            <div>
-              <p className="text-xs text-muted-foreground">SKU</p>
-              <p className="truncate font-semibold">{form.sku || 'Sin SKU'}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Codigo barras</p>
-              <p className="flex items-center gap-1 truncate font-mono text-xs font-semibold">
-                <Barcode className="h-3.5 w-3.5 shrink-0" />
-                {form.codigoBarras || 'Se genera al guardar'}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Producto</p>
-              <p className="truncate font-semibold">{form.nombre || 'Sin nombre'}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Precio</p>
-              <p className="font-semibold">
-                {Number.isFinite(precioPreview) && precioPreview > 0
-                  ? precioPreview.toLocaleString('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
-                  : '$ 0'}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Unidad</p>
-              <Badge variant="secondary">
-                {unidadSeleccionada ? `${unidadSeleccionada.nombre} (${unidadSeleccionada.codigo})` : form.unidadMedida || 'Sin unidad'}
-              </Badge>
-            </div>
-          </div>
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            <Badge variant="outline">Stock minimo: {Number.isFinite(stockMinimoPreview) ? stockMinimoPreview : 0}</Badge>
-            <span className="truncate">{form.descripcion || 'Sin descripcion'}</span>
           </div>
         </div>
 

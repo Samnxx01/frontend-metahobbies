@@ -1,23 +1,31 @@
 import React from 'react';
 import { TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { inventarioTabsDesdeCatalogo, type InventarioTabValue } from '../inventario/inventarioModulosCatalog';
+import {
+  type InventarioJwtScopeUserLike,
+  type InventarioTabValue,
+} from '../inventario/inventarioModulosCatalog';
 
 export type { InventarioTabValue };
 
 type InventarioMenuTabsProps = {
   activeTab: InventarioTabValue;
   onTabChange: (value: InventarioTabValue) => void;
+  /** Si se omite, se listan todas las pestañas del catálogo (salvo `config`). */
+  tabs?: Array<{ value: InventarioTabValue; label: string }>;
+  /** Sesión actual: filtra pestañas sensibles (p. ej. TRM) según `tenantScope` del JWT. */
+  user?: InventarioJwtScopeUserLike | null;
 };
-
-const INVENTARIO_TABS = inventarioTabsDesdeCatalogo();
 
 export default function InventarioMenuTabs({
   activeTab,
   onTabChange,
+  tabs: tabsProp,
 }: InventarioMenuTabsProps): React.ReactElement {
+  const tabs = tabsProp ?? [];
+
   return (
     <TabsList className="justify-start">
-      {INVENTARIO_TABS.map((tab) => (
+      {tabs.map((tab) => (
         <TabsTrigger
           key={tab.value}
           value={tab.value}

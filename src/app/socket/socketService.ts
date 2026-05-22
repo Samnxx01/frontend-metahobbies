@@ -10,7 +10,6 @@ export const conectarSocket = (): Socket | null => {
     const API_URL = import.meta.env.PUBLIC_BASE_URL;
 
     if (!token) {
-        console.warn("⚠ No token → No socket");
         return null;
     }
 
@@ -21,9 +20,6 @@ export const conectarSocket = (): Socket | null => {
 
     socket = s;
 
-    s.on("connect", () => console.log("⚡ Socket conectado:", s.id));
-    s.on("disconnect", () => console.log("🔴 Socket desconectado"));
-
     return s;
 };
 
@@ -31,7 +27,6 @@ export const conectarSocket = (): Socket | null => {
 export const desconectadoUsu = (): void => {
     if (socket) {
         socket.disconnect();
-        console.log("🔌 Socket desconectado manualmente");
     }
 };
 
@@ -42,8 +37,6 @@ export const getSocket = (): Socket | null => socket;
 export const emitSocketEvent = (event: string, data?: any): void => {
     if (socket?.connected) {
         socket.emit(event, data);
-    } else {
-        console.warn("⚠ No se puede emitir, socket desconectado:", event);
     }
 };
 
@@ -53,7 +46,6 @@ export const onSocketEvent = (
     callback: (data: any) => void
 ): void => {
     if (!socket) {
-        console.warn("⚠ Socket no inicializado:", event);
         return;
     }
 

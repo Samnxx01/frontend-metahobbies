@@ -30,11 +30,7 @@ const documentoTipoLabel: Record<NonNullable<LedgerByInvoiceResponse['documentoT
   ORDEN_COMPRA: 'Orden de compra',
   FACTURA_DIAN_COMPRA: 'Factura DIAN (compra)',
   FACTURA_DIAN_VENTA: 'Factura DIAN (venta)',
-};
-
-const isInternalCufe = (cufe: string | undefined | null): boolean => {
-  if (!cufe) return false;
-  return cufe.length === 64 && /^[A-F0-9]+$/.test(cufe);
+  COMPROBANTE_ENTRADA: 'Comprobante de entrada',
 };
 
 const Hash = ({ value }: { value?: string | null }): React.ReactElement => (
@@ -56,18 +52,20 @@ const renderMovementRow = (m: InventoryLedgerMovement): React.ReactElement => (
       <div className="font-medium text-foreground">
         {m.referenceDocument?.type} · {m.referenceDocument?.number}
       </div>
+      {m.referenceDocument?.comprobanteId ? (
+        <div className="font-mono text-[10px] text-muted-foreground" title={m.referenceDocument.comprobanteId}>
+          Comprobante: {m.referenceDocument.comprobanteId.slice(0, 8)}…
+        </div>
+      ) : null}
       <div className="text-muted-foreground">{fmtDate(m.referenceDocument?.issuedAt)}</div>
     </TableCell>
     <TableCell className="text-right font-mono text-xs">{Number(m.quantity).toLocaleString('es-CO')}</TableCell>
     <TableCell className="text-right font-mono text-xs">{MONEY.format(Number(m.unitCost || 0))}</TableCell>
     <TableCell className="text-right font-mono text-xs">{MONEY.format(Number(m.totalCost || 0))}</TableCell>
     <TableCell className="text-xs">
-      {isInternalCufe(m.cufe) ? (
-        <Badge variant="outline">CUFE interno</Badge>
-      ) : (
-        <Badge variant="default">CUFE DIAN</Badge>
-      )}
-      <div className="mt-1"><Hash value={m.cufe} /></div>
+      <div className="text-foreground">{m.audit?.usuarioCorreo || '—'}</div>
+      <div className="text-muted-foreground">{m.audit?.ipOrigen || '—'}</div>
+      <div className="text-muted-foreground">{fmtDate(m.audit?.timestamp)}</div>
     </TableCell>
     <TableCell><Hash value={m.transactionHash} /></TableCell>
     <TableCell>
@@ -198,13 +196,19 @@ export default function InventarioConciliacionTab(): React.ReactElement {
               </div>
             </div>
           </CardHeader>
-          {result.mensajeValidacion ? (
-            <CardContent>
+          <CardContent className="space-y-2">
+            {typeof result.documento === 'object' && result.documento && 'cufe' in result.documento && result.documento.cufe ? (
+              <div className="text-xs text-muted-foreground">
+                <span className="font-medium text-foreground">CUFE (invoiceElectronic):</span>{' '}
+                <span className="font-mono">{String(result.documento.cufe)}</span>
+              </div>
+            ) : null}
+            {result.mensajeValidacion ? (
               <div className="rounded-md border border-amber-300/50 bg-amber-50/40 px-3 py-2 text-xs text-amber-900 dark:border-amber-700/50 dark:bg-amber-900/20 dark:text-amber-200">
                 {result.mensajeValidacion}
               </div>
-            </CardContent>
-          ) : null}
+            ) : null}
+          </CardContent>
         </Card>
       ) : null}
 
@@ -213,7 +217,7 @@ export default function InventarioConciliacionTab(): React.ReactElement {
           <CardHeader>
             <CardTitle className="text-base">Movimientos del kardex contable</CardTitle>
             <CardDescription>
-              Drilldown: cada fila muestra su movimiento padre (CUFE interno previo) si existe.
+              Drilldown: cada fila muestra auditoría del ejecutor. El CUFE vive solo en invoiceElectronic (documento arriba).
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -228,7 +232,7 @@ export default function InventarioConciliacionTab(): React.ReactElement {
                     <TableHead className="text-right">Cantidad</TableHead>
                     <TableHead className="text-right">Costo unitario</TableHead>
                     <TableHead className="text-right">Total</TableHead>
-                    <TableHead>CUFE</TableHead>
+                    <TableHead>Auditoría</TableHead>
                     <TableHead>Hash</TableHead>
                     <TableHead>Movimiento padre</TableHead>
                   </TableRow>

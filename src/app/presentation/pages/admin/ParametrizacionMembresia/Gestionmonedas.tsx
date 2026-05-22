@@ -13,6 +13,7 @@ interface Moneda {
     _id: string;
     monedas: string;
     estadoMoneda: boolean;
+    activosInventory?: boolean;
     usuarioId?: {
         nombre_cliente: string;
         correo: string;
@@ -64,15 +65,19 @@ export default function GestionMonedas() {
         }
     };
 
-    const toggleEstado = async (id: string, estadoActual: boolean) => {
-        setLoadingToggle(id);
+    const toggleEstado = async (
+        id: string,
+        campo: 'estadoMoneda' | 'activosInventory',
+        estadoActual: boolean
+    ) => {
+        setLoadingToggle(`${id}-${campo}`);
         try {
             await apiFetch(`/api/monedas/seguridad/actualizar/${id}`, {
                 method: 'PUT',
-                body: { estadoMoneda: !estadoActual },
+                body: { [campo]: !estadoActual },
             });
             setMonedas(prev =>
-                prev.map(m => m._id === id ? { ...m, estadoMoneda: !estadoActual } : m)
+                prev.map(m => m._id === id ? { ...m, [campo]: !estadoActual } : m)
             );
             mostrarMensaje('success', `Moneda ${!estadoActual ? 'activada' : 'desactivada'} correctamente.`);
         } catch (err: any) {
@@ -85,6 +90,7 @@ export default function GestionMonedas() {
     useEffect(() => { listarMonedas(); }, [listarMonedas]);
 
     const activas = monedas.filter(m => m.estadoMoneda).length;
+    const activasInventory = monedas.filter(m => m.activosInventory === true).length;
 
     return (
         <Card className="border border-border/50 shadow-sm">
@@ -181,6 +187,8 @@ export default function GestionMonedas() {
                                 <span className="text-primary font-medium">{activas} activa{activas !== 1 ? 's' : ''}</span>
                                 {' · '}
                                 <span>{monedas.length - activas} inactiva{(monedas.length - activas) !== 1 ? 's' : ''}</span>
+                                {' Â· '}
+                                <span>{activasInventory} inventario</span>
                             </p>
                         </div>
 
@@ -222,14 +230,30 @@ export default function GestionMonedas() {
                                     </div>
                                 </div>
 
-                                {loadingToggle === moneda._id ? (
-                                    <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-                                ) : (
-                                    <Switch
-                                        checked={moneda.estadoMoneda}
-                                        onCheckedChange={() => toggleEstado(moneda._id, moneda.estadoMoneda)}
-                                    />
-                                )}
+                                <div className="flex items-center gap-4">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-[11px] text-muted-foreground">Sistema</span>
+                                        {loadingToggle === `${moneda._id}-estadoMoneda` ? (
+                                            <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                                        ) : (
+                                            <Switch
+                                                checked={moneda.estadoMoneda}
+                                                onCheckedChange={() => toggleEstado(moneda._id, 'estadoMoneda', moneda.estadoMoneda)}
+                                            />
+                                        )}
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-[11px] text-muted-foreground">Inventario</span>
+                                        {loadingToggle === `${moneda._id}-activosInventory` ? (
+                                            <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                                        ) : (
+                                            <Switch
+                                                checked={moneda.activosInventory === true}
+                                                onCheckedChange={() => toggleEstado(moneda._id, 'activosInventory', moneda.activosInventory === true)}
+                                            />
+                                        )}
+                                    </div>
+                                </div>
                             </div>
                         ))}
                     </div>

@@ -1,4 +1,5 @@
 import { apiFetch, apiFetchPublic } from './api';
+import { fetchAllSecurityRoutes } from './routeService';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api';
 
@@ -209,6 +210,13 @@ export interface RoutesResponse {
   total: number;
   actorTipo?: string;
   sourceCollection?: string | null;
+  toolbarPolicy?: {
+    mode?: 'all' | 'consulta' | 'parametrizacion' | 'crear' | string;
+    actionIds?: string[];
+    canList?: boolean;
+    canCreate?: boolean;
+    canManage?: boolean;
+  } | null;
   data: Route[];
 }
 
@@ -376,10 +384,14 @@ const normalizeAccionesRows = (payload: any): AccionOption[] => {
  * Get all routes from the system
  */
 export const getAllRoutes = async (): Promise<RoutesResponse> => {
-  const response = await apiFetch(`${API_BASE_URL}/seguridad/rutas/listarRutas/admin`, {
-    method: 'GET',
-  });
-  return response;
+  const response = await fetchAllSecurityRoutes(true);
+  if (response) return response as RoutesResponse;
+  return {
+    success: false,
+    message: 'No se pudo cargar el listado de rutas',
+    total: 0,
+    data: [],
+  };
 };
 
 export const getRouteMenuTags = async (params?: {
@@ -433,6 +445,14 @@ export const deleteRouteMenuTag = async (id: string): Promise<{ success: boolean
 
 export const previewRoute = async (id: string): Promise<PreviewRouteResponse> => {
   const response = await apiFetch(`${API_BASE_URL}/seguridad/rutas/preview/${id}`, {
+    method: 'GET',
+  });
+  return response;
+};
+
+/** Detalle completo de una ruta (tipos de nodo, accessType y acciones poblados). */
+export const getRouteById = async (id: string): Promise<RouteResponse> => {
+  const response = await apiFetch(`${API_BASE_URL}/seguridad/rutas/listar/especifico/${id}`, {
     method: 'GET',
   });
   return response;

@@ -1,0 +1,78 @@
+/** Textos de ayuda por acción (reutilizable en cualquier módulo). */
+
+export type GobernanzaModuloFlowMeta = {
+  title: string;
+  summary: string;
+  helpTitle: string;
+  helpParagraphs: string[];
+  tips?: string[];
+};
+
+const META: Record<string, GobernanzaModuloFlowMeta> = {
+  'tenant-listar-libres-tenantglobal': {
+    title: 'Consultar tenants de tu red',
+    summary:
+      'Muestra los administradores de sistema (tenantSuperAdmin) que puedes ver según tu tenant global. Es el punto de partida antes de crear o modificar descendientes.',
+    helpTitle: '¿Qué hace esta consulta?',
+    helpParagraphs: [
+      'Ejecuta una lectura (GET) sin modificar datos. El servidor filtra la lista usando el tenant global de tu sesión.',
+      'Úsala para verificar nombres, IDs y alcance antes de dar de alta un tenant hijo o editar uno existente.',
+    ],
+    tips: ['No requiere completar campos: pulsa Ejecutar directamente.'],
+  },
+  'tenant-crear-global-usuario': {
+    title: 'Dar de alta un tenant global hijo',
+    summary:
+      'Registra un nuevo tenant global bajo tu rama (descendencia). El nivel jerárquico lo calcula el servidor según tu configuración.',
+    helpTitle: '¿Qué necesito para crear?',
+    helpParagraphs: [
+      'Completa corporativo (si aplica), dominios API, acción de usuario y rol MABS. Los campos obligatorios están marcados.',
+      'Solo sesiones tenantGlobal (o tenantSuperAdmin con alcance) pueden ejecutar este alta.',
+    ],
+    tips: ['Tras crear, vuelve a Consultar para confirmar que el registro aparece en tu red.'],
+  },
+  'tenant-actualizar-global': {
+    title: 'Modificar un tenant global',
+    summary:
+      'Cambia tipo de tenant, dominios o roles de un registro existente. Debes indicar el ID del tenant a actualizar.',
+    helpTitle: '¿Cómo actualizo de forma segura?',
+    helpParagraphs: [
+      'Selecciona o escribe el ID del tenant global. Puedes cargar datos previos si el formulario ofrece autocompletado.',
+      'Los cambios aplican solo al tenant indicado; el servidor valida que pertenezca a tu alcance (DIOS / SA).',
+    ],
+    tips: ['Si no ves el tenant en la lista, revisa primero la consulta GET.'],
+  },
+  'tenant-desactivar-global': {
+    title: 'Bloquear un tenant global',
+    summary:
+      'Desactiva el tenant sin borrarlo del sistema. El registro queda inactivo y deja de usarse en flujos operativos.',
+    helpTitle: '¿Bloqueo o eliminación?',
+    helpParagraphs: [
+      'El bloqueo es reversible a nivel de negocio (según políticas del backend). No elimina historial ni relaciones.',
+      'Indica el ID del tenant global que deseas desactivar.',
+    ],
+    tips: ['Prefiere bloquear antes que eliminar si hay dudas sobre el impacto.'],
+  },
+  'tenant-eliminar-global': {
+    title: 'Eliminar un tenant global',
+    summary:
+      'Eliminación definitiva del tenant global indicado. Operación crítica: verifica el ID antes de ejecutar.',
+    helpTitle: '¿Cuándo usar eliminación?',
+    helpParagraphs: [
+      'Solo cuando el tenant debe retirarse por completo del catálogo y las reglas del servidor lo permitan.',
+      'Requiere permisos de tenantSuperAdmin (DIOS) con alcance sobre ese registro.',
+    ],
+    tips: ['Si solo quieres suspender el acceso, usa Bloquear en su lugar.'],
+  },
+};
+
+export function getGobernanzaModuloFlowMeta(endpointId: string): GobernanzaModuloFlowMeta | null {
+  return META[endpointId] ?? null;
+}
+
+export function registerGobernanzaModuloFlowMeta(endpointId: string, meta: GobernanzaModuloFlowMeta): void {
+  META[endpointId] = meta;
+}
+
+/** @deprecated Usar getGobernanzaModuloFlowMeta */
+export const getTenantFlowMeta = getGobernanzaModuloFlowMeta;

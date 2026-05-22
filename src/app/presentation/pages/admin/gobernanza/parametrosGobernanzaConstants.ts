@@ -69,6 +69,21 @@ export const REGLA_SA_SYNTH_PREFIX = '__regla_sa__:';
 /** Un `__tsa_scope__` por cada SA del GET selects. */
 export const TENANT_SUPERADMIN_SCOPE_PREFIX = '__tsa_scope__:';
 
+/** Flujo inline Gobernanza Tenant: query `?accion=<id>` y GET por defecto. */
+export const TENANT_INLINE_FLOW_QUERY_PARAM = 'accion';
+
+export const TENANT_INLINE_FLOW_DEFAULT_ACTION_ID = 'tenant-listar-libres-tenantglobal';
+
+export const TENANT_INLINE_FLOW_ENDPOINT_IDS = [
+  'tenant-listar-libres-tenantglobal',
+  'tenant-crear-global-usuario',
+  'tenant-actualizar-global',
+  'tenant-desactivar-global',
+  'tenant-eliminar-global',
+] as const;
+
+export const TENANT_INLINE_FLOW_ENDPOINT_ID_SET = new Set<string>(TENANT_INLINE_FLOW_ENDPOINT_IDS);
+
 export const HIDDEN_ENDPOINT_IDS = new Set([
   'tenant-crear-global-usuario',
   'tenant-crear-global-admin',
