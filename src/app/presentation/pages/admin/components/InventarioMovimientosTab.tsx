@@ -10,7 +10,7 @@ import type {
 } from '@/app/services/inventarioService';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -42,6 +42,7 @@ type InventarioMovimientosTabProps = {
   stockActual?: StockActualItem[];
   onOrdenCompraLineChange?: (ordenCompraId: string, itemIndex: string) => void;
   onComprobanteSalidaLineChange?: (recepcionCompraId: string, lineaKey: string) => void;
+  onComprobanteEntradaLineChange?: (recepcionCompraId: string, lineaKey: string) => void;
   onVerComprobante?: (recepcionId: string) => void;
   onRecargarComprobantes?: () => Promise<void>;
   motivos?: InventarioMotivoMovimiento[];
@@ -84,6 +85,9 @@ const lineaKeyDeItem = (item: { lineaKey?: string; sku: string; bodega: string }
 const esTrasladoBodega = (codigo?: string): boolean =>
   String(codigo || '').trim().toUpperCase() === 'TRASLADO_BODEGA';
 
+const esEntradaCompraTipo = (codigo?: string): boolean =>
+  String(codigo || '').trim().toUpperCase() === 'ENTRADA_COMPRA';
+
 export default function InventarioMovimientosTab({
   movimientoForm,
   setMovimientoForm,
@@ -93,6 +97,7 @@ export default function InventarioMovimientosTab({
   stockActual,
   onOrdenCompraLineChange,
   onComprobanteSalidaLineChange,
+  onComprobanteEntradaLineChange,
   onVerComprobante,
   onRecargarComprobantes,
   motivos,
@@ -115,8 +120,9 @@ export default function InventarioMovimientosTab({
 
   const tipoSeleccionado = tipos.find((t) => t._id === form.tipoMovimientoConfigId);
   const esTraslado = esTrasladoBodega(tipoSeleccionado?.codigo);
-  const esEntradaCompra = form.tipo === 'ENTRADA' && form.motivo === 'COMPRA';
+  const esEntradaCompra = form.tipo === 'ENTRADA' && esEntradaCompraTipo(tipoSeleccionado?.codigo);
   const esSalidaConComprobante = form.tipo === 'SALIDA' && !esTraslado;
+  const esEntradaCompraConComprobante = esEntradaCompra;
   const requiereMotivoPersonalizado = !esTraslado && form.motivo === 'OTRO';
 
   const ordenSeleccionada = ordenesDisponibles.find((oc) => oc._id === form.ordenCompraId);
@@ -131,6 +137,9 @@ export default function InventarioMovimientosTab({
 
   const lineasParaSalida = lineasComprobante.filter((l) => l.puedeSalida);
   const lineaComprobanteSel = lineasComprobante.find((l) => l.key === form.recepcionLineaKey);
+  const lineasParaEntrada = lineasComprobante.filter((l) =>
+    String(l.item.estadoKardex || 'NO_CONFIRMADO').toUpperCase() !== 'CONFIRMADO'
+  );
 
   const skusEnBodegaOrigen = React.useMemo(() => {
     if (!esTraslado || !form.bodega.trim()) return [];
@@ -217,6 +226,22 @@ export default function InventarioMovimientosTab({
     onComprobanteSalidaLineChange,
   ]);
 
+  React.useEffect(() => {
+    if (!esEntradaCompraConComprobante || !form.recepcionCompraId) return;
+    if (!comprobanteSeleccionado || lineasParaEntrada.length === 0) return;
+    const lineaValida = lineasParaEntrada.some((l) => l.key === form.recepcionLineaKey);
+    if (!lineaValida) {
+      onComprobanteEntradaLineChange?.(comprobanteSeleccionado.recepcionId, lineasParaEntrada[0].key);
+    }
+  }, [
+    comprobanteSeleccionado,
+    esEntradaCompraConComprobante,
+    form.recepcionCompraId,
+    form.recepcionLineaKey,
+    lineasParaEntrada,
+    onComprobanteEntradaLineChange,
+  ]);
+
   return (
     <div>
       <Card>
@@ -224,9 +249,6 @@ export default function InventarioMovimientosTab({
           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div>
               <CardTitle className="flex items-center gap-2"><Plus className="h-5 w-5" /> Registrar movimiento</CardTitle>
-              <CardDescription>
-                Entradas y salidas con documento soporte. Las salidas se vinculan al comprobante de entrada; use Traslado entre bodegas para mover stock.
-              </CardDescription>
             </div>
             <div className="flex flex-wrap gap-2">
               <Button type="button" variant="outline" onClick={abrirModalSkuCatalogo ?? noop}>
@@ -281,29 +303,56 @@ export default function InventarioMovimientosTab({
             </Select>
           </div>
 
-          {esEntradaCompra ? (
-            <div className="space-y-2">
-              <Label>Orden de compra (entrada)</Label>
-              <Select
-                value={form.ordenCompraId || undefined}
-                onValueChange={(value) => {
-                  const oc = ordenesDisponibles.find((orden) => orden._id === value);
-                  const firstPendingIndex = oc?.items?.findIndex((item) => Number(item.cantidadOrdenada || 0) - Number(item.cantidadRecibida || 0) > 0);
-                  const fallbackIndex = firstPendingIndex !== undefined && firstPendingIndex >= 0 ? firstPendingIndex : 0;
-                  onOrdenCompraLineChange?.(value, oc?.items?.length ? String(fallbackIndex) : '');
-                }}
-              >
-                <SelectTrigger><SelectValue placeholder="Selecciona OC" /></SelectTrigger>
-                <SelectContent>
-                  {ordenesDisponibles.length === 0 ? (
-                    <SelectItem value="__empty_ordenes" disabled>No hay OC disponibles</SelectItem>
-                  ) : ordenesDisponibles.map((oc) => (
-                    <SelectItem key={oc._id} value={oc._id}>
-                      {oc.numeroOrden} | {oc.proveedor?.nombre || 'Proveedor'} | {ordenTienePendiente(oc) ? oc.estado : 'sin pendiente'}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          {esEntradaCompraConComprobante ? (
+            <div className="space-y-2 md:col-span-2">
+              <div className="flex flex-wrap items-end gap-2">
+                <div className="min-w-[220px] flex-1 space-y-2">
+                  <Label>Comprobante de entrada (para compra)</Label>
+                  <Select
+                    value={form.recepcionCompraId || undefined}
+                    onValueChange={(value) => {
+                      const comp = comprobantes.find((c) => c.recepcionId === value);
+                      const first = comp?.items?.find((item) =>
+                        String(item.estadoKardex || 'NO_CONFIRMADO').toUpperCase() !== 'CONFIRMADO'
+                      );
+                      const firstKey = first ? lineaKeyDeItem(first) : '';
+                      onComprobanteEntradaLineChange?.(value, firstKey);
+                    }}
+                  >
+                    <SelectTrigger><SelectValue placeholder="Selecciona comprobante" /></SelectTrigger>
+                    <SelectContent>
+                      {comprobantes.length === 0 ? (
+                        <SelectItem value="__empty_comp_entrada" disabled>
+                          Sin comprobantes confirmados
+                        </SelectItem>
+                      ) : comprobantes.map((comp) => (
+                        <SelectItem key={comp.recepcionId} value={comp.recepcionId}>
+                          {comp.documentoSoporte?.numero || comp.numeroRecepcion}
+                          {' '}| Confirmado
+                          {' '}| {comp.items.some((item) => String(item.estadoKardex || '').toUpperCase() !== 'CONFIRMADO') ? 'Pendiente kardex' : 'Kardex generado'}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button type="button" variant="outline" size="icon" title="Actualizar lista" onClick={() => void onRecargarComprobantes?.()}>
+                  <RefreshCw className="h-4 w-4" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={!form.recepcionCompraId}
+                  onClick={() => { if (form.recepcionCompraId) onVerComprobante?.(form.recepcionCompraId); }}
+                >
+                  <Eye className="mr-2 h-4 w-4" />
+                  Ver comprobante
+                </Button>
+              </div>
+              {comprobantes.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  Confirma primero el comprobante de entrada para poder generar kardex.
+                </p>
+              ) : null}
             </div>
           ) : null}
 
@@ -325,12 +374,12 @@ export default function InventarioMovimientosTab({
                     <SelectContent>
                       {comprobantes.length === 0 ? (
                         <SelectItem value="__empty_comp" disabled>
-                          Sin comprobantes (cree y confirme en Orden-Compra)
+                          Sin comprobantes confirmados
                         </SelectItem>
                       ) : comprobantes.map((comp) => (
                         <SelectItem key={comp.recepcionId} value={comp.recepcionId}>
                           {comp.documentoSoporte?.numero || comp.numeroRecepcion}
-                          {' '}| {comp.estado === 'PENDIENTE_APROBACION' ? 'Borrador' : 'Aprobado'}
+                          {' '}| Confirmado
                           {' '}| {comp.tieneLineasSalida ? 'Con stock' : 'Sin stock kardex'}
                         </SelectItem>
                       ))}
@@ -352,7 +401,7 @@ export default function InventarioMovimientosTab({
               </div>
               {comprobantes.length === 0 ? (
                 <p className="text-xs text-muted-foreground">
-                  Cree un comprobante en Orden-Compra, confírmelo y registre la entrada en kardex.
+                  Cree y confirme un comprobante en Orden-Compra antes de generar movimientos.
                 </p>
               ) : null}
             </div>
@@ -431,7 +480,26 @@ export default function InventarioMovimientosTab({
             <>
               <div className="space-y-2">
                 <Label>{esEntradaCompra ? 'Línea / SKU' : esSalidaConComprobante ? 'SKU (comprobante)' : 'SKU'}</Label>
-                {esEntradaCompra && form.ordenCompraId ? (
+                {esEntradaCompraConComprobante && form.recepcionCompraId ? (
+                  <Select
+                    value={form.recepcionLineaKey || undefined}
+                    onValueChange={(value) => onComprobanteEntradaLineChange?.(form.recepcionCompraId, value)}
+                    disabled={lineasParaEntrada.length === 0}
+                  >
+                    <SelectTrigger><SelectValue placeholder={lineasParaEntrada.length ? 'SKU del comprobante' : 'Sin líneas'} /></SelectTrigger>
+                    <SelectContent>
+                      {lineasParaEntrada.length === 0 ? (
+                        <SelectItem value="__sin_lineas_entrada" disabled>
+                          Sin líneas en el comprobante
+                        </SelectItem>
+                      ) : lineasParaEntrada.map(({ item, key }) => (
+                        <SelectItem key={key} value={key}>
+                          {item.sku} | {item.bodega} | Cant. {formatQty(Number(item.cantidadRecibida || 0))}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : esEntradaCompra && form.ordenCompraId ? (
                   <Select
                     value={form.ordenCompraItemIndex || undefined}
                     onValueChange={(value) => onOrdenCompraLineChange?.(form.ordenCompraId, value)}
@@ -468,7 +536,7 @@ export default function InventarioMovimientosTab({
               </div>
               <div className="space-y-2">
                 <Label>Bodega</Label>
-                {esSalidaConComprobante && form.recepcionLineaKey ? (
+                {((esSalidaConComprobante || esEntradaCompraConComprobante) && form.recepcionLineaKey) ? (
                   <Input value={form.bodega} readOnly disabled className="bg-muted" />
                 ) : renderBodega(form.bodega, (value) => updateForm((prev) => ({ ...prev, bodega: value })))}
               </div>
@@ -483,6 +551,7 @@ export default function InventarioMovimientosTab({
               max={esSalidaConComprobante && lineaComprobanteSel ? lineaComprobanteSel.disponible : undefined}
               value={form.cantidad}
               onChange={(event) => updateForm((prev) => ({ ...prev, cantidad: event.target.value }))}
+              disabled={esEntradaCompraConComprobante && Boolean(form.recepcionLineaKey)}
             />
           </div>
           <div className="space-y-2">
@@ -492,7 +561,7 @@ export default function InventarioMovimientosTab({
               min="0"
               value={form.costoUnitario}
               onChange={(event) => updateForm((prev) => ({ ...prev, costoUnitario: event.target.value }))}
-              disabled={form.tipo === 'SALIDA' || esTraslado}
+              disabled={form.tipo === 'SALIDA' || esTraslado || (esEntradaCompraConComprobante && Boolean(form.recepcionLineaKey))}
             />
           </div>
           {!esTraslado ? (
@@ -519,6 +588,7 @@ export default function InventarioMovimientosTab({
                   ...(value !== 'COMPRA' ? limpiarVinculosCompra() : { recepcionCompraId: '', recepcionLineaKey: '' }),
                   ...(value === 'COMPRA' ? { recepcionCompraId: '', recepcionLineaKey: '' } : {}),
                 }))}
+                disabled={esEntradaCompraConComprobante}
               >
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>

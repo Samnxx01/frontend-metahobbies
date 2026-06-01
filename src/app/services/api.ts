@@ -84,11 +84,16 @@ export const apiFetch = async (
         const data: any = await response.json();
 
         if (!response.ok) {
+            const msgField = data?.msg;
+            const msgFromObject =
+                msgField && typeof msgField === 'object'
+                    ? msgField.msg || msgField.detalle || msgField.message
+                    : null;
             const backendMsg =
-                data?.msg ||
+                (typeof msgField === 'string' ? msgField : msgFromObject) ||
+                data?.detalle ||
                 data?.message ||
                 data?.error ||
-                data?.detalle ||
                 (Array.isArray(data?.errors)
                     ? data.errors.map((e: any) => e?.msg || e?.message || String(e)).join(' | ')
                     : null) ||

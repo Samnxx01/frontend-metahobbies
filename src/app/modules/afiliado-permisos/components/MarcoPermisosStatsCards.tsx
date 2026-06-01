@@ -21,7 +21,14 @@ export function MarcoPermisosStatsCards({
         </CardHeader>
         <CardContent>
           {marcoActivo ? (
-            <p className="text-2xl font-bold">seq {marcoActivo.seq}</p>
+            <>
+              <p className="text-2xl font-bold">seq {marcoActivo.seq}</p>
+              {marcoActivo.rolCorporativoId ? (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  rol corporativo CLIENTE vinculado
+                </p>
+              ) : null}
+            </>
           ) : (
             <p className="text-sm text-muted-foreground">Sin marco — guarde el primero abajo</p>
           )}

@@ -57,23 +57,71 @@ export interface BackendProducto {
   imagenes?: string[];
   estadoCatalogo: string;
   estadoProducto: boolean;
+  productoVentaRelacion?: {
+    _id?: string;
+    iud?: string;
+    productoVentaId: string;
+    productoOrigenId: string | BackendProducto;
+    productoOrigen?: BackendProducto | string | null;
+    manejaVentas: boolean;
+    destacado?: boolean;
+    nombre?: string;
+    descripcion?: string;
+    descripcionCorta?: string;
+    precio?: number;
+    moneda?: string;
+    tipo?: string;
+    categoria?: BackendCategoria | string | null;
+    unidadMedida?: string;
+    stockMinimo?: number;
+    imagenes?: string[];
+    cantidadColoresRender?: number;
+    coloresPermitidos?: Array<{ nombre?: string; valor: string }>;
+    reglasContables?: Array<{ codigo: string; aplica?: boolean; reglaContableId?: string | null }>;
+    media?: ProductoVentaMedia[];
+    estado: boolean;
+  } | null;
+}
+
+export interface ProductoVentaMedia {
+  _id?: string;
+  iud?: string;
+  tipo: 'image' | 'video';
+  nombreDocumento: string;
+  mimetype: string;
+  size: number;
+  duracionSegundos?: number | null;
+  principal: boolean;
+  url: string;
 }
 
 // ── Mapeo backend → ComponentProduct (para ProductCard) ───────────────────
 
 const PLACEHOLDER = 'https://placehold.co/400x320/f3f4f6/a3a3a3?text=Producto';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
+
+const mediaSrc = (url: string): string => {
+  const value = String(url || '').trim();
+  if (!value || value.startsWith('http') || value.startsWith('data:') || value.startsWith('blob:')) return value;
+  if (!value.startsWith('/api') || !API_BASE_URL.startsWith('http')) return value;
+  return `${API_BASE_URL.replace(/\/api\/?$/, '')}${value}`;
+};
 
 export function mapProducto(p: BackendProducto): ComponentProduct {
-  const cat = typeof p.categoria === 'object' && p.categoria !== null
-    ? p.categoria.nombre
-    : (typeof p.categoria === 'string' ? p.categoria : p.tipo);
+  const relacion = p.productoVentaRelacion;
+  const categoriaRelacion = relacion?.categoria ?? p.categoria;
+  const cat = typeof categoriaRelacion === 'object' && categoriaRelacion !== null
+    ? categoriaRelacion.nombre
+    : (typeof categoriaRelacion === 'string' ? categoriaRelacion : relacion?.tipo || p.tipo);
+  const imagenesRelacion = Array.isArray(relacion?.imagenes) ? relacion.imagenes : [];
+  const imagenesProducto = Array.isArray(p.imagenes) ? p.imagenes : [];
 
   return {
     id: String(p.iud || p._id || p.id || ''),
-    name: p.nombre,
-    description: p.descripcionCorta || p.descripcion || '',
-    price: p.precio,
-    image: Array.isArray(p.imagenes) && p.imagenes.length > 0 ? p.imagenes[0] : PLACEHOLDER,
+    name: relacion?.nombre || p.nombre,
+    description: relacion?.descripcionCorta || relacion?.descripcion || p.descripcionCorta || p.descripcion || '',
+    price: Number(relacion?.precio ?? p.precio ?? 0),
+    image: imagenesRelacion[0] ? mediaSrc(imagenesRelacion[0]) : imagenesProducto[0] ? mediaSrc(imagenesProducto[0]) : PLACEHOLDER,
     category: cat || '',
   };
 }
@@ -84,6 +132,7 @@ export interface FiltrosProductos {
   categoria?: string;
   tipo?: string;
   estadoCatalogo?: string;
+  destacado?: boolean;
 }
 
 export interface AdminProductoPayload {
@@ -102,6 +151,12 @@ export interface AdminProductoPayload {
   peso?: number | null;
   imagenes?: string[];
   estadoCatalogo?: string;
+  productoOrigenId?: string | null;
+  manejaVentas?: boolean;
+  destacado?: boolean;
+  cantidadColoresRender?: number;
+  coloresPermitidos?: Array<{ nombre?: string; valor: string }>;
+  reglasContables?: Array<{ codigo: string; aplica?: boolean; reglaContableId?: string | null }>;
 }
 
 const productosService = {
@@ -139,6 +194,7 @@ const productosService = {
     if (filtros.categoria) params.set('categoria', filtros.categoria);
     if (filtros.tipo) params.set('tipo', filtros.tipo);
     if (filtros.estadoCatalogo) params.set('estadoCatalogo', filtros.estadoCatalogo);
+    if (typeof filtros.destacado === 'boolean') params.set('destacado', String(filtros.destacado));
 
     const query = params.toString() ? `?${params.toString()}` : '';
     const resp = await apiFetchPublic(`/api/productos/listar${query}`);
@@ -153,6 +209,16 @@ const productosService = {
     const query = params.toString() ? `?${params.toString()}` : '';
     const resp = await apiFetch(`/api/productos/listar${query}`, { method: 'GET' });
     return (resp?.data ?? []) as BackendProducto[];
+  },
+
+  async listarProductosVentasAdmin(): Promise<BackendProducto[]> {
+    const resp = await apiFetch('/api/productos/admin/ventas/listar', { method: 'GET' });
+    return (resp?.data ?? []) as BackendProducto[];
+  },
+
+  async obtenerProductoPublico(id: string): Promise<BackendProducto> {
+    const resp = await apiFetchPublic(`/api/productos/detalle/${id}`, { method: 'GET' });
+    return resp?.data as BackendProducto;
   },
 
   async obtenerProductoAdmin(id: string): Promise<BackendProducto> {
@@ -170,6 +236,17 @@ const productosService = {
     return resp?.data as BackendProducto;
   },
 
+  async subirMediaProductoVenta(relacionId: string, file: File, duracionSegundos?: number): Promise<ProductoVentaMedia> {
+    const formData = new FormData();
+    formData.append('media', file);
+    if (typeof duracionSegundos === 'number') formData.append('duracionSegundos', String(duracionSegundos));
+    const resp = await apiFetch(`/api/productos/admin/ventas/${relacionId}/media`, {
+      method: 'POST',
+      body: formData,
+    });
+    return resp?.data as ProductoVentaMedia;
+  },
+
   async desactivarProductoAdmin(id: string): Promise<void> {
     await apiFetch(`/api/productos/admin/desactivar/${id}`, { method: 'DELETE' });
   },
@@ -183,6 +260,7 @@ const productosService = {
     const productos = await productosService.listarProductos({
       categoria: categoriaId,
       estadoCatalogo: 'ACTIVO',
+      destacado: true,
     });
     return productos.map(mapProducto);
   },

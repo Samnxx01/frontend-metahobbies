@@ -209,6 +209,8 @@ export interface InventarioLibroFiscalConfig {
   tipoLibro: string;
   periodicidad: string;
   formato: 'PDF' | 'EXCEL' | 'XML' | 'CSV';
+  monedaId: string;
+  moneda?: string;
   prefijo: string;
   padding: number;
   siguiente: number;
@@ -1398,8 +1400,11 @@ const inventarioService = {
     return { data: resp.data as AjusteInventario, msg: resp.msg };
   },
 
-  async stockActual(bodega?: string): Promise<StockActualItem[]> {
-    const resp = await apiFetch(`/api/inventario/reportes/stock-actual${buildQuery({ bodega })}`, { method: 'GET' });
+  async stockActual(params?: { bodega?: string; sku?: string }): Promise<StockActualItem[]> {
+    const resp = await apiFetch(
+      `/api/inventario/reportes/stock-actual${buildQuery({ bodega: params?.bodega, sku: params?.sku })}`,
+      { method: 'GET' },
+    );
     return (resp?.data ?? []) as StockActualItem[];
   },
 };

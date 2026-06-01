@@ -21,6 +21,7 @@ import { apiFetch } from "@/app/services/api";
 import { getPublicNavigationRoutes, getMenuUsuarioRoutes, MenuUsuarioItem } from "@/app/services/routeService";
 import { getGovernedLoginPath, getGovernedLogoutPath, getGovernedPublicHomePath } from "@/app/services/governedNavigation";
 import { appendPublicAttributionToInternalPath } from "@/app/services/publicAttributionParams";
+import { formatCOP } from "@/lib/utils";
 
 import type { NavbarProps } from '@/types/components';
 
@@ -244,7 +245,7 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
                                     <p className="font-semibold text-sm truncate leading-tight">{item.name}</p>
                                     <p className="text-xs text-muted-foreground">Cant: {item.quantity} {item.color?.name ? `- ${item.color.name}` : ''}</p>
                                 </div>
-                                <p className="font-semibold text-sm flex-shrink-0 pointer-events-auto">${(item.price * item.quantity).toFixed(2)}</p>
+                                <p className="font-semibold text-sm flex-shrink-0 pointer-events-auto">{formatCOP(item.price * item.quantity)}</p>
                                 <Button
                                     variant="ghost"
                                     size="icon"
@@ -258,7 +259,7 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
                         <DropdownMenuSeparator className="my-3" />
                         <div className="flex justify-between items-center p-2 pt-0">
                             <p className="text-base font-semibold">Total:</p>
-                            <p className="text-lg font-bold text-primary">${cartTotal.toFixed(2)}</p>
+                            <p className="text-lg font-bold text-primary">{formatCOP(cartTotal)}</p>
                         </div>
                         <div className="flex gap-2 p-2 pt-0">
                             <Button variant="outline" className="flex-1" onClick={() => navigate(appendPublicAttributionToInternalPath('/carrito'))}>Ver Carrito</Button>
@@ -319,8 +320,10 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
                 </div>
                 <DropdownMenuSeparator />
                 {menuUsuarioItems.map((item) => (
-                    <DropdownMenuItem key={item.key ?? item.path} onClick={() => navigate(appendPublicAttributionToInternalPath(item.path))} className="cursor-pointer py-2.5">
-                        {resolveIcon(item.icon)} {item.label}
+                    <DropdownMenuItem key={item.key ?? item.path} asChild className="cursor-pointer py-2.5">
+                        <Link to={appendPublicAttributionToInternalPath(item.path)}>
+                            {resolveIcon(item.icon)} {item.label}
+                        </Link>
                     </DropdownMenuItem>
                 ))}
                 <DropdownMenuSeparator />

@@ -5,6 +5,7 @@ import inventarioService, {
   type InventarioConfig,
   type InventarioLibroFiscalCatalogoHijo,
   type InventarioLibroFiscalConfig,
+  type MonedaCopOption,
 } from '@/app/services/inventarioService';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -17,6 +18,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Textarea } from '@/components/ui/textarea';
 import InventarioLibroFiscalCatalogoTenantModal, { type CatalogoTenantModo } from './InventarioLibroFiscalCatalogoTenantModal';
 import InventarioLibroFiscalFormatosModal from './InventarioLibroFiscalFormatosModal';
+import { monedaCodigo, monedaId, monedaLabel } from '../inventario/monedaInventarioDraft';
 
 type DraftLibroFiscal = InventarioLibroFiscalConfig;
 
@@ -45,6 +47,8 @@ const blankDraft = (
   tipoLibro,
   periodicidad,
   formato: 'PDF',
+  monedaId: '',
+  moneda: '',
   prefijo: 'LF',
   padding: 6,
   siguiente: 1,
@@ -86,6 +90,7 @@ export default function ConfigFicales({
   const [draft, setDraft] = React.useState<DraftLibroFiscal>(blankDraft());
   const [tiposLibroCatalog, setTiposLibroCatalog] = React.useState<InventarioLibroFiscalCatalogoHijo[]>([]);
   const [periodicidadesCatalog, setPeriodicidadesCatalog] = React.useState<InventarioLibroFiscalCatalogoHijo[]>([]);
+  const [monedasCop, setMonedasCop] = React.useState<MonedaCopOption[]>([]);
   const [catalogoTenantModal, setCatalogoTenantModal] = React.useState<CatalogoTenantModo | null>(null);
   const [configLocal, setConfigLocal] = React.useState<InventarioConfig | null>(null);
   const [periodoLocal, setPeriodoLocal] = React.useState('');
@@ -103,7 +108,15 @@ export default function ConfigFicales({
     () => periodicidadesCatalog.filter((row) => row.activo),
     [periodicidadesCatalog],
   );
-  const catalogosListos = tiposLibroActivos.length > 0 && periodicidadesActivas.length > 0;
+  const monedasActivas = React.useMemo(
+    () => monedasCop.filter((row) => row.estadoMoneda !== false && monedaId(row)),
+    [monedasCop],
+  );
+  const monedasPorId = React.useMemo(
+    () => new Map(monedasActivas.map((moneda) => [monedaId(moneda), moneda])),
+    [monedasActivas],
+  );
+  const catalogosListos = tiposLibroActivos.length > 0 && periodicidadesActivas.length > 0 && monedasActivas.length > 0;
   const configActiva = config !== undefined ? config : configLocal;
   const periodoActivo = periodo ?? periodoLocal;
   const savingContable = Boolean(savingProp || savingPeriodo);
@@ -136,15 +149,18 @@ export default function ConfigFicales({
 
   const cargarCatalogos = React.useCallback(async () => {
     try {
-      const [tipos, periodicidades] = await Promise.all([
+      const [tipos, periodicidades, monedas] = await Promise.all([
         inventarioService.listarTiposLibroFiscalCatalogo(),
         inventarioService.listarPeriodicidadesLibroFiscalCatalogo(),
+        inventarioService.listarMonedasCop(),
       ]);
       setTiposLibroCatalog(tipos);
       setPeriodicidadesCatalog(periodicidades);
+      setMonedasCop(monedas);
     } catch (err) {
       setTiposLibroCatalog([]);
       setPeriodicidadesCatalog([]);
+      setMonedasCop([]);
       toast.error(err instanceof Error ? err.message : 'No se pudieron cargar los catalogos de libros fiscales.');
     }
   }, []);
@@ -177,7 +193,12 @@ export default function ConfigFicales({
   };
 
   const limpiarDraft = (): void => {
-    setDraft(blankDraft(tiposLibroActivos[0]?.codigo, periodicidadesActivas[0]?.codigo));
+    const primeraMoneda = monedasActivas[0];
+    setDraft({
+      ...blankDraft(tiposLibroActivos[0]?.codigo, periodicidadesActivas[0]?.codigo),
+      monedaId: primeraMoneda ? monedaId(primeraMoneda) : '',
+      moneda: primeraMoneda ? monedaCodigo(primeraMoneda) : '',
+    });
   };
 
   React.useEffect(() => {
@@ -189,10 +210,14 @@ export default function ConfigFicales({
       const periodicidad = periodicidadesActivas.some((row) => row.codigo === prev.periodicidad)
         ? prev.periodicidad
         : periodicidadesActivas[0]?.codigo || '';
-      if (tipoLibro === prev.tipoLibro && periodicidad === prev.periodicidad) return prev;
-      return { ...prev, tipoLibro, periodicidad };
+      const primeraMoneda = monedasActivas[0];
+      const selectedMoneda = monedasPorId.has(prev.monedaId) ? prev.monedaId : primeraMoneda ? monedaId(primeraMoneda) : '';
+      const selectedMonedaDoc = monedasPorId.get(selectedMoneda) || primeraMoneda;
+      const selectedMonedaCodigo = selectedMonedaDoc ? monedaCodigo(selectedMonedaDoc) : '';
+      if (tipoLibro === prev.tipoLibro && periodicidad === prev.periodicidad && selectedMoneda === prev.monedaId) return prev;
+      return { ...prev, tipoLibro, periodicidad, monedaId: selectedMoneda, moneda: selectedMonedaCodigo };
     });
-  }, [catalogosListos, tiposLibroActivos, periodicidadesActivas]);
+  }, [catalogosListos, tiposLibroActivos, periodicidadesActivas, monedasActivas, monedasPorId]);
 
   const agregarOActualizar = (): void => {
     const codigo = draft.codigo.trim().toUpperCase();
@@ -228,11 +253,18 @@ export default function ConfigFicales({
       toast.error('Seleccione una periodicidad parametrizada y activa.');
       return;
     }
+    const monedaSeleccionada = monedasPorId.get(draft.monedaId);
+    if (!monedaSeleccionada) {
+      toast.error('Seleccione una moneda activa para el libro fiscal.');
+      return;
+    }
 
     const nextRow: InventarioLibroFiscalConfig = {
       ...draft,
       codigo,
       nombre,
+      monedaId: monedaId(monedaSeleccionada),
+      moneda: monedaCodigo(monedaSeleccionada),
       prefijo,
       padding: clampPadding(draft.padding),
       siguiente: Math.max(1, Number(draft.siguiente) || 1),
@@ -328,6 +360,10 @@ export default function ConfigFicales({
   };
 
   const activos = rows.filter((row) => row.activo).length;
+  const monedaNombre = (row: InventarioLibroFiscalConfig): string => {
+    const monedaSeleccionada = monedasPorId.get(row.monedaId);
+    return row.moneda || (monedaSeleccionada ? monedaCodigo(monedaSeleccionada) : '') || 'Sin moneda';
+  };
 
   return (
     <div className="space-y-4">
@@ -428,7 +464,7 @@ export default function ConfigFicales({
 
         {!catalogosListos ? (
           <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-900 dark:text-amber-100">
-            Parametriza al menos un tipo de libro y una periodicidad activos antes de crear o guardar libros fiscales.
+            Parametriza al menos un tipo de libro, una periodicidad y una moneda activa antes de crear o guardar libros fiscales.
           </div>
         ) : null}
 
@@ -485,6 +521,24 @@ export default function ConfigFicales({
             </Select>
           </div>
           <div className="space-y-2">
+            <Label>Moneda</Label>
+            <Select
+              value={draft.monedaId || undefined}
+              disabled={!monedasActivas.length}
+              onValueChange={(value) => {
+                const moneda = monedasPorId.get(value);
+                patchDraft({ monedaId: value, moneda: moneda ? monedaCodigo(moneda) : '' });
+              }}
+            >
+              <SelectTrigger><SelectValue placeholder="Selecciona moneda" /></SelectTrigger>
+              <SelectContent>
+                {monedasActivas.map((moneda) => (
+                  <SelectItem key={monedaId(moneda)} value={monedaId(moneda)}>{monedaLabel(moneda)}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
             <Label>Activo</Label>
             <div className="flex h-10 items-center justify-between rounded-md border border-border px-3">
               <span className="text-sm">{draft.activo ? 'Activo' : 'Inactivo'}</span>
@@ -536,6 +590,7 @@ export default function ConfigFicales({
                 <TableHead>Tipo</TableHead>
                 <TableHead>Periodo</TableHead>
                 <TableHead>Formato</TableHead>
+                <TableHead>Moneda</TableHead>
                 <TableHead>Consecutivo</TableHead>
                 <TableHead>Estado</TableHead>
                 <TableHead className="text-right">Acciones</TableHead>
@@ -544,7 +599,7 @@ export default function ConfigFicales({
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={8} className="py-8 text-center text-sm text-muted-foreground">
                     Cargando libros fiscales...
                   </TableCell>
                 </TableRow>
@@ -558,6 +613,7 @@ export default function ConfigFicales({
                     <TableCell>{row.tipoLibro}</TableCell>
                     <TableCell>{row.periodicidad}</TableCell>
                     <TableCell>{row.formato}</TableCell>
+                    <TableCell>{monedaNombre(row)}</TableCell>
                     <TableCell className="font-mono text-xs">{previewConsecutivo(row)}</TableCell>
                     <TableCell>
                       <button type="button" onClick={() => toggleActivo(row.id)} className="text-left">
@@ -583,7 +639,7 @@ export default function ConfigFicales({
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={8} className="py-8 text-center text-sm text-muted-foreground">
                     No hay libros fiscales parametrizados.
                   </TableCell>
                 </TableRow>

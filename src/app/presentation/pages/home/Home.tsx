@@ -30,6 +30,19 @@ function getCategoryImage(nombre: string): string {
   return CATEGORY_IMAGES[match ?? ''] ?? '/assets/images/products/product1.png';
 }
 
+function getCategoryId(cat: BackendCategoria, index: number): string {
+  const raw = cat as BackendCategoria & { _id?: string; id?: string };
+  return String(raw.iud || raw._id || raw.id || `${raw.nombre}-${index}`);
+}
+
+const FALLBACK_CATEGORIES = [
+  { id: '1', name: 'Maquillaje', image: '/assets/images/products/product1.png' },
+  { id: '2', name: 'Labiales', image: '/assets/images/products/product2.png' },
+  { id: '3', name: 'Brochas', image: '/assets/images/products/product3.png' },
+  { id: '4', name: 'Base & Corrector', image: '/assets/images/products/product4.png' },
+  { id: '5', name: 'Cuidado Facial', image: '/assets/images/products/product5.png' },
+];
+
 // ── Skeleton de tarjeta ───────────────────────────────────────────────────
 function ProductCardSkeleton(): React.ReactElement {
   return (
@@ -155,18 +168,21 @@ export default function Home(): React.ReactElement {
                 >
                   Todas
                 </button>
-                {categorias.map(cat => (
+                {categorias.map((cat, index) => {
+                  const categoryId = getCategoryId(cat, index);
+                  return (
                   <button
-                    key={cat.iud}
-                    onClick={() => handleSelectCategoria(cat.iud)}
+                    key={categoryId}
+                    onClick={() => handleSelectCategoria(categoryId)}
                     className={`px-4 py-1.5 rounded-full text-sm font-medium border transition-colors capitalize
-                      ${categoriaSeleccionada === cat.iud
+                      ${categoriaSeleccionada === categoryId
                         ? 'bg-foreground text-background border-foreground'
                         : 'bg-background text-foreground border-border hover:bg-muted'}`}
                   >
                     {cat.nombre.toLowerCase()}
                   </button>
-                ))}
+                  );
+                })}
               </div>
             )}
 
@@ -212,28 +228,35 @@ export default function Home(): React.ReactElement {
             {categorias.length > 0 ? (
               <>
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
-                  {categorias.slice(0, 3).map(cat => (
-                    <CategoryCard key={cat.iud} category={{ id: cat.iud, name: cat.nombre, image: getCategoryImage(cat.nombre) }} />
-                  ))}
+                  {categorias.slice(0, 3).map((cat, index) => {
+                    const categoryId = getCategoryId(cat, index);
+                    return (
+                      <CategoryCard key={categoryId} category={{ id: categoryId, name: cat.nombre, image: getCategoryImage(cat.nombre) }} />
+                    );
+                  })}
                 </div>
                 {categorias.length > 3 && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mt-6">
-                    {categorias.slice(3, 5).map(cat => (
-                      <CategoryCard key={cat.iud} category={{ id: cat.iud, name: cat.nombre, image: getCategoryImage(cat.nombre) }} />
-                    ))}
+                    {categorias.slice(3, 5).map((cat, index) => {
+                      const categoryId = getCategoryId(cat, index + 3);
+                      return (
+                        <CategoryCard key={categoryId} category={{ id: categoryId, name: cat.nombre, image: getCategoryImage(cat.nombre) }} />
+                      );
+                    })}
                   </div>
                 )}
               </>
             ) : (
               <>
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
-                  <CategoryCard category={{ id: '1', name: 'Maquillaje', image: '/assets/images/products/product1.png' }} />
-                  <CategoryCard category={{ id: '2', name: 'Labiales', image: '/assets/images/products/product2.png' }} />
-                  <CategoryCard category={{ id: '3', name: 'Brochas', image: '/assets/images/products/product3.png' }} />
+                  {FALLBACK_CATEGORIES.slice(0, 3).map(category => (
+                    <CategoryCard key={category.id} category={category} />
+                  ))}
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mt-6">
-                  <CategoryCard category={{ id: '4', name: 'Base & Corrector', image: '/assets/images/products/product4.png' }} />
-                  <CategoryCard category={{ id: '5', name: 'Cuidado Facial', image: '/assets/images/products/product5.png' }} />
+                  {FALLBACK_CATEGORIES.slice(3, 5).map(category => (
+                    <CategoryCard key={category.id} category={category} />
+                  ))}
                 </div>
               </>
             )}

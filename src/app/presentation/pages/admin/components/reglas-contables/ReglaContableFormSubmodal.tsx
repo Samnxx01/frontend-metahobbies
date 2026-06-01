@@ -7,6 +7,7 @@ import reglasContablesService, {
   type ReglaContable,
   type TipoReglaContable,
 } from '@/app/services/reglasContablesService';
+import productosService, { type BackendCategoria } from '@/app/services/productosService';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -60,6 +61,8 @@ type DraftRegla = {
   montoFijo: string;
   baseCalculo: BaseCalculoRegla;
   aplicaEn: AplicaEnRegla;
+  aplicaEnCarrito: boolean;
+  categoriasAplicacion: string[];
   orden: string;
   codigoDian: string;
   estado: boolean;
@@ -75,6 +78,8 @@ const draftInicial: DraftRegla = {
   montoFijo: '0',
   baseCalculo: 'SUBTOTAL_COMERCIAL',
   aplicaEn: 'VENTA',
+  aplicaEnCarrito: false,
+  categoriasAplicacion: [],
   orden: '0',
   codigoDian: '',
   estado: true,
@@ -90,6 +95,8 @@ const draftDesdeRegistro = (registro: ReglaContable): DraftRegla => ({
   montoFijo: String(registro.montoFijo ?? 0),
   baseCalculo: registro.baseCalculo,
   aplicaEn: registro.aplicaEn,
+  aplicaEnCarrito: registro.aplicaEnCarrito === true,
+  categoriasAplicacion: (registro.categoriasAplicacion || []).map((categoria) => String(categoria)),
   orden: String(registro.orden ?? 0),
   codigoDian: registro.codigoDian ?? '',
   estado: registro.estado !== false,
@@ -97,6 +104,14 @@ const draftDesdeRegistro = (registro: ReglaContable): DraftRegla => ({
 
 const errorMessage = (error: unknown, fallback: string): string =>
   error instanceof Error ? error.message.replace(/^\[\d+\]\s*/, '') : fallback;
+
+const backendId = (row: { _id?: string; iud?: string; id?: string } | null | undefined): string =>
+  String(row?.iud || row?._id || row?.id || '');
+
+const categoriaLabel = (categoria: BackendCategoria): string => {
+  const padre = typeof categoria.padre === 'object' && categoria.padre !== null ? categoria.padre.nombre : '';
+  return padre ? `${padre} / ${categoria.nombre}` : categoria.nombre;
+};
 
 export default function ReglaContableFormSubmodal({
   open,
@@ -120,11 +135,22 @@ export default function ReglaContableFormSubmodal({
   const [tiposKeyLocal, setTiposKeyLocal] = useState(0);
   const [ambitosKeyLocal, setAmbitosKeyLocal] = useState(0);
   const [tarifasKeyLocal, setTarifasKeyLocal] = useState(0);
+  const [categorias, setCategorias] = useState<BackendCategoria[]>([]);
 
   useEffect(() => {
     if (!open) return;
     setDraft(registro ? draftDesdeRegistro(registro) : draftInicial);
   }, [open, registro]);
+
+  useEffect(() => {
+    if (!open) return;
+    productosService.listarCategorias()
+      .then((data) => setCategorias(data))
+      .catch((error) => {
+        console.error('Error cargando categorias:', error);
+        setCategorias([]);
+      });
+  }, [open]);
 
   const guardar = async (): Promise<void> => {
     if (!draft.codigo.trim() || !draft.nombre.trim()) {
@@ -141,6 +167,8 @@ export default function ReglaContableFormSubmodal({
         montoFijo: Number(draft.montoFijo) || 0,
         baseCalculo: draft.baseCalculo,
         aplicaEn: draft.aplicaEn,
+        aplicaEnCarrito: draft.aplicaEnCarrito,
+        categoriasAplicacion: draft.aplicaEnCarrito ? draft.categoriasAplicacion : [],
         orden: Number(draft.orden) || 0,
         codigoDian: draft.codigoDian.trim(),
         estado: draft.estado,
@@ -173,6 +201,15 @@ export default function ReglaContableFormSubmodal({
     onOpenChange(next);
   };
 
+  const toggleCategoria = (categoriaId: string, checked: boolean): void => {
+    setDraft((prev) => {
+      const actual = new Set(prev.categoriasAplicacion);
+      if (checked) actual.add(categoriaId);
+      else actual.delete(categoriaId);
+      return { ...prev, categoriasAplicacion: Array.from(actual) };
+    });
+  };
+
   return (
     <>
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -203,6 +240,8 @@ export default function ReglaContableFormSubmodal({
                   tarifa: String(preset.tarifa),
                   baseCalculo: preset.baseCalculo,
                   aplicaEn: preset.aplicaEn,
+                  aplicaEnCarrito: preset.tipo === 'IVA' && preset.aplicaEn === 'VENTA',
+                  categoriasAplicacion: [],
                 }))
               }
             />
@@ -340,6 +379,51 @@ export default function ReglaContableFormSubmodal({
               Activa en catálogo
             </Label>
           </div>
+
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="regla-contable-carrito"
+              checked={draft.aplicaEnCarrito}
+              onCheckedChange={(checked) => setDraft((prev) => ({ ...prev, aplicaEnCarrito: checked === true }))}
+              disabled={submitting || saving}
+            />
+            <Label htmlFor="regla-contable-carrito" className="cursor-pointer font-normal">
+              Aplicar masivamente a productos de venta
+            </Label>
+          </div>
+
+          {draft.aplicaEnCarrito ? (
+            <div className="space-y-2 rounded-md border border-border p-3">
+              <div>
+                <Label>Categorias de aplicacion</Label>
+                <p className={reglasContablesUi.description}>
+                  Si no seleccionas categorias, se aplica a todos los productos de venta.
+                </p>
+              </div>
+              {categorias.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No hay categorias activas.</p>
+              ) : (
+                <div className="grid max-h-48 gap-2 overflow-auto sm:grid-cols-2">
+                  {categorias.map((categoria) => {
+                    const id = backendId(categoria);
+                    const checked = draft.categoriasAplicacion.includes(id);
+                    return (
+                      <label key={id} className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
+                        <Checkbox
+                          checked={checked}
+                          disabled={submitting || saving}
+                          onCheckedChange={(value) => toggleCategoria(id, value === true)}
+                        />
+                        <span className="min-w-0 truncate">
+                          {categoriaLabel(categoria)}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          ) : null}
         </div>
 
         <DialogFooter className="gap-2 sm:gap-0">

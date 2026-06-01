@@ -11,6 +11,7 @@ import type { Product, CartItem, ProductId, CartSummary } from '../../types/comm
 import carritoService, {
   type BackendCart,
   type BackendCartItem,
+  type BackendCartTaxDetail,
   type DescuentoCodigo,
   type CartAlerta,
 } from '../services/carritoService';
@@ -73,6 +74,8 @@ interface CartContextType {
   backendCartId: string | null;
   descuentoAplicado: (DescuentoCodigo & { codigo: string }) | null;
   totalDescuentoCodigo: number;
+  totalImpuestos: number;
+  detalleImpuestos: BackendCartTaxDetail[];
   totalBackend: number;
   alertas: CartAlerta[];
   loading: boolean;
@@ -84,6 +87,7 @@ interface CartContextType {
   aplicarDescuento: (codigo: string) => Promise<void>;
   removerDescuento: () => Promise<void>;
   sincronizar: () => Promise<void>;
+  ensureBackendCart: () => Promise<string | null>;
   // Utilidades
   getItemCount: (productId: ProductId, colorPantone?: string) => number;
   isInCart: (productId: ProductId, colorPantone?: string) => boolean;
@@ -106,6 +110,8 @@ export default function CartProvider({ children }: CartProviderProps) {
   const [backendCartId, setBackendCartId] = useState<string | null>(null);
   const [descuentoAplicado, setDescuentoAplicado] = useState<(DescuentoCodigo & { codigo: string }) | null>(null);
   const [totalDescuentoCodigo, setTotalDescuentoCodigo] = useState(0);
+  const [totalImpuestos, setTotalImpuestos] = useState(0);
+  const [detalleImpuestos, setDetalleImpuestos] = useState<BackendCartTaxDetail[]>([]);
   const [totalBackend, setTotalBackend] = useState(0);
   const [alertas, setAlertas] = useState<CartAlerta[]>([]);
   const [loading, setLoading] = useState(false);
@@ -115,6 +121,8 @@ export default function CartProvider({ children }: CartProviderProps) {
     setBackendCartId(cart._id);
     setCartItems(mapBackendCart(cart));
     setTotalDescuentoCodigo(cart.totalDescuentoCodigo ?? 0);
+    setTotalImpuestos(cart.totalImpuestos ?? 0);
+    setDetalleImpuestos(cart.detalleImpuestos ?? []);
     setTotalBackend(cart.total ?? 0);
     setDescuentoAplicado(
       cart.codigoDescuentoAplicado && cart.descuentoCodigo
@@ -123,11 +131,8 @@ export default function CartProvider({ children }: CartProviderProps) {
     );
   }, []);
 
-  // Carga el carrito del backend al montar (solo si hay token)
+  // Carga el carrito del backend al montar para usuario autenticado o invitado.
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (!token) return;
-
     setLoading(true);
     carritoService.obtenerOCrear()
       .then(applyBackendCart)
@@ -141,51 +146,20 @@ export default function CartProvider({ children }: CartProviderProps) {
     // 1. Guardar imagen en caché local (el backend no la almacena)
     if (product.image) saveImageCache(String(product.id), product.image);
 
-    // 2. Actualización optimista en local
-    setCartItems(prev => {
-      const existing = prev.find(i => i.id === product.id && i.color?.pantone === product.color?.pantone);
-      if (existing) {
-        return prev.map(i =>
-          i.id === product.id && i.color?.pantone === product.color?.pantone
-            ? { ...i, quantity: i.quantity + quantity }
-            : i,
-        );
-      }
-      return [...prev, { ...product, quantity, addedAt: new Date().toISOString() }];
-    });
-
-    // 3. Sync con backend si hay carrito activo
-    if (!backendCartId) return;
-    try {
-      const updated = await carritoService.agregarItem(backendCartId, String(product.id), quantity);
-      applyBackendCart(updated);
-    } catch (err: any) {
-      // Revertir optimismo ante error de stock
-      setCartItems(prev => {
-        const existing = prev.find(i => i.id === product.id);
-        if (!existing) return prev;
-        const reverted = existing.quantity - quantity;
-        if (reverted <= 0) return prev.filter(i => i.id !== product.id);
-        return prev.map(i => i.id === product.id ? { ...i, quantity: reverted } : i);
-      });
-      throw err;
-    }
+    // El backend crea o recupera el carrito activo y devuelve el estado vigente.
+    const cart = backendCartId ? null : await carritoService.obtenerOCrear();
+    const carritoId = backendCartId || cart?._id;
+    if (!carritoId) throw new Error('No se pudo obtener el carrito activo');
+    const updated = await carritoService.agregarItem(carritoId, String(product.id), quantity);
+    applyBackendCart(updated);
   }, [backendCartId, applyBackendCart]);
 
   const removeFromCart = useCallback(async (productId: ProductId, colorPantone?: string): Promise<void> => {
     const item = cartItems.find(i => i.id === productId && i.color?.pantone === colorPantone);
 
-    // Actualización optimista
-    setCartItems(prev => prev.filter(i => !(i.id === productId && i.color?.pantone === colorPantone)));
-
     if (!backendCartId || !item?.backendItemId) return;
-    try {
-      const updated = await carritoService.eliminarItem(backendCartId, item.backendItemId);
-      applyBackendCart(updated);
-    } catch {
-      // Revertir si falla
-      if (item) setCartItems(prev => [...prev, item]);
-    }
+    const updated = await carritoService.eliminarItem(backendCartId, item.backendItemId);
+    applyBackendCart(updated);
   }, [backendCartId, cartItems, applyBackendCart]);
 
   const updateQuantity = useCallback(async (
@@ -199,42 +173,20 @@ export default function CartProvider({ children }: CartProviderProps) {
     }
 
     const item = cartItems.find(i => i.id === productId && i.color?.pantone === colorPantone);
-    const prevQuantity = item?.quantity ?? newQuantity;
-
-    // Actualización optimista
-    setCartItems(prev =>
-      prev.map(i =>
-        i.id === productId && i.color?.pantone === colorPantone
-          ? { ...i, quantity: newQuantity }
-          : i,
-      ),
-    );
-
     if (!backendCartId || !item?.backendItemId) return;
-    try {
-      const updated = await carritoService.actualizarCantidad(backendCartId, item.backendItemId, newQuantity);
-      applyBackendCart(updated);
-    } catch {
-      // Revertir
-      setCartItems(prev =>
-        prev.map(i =>
-          i.id === productId && i.color?.pantone === colorPantone
-            ? { ...i, quantity: prevQuantity }
-            : i,
-        ),
-      );
-    }
+    const updated = await carritoService.actualizarCantidad(backendCartId, item.backendItemId, newQuantity);
+    applyBackendCart(updated);
   }, [backendCartId, cartItems, removeFromCart, applyBackendCart]);
 
   const clearCart = useCallback(async (): Promise<void> => {
-    setCartItems([]);
-    setDescuentoAplicado(null);
-    setTotalDescuentoCodigo(0);
-    if (!backendCartId) return;
-    try {
-      const updated = await carritoService.vaciar(backendCartId);
-      applyBackendCart(updated);
-    } catch { /* ignorar — local ya está limpio */ }
+    if (!backendCartId) {
+      setCartItems([]);
+      return;
+    }
+    const updated = await carritoService
+      .vaciar(backendCartId)
+      .catch(() => carritoService.obtenerOCrear());
+    applyBackendCart(updated);
   }, [backendCartId, applyBackendCart]);
 
   // ── Descuentos ───────────────────────────────────────────────────────────
@@ -260,16 +212,25 @@ export default function CartProvider({ children }: CartProviderProps) {
     setAlertas(nuevasAlertas);
   }, [backendCartId, applyBackendCart]);
 
+  const ensureBackendCart = useCallback(async (): Promise<string | null> => {
+    const cart = await carritoService.obtenerOCrear();
+    const carritoId = cart._id;
+    const synced = await carritoService.sincronizar(carritoId);
+    applyBackendCart(synced.carrito);
+    setAlertas(synced.alertas);
+    return carritoId;
+  }, [applyBackendCart]);
+
   // ── Resumen local ────────────────────────────────────────────────────────
 
   const cartSummary = useMemo((): CartSummary => {
     const subtotal = cartItems.reduce((acc, item) => acc + item.price * item.quantity, 0);
     const totalItems = cartItems.reduce((acc, item) => acc + item.quantity, 0);
-    const tax = subtotal * 0.19;
+    const tax = totalImpuestos;
     const shipping = subtotal > 100000 ? 0 : 15000;
-    const total = subtotal + tax + shipping;
+    const total = totalBackend > 0 ? totalBackend : subtotal + tax + shipping;
     return { totalItems, subtotal, tax, shipping, total };
-  }, [cartItems]);
+  }, [cartItems, totalBackend, totalImpuestos]);
 
   // ── Utilidades ───────────────────────────────────────────────────────────
 
@@ -290,6 +251,8 @@ export default function CartProvider({ children }: CartProviderProps) {
     backendCartId,
     descuentoAplicado,
     totalDescuentoCodigo,
+    totalImpuestos,
+    detalleImpuestos,
     totalBackend,
     alertas,
     loading,
@@ -300,6 +263,7 @@ export default function CartProvider({ children }: CartProviderProps) {
     aplicarDescuento,
     removerDescuento,
     sincronizar,
+    ensureBackendCart,
     getItemCount,
     isInCart,
   };

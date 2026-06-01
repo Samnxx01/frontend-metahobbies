@@ -66,7 +66,7 @@ export function MarcoPermisosPageHeader({
           ) : (
             <Users className="mr-2 h-4 w-4" />
           )}
-          Sincronizar afiliados
+          Sincronizar mi sesión
         </Button>
         <Button type="button" size="sm" onClick={onGuardar} disabled={saving || syncing}>
           {saving ? (

@@ -50,6 +50,8 @@ export function MarcoPermisosCatalogCard({
   onSeleccionarAccionesVisibles,
   onLimpiarAccionesVisibles,
 }: Props): React.ReactElement {
+  const filtroNorm = filtro.trim().toLowerCase();
+
   return (
     <Card>
       <CardHeader>
@@ -78,8 +80,12 @@ export function MarcoPermisosCatalogCard({
 
         <Tabs value={tab} onValueChange={(v) => onTabChange(v as MarcoCatalogTab)}>
           <TabsList>
-            <TabsTrigger value="vistas">Vistas ({vistasSel.size})</TabsTrigger>
-            <TabsTrigger value="acciones">Acciones ({accionesSel.size})</TabsTrigger>
+            <TabsTrigger value="vistas">
+              Vistas ({vistasSel.size}/{rutasFiltradas.length})
+            </TabsTrigger>
+            <TabsTrigger value="acciones">
+              Acciones ({accionesSel.size}/{accionesFiltradas.length})
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="vistas" className="mt-4 space-y-2">
@@ -149,7 +155,9 @@ export function MarcoPermisosCatalogCard({
               <ul className="divide-y p-2">
                 {accionesFiltradas.length === 0 ? (
                   <li className="p-4 text-center text-sm text-muted-foreground">
-                    Sin acciones para el filtro
+                    {filtroNorm
+                      ? 'Sin acciones para el filtro. Limpie la búsqueda o use «Marcar visibles».'
+                      : 'No hay acciones HTTP en el catálogo. Créelas en Gestión de rutas o reinicie el backend.'}
                   </li>
                 ) : (
                   accionesFiltradas.map((a) => {

@@ -26,7 +26,7 @@ export type PipelineBOriginPayload = {
 
 const dashboardVentaService = {
   async listarProductos(): Promise<BackendProducto[]> {
-    return productosService.listarProductosAdmin({ estadoCatalogo: 'ACTIVO' });
+    return productosService.listarProductosVentasAdmin();
   },
 
   async listarConfiguraciones(): Promise<PipelineBOriginConfig[]> {

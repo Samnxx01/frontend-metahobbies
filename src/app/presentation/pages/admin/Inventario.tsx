@@ -87,6 +87,7 @@ import { Textarea } from '@/components/ui/textarea';
 
 /** Valor interno del select cuando no hay bodega filtrada (Radix Select no admite value vacío). */
 const BODEGA_TODAS = '__TODAS__';
+const SKU_TODOS = '__TODOS_SKU__';
 
 const MONEY = new Intl.NumberFormat('es-CO', {
   style: 'currency',
@@ -245,7 +246,9 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
   const [kardex, setKardex] = useState<InventarioMovimiento[]>([]);
   const [ajustes, setAjustes] = useState<AjusteInventario[]>([]);
   const [stockConsulta, setStockConsulta] = useState<InventarioSaldo | null>(null);
-  const [stockFiltro, setStockFiltro] = useState({ sku: '', bodega: '' });
+  const [stockFiltro, setStockFiltro] = useState({ sku: '' });
+  const [stockSkuQuery, setStockSkuQuery] = useState('');
+  const [bodegaVistaStock, setBodegaVistaStock] = useState('');
   const [periodo, setPeriodo] = useState('');
   const [bodegaForm, setBodegaForm] = useState<BodegaFormState>(bodegaFormVacio);
   const [editingBodegaId, setEditingBodegaId] = useState<string | null>(null);
@@ -327,6 +330,16 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
       .sort((a, b) => String(a.sku).localeCompare(String(b.sku))),
     [productosSku]
   );
+
+  const skuOptionsFiltradasStock = useMemo(() => {
+    const q = String(stockSkuQuery || '').trim().toUpperCase();
+    if (!q) return skuOptions;
+    return skuOptions.filter((producto) => {
+      const sku = String(producto.sku || '').trim().toUpperCase();
+      const nombre = String((producto as any).nombre || '').trim().toUpperCase();
+      return sku.includes(q) || nombre.includes(q);
+    });
+  }, [skuOptions, stockSkuQuery]);
   const tenantScope = user?.auth?.tenantScope || {};
   const nombreCorporativoImpresion = useMemo(() => {
     const currentUser = user as Record<string, any> | null;
@@ -409,6 +422,45 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
       bodega: linea.bodega,
       cantidad: disponible > 0 ? String(disponible) : '',
       costoUnitario: String(linea.costoPromedioKardex ?? linea.costoUnitario ?? ''),
+      documentoTipo: doc?.tipo || 'RECEPCION_OC',
+      documentoNumero: doc?.numero || comprobante.numeroRecepcion,
+    }));
+  };
+
+  const seleccionarLineaComprobanteEntradaCompra = (recepcionCompraId: string, lineaKey: string): void => {
+    const comprobante = comprobantesEntradaMov.find((c) => c.recepcionId === recepcionCompraId);
+    const linea = comprobante?.items.find((item) => (item.lineaKey || `${item.sku}::${item.bodega}`) === lineaKey);
+    const doc = comprobante?.documentoSoporte;
+    if (!comprobante || !linea) {
+      setMovimientoForm((prev) => ({
+        ...prev,
+        ordenCompraId: '',
+        ordenCompraItemIndex: '',
+        recepcionCompraId,
+        recepcionLineaKey: lineaKey,
+        sku: '',
+        bodega: '',
+        cantidad: '',
+        costoUnitario: '',
+        motivo: 'COMPRA',
+        tipo: 'ENTRADA',
+        documentoTipo: doc?.tipo || 'RECEPCION_OC',
+        documentoNumero: doc?.numero || comprobante?.numeroRecepcion || '',
+      }));
+      return;
+    }
+    setMovimientoForm((prev) => ({
+      ...prev,
+      ordenCompraId: '',
+      ordenCompraItemIndex: '',
+      recepcionCompraId,
+      recepcionLineaKey: lineaKey,
+      tipo: 'ENTRADA',
+      sku: linea.sku,
+      bodega: linea.bodega,
+      cantidad: String(Number(linea.cantidadRecibida || 0) || ''),
+      costoUnitario: String(linea.costoUnitario ?? ''),
+      motivo: 'COMPRA',
       documentoTipo: doc?.tipo || 'RECEPCION_OC',
       documentoNumero: doc?.numero || comprobante.numeroRecepcion,
     }));
@@ -584,9 +636,9 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
     setAjustes(data);
   };
 
-  const refreshKardex = async (filtro?: { sku?: string; bodega?: string }): Promise<void> => {
+  const refreshKardex = async (filtro?: { sku?: string }): Promise<void> => {
     const sku = (filtro?.sku ?? stockFiltro.sku).trim();
-    const bodega = (filtro?.bodega ?? stockFiltro.bodega).trim();
+    const bodega = bodegaVistaStock.trim();
     const data = await inventarioService.listarKardex({
       sku: sku || undefined,
       bodega: bodega || undefined,
@@ -595,24 +647,39 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
     setKardex(data);
   };
 
-  const aplicarFiltroStock = async (filtro?: { sku?: string; bodega?: string }): Promise<void> => {
+  const buildResumenStockConsulta = (filas: StockActualItem[]): InventarioSaldo | null => {
+    if (!filas.length) return null;
+    const unidades = filas.reduce((acc, item) => acc + Number(item.cantidadDisponible || 0), 0);
+    const valor = filas.reduce(
+      (acc, item) => acc + Number(item.valorTotal ?? Number(item.cantidadDisponible || 0) * Number(item.costoPromedioUnitario || 0)),
+      0,
+    );
+    return {
+      sku: stockFiltro.sku.trim() || filas[0]?.sku || '',
+      bodega: bodegaVistaStock.trim() || 'TODAS',
+      cantidadDisponible: unidades,
+      costoPromedioUnitario: unidades > 0 ? valor / unidades : 0,
+    };
+  };
+
+  const aplicarFiltroStock = async (filtro?: { sku?: string }): Promise<void> => {
     const sku = (filtro?.sku ?? stockFiltro.sku).trim();
-    const bodega = (filtro?.bodega ?? stockFiltro.bodega).trim();
+    const bodega = bodegaVistaStock.trim();
 
     try {
-      const [saldo, stockFiltrado, kardexData] = await Promise.all([
-        sku && bodega
-          ? inventarioService.obtenerStock({ sku, bodega })
-          : Promise.resolve(null),
-        inventarioService.stockActual(bodega || undefined),
+      const [stockFiltrado, kardexData] = await Promise.all([
+        inventarioService.stockActual({
+          bodega: bodega || undefined,
+          sku: sku || undefined,
+        }),
         inventarioService.listarKardex({
           sku: sku || undefined,
           bodega: bodega || undefined,
           limit: 100,
         }),
       ]);
-      setStockConsulta(saldo);
       setStockActual(stockFiltrado);
+      setStockConsulta(sku ? buildResumenStockConsulta(stockFiltrado) : null);
       setKardex(kardexData);
     } catch (error) {
       console.error('Error consultando stock:', error);
@@ -621,20 +688,12 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
   };
 
   const consultarStock = async (): Promise<void> => {
-    const sku = stockFiltro.sku.trim();
-    const bodega = stockFiltro.bodega.trim();
-
-    if (!sku && !bodega) {
-      toast.error('Selecciona una bodega o ingresa un SKU para consultar stock.');
-      return;
-    }
-
-    await aplicarFiltroStock({ sku, bodega });
+    await aplicarFiltroStock({ sku: stockFiltro.sku.trim() });
   };
 
-  const handleBodegaStockChange = (bodega: string): void => {
-    setStockFiltro((prev) => ({ ...prev, bodega }));
-    void aplicarFiltroStock({ bodega });
+  const handleBodegaVistaStockChange = (bodega: string): void => {
+    setBodegaVistaStock(bodega);
+    void aplicarFiltroStock({ sku: stockFiltro.sku });
   };
 
   const actualizarMetodo = async (metodoValuacion: MetodoValuacion, anioFiscal?: number): Promise<void> => {
@@ -812,6 +871,8 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
     const tipoSeleccionado = tiposMovimientoActivos.find((tipo) => tipo._id === movimientoForm.tipoMovimientoConfigId);
     const esTraslado = esTipoTrasladoBodega(tipoSeleccionado?.codigo);
     const esSalidaConComprobante = tipoSeleccionado?.naturaleza === 'SALIDA' && !esTraslado;
+    const esEntradaCompraPorTipo = tipoSeleccionado?.naturaleza === 'ENTRADA'
+      && String(tipoSeleccionado?.codigo || '').trim().toUpperCase() === 'ENTRADA_COMPRA';
     const motivoRegistro = movimientoForm.motivo === 'OTRO'
       ? movimientoForm.motivoPersonalizado.trim().toUpperCase()
       : movimientoForm.motivo;
@@ -888,6 +949,33 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
 
     try {
       setSaving(true);
+      if (esEntradaCompraPorTipo && movimientoForm.recepcionCompraId) {
+        // Subproceso manual: el comprobante (recepción) ya existe en borrador; aquí se confirma para aplicar kardex+contable.
+        const data = await inventarioService.confirmarRecepcionOrdenCompra(movimientoForm.recepcionCompraId, { estado: true });
+        setComprobanteEntradaData(data);
+        setComprobanteEntradaDoc({
+          tipo: movimientoForm.documentoTipo.trim(),
+          numero: movimientoForm.documentoNumero.trim(),
+        });
+        setComprobanteEntradaOpen(true);
+        setMovimientoForm((prev) => ({
+          ...movimientoInicial,
+          tipo: tipoSeleccionado.naturaleza,
+          tipoMovimientoConfigId: prev.tipoMovimientoConfigId,
+          bodega: prev.bodega,
+        }));
+        const [stock, kardexActualizado, comprobantesActualizados] = await Promise.all([
+          inventarioService.stockActual(),
+          inventarioService.listarKardex({ limit: 100 }),
+          inventarioService.listarComprobantesEntradaMovimientos(200),
+        ]);
+        setStockActual(stock);
+        setKardex(kardexActualizado);
+        setComprobantesEntradaMov(comprobantesActualizados);
+        toast.success('Comprobante confirmado. Kardex y contabilidad actualizados.');
+        return;
+      }
+
       if (tipoSeleccionado.naturaleza === 'ENTRADA' && movimientoForm.motivo === 'COMPRA' && movimientoForm.ordenCompraId) {
         const itemIndex = Number(movimientoForm.ordenCompraItemIndex);
         const data = await inventarioService.registrarRecepcionOrdenCompra(movimientoForm.ordenCompraId, {
@@ -1412,12 +1500,12 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
     </Select>
   );
 
-  const renderBodegaStockSelect = (): React.ReactElement => (
+  const renderBodegaVistaStockSelect = (): React.ReactElement => (
     <Select
-      value={stockFiltro.bodega || BODEGA_TODAS}
+      value={bodegaVistaStock || BODEGA_TODAS}
       onValueChange={(next) => {
         const bodega = next === BODEGA_TODAS ? '' : next;
-        handleBodegaStockChange(bodega);
+        handleBodegaVistaStockChange(bodega);
       }}
     >
       <SelectTrigger className="border-input bg-background">
@@ -1447,6 +1535,35 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
     </Select>
   );
 
+  const renderSkuStockSelect = (): React.ReactElement => (
+    <div className="space-y-2">
+      <Input
+        value={stockSkuQuery}
+        onChange={(e) => setStockSkuQuery(e.target.value)}
+        placeholder="Buscar SKU o nombre..."
+      />
+      <Select
+        value={stockFiltro.sku || '__SIN_SKU__'}
+        onValueChange={(next) => {
+          const sku = next === '__SIN_SKU__' ? '' : next;
+          setStockFiltro((prev) => ({ ...prev, sku }));
+        }}
+      >
+        <SelectTrigger className="border-input bg-background">
+          <SelectValue placeholder={skuOptions.length ? 'Selecciona SKU' : 'Sin SKUs'} />
+        </SelectTrigger>
+        <SelectContent className="max-h-72 border-border bg-popover">
+          <SelectItem value="__SIN_SKU__">Todos</SelectItem>
+          {skuOptionsFiltradasStock.map((producto) => (
+            <SelectItem key={getProductoId(producto) || producto.sku} value={producto.sku || ''}>
+              {producto.sku} | {producto.nombre}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+
   if (loading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
@@ -1471,7 +1588,7 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
         <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-end">
           <div className="min-w-[200px] space-y-1">
             <p className="text-xs font-medium text-muted-foreground">Vista por bodega</p>
-            {renderBodegaStockSelect()}
+            {renderBodegaVistaStockSelect()}
           </div>
           <Button variant="outline" onClick={() => void loadData()} disabled={saving} className="shrink-0">
             <RefreshCcw className="mr-2 h-4 w-4" />
@@ -1541,16 +1658,15 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
         <TabsContent value="stock" className="space-y-4">
           <InventarioStockTab
             stockFiltro={stockFiltro}
-            setStockFiltro={setStockFiltro}
             stockConsulta={stockConsulta}
             stockActual={stockActual}
             kardex={kardex}
             money={MONEY}
-            renderBodegaStockSelect={renderBodegaStockSelect}
+            renderSkuStockSelect={renderSkuStockSelect}
             consultarStock={consultarStock}
             formatDate={formatDate}
             getTipoMovimientoLabel={getTipoMovimientoLabel}
-            bodegaSeleccionada={stockFiltro.bodega}
+            etiquetaVista={bodegaVistaStock.trim() || 'Todas las bodegas'}
           />
         </TabsContent>
 
@@ -1563,6 +1679,7 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
             stockActual={stockActual}
             onOrdenCompraLineChange={seleccionarLineaOrdenCompraMovimiento}
             onComprobanteSalidaLineChange={seleccionarLineaComprobanteSalida}
+            onComprobanteEntradaLineChange={seleccionarLineaComprobanteEntradaCompra}
             onVerComprobante={(recepcionId) => {
               setComprobanteVistaId(recepcionId);
               setComprobanteVistaOpen(true);

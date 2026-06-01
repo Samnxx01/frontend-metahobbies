@@ -95,7 +95,6 @@ export function MarcoPermisosApiReferenciaModal({
     {
       vistas: ['idRutaSeguridad1', 'idRutaSeguridad2'],
       acciones: ['idAccionGet1', 'idAccionPost1'],
-      notas: marcoActivo?.notas || 'Notas del techo',
     },
     null,
     2
@@ -139,9 +138,9 @@ Authorization: Bearer <token>  // opcional en GET activo`}
             />
 
             <EndpointSection
-              method="PUT"
+              method="POST"
               title={AFILIADO_PERMISOS_PATHS.marcoGuardar}
-              description={`Botón «Guardar techo». Desactiva seq ${seqActual} y crea nueva versión seq ${seqNueva}. Actualiza rolesCorporativos.marcoPermisosAfiliadoId.`}
+              description={`Botón «Guardar techo». Desactiva seq ${seqActual} y crea nueva versión seq ${seqNueva}. Sincroniza herenciaCliente automáticamente.`}
               request={`Authorization: Bearer <token>
 Content-Type: application/json
 
@@ -189,10 +188,10 @@ ${ejemploBodyGuardar}`}
               <ol className="list-decimal space-y-1 pl-5 text-sm text-muted-foreground">
                 <li>Seleccionar vistas y acciones en el catálogo.</li>
                 <li>
-                  <strong>PUT</strong> guardar techo → sube <code>seq</code>.
+                  <strong>POST</strong> guardar techo → sube <code>seq</code> y escribe <code>herenciaCliente</code>.
                 </li>
                 <li>
-                  <strong>POST</strong> sincronizar → materializa permisos por afiliado.
+                  <strong>POST</strong> sincronizar lote (opcional) → repite materialización por afiliado.
                 </li>
                 <li>Afiliados deben volver a iniciar sesión para JWT con marcoSeq actualizado.</li>
               </ol>

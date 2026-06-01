@@ -96,11 +96,18 @@ type OrganigramaColumnProps = {
     orden: number;
     titulo: string;
     descripcion?: string;
+    headerAction?: React.ReactNode;
     children: React.ReactNode;
 };
 
 /** Bloque numerado del organigrama (nivel visual alineado al flujo 1→2→3) */
-export function OrganigramaColumn({ orden, titulo, descripcion, children }: OrganigramaColumnProps): React.ReactElement {
+export function OrganigramaColumn({
+    orden,
+    titulo,
+    descripcion,
+    headerAction,
+    children,
+}: OrganigramaColumnProps): React.ReactElement {
     const mod = ((orden - 1) % 3) + 1;
     const accent =
         mod === 1
@@ -112,14 +119,19 @@ export function OrganigramaColumn({ orden, titulo, descripcion, children }: Orga
     return (
         <div className={`relative overflow-hidden rounded-xl border border-border/90 shadow-sm ${accent} border-l-[4px]`}>
             <div className="border-b border-border/50 bg-muted/30 px-4 py-3">
-                <div className="flex flex-wrap items-center gap-2">
-                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/90 text-xs font-bold text-primary-foreground shadow-sm">
-                        {orden}
-                    </span>
-                    <div className="min-w-0">
-                        <h2 className="text-sm font-semibold leading-snug text-foreground">{titulo}</h2>
-                        {descripcion && <p className="mt-0.5 text-[11px] text-muted-foreground">{descripcion}</p>}
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex flex-wrap items-center gap-2 min-w-0">
+                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/90 text-xs font-bold text-primary-foreground shadow-sm">
+                            {orden}
+                        </span>
+                        <div className="min-w-0">
+                            <h2 className="text-sm font-semibold leading-snug text-foreground">{titulo}</h2>
+                            {descripcion && (
+                                <p className="mt-0.5 text-[11px] text-muted-foreground">{descripcion}</p>
+                            )}
+                        </div>
                     </div>
+                    {headerAction ? <div className="shrink-0">{headerAction}</div> : null}
                 </div>
             </div>
             <div className="p-3 sm:p-4">{children}</div>

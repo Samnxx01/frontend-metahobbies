@@ -5,8 +5,11 @@ export { default as MarcoPermisosAfiliadoPage } from './pages/MarcoPermisosAfili
 export { useMarcoPermisosParametrizacion } from './hooks/useMarcoPermisosParametrizacion';
 export {
   getMarcoAfiliadoActivo,
+  getCatalogoMarcoAfiliado,
   guardarMarcoAfiliado,
   sincronizarPermisosAfiliado,
+  sincronizarLoteAfiliadosAdmin,
+  sincronizarUsuarioAfiliadoAdmin,
   getContextoClienteMe,
 } from './api/marco.api';
 export { AFILIADO_PERMISOS_PATHS } from './api/paths';
@@ -18,4 +21,5 @@ export type {
   GuardarMarcoResponse,
   SincronizarMarcoResponse,
   ContextoClienteResponse,
+  HerenciaClienteRelacion,
 } from './types/marco.types';

@@ -58,6 +58,8 @@ export interface ReglaContable {
   montoFijo?: number;
   baseCalculo: BaseCalculoRegla;
   aplicaEn: AplicaEnRegla;
+  aplicaEnCarrito?: boolean;
+  categoriasAplicacion?: string[];
   orden: number;
   codigoDian?: string;
   estado: boolean;
@@ -229,6 +231,8 @@ const reglasContablesService = {
     montoFijo?: number;
     baseCalculo?: BaseCalculoRegla;
     aplicaEn?: AplicaEnRegla;
+    aplicaEnCarrito?: boolean;
+    categoriasAplicacion?: string[];
     orden?: number;
     codigoDian?: string;
     estado?: boolean;
@@ -250,6 +254,8 @@ const reglasContablesService = {
       montoFijo?: number;
       baseCalculo?: BaseCalculoRegla;
       aplicaEn?: AplicaEnRegla;
+      aplicaEnCarrito?: boolean;
+      categoriasAplicacion?: string[];
       orden?: number;
       codigoDian?: string;
       estado?: boolean;

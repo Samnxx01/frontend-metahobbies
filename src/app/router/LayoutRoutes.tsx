@@ -1,7 +1,12 @@
 import { Routes, Route, useLocation, Navigate, Outlet } from 'react-router-dom';
 import { useState, useEffect, ReactElement, lazy, Suspense } from 'react';
 import { useAuth } from '@/app/providers/AuthProvider';
-import { getAuthorizedRoutes, getPrivateHomeRoute, readCachedPrivateHomeRoute } from '@/app/services/routeService';
+import {
+    getAuthorizedRoutes,
+    getPrivateHomeRoute,
+    normalizeAdminRouteComponent,
+    readCachedPrivateHomeRoute,
+} from '@/app/services/routeService';
 import { resolveCurrentRouteMenuTags } from '@/app/services/routesService';
 import { useLoading } from '@/app/providers/LoadingProvider';
 import { getGovernedPublicHomePath } from '@/app/services/governedNavigation';
@@ -21,6 +26,8 @@ import RecuperarContrasenaToken from '@/app/presentation/pages/recuperar-contras
 import NotFound from '@/app/presentation/pages/not-found/NotFound';
 import Home from '@/app/presentation/pages/home/Home';
 import Carrito from '@/app/presentation/pages/carrito/Carrito';
+import Checkout from '@/app/presentation/pages/checkout/Checkout';
+import DetalleProducto from '@/app/presentation/pages/producto/DetalleProducto';
 import DynamicRouteFallback from '@/app/presentation/pages/admin/DynamicRouteFallback';
 
 // —— Dynamic component map via Vite glob —————————————————————
@@ -99,6 +106,10 @@ const buildComponentMap = (): ComponentMapType => {
         MarcoPermisosAfiliado:         'MarcoPermisosAfiliadoParametrizacion',
         TechoPermisosAfiliado:         'MarcoPermisosAfiliadoParametrizacion',
         ParametrizacionMarcoAfiliado:  'MarcoPermisosAfiliadoParametrizacion',
+        // Rutas de usuarios/gobernanza en BD sin .tsx homónimo
+        UsuariosGobernanza:            'GestionUsuarios',
+        UsuariosGobernanzaPerfilCliente: 'Perfil',
+        UsuariosGobernanzaAdministracionTenant: 'GestionUsuarios',
     };
 
     for (const [alias, target] of Object.entries(aliases)) {
@@ -329,7 +340,11 @@ export default function LayoutRoutes(): ReactElement {
 
     const renderRoutes = (routes: RouteConfig[], parentPath = ''): ReactElement[] => {
         return routes.map(route => {
-            const LazyComponent = componentMap[route.component];
+            const routeFullPath = parentPath
+                ? `${parentPath.replace(/\/$/, '')}/${String(route.path || '').replace(/^\//, '')}`
+                : route.path;
+            const resolvedComponent = normalizeAdminRouteComponent(route.component, routeFullPath);
+            const LazyComponent = componentMap[resolvedComponent] || componentMap[route.component];
             const hasChildren = Array.isArray(route.children) && route.children.length > 0;
 
             // Ruta relativa al padre: quitar el prefijo del padre si viene con path completo
@@ -366,10 +381,15 @@ export default function LayoutRoutes(): ReactElement {
             <Route element={<PublicLayout />}>
                 <Route path="public/render" element={<Navigate to={getGovernedPublicHomePath()} replace />} />
                 <Route path="public/render/home" element={<Home />} />
+                <Route path="producto/:id" element={<DetalleProducto />} />
+                <Route path="public/render/producto/:id" element={<DetalleProducto />} />
                 <Route path="carrito" element={<Carrito />} />
                 <Route path="public/render/carrito" element={<Carrito />} />
                 <Route path="public/render/carrito-compras" element={<Carrito />} />
                 <Route path="public/render/carrrto-compras" element={<Carrito />} />
+                <Route path="checkout" element={<Checkout />} />
+                <Route path="public/render/checkout" element={<Checkout />} />
+                <Route path="public/render/finalizar-compra" element={<Checkout />} />
                 {authorizedRoutes.publicRoutes && renderRoutes(authorizedRoutes.publicRoutes)}
                 <Route path="membresia/*" element={<MembershipRoutes />} />
                 <Route path="cambiar-contrasena-provisional" element={<CambiarContrasenaProvisional />} />

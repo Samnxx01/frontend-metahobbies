@@ -4,7 +4,6 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useMarcoPermisosParametrizacion } from '../hooks/useMarcoPermisosParametrizacion';
 import { MarcoPermisosPageHeader } from '../components/MarcoPermisosPageHeader';
 import { MarcoPermisosStatsCards } from '../components/MarcoPermisosStatsCards';
-import { MarcoPermisosNotesCard } from '../components/MarcoPermisosNotesCard';
 import { MarcoPermisosCatalogCard } from '../components/MarcoPermisosCatalogCard';
 
 export default function MarcoPermisosAfiliadoPage(): React.ReactElement {
@@ -47,8 +46,6 @@ export default function MarcoPermisosAfiliadoPage(): React.ReactElement {
         vistasCount={vm.vistasSel.size}
         accionesCount={vm.accionesSel.size}
       />
-
-      <MarcoPermisosNotesCard notas={vm.notas} onNotasChange={vm.setNotas} />
 
       <MarcoPermisosCatalogCard
         tab={vm.tab}

@@ -8,6 +8,7 @@ import { Check, Truck, ShoppingCart, Loader2 } from 'lucide-react';
 import { useCart } from '../../../providers/CartProvider';
 import carritoService from '../../../services/carritoService';
 import type { CartItem } from '../../../../types/common';
+import { readDatosFacturacionInvitado } from '@/app/presentation/components/carrito/DatosFacturacionInvitadoModal';
 
 // ── Stepper ────────────────────────────────────────────────────────────────
 
@@ -42,12 +43,11 @@ export default function Checkout(): React.ReactElement {
   const {
     cartItems,
     cartSummary,
-    backendCartId,
     descuentoAplicado,
     totalDescuentoCodigo,
     totalBackend,
     clearCart,
-    sincronizar,
+    ensureBackendCart,
   } = useCart();
 
   const [activeStep, setActiveStep] = useState(0);
@@ -57,23 +57,15 @@ export default function Checkout(): React.ReactElement {
   const totalFinal = totalBackend > 0 ? totalBackend : cartSummary.total;
 
   const handleConfirmarPedido = async (): Promise<void> => {
-    if (!backendCartId) {
+    setProcessing(true);
+    try {
+    const carritoId = await ensureBackendCart();
+    if (!carritoId) {
       toast.error('No se encontró el carrito. Recarga la página e intenta de nuevo.');
       return;
     }
 
-    setProcessing(true);
-    try {
-      // Sincronizar antes del checkout para detectar cambios de stock/precio
-      await sincronizar();
-
-      const sinStock = cartItems.filter(i => !i.available);
-      if (sinStock.length > 0) {
-        toast.error(`Stock insuficiente para: ${sinStock.map(i => i.name).join(', ')}`);
-        return;
-      }
-
-      const result = await carritoService.checkout(backendCartId);
+      const result = await carritoService.checkout(carritoId, readDatosFacturacionInvitado());
       setVentaReferencia(result.ventaReferencia);
       await clearCart();
       setActiveStep(1);
