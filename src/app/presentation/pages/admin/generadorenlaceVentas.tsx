@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Copy, Link2, Loader2, Orbit, ShoppingBag, Sparkles } from 'lucide-react';
 import {
     generarEnlaceConAttribution,
+    buildMembresiaReferidosUrl,
     type ReferralAttributionResult,
 } from '@/app/services/referralAttributionService';
 
@@ -56,11 +57,20 @@ export default function GeneradorEnlaceVentas({
     const generatedLink = useMemo(() => {
         if (!result?.jwtReferido) return '';
 
+        if (destination === 'referidos') {
+            return buildMembresiaReferidosUrl({
+                jwtReferido: result.jwtReferido,
+                guestSessionId: result.guestSessionId,
+                originType: result.originType || originType,
+                originId: result.originId || originId,
+            });
+        }
+
         const params = new URLSearchParams();
         params.set('guestSessionId', result.guestSessionId);
         params.set('originType', result.originType || originType);
         params.set('ref', result.jwtReferido);
-        params.set('flow', destination === 'referidos' ? 'referidos' : 'venta');
+        params.set('flow', 'venta');
         params.set('redirectTo', destination);
         if (result.originId || originId) params.set('originId', String(result.originId || originId));
 

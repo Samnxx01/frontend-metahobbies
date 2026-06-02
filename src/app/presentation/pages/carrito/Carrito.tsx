@@ -210,7 +210,7 @@ export default function Carrito(): React.ReactElement {
             if (!backendCartId) throw new Error('No se encontro el carrito activo');
             await carritoService.guardarDatosFacturacion(backendCartId, datosFacturacion);
             setBillingGuestOpen(false);
-            navigate('/checkout');
+            navigate('/checkout', { state: { openPayment: true } });
           } catch (error) {
             toast.error(error instanceof Error ? error.message : 'No se pudieron guardar los datos de facturacion');
           }

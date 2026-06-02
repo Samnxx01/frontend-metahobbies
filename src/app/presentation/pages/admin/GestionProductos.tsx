@@ -221,6 +221,8 @@ export default function GestionProductos(): React.ReactElement {
   const [mediaFile, setMediaFile] = useState<File | null>(null);
   const [mediaDuration, setMediaDuration] = useState<number | undefined>(undefined);
   const [categorySaving, setCategorySaving] = useState(false);
+  const [categoryMediaFile, setCategoryMediaFile] = useState<File | null>(null);
+  const [categoryMediaDuration, setCategoryMediaDuration] = useState<number | undefined>(undefined);
   const [typeSaving, setTypeSaving] = useState(false);
   const [categoryForm, setCategoryForm] = useState<CategoriaPayload>({
     nombre: '',
@@ -344,6 +346,34 @@ export default function GestionProductos(): React.ReactElement {
       descripcion: '',
       padre: null,
     });
+    setCategoryMediaFile(null);
+    setCategoryMediaDuration(undefined);
+  };
+
+  const onCategoryMediaFileChange = async (file?: File): Promise<void> => {
+    if (!file) return;
+    const isImage = file.type.startsWith('image/');
+    const isVideo = file.type.startsWith('video/');
+    if (!isImage && !isVideo) {
+      toast.error('Selecciona una imagen o un video.');
+      return;
+    }
+    if (isVideo) {
+      try {
+        const duration = await readVideoDuration(file);
+        if (duration > 10) {
+          toast.error('El video de la categoría debe durar máximo 10 segundos.');
+          return;
+        }
+        setCategoryMediaDuration(duration);
+      } catch (error) {
+        toast.error(errorMessage(error, 'No se pudo validar la duración del video.'));
+        return;
+      }
+    } else {
+      setCategoryMediaDuration(undefined);
+    }
+    setCategoryMediaFile(file);
   };
 
   const closeTypeDialog = (): void => {
@@ -631,7 +661,19 @@ export default function GestionProductos(): React.ReactElement {
         descripcion: categoryForm.descripcion || '',
         padre: categoryForm.padre || null,
       });
-      const nextCategorias = [...categorias, created].sort((a, b) => String(a.nombre || '').localeCompare(String(b.nombre || '')));
+      const createdId = backendId(created);
+      let createdWithMedia = created;
+      if (categoryMediaFile && createdId) {
+        const media = await productosService.subirMediaCategoria(
+          createdId,
+          categoryMediaFile,
+          categoryMediaDuration
+        );
+        createdWithMedia = { ...created, media };
+      }
+      const nextCategorias = [...categorias, createdWithMedia].sort((a, b) =>
+        String(a.nombre || '').localeCompare(String(b.nombre || ''))
+      );
       setCategorias(nextCategorias);
       setForm((prev) => ({ ...prev, categoriaId: backendId(created), categoria: created.nombre }));
       toast.success('Categoría creada correctamente');
@@ -793,21 +835,23 @@ export default function GestionProductos(): React.ReactElement {
       </div>
 
       <Dialog open={openDialog} onOpenChange={(open) => (open ? setOpenDialog(true) : closeDialog())}>
-        <DialogContent className="sm:max-w-xl">
-          <DialogHeader>
+        <DialogContent className="flex max-h-[92vh] w-[min(96vw,1280px)] max-w-[min(96vw,1280px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(96vw,1280px)]">
+          <DialogHeader className="shrink-0 border-b px-6 py-4">
             <DialogTitle>
               {dialogType === 'add' ? 'Agregar Nuevo Producto' : dialogType === 'edit' ? 'Editar Producto' : dialogType === 'view' ? 'Detalle del Producto' : 'Desactivar Producto'}
             </DialogTitle>
           </DialogHeader>
 
           {dialogType === 'delete' ? (
-            <div className="space-y-2 py-4 text-center text-sm text-muted-foreground">
+            <div className="space-y-2 px-6 py-6 text-center text-sm text-muted-foreground">
               <p>¿Seguro que deseas desactivar "{selected?.nombre}"?</p>
             </div>
           ) : current ? (
-            <div className="space-y-4 py-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2 space-y-2">
+            <div className="min-h-0 flex-1 overflow-x-auto overflow-y-auto px-6 py-4">
+              <div className="flex min-w-[1040px] flex-row flex-nowrap items-start gap-5">
+                {/* Columna 1: identificación y catálogo */}
+                <section className="flex w-[min(280px,28%)] shrink-0 flex-col gap-4">
+                <div className="space-y-2">
                   <Label htmlFor="nombre">Nombre</Label>
                   <Input id="nombre" value={current.nombre} disabled={dialogType === 'view'} onChange={(e) => setForm((prev) => ({ ...prev, nombre: e.target.value }))} />
                 </div>
@@ -942,6 +986,10 @@ export default function GestionProductos(): React.ReactElement {
                     </select>
                   )}
                 </div>
+                </section>
+
+                {/* Columna 2: colores */}
+                <section className="flex w-[min(280px,28%)] shrink-0 flex-col gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="cantidadColoresRender">Colores a renderizar</Label>
                   <Input
@@ -955,9 +1003,9 @@ export default function GestionProductos(): React.ReactElement {
                   />
                 </div>
                 {current.cantidadColoresRender > 0 && (
-                  <div className="col-span-2 space-y-3 rounded-md border border-border p-3">
+                  <div className="space-y-3 rounded-md border border-border p-3">
                     <Label>Colores permitidos del producto</Label>
-                    <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="flex flex-col gap-3">
                       {syncColoresPermitidos(current.cantidadColoresRender, current.coloresPermitidos).map((color, index) => (
                         <div key={`color-${index}`} className="grid grid-cols-[44px_1fr_92px] items-center gap-2">
                           <Input
@@ -984,7 +1032,11 @@ export default function GestionProductos(): React.ReactElement {
                     </div>
                   </div>
                 )}
-                <div className="col-span-2 space-y-3 rounded-md border border-border px-3 py-2">
+                </section>
+
+                {/* Columna 3: reglas contables e imagen */}
+                <section className="flex w-[min(300px,30%)] shrink-0 flex-col gap-4">
+                <div className="space-y-3 rounded-md border border-border px-3 py-2">
                   <div>
                     <Label>Reglas contables del producto</Label>
                     <p className="text-xs text-muted-foreground">
@@ -994,7 +1046,7 @@ export default function GestionProductos(): React.ReactElement {
                   {reglasContables.length === 0 ? (
                     <p className="text-sm text-muted-foreground">No hay reglas contables activas.</p>
                   ) : (
-                    <div className="grid gap-2 sm:grid-cols-2">
+                    <div className="flex max-h-48 flex-col gap-2 overflow-y-auto pr-1">
                       {reglasContables.map((regla) => {
                         const codigo = String(regla.codigo || '').toUpperCase();
                         const checked = current.reglasContables.some((item) => item.codigo === codigo && item.aplica !== false);
@@ -1016,9 +1068,9 @@ export default function GestionProductos(): React.ReactElement {
                     </div>
                   )}
                 </div>
-                <div className="col-span-2 space-y-2">
+                <div className="space-y-2">
                   <Label htmlFor="imagenProducto">Imagen o video corto del producto</Label>
-                  <div className="grid gap-3 sm:grid-cols-[96px_1fr]">
+                  <div className="flex flex-col gap-3">
                     <img
                       src={current.imagen || PLACEHOLDER}
                       alt={current.nombre || 'Producto'}
@@ -1060,7 +1112,11 @@ export default function GestionProductos(): React.ReactElement {
                     </div>
                   </div>
                 </div>
-                <div className="col-span-2 flex items-center justify-between rounded-md border border-border px-3 py-2">
+                </section>
+
+                {/* Columna 4: opciones y descripción */}
+                <section className="flex min-w-[220px] flex-1 flex-col gap-4">
+                <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
                   <div>
                     <Label htmlFor="manejaVentas">Maneja ventas</Label>
                     <p className="text-xs text-muted-foreground">Crea la relacion del producto para el flujo de ventas.</p>
@@ -1072,7 +1128,7 @@ export default function GestionProductos(): React.ReactElement {
                     onCheckedChange={(checked) => setForm((prev) => ({ ...prev, manejaVentas: checked }))}
                   />
                 </div>
-                <div className="col-span-2 flex items-center justify-between rounded-md border border-border px-3 py-2">
+                <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
                   <div className="flex items-start gap-2">
                     <Star className="mt-0.5 h-4 w-4 text-primary" />
                     <div>
@@ -1087,15 +1143,23 @@ export default function GestionProductos(): React.ReactElement {
                     onCheckedChange={(checked) => setForm((prev) => ({ ...prev, destacado: checked }))}
                   />
                 </div>
-                <div className="col-span-2 space-y-2">
+                <div className="flex min-h-0 flex-1 flex-col space-y-2">
                   <Label htmlFor="descripcion">Descripción</Label>
-                  <Textarea id="descripcion" value={current.descripcion} disabled={dialogType === 'view'} rows={4} onChange={(e) => setForm((prev) => ({ ...prev, descripcion: e.target.value }))} />
+                  <Textarea
+                    id="descripcion"
+                    value={current.descripcion}
+                    disabled={dialogType === 'view'}
+                    rows={8}
+                    className="min-h-[140px] flex-1 resize-y"
+                    onChange={(e) => setForm((prev) => ({ ...prev, descripcion: e.target.value }))}
+                  />
                 </div>
+                </section>
               </div>
             </div>
           ) : null}
 
-          <DialogFooter>
+          <DialogFooter className="shrink-0 border-t px-6 py-4">
             <Button variant="outline" onClick={closeDialog}>{dialogType === 'delete' ? 'Cancelar' : 'Cerrar'}</Button>
             {dialogType === 'add' || dialogType === 'edit' ? (
               <Button onClick={() => { void onSave(); }} disabled={saving}>
@@ -1222,6 +1286,27 @@ export default function GestionProductos(): React.ReactElement {
                 rows={3}
                 placeholder="Descripción opcional de la categoría"
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="categoria-media">Imagen o video (máx. 10 s)</Label>
+              <Input
+                id="categoria-media"
+                type="file"
+                accept="image/*,video/mp4,video/webm,video/quicktime"
+                onChange={(e) => { void onCategoryMediaFileChange(e.target.files?.[0]); }}
+              />
+              {categoryMediaFile && (
+                <p className="text-xs text-muted-foreground">
+                  {categoryMediaFile.name}
+                  {typeof categoryMediaDuration === 'number'
+                    ? ` | ${categoryMediaDuration.toFixed(1)} seg`
+                    : ''}
+                </p>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Se muestra en la tarjeta del home. JPG, PNG, WEBP, GIF o MP4/WEBM/MOV.
+              </p>
             </div>
           </div>
 

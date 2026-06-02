@@ -1,15 +1,17 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import type { MarcoPermisosAfiliado } from '../types/marco.types';
+import type { MarcoPermisosAfiliado, RolMarcoParametrizable } from '../types/marco.types';
 
 type Props = {
   marcoActivo: MarcoPermisosAfiliado | null;
+  rolSeleccionado?: RolMarcoParametrizable | null;
   vistasCount: number;
   accionesCount: number;
 };
 
 export function MarcoPermisosStatsCards({
   marcoActivo,
+  rolSeleccionado,
   vistasCount,
   accionesCount,
 }: Props): React.ReactElement {
@@ -23,14 +25,16 @@ export function MarcoPermisosStatsCards({
           {marcoActivo ? (
             <>
               <p className="text-2xl font-bold">seq {marcoActivo.seq}</p>
-              {marcoActivo.rolCorporativoId ? (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  rol corporativo CLIENTE vinculado
-                </p>
-              ) : null}
+              <p className="mt-1 text-xs text-muted-foreground">
+                {rolSeleccionado?.codigo ?? marcoActivo.codigo ?? 'Marco activo'}
+                {rolSeleccionado?.rol ? ` · rol ${rolSeleccionado.rol}` : ''}
+              </p>
             </>
           ) : (
-            <p className="text-sm text-muted-foreground">Sin marco — guarde el primero abajo</p>
+            <p className="text-sm text-muted-foreground">
+              Sin marco
+              {rolSeleccionado ? ` para ${rolSeleccionado.rol}` : ''} — guarde el techo abajo
+            </p>
           )}
         </CardContent>
       </Card>

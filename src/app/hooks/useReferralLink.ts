@@ -1,5 +1,9 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { apiFetch } from '@/app/services/api';
+import {
+    buildMembresiaReferidosUrl,
+    type ReferralAttributionResult,
+} from '@/app/services/referralAttributionService';
 
 interface ReferralData {
     codigoReferido: string;
@@ -13,15 +17,23 @@ interface UseReferralLinkReturn {
     referralData: ReferralData | null;
     loading: boolean;
     error: string | null;
-    refetch: () => Promise<void>;
+    refetch: () => Promise<ReferralData>;
 }
+
+const mapAttributionToReferralData = (data: ReferralAttributionResult): ReferralData => ({
+    codigoReferido: data.codigoReferido,
+    jwtReferido: data.jwtReferido,
+    enlaceCompleto: buildMembresiaReferidosUrl(data),
+    guestSessionId: data?.guestSessionId || null,
+    attributionId: data?.attributionId || null,
+});
 
 export const useReferralLink = (): UseReferralLinkReturn => {
     const [referralData, setReferralData] = useState<ReferralData | null>(null);
     const [loading, setLoading] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
 
-    const fetchReferralLink = async (): Promise<void> => {
+    const fetchReferralLink = useCallback(async (): Promise<ReferralData> => {
         try {
             setLoading(true);
             setError(null);
@@ -36,22 +48,12 @@ export const useReferralLink = (): UseReferralLinkReturn => {
                 method: 'POST',
                 body: {
                     originType: 'membresia',
-                }
-            });
+                },
+            }) as ReferralAttributionResult;
 
-            const currentOrigin = window.location.origin;
-            const sessionQuery = data?.guestSessionId
-                ? `?guestSessionId=${encodeURIComponent(data.guestSessionId)}`
-                : '';
-            const enlaceCompleto = `${currentOrigin}/membresia/pago/${data.jwtReferido}${sessionQuery}`;
-
-            setReferralData({
-                codigoReferido: data.codigoReferido,
-                jwtReferido: data.jwtReferido,
-                enlaceCompleto,
-                guestSessionId: data?.guestSessionId || null,
-                attributionId: data?.attributionId || null,
-            });
+            const mapped = mapAttributionToReferralData(data);
+            setReferralData(mapped);
+            return mapped;
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : 'No fue posible generar el enlace de referido.';
             setError(errorMessage);
@@ -60,12 +62,12 @@ export const useReferralLink = (): UseReferralLinkReturn => {
         } finally {
             setLoading(false);
         }
-    };
+    }, []);
 
     return {
         referralData,
         loading,
         error,
-        refetch: fetchReferralLink
+        refetch: fetchReferralLink,
     };
 };

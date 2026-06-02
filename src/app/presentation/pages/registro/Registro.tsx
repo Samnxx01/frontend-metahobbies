@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -64,8 +64,20 @@ const registerSchema = z.object({
     });
 
 
+const REGISTRO_ROL_INVITADO = 'INVITADO';
+const REGISTRO_ROL_CLIENTE = 'CLIENTE';
+
+const resolverRolCorporativoRegistro = (valor: string | null): string =>
+    String(valor || '').trim().toUpperCase() === REGISTRO_ROL_INVITADO
+        ? REGISTRO_ROL_INVITADO
+        : REGISTRO_ROL_CLIENTE;
+
 export default function Registro(): React.ReactElement {
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+    const rolCorporativoRegistro = resolverRolCorporativoRegistro(
+        searchParams.get('rolCorporativo')
+    );
 
     // --- ESTADO DE CONTROL DE LA UI ---
     const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -153,7 +165,7 @@ export default function Registro(): React.ReactElement {
         const clientData: ClientData = {
             email: data.email,
             password: data.password,
-            rol: "CLIENTE"
+            rol: rolCorporativoRegistro,
         };
 
         try {

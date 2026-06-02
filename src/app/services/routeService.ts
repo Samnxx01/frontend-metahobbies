@@ -185,6 +185,13 @@ const getHerenciaAdminPermitida = async (): Promise<{
             const vistas = Array.isArray(h.vistas) ? h.vistas : [];
             vistas.forEach((vista) => {
                 if (!vista) return;
+
+                if (typeof vista === 'string' || typeof vista === 'number') {
+                    const vistaId = String(vista).trim();
+                    if (vistaId) idsPermitidos.add(vistaId);
+                    return;
+                }
+
                 if (vista.estadoRuta === false) return;
                 if (vista.layout && !isAdminLayout(vista.layout)) return;
 
@@ -1036,6 +1043,85 @@ const compareGuestPublicNavbar = (a: SecurityRouteRow, b: SecurityRouteRow): num
     );
 };
 
+/** Usuario afiliado / rol corporativo con sesión (no debe ver navbar de invitado). */
+export const esUsuarioRolCorporativoAutenticado = (): boolean => {
+    const token = localStorage.getItem('token');
+    if (!token) return false;
+
+    const stored = readTenantScopeAndRolFromStoredUser();
+    if (stored.esAfiliadoCliente) return true;
+    if (String(stored.tenantScope.tenantCorporativoId || '').trim()) return true;
+
+    try {
+        const payload = decodeJwtPayload(token) as {
+            auth?: {
+                rolCorporativoScope?: { rolCorporativoId?: string | null };
+                afiliadoScope?: { rolCorporativoId?: string | null; marcoId?: string | null };
+                tenantScope?: { tenantCorporativoId?: string | null };
+            };
+        } | null;
+        const auth = payload?.auth;
+        if (String(auth?.rolCorporativoScope?.rolCorporativoId || '').trim()) return true;
+        if (String(auth?.afiliadoScope?.rolCorporativoId || auth?.afiliadoScope?.marcoId || '').trim()) {
+            return true;
+        }
+        if (String(auth?.tenantScope?.tenantCorporativoId || '').trim()) return true;
+    } catch {
+        /* ignore */
+    }
+
+    return false;
+};
+
+const mapMenuTagsToNavbarItems = (
+    tags: Array<{
+        estado?: boolean;
+        routePath?: string;
+        ruta?: { path?: string };
+        label?: string;
+        nombreTag?: string;
+        order?: number;
+    }>,
+): PublicNavItem[] =>
+    tags
+        .filter((t) => t?.estado !== false)
+        .map((t) => ({
+            path: normalizeRoutePath(String(t.routePath || t.ruta?.path || '/')),
+            label: String(t.label || t.nombreTag || '').trim(),
+            order: Number(t.order ?? 0),
+        }))
+        .filter((item) => Boolean(item.label && item.path))
+        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
+const fetchMarcoMenuNavbarRoutes = async (menuTipo: 'SIDEBAR_MARCO' | 'USER_DROPDOWN'): Promise<PublicNavItem[]> => {
+    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api';
+    const menuResult = await apiFetch(
+        `${API_BASE_URL}/seguridad/rutas/menu-tags/resolver/actual?menuTipo=${menuTipo}`,
+        { method: 'GET', useAuth: true, logoutOn401: false },
+    );
+    if (!menuResult?.success || !Array.isArray(menuResult.data) || menuResult.data.length === 0) {
+        return [];
+    }
+    return mapMenuTagsToNavbarItems(menuResult.data);
+};
+
+/**
+ * Rutas del navbar según tipo de sesión.
+ * Rol corporativo autenticado: solo menú marco (tags), nunca catálogo público de invitado.
+ */
+export const getNavbarNavigationRoutes = async (isAuthenticated: boolean): Promise<PublicNavItem[]> => {
+    if (isAuthenticated && esUsuarioRolCorporativoAutenticado()) {
+        try {
+            const marco = await fetchMarcoMenuNavbarRoutes('SIDEBAR_MARCO');
+            if (marco.length > 0) return marco;
+        } catch {
+            /* sin menú marco */
+        }
+        return [];
+    }
+    return getPublicNavigationRoutes(isAuthenticated);
+};
+
 // export const getPublicNavigationRoutes = async (): Promise<PublicNavItem[]> => {
 //     try {
 //         const result = await fetchAllSecurityRoutes(false);
@@ -1066,6 +1152,18 @@ export const getPublicNavigationRoutes = async (
     isAuthenticated: boolean = false
 ): Promise<PublicNavItem[]> => {
     try {
+        if (isAuthenticated) {
+            if (esUsuarioRolCorporativoAutenticado()) {
+                return [];
+            }
+            try {
+                const marco = await fetchMarcoMenuNavbarRoutes('SIDEBAR_MARCO');
+                if (marco.length > 0) return marco;
+            } catch {
+                /* usuarios privados no corporativos: fallback catálogo PRIVATE */
+            }
+        }
+
         const result = await fetchAllSecurityRoutes(false);
 
         if (!result?.success || !result?.data) {

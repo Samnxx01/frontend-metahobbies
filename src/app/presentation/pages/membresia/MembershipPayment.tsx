@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { toast } from 'react-toastify';
 import { useMembership } from '../../../providers/MembershipProvider';
 import { apiFetch } from '@/app/services/api';
+import { resolvePublicAttributionContext } from '@/app/services/publicAttributionParams';
 import MembershipStepContent from '@/components/membership/MembershipStepContent';
 import { useMembershipPaymentForm } from '@/app/hooks/useMembershipPaymentForm';
 import { Button } from '@/components/ui/button';
@@ -27,6 +29,12 @@ export interface ResultadoPago {
     monto?: number;
     moneda?: string;
     email?: string;
+    /** ID de transacción en Wompi */
+    transactionId?: string;
+    referenciaPago?: string;
+    ventaReferencia?: string;
+    facturaId?: string;
+    metodoPago?: string;
 }
 
 interface MembresiaPlan {
@@ -184,7 +192,19 @@ const steps = [
 export default function MembershipPayment(): React.ReactElement {
     const navigate = useNavigate();
     const { token } = useParams<{ token: string }>();
+    const [searchParams] = useSearchParams();
     const { purchaseMembership: originalPurchaseMembership } = useMembership();
+
+    const guestSessionIdFromUrl = searchParams.get('guestSessionId')?.trim() || '';
+    const flowReferidos = searchParams.get('flow') === 'referidos'
+        || searchParams.get('redirectTo') === 'referidos';
+
+    const resolveGuestSessionId = (): string => {
+        if (guestSessionIdFromUrl) return guestSessionIdFromUrl;
+        const ctx = resolvePublicAttributionContext(searchParams.toString() ? `?${searchParams.toString()}` : '');
+        if (ctx.guestSessionId) return ctx.guestSessionId;
+        return sessionStorage.getItem('mabs_guest_session_id')?.trim() || '';
+    };
 
     // Lista de planes con esPrecioDefault: true y plan actualmente seleccionado
     const [planes, setPlanes] = useState<MembresiaPlan[]>([]);
@@ -292,18 +312,33 @@ export default function MembershipPayment(): React.ReactElement {
         return 'rechazada';
     };
 
+    useEffect(() => {
+        const guestSessionId = resolveGuestSessionId();
+        if (guestSessionId) {
+            sessionStorage.setItem('mabs_guest_session_id', guestSessionId);
+        }
+        if (flowReferidos) {
+            sessionStorage.setItem('mabs_referidos_flow', '1');
+        }
+    }, [guestSessionIdFromUrl, flowReferidos, searchParams]);
+
     // Carga membresías con esPrecioDefault: true
     useEffect(() => {
         async function loadPlanes() {
             try {
                 setLoadingPrice(true);
+                const guestSessionHeader = resolveGuestSessionId();
+                const headers: Record<string, string> = { referidos: token ?? '' };
+                if (guestSessionHeader) {
+                    headers['x-guest-session-id'] = guestSessionHeader;
+                }
                 const json = await apiFetch(
                     '/api/membresia/seguridad/crear/parametrizacion/membresia',
                     {
                         method: 'GET',
                         useAuth: false,
                         logoutOn401: false,
-                        headers: { referidos: token ?? '' },
+                        headers,
                     }
                 );
 

@@ -118,7 +118,8 @@ export default function CartProvider({ children }: CartProviderProps) {
 
   // Aplica el estado del backend al estado local
   const applyBackendCart = useCallback((cart: BackendCart) => {
-    setBackendCartId(cart._id);
+    // Solo enlazar operaciones de ítems a carritos ACTIVO (evita 404/409 tras checkout).
+    setBackendCartId(cart.estado === 'ACTIVO' ? cart._id : null);
     setCartItems(mapBackendCart(cart));
     setTotalDescuentoCodigo(cart.totalDescuentoCodigo ?? 0);
     setTotalImpuestos(cart.totalImpuestos ?? 0);
@@ -146,13 +147,12 @@ export default function CartProvider({ children }: CartProviderProps) {
     // 1. Guardar imagen en caché local (el backend no la almacena)
     if (product.image) saveImageCache(String(product.id), product.image);
 
-    // El backend crea o recupera el carrito activo y devuelve el estado vigente.
-    const cart = backendCartId ? null : await carritoService.obtenerOCrear();
-    const carritoId = backendCartId || cart?._id;
+    const cart = await carritoService.obtenerOCrear();
+    const carritoId = cart._id;
     if (!carritoId) throw new Error('No se pudo obtener el carrito activo');
     const updated = await carritoService.agregarItem(carritoId, String(product.id), quantity);
     applyBackendCart(updated);
-  }, [backendCartId, applyBackendCart]);
+  }, [applyBackendCart]);
 
   const removeFromCart = useCallback(async (productId: ProductId, colorPantone?: string): Promise<void> => {
     const item = cartItems.find(i => i.id === productId && i.color?.pantone === colorPantone);

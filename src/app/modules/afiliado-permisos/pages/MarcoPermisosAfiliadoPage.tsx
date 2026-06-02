@@ -24,6 +24,10 @@ export default function MarcoPermisosAfiliadoPage(): React.ReactElement {
         syncing={vm.syncing}
         hasMarco={Boolean(vm.marcoActivo)}
         marcoActivo={vm.marcoActivo}
+        roles={vm.roles}
+        rolSeleccionadoId={vm.rolSeleccionadoId}
+        rolSeleccionado={vm.rolSeleccionado}
+        onRolChange={(id) => void vm.seleccionarRol(id)}
         vistasCount={vm.vistasSel.size}
         accionesCount={vm.accionesSel.size}
         onRecargar={() => void vm.cargar()}
@@ -43,6 +47,7 @@ export default function MarcoPermisosAfiliadoPage(): React.ReactElement {
 
       <MarcoPermisosStatsCards
         marcoActivo={vm.marcoActivo}
+        rolSeleccionado={vm.rolSeleccionado}
         vistasCount={vm.vistasSel.size}
         accionesCount={vm.accionesSel.size}
       />
@@ -50,8 +55,11 @@ export default function MarcoPermisosAfiliadoPage(): React.ReactElement {
       <MarcoPermisosCatalogCard
         tab={vm.tab}
         onTabChange={vm.setTab}
-        filtro={vm.filtro}
-        onFiltroChange={vm.setFiltro}
+        filtroVistas={vm.filtroVistas}
+        onFiltroVistasChange={vm.setFiltroVistas}
+        filtroAcciones={vm.filtroAcciones}
+        onFiltroAccionesChange={vm.setFiltroAcciones}
+        accionesTotal={vm.accionesTotal}
         soloSugeridas={vm.soloSugeridas}
         onSoloSugeridasChange={vm.setSoloSugeridas}
         vistasSel={vm.vistasSel}

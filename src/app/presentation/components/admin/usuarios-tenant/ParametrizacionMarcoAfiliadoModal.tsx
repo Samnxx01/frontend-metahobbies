@@ -12,6 +12,7 @@ import { apiFetch } from '@/app/services/api';
 import { useMarcoPermisosParametrizacion } from '@/app/modules/afiliado-permisos/hooks/useMarcoPermisosParametrizacion';
 import { MarcoPermisosStatsCards } from '@/app/modules/afiliado-permisos/components/MarcoPermisosStatsCards';
 import { MarcoPermisosCatalogCard } from '@/app/modules/afiliado-permisos/components/MarcoPermisosCatalogCard';
+import { MarcoRolSelector } from '@/app/modules/afiliado-permisos/components/MarcoRolSelector';
 import { MARCO_AFILIADO_CODIGO } from '@/app/modules/afiliado-permisos/constants/catalog-filters';
 import type { ListadoUsuariosRolCorporativoResponse } from '@/app/presentation/components/admin/usuarios-tenant/usuariosRolCorporativoTypes';
 
@@ -57,21 +58,31 @@ export const ParametrizacionMarcoAfiliadoModal = ({
         await cargarPendientes();
     };
 
+    const codigoMarco = vm.rolSeleccionado?.codigo ?? vm.marcoActivo?.codigo ?? MARCO_AFILIADO_CODIGO;
+    const nombreRol = vm.rolSeleccionado?.rol ?? 'CLIENTE';
+
     return (
         <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
             <DialogContent className="flex max-h-[92vh] w-[min(96vw,56rem)] flex-col gap-0 overflow-hidden p-0">
                 <DialogHeader className="shrink-0 border-b border-border px-6 pb-4 pt-6">
                     <DialogTitle className="flex items-center gap-2 text-lg">
                         <Settings2 className="h-5 w-5 text-primary" />
-                        Parametrización del marco — {MARCO_AFILIADO_CODIGO}
+                        Parametrización del marco — {codigoMarco}
                     </DialogTitle>
                     <p className="text-left text-xs font-normal text-muted-foreground">
                         Define el techo de vistas y acciones HTTP para el rol corporativo{' '}
-                        <strong>CLIENTE</strong>. Al guardar
-                        se crea una nueva versión <strong>seq</strong> y se sincroniza automáticamente
-                        la <strong>herenciaCliente</strong> en los afiliados elegibles. Use «Sincronizar
-                        pendientes» para repetir el lote manualmente.
+                        <strong>{nombreRol}</strong>. Al guardar se crea una nueva versión{' '}
+                        <strong>seq</strong> y se sincroniza automáticamente la{' '}
+                        <strong>herenciaCliente</strong> en los usuarios con ese rol. Use
+                        «Sincronizar pendientes» para repetir el lote manualmente.
                     </p>
+                    <MarcoRolSelector
+                        className="mt-3"
+                        roles={vm.roles}
+                        rolSeleccionadoId={vm.rolSeleccionadoId}
+                        onRolChange={(id) => void vm.seleccionarRol(id)}
+                        disabled={vm.loading || vm.saving || vm.syncingLote}
+                    />
                 </DialogHeader>
 
                 <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4 space-y-4">
@@ -94,6 +105,7 @@ export const ParametrizacionMarcoAfiliadoModal = ({
 
                             <MarcoPermisosStatsCards
                                 marcoActivo={vm.marcoActivo}
+                                rolSeleccionado={vm.rolSeleccionado}
                                 vistasCount={vm.vistasSel.size}
                                 accionesCount={vm.accionesSel.size}
                             />
@@ -127,6 +139,7 @@ export const ParametrizacionMarcoAfiliadoModal = ({
                                     disabled={
                                         vm.syncingLote ||
                                         vm.saving ||
+                                        !vm.rolSeleccionadoId ||
                                         !vm.marcoActivo ||
                                         pendientesCount === 0
                                     }
@@ -157,8 +170,11 @@ export const ParametrizacionMarcoAfiliadoModal = ({
                             <MarcoPermisosCatalogCard
                                 tab={vm.tab}
                                 onTabChange={vm.setTab}
-                                filtro={vm.filtro}
-                                onFiltroChange={vm.setFiltro}
+                                filtroVistas={vm.filtroVistas}
+                                onFiltroVistasChange={vm.setFiltroVistas}
+                                filtroAcciones={vm.filtroAcciones}
+                                onFiltroAccionesChange={vm.setFiltroAcciones}
+                                accionesTotal={vm.accionesTotal}
                                 soloSugeridas={vm.soloSugeridas}
                                 onSoloSugeridasChange={vm.setSoloSugeridas}
                                 vistasSel={vm.vistasSel}

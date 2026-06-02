@@ -18,7 +18,11 @@ import { Menu, ShoppingCart, User, X, Trash2, ShieldCheck, LogOut, LogIn, Chevro
 import ThemeToggle from "@/app/presentation/components/common/ThemeToggle";
 
 import { apiFetch } from "@/app/services/api";
-import { getPublicNavigationRoutes, getMenuUsuarioRoutes, MenuUsuarioItem } from "@/app/services/routeService";
+import {
+    getNavbarNavigationRoutes,
+    getMenuUsuarioRoutes,
+    MenuUsuarioItem,
+} from "@/app/services/routeService";
 import { getGovernedLoginPath, getGovernedLogoutPath, getGovernedPublicHomePath } from "@/app/services/governedNavigation";
 import { appendPublicAttributionToInternalPath } from "@/app/services/publicAttributionParams";
 import { formatCOP } from "@/lib/utils";
@@ -71,7 +75,7 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
                         useAuth: false,
                         logoutOn401: false
                     }),
-                    getPublicNavigationRoutes(!!user),
+                    getNavbarNavigationRoutes(!!user),
                     user ? getMenuUsuarioRoutes() : Promise.resolve([])
                 ]);
 

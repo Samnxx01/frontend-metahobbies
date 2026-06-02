@@ -15,17 +15,34 @@ export interface MarcoPermisosAfiliado {
 export interface MarcoActivoResponse {
   marco: MarcoPermisosAfiliado | null;
   creado?: boolean;
+  rolCorporativoId?: string | null;
+  msg?: string;
+}
+
+export interface RolMarcoParametrizable {
+  _id: string;
+  rol: string;
+  codigo: string;
+  scopeKey: string;
+  tenantCorporativo?: string | null;
+}
+
+export interface RolesMarcoResponse {
+  roles: RolMarcoParametrizable[];
+  total?: number;
   msg?: string;
 }
 
 export interface GuardarMarcoPayload {
   acciones: string[];
   vistas: string[];
+  rolCorporativoId?: string;
 }
 
 export interface GuardarMarcoResponse {
   msg?: string;
   marco?: MarcoPermisosAfiliado;
+  actualizado?: boolean;
   resultado?: SincronizarMarcoResponse['resultado'] & {
     motivosOmitidos?: Record<string, number>;
     herenciaClienteMuestras?: Array<{

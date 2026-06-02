@@ -6,11 +6,66 @@ import type {
   GuardarMarcoResponse,
   HerenciaClienteRelacion,
   MarcoActivoResponse,
+  RolesMarcoResponse,
+  RolMarcoParametrizable,
   SincronizarMarcoResponse,
 } from '../types/marco.types';
+import { mapRolCorporativoAMarco } from '../utils/marcoRolKeys';
 
-export const getMarcoAfiliadoActivo = async (bootstrap = true): Promise<MarcoActivoResponse> =>
-  apiFetch(AFILIADO_PERMISOS_PATHS.marcoActivo(bootstrap), {
+const CORPORATIVO_ROLES_PATH = `${AFILIADO_PERMISOS_PATHS.configBase}/permisos/corporativo/listar/roles/tenant/corporativo`;
+
+async function listarRolesDesdeCorporativo(): Promise<RolMarcoParametrizable[]> {
+  const res = await apiFetch<{ ok?: boolean; data?: Array<Record<string, unknown>> }>(
+    CORPORATIVO_ROLES_PATH,
+    { method: 'GET', useAuth: true }
+  );
+  return (res?.data ?? [])
+    .map((r) => mapRolCorporativoAMarco(r))
+    .filter((r) => r._id);
+}
+
+export const getRolesMarcoParametrizables = async (): Promise<RolesMarcoResponse> => {
+  try {
+    return await apiFetch<RolesMarcoResponse>(AFILIADO_PERMISOS_PATHS.marcoRoles, {
+      method: 'GET',
+      useAuth: true,
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (!msg.includes('[404]')) throw err;
+
+    try {
+      const activo = await apiFetch<MarcoActivoResponse & { roles?: RolMarcoParametrizable[] }>(
+        AFILIADO_PERMISOS_PATHS.marcoActivo(false, null, true),
+        { method: 'GET', useAuth: true }
+      );
+      if (activo?.roles?.length) {
+        return {
+          roles: activo.roles,
+          total: activo.roles.length,
+          msg: 'Roles desde marco activo (incluirRoles)',
+        };
+      }
+    } catch {
+      /* siguiente fallback */
+    }
+
+    const roles = await listarRolesDesdeCorporativo();
+    return {
+      roles,
+      total: roles.length,
+      msg: roles.length
+        ? 'Roles desde catálogo corporativo'
+        : 'No hay roles corporativos activos',
+    };
+  }
+};
+
+export const getMarcoAfiliadoActivo = async (
+  rolCorporativoId?: string | null,
+  bootstrap = true
+): Promise<MarcoActivoResponse> =>
+  apiFetch(AFILIADO_PERMISOS_PATHS.marcoActivo(bootstrap, rolCorporativoId), {
     method: 'GET',
     useAuth: true,
   });
@@ -50,11 +105,15 @@ export const sincronizarPermisosAfiliado = async (): Promise<SincronizarMarcoRes
   });
 
 export const sincronizarLoteAfiliadosAdmin = async (
-  limit = 100
+  limit = 100,
+  rolCorporativoId?: string | null
 ): Promise<SincronizarMarcoResponse> =>
   apiFetch(AFILIADO_PERMISOS_PATHS.syncLote, {
     method: 'POST',
-    body: { limit },
+    body: {
+      limit,
+      ...(rolCorporativoId ? { rolCorporativoId } : {}),
+    },
     useAuth: true,
   });
 

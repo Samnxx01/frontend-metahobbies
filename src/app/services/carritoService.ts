@@ -14,15 +14,18 @@ const getCartSessionId = (): string => {
   return generated;
 };
 
-const cartFetch = (endpoint: string, options: Parameters<typeof apiFetch>[1]) =>
-  apiFetch(endpoint, {
+const cartFetch = (endpoint: string, options: Parameters<typeof apiFetch>[1]) => {
+  const hasToken = Boolean(localStorage.getItem('token'));
+  return apiFetch(endpoint, {
     ...options,
+    useAuth: options.useAuth ?? hasToken,
     logoutOn401: false,
     headers: {
       ...(options.headers || {}),
       'x-session-id': getCartSessionId(),
     },
   });
+};
 
 // ── Tipos del backend ──────────────────────────────────────────────────────
 
@@ -83,9 +86,22 @@ export interface CartAlerta {
 }
 
 export interface CheckoutResult {
-  ventaReferencia: string;
-  total: number;
+  wompiCheckoutUrl: string;
+  reference: string;
+  auditoriaId?: string;
+  ventaReferencia?: string;
+  facturaId?: string;
+  total?: number;
   carrito: BackendCart;
+  resumen?: {
+    items: number;
+    subtotal: number;
+    descuento: number;
+    impuestos?: number;
+    total: number;
+    moneda: string;
+    amount_in_cents: number;
+  };
 }
 
 const normalizeCartItem = (item: BackendCartItem): BackendCartItem => ({
@@ -106,6 +122,18 @@ const carritoService = {
   /** Obtiene el carrito ACTIVO del usuario o crea uno nuevo */
   async obtenerOCrear(): Promise<BackendCart> {
     const resp = await cartFetch('/api/carrito', { method: 'GET' });
+    return normalizeCart(resp.data as BackendCart);
+  },
+
+  /** Obtiene un carrito por id (incluye COMPLETADO tras pago) */
+  async obtenerPorId(carritoId: string): Promise<
+    BackendCart & {
+      datosFacturacion?: DatosFacturacionInvitado | null;
+      facturaId?: string | null;
+      ventaReferencia?: string | null;
+    }
+  > {
+    const resp = await cartFetch(`/api/carrito/${carritoId}`, { method: 'GET' });
     return normalizeCart(resp.data as BackendCart);
   },
 
@@ -183,11 +211,233 @@ const carritoService = {
     } as CheckoutResult;
   },
 
+  async ejecutarPagoWompi(
+    carritoId: string,
+    payload: {
+      paymentMethod: 'nequi' | 'card' | 'pse';
+      payment_method?: Record<string, unknown>;
+      customer_data?: Record<string, unknown>;
+      customer_email?: string;
+    },
+  ): Promise<{
+    ok?: boolean;
+    flow?: string;
+    wompiCheckoutUrl?: string | null;
+    reference?: string;
+    ventaReferencia?: string | null;
+    facturaId?: string | null;
+    status?: string;
+    transactionId?: string;
+    transaccion?: { status?: string };
+    amount_in_cents?: number;
+  }> {
+    return cartFetch(`/api/carrito/${carritoId}/pago/wompi`, {
+      method: 'POST',
+      body: payload,
+    });
+  },
+
+  async emitirComprobantePedidoPdf(payload: {
+    transactionId: string;
+    facturaId?: string;
+    ventaReferencia?: string;
+    referenciaPago?: string;
+    carritoId?: string;
+    snapshot: Record<string, unknown>;
+  }): Promise<{
+    id: string;
+    facturaId: string;
+    invoiceId?: string | null;
+    transactionId: string;
+    nombreArchivo: string;
+    contenidoHash: string;
+    yaExistia: boolean;
+    descargaUrl: string;
+  }> {
+    const resp = await cartFetch('/api/carrito/comprobantes-pedido', {
+      method: 'POST',
+      body: payload,
+    });
+    return resp.data as {
+      id: string;
+      facturaId: string;
+      transactionId: string;
+      nombreArchivo: string;
+      contenidoHash: string;
+      yaExistia: boolean;
+      descargaUrl: string;
+    };
+  },
+
+  async descargarComprobantePedidoPdf(transactionId: string): Promise<{
+    blob: Blob;
+    fileName: string;
+  }> {
+    const token = localStorage.getItem('token');
+    const headers: Record<string, string> = {
+      'x-session-id': getCartSessionId(),
+    };
+    if (token) {
+      headers.metasploit = token;
+      headers.Authorization = `Bearer ${token}`;
+    }
+    const response = await fetch(
+      `/api/carrito/comprobantes-pedido/${encodeURIComponent(transactionId)}/pdf`,
+      { method: 'GET', headers },
+    );
+    if (!response.ok) {
+      let msg = 'No se pudo descargar el comprobante PDF';
+      try {
+        const err = await response.json();
+        msg = err?.msg || msg;
+      } catch {
+        /* ignore */
+      }
+      throw new Error(msg);
+    }
+    const disposition = response.headers.get('Content-Disposition') || '';
+    const match = disposition.match(/filename="?([^"]+)"?/i);
+    const fileName = match?.[1] || `pedido-mabs-${transactionId}.pdf`;
+    const blob = await response.blob();
+    return { blob, fileName };
+  },
+
+  async consultarEstadoPagoWompi(carritoId: string): Promise<{
+    ok?: boolean;
+    reference?: string;
+    ventaReferencia?: string | null;
+    facturaId?: string | null;
+    invoiceId?: string | null;
+    carritoEstado?: string | null;
+    status?: string;
+    transactionId?: string | null;
+    amount_in_cents?: number | null;
+    currency?: string;
+    subtotal?: number | null;
+    total?: number | null;
+    datosFacturacion?: DatosFacturacionInvitado | null;
+    items?: Array<{
+      _id: string;
+      productoId: string;
+      sku?: string | null;
+      nombre: string;
+      cantidad: number;
+      precioUnitario: number;
+      subtotalNeto: number;
+      stockDisponible?: number;
+      stockSuficiente?: boolean;
+    }>;
+  }> {
+    return cartFetch(`/api/carrito/${carritoId}/pago/estado`, { method: 'GET' });
+  },
+
+  /** Pedidos completados del usuario invitado/cliente autenticado */
+  async listarMisPedidos(params: { limit?: number; skip?: number } = {}): Promise<{
+    ok?: boolean;
+    total: number;
+    data: Array<{
+      id: string;
+      ventaReferencia?: string | null;
+      facturaId?: string | null;
+      invoiceId?: string | null;
+      referenciaPago?: string | null;
+      estado: string;
+      total: number;
+      moneda: string;
+      cantidadItems: number;
+      items: Array<{ nombre: string; sku?: string | null; cantidad: number; subtotalNeto?: number }>;
+      fechaPedido?: string;
+      datosFacturacion?: Record<string, unknown> | null;
+    }>;
+  }> {
+    const qs = new URLSearchParams();
+    if (params.limit != null) qs.set('limit', String(params.limit));
+    if (params.skip != null) qs.set('skip', String(params.skip));
+    const query = qs.toString();
+    return apiFetch(`/api/carrito/mis-pedidos${query ? `?${query}` : ''}`, { method: 'GET' });
+  },
+
   /** Cancela el carrito */
   async cancelar(carritoId: string): Promise<BackendCart> {
     const resp = await cartFetch(`/api/carrito/${carritoId}/cancelar`, { method: 'POST' });
     return normalizeCart(resp.data as BackendCart);
   },
+
+  /** Admin: pedidos con pago aprobado y venta completada */
+  async reaplicarKardexPedido(carritoId: string): Promise<{ ok: boolean; msg?: string; movimientosKardex?: unknown[] }> {
+    return apiFetch(`/api/carrito/admin/pedidos-aprobados/${carritoId}/reaplicar-kardex`, {
+      method: 'POST',
+      body: {},
+    });
+  },
+
+  async listarPedidosAprobados(params: { limit?: number; skip?: number; q?: string } = {}): Promise<{
+    total: number;
+    data: PedidoAprobado[];
+  }> {
+    const qs = new URLSearchParams();
+    if (params.limit != null) qs.set('limit', String(params.limit));
+    if (params.skip != null) qs.set('skip', String(params.skip));
+    if (params.q) qs.set('q', params.q);
+    const query = qs.toString();
+    const resp = await apiFetch(
+      `/api/carrito/admin/pedidos-aprobados${query ? `?${query}` : ''}`,
+      { method: 'GET' },
+    );
+    return {
+      total: Number(resp.total || 0),
+      data: (resp.data || []) as PedidoAprobado[],
+    };
+  },
 };
+
+export interface PedidoAprobadoLinea {
+  productoId: string | null;
+  nombre: string;
+  sku: string | null;
+  skuOrigen: string | null;
+  cantidad: number;
+  precioUnitario: number;
+  precioVentaCobrado: number;
+  precioVentaRelacion: number;
+  precioSkuOrigen: number;
+  costoUnitarioSku: number;
+  stockActualKardex: number | null;
+  margenUnitario: number;
+  margenTotal: number;
+  margenPorcentaje: number | null;
+  subtotal: number;
+}
+
+export interface PedidoResumenMargen {
+  costoTotal: number;
+  ventaItemsTotal: number;
+  margenTotal: number;
+  margenPorcentaje: number | null;
+}
+
+export interface PedidoAprobado {
+  id: string;
+  ventaReferencia: string | null;
+  referenciaPago: string | null;
+  pagoEstado: string;
+  fechaPedido: string;
+  total: number;
+  moneda: string;
+  cantidadTotalUnidades: number;
+  resumenMargen: PedidoResumenMargen;
+  facturacion: {
+    nombre: string;
+    email: string;
+    telefono: string;
+    tipoDocumento: string;
+    numeroDocumento: string;
+    tipoPersona: string | null;
+    ciudad: string;
+    departamento: string;
+    direccion: string;
+  };
+  items: PedidoAprobadoLinea[];
+}
 
 export default carritoService;

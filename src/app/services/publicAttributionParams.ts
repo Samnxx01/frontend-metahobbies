@@ -13,9 +13,18 @@ export const PUBLIC_ATTRIBUTION_KEYS = [
     'originType',
     'originId',
     'flow',
+    'redirectTo',
 ] as const;
 
 export type PublicAttributionKey = (typeof PUBLIC_ATTRIBUTION_KEYS)[number];
+
+export interface PublicAttributionContext {
+    ref: string;
+    guestSessionId: string;
+    originType: string;
+    originId: string;
+    flow: string;
+}
 
 function readStored(): Record<string, string> {
     try {
@@ -36,6 +45,57 @@ export function getStoredPublicAttribution(): Record<string, string> {
 }
 
 /**
+ * Combina query actual + sessionStorage de atribución (Pipeline B / referidos).
+ */
+export function resolvePublicAttributionContext(search = ''): PublicAttributionContext {
+    const stored = readStored();
+    const query = search.startsWith('?') ? search.slice(1) : search;
+    const params = query ? new URLSearchParams(query) : null;
+
+    const pick = (key: PublicAttributionKey): string => {
+        const fromUrl = params?.get(key);
+        if (fromUrl != null && String(fromUrl).trim() !== '') {
+            return String(fromUrl).trim();
+        }
+        return String(stored[key] || '').trim();
+    };
+
+    return {
+        ref: pick('ref'),
+        guestSessionId: pick('guestSessionId'),
+        originType: pick('originType'),
+        originId: pick('originId'),
+        flow: pick('flow'),
+    };
+}
+
+/** Token mínimo del enlace de referido (JWT encriptado en query `ref`). */
+export function esTokenReferidoAtribucionValido(ref: string): boolean {
+    const token = String(ref || '').trim();
+    return token.length >= 32;
+}
+
+/**
+ * Persiste atribución antes de entrar al flujo membresía referidos.
+ * Sincroniza guestSessionId con la sesión que consume MembershipPayment.
+ */
+export function persistAttributionForReferidosFlow(ctx: PublicAttributionContext): void {
+    const stored = readStored();
+    if (ctx.ref) stored.ref = ctx.ref;
+    if (ctx.guestSessionId) stored.guestSessionId = ctx.guestSessionId;
+    if (ctx.originType) stored.originType = ctx.originType;
+    if (ctx.originId) stored.originId = ctx.originId;
+    stored.flow = 'referidos';
+    stored.redirectTo = 'referidos';
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
+
+    if (ctx.guestSessionId) {
+        sessionStorage.setItem('mabs_guest_session_id', ctx.guestSessionId);
+    }
+    sessionStorage.setItem('mabs_referidos_flow', '1');
+}
+
+/**
  * Fusiona la query actual de la URL en sessionStorage cuando llegan claves de atribución.
  * Llamar en cada cambio de ruta del layout público.
  */
@@ -53,6 +113,9 @@ export function capturePublicAttributionFromSearch(search: string): void {
     }
     if (updated) {
         sessionStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
+        if (stored.guestSessionId) {
+            sessionStorage.setItem('mabs_guest_session_id', stored.guestSessionId);
+        }
     }
 }
 

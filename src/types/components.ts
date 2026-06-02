@@ -61,11 +61,18 @@ export interface ProductCardProps {
   onAddToCart?: (product: Product) => void;
 }
 
+export interface CategoryCardMedia {
+  tipo: 'image' | 'video';
+  url: string;
+  duracionSegundos?: number | null;
+}
+
 export interface CategoryCardProps {
   category: {
-    id: string ;
+    id: string;
     name: string;
     image: string;
+    media?: CategoryCardMedia | null;
   };
 }
 

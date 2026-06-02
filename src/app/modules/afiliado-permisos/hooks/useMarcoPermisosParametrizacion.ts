@@ -1,13 +1,17 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'react-toastify';
 import {
   getMarcoAfiliadoActivo,
-  getCatalogoMarcoAfiliado,
+  getRolesMarcoParametrizables,
   guardarMarcoAfiliado,
   sincronizarPermisosAfiliado,
   sincronizarLoteAfiliadosAdmin,
 } from '../api/marco.api';
-import type { MarcoCatalogTab, MarcoPermisosAfiliado } from '../types/marco.types';
+import type {
+  MarcoCatalogTab,
+  MarcoPermisosAfiliado,
+  RolMarcoParametrizable,
+} from '../types/marco.types';
 import { SUGERENCIAS_AFILIADO } from '../constants/catalog-filters';
 import { toId } from '../utils/toId';
 import { getAllRoutes, getAccionesCatalogo, type Route } from '@/app/services/routesService';
@@ -20,63 +24,109 @@ const toggleSet = (set: Set<string>, id: string, checked: boolean): Set<string> 
   return next;
 };
 
+function resolverRolPorDefecto(
+  roles: RolMarcoParametrizable[],
+  actual: string | null
+): string | null {
+  if (actual && roles.some((r) => r._id === actual)) return actual;
+  const clienteGlobal =
+    roles.find((r) => r.rol === 'CLIENTE' && !r.tenantCorporativo)?._id ?? null;
+  return clienteGlobal ?? roles[0]?._id ?? null;
+}
+
 export function useMarcoPermisosParametrizacion() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncingLote, setSyncingLote] = useState(false);
+  const [roles, setRoles] = useState<RolMarcoParametrizable[]>([]);
+  const [rolSeleccionadoId, setRolSeleccionadoId] = useState<string | null>(null);
   const [marcoActivo, setMarcoActivo] = useState<MarcoPermisosAfiliado | null>(null);
   const [rutas, setRutas] = useState<Route[]>([]);
   const [acciones, setAcciones] = useState<AccionOption[]>([]);
   const [vistasSel, setVistasSel] = useState<Set<string>>(new Set());
   const [accionesSel, setAccionesSel] = useState<Set<string>>(new Set());
-  const [filtro, setFiltro] = useState('');
+  const [filtroVistas, setFiltroVistas] = useState('');
+  const [filtroAcciones, setFiltroAcciones] = useState('');
   const [soloSugeridas, setSoloSugeridas] = useState(false);
   const [tab, setTab] = useState<MarcoCatalogTab>('vistas');
+  const rolSeleccionadoIdRef = useRef<string | null>(null);
 
-  const cargar = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [marcoRes, rutasRes, catalogoMarco, accRes] = await Promise.all([
-        getMarcoAfiliadoActivo(),
-        getAllRoutes(),
-        getCatalogoMarcoAfiliado().catch(() => null),
-        getAccionesCatalogo(),
-      ]);
+  const rolSeleccionado = useMemo(
+    () => roles.find((r) => r._id === rolSeleccionadoId) ?? null,
+    [roles, rolSeleccionadoId]
+  );
 
-      const marco = marcoRes?.marco ?? null;
+  const aplicarMarcoEnEstado = useCallback(
+    (
+      marco: MarcoPermisosAfiliado | null,
+      marcoRes?: { creado?: boolean; msg?: string },
+      { avisarSinMarco = false } = {}
+    ) => {
       setMarcoActivo(marco);
+      setVistasSel(new Set((marco?.vistas ?? []).map((id) => toId(id))));
+      setAccionesSel(new Set((marco?.acciones ?? []).map((id) => toId(id))));
 
       if (marcoRes?.creado) {
         toast.info(
           marcoRes.msg || 'Se creó el marco inicial vacío (seq 1). Seleccione vistas y acciones.'
         );
+      } else if (!marco && avisarSinMarco) {
+        toast.info(
+          'No hay techo para este rol. Seleccione vistas y acciones y guarde para crearlo.'
+        );
+      }
+    },
+    []
+  );
+
+  const cargarMarcoParaRol = useCallback(
+    async (rolId: string, bootstrap = false, avisarSinMarco = false) => {
+      const marcoRes = await getMarcoAfiliadoActivo(rolId, bootstrap);
+      aplicarMarcoEnEstado(marcoRes?.marco ?? null, marcoRes ?? undefined, { avisarSinMarco });
+      return marcoRes;
+    },
+    [aplicarMarcoEnEstado]
+  );
+
+  const cargar = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [rolesRes, rutasRes, accRes] = await Promise.all([
+        getRolesMarcoParametrizables(),
+        getAllRoutes(),
+        getAccionesCatalogo().catch(() => ({ success: false, data: [], total: 0 })),
+      ]);
+
+      const rolesLista = rolesRes?.roles ?? [];
+      setRoles(rolesLista);
+
+      if (rolesLista.length === 0) {
+        toast.warn('No hay roles corporativos activos para parametrizar.');
+        setRolSeleccionadoId(null);
+        setMarcoActivo(null);
+        setVistasSel(new Set());
+        setAccionesSel(new Set());
+      } else {
+        const rolId = resolverRolPorDefecto(rolesLista, rolSeleccionadoIdRef.current);
+        setRolSeleccionadoId(rolId);
+        rolSeleccionadoIdRef.current = rolId;
+        if (rolId) {
+          await cargarMarcoParaRol(rolId, false);
+        }
       }
 
-      setVistasSel(new Set((marco?.vistas ?? []).map((id) => toId(id))));
-      setAccionesSel(new Set((marco?.acciones ?? []).map((id) => toId(id))));
       setRutas((rutasRes?.data ?? []).filter((r) => r.estadoRuta !== false));
 
-      const accionesMarco = (catalogoMarco?.acciones ?? [])
-        .map((a) => ({
-          _id: String(a._id || a.iud || ''),
-          iud: String(a.iud || a._id || ''),
-          method: String(a.method || '').toUpperCase(),
-          etiquetas: String(a.etiquetas || ''),
-          estadoAccion: a.estadoAccion !== false,
-        }))
-        .filter((a) => a._id);
-
-      const accionesMerge = new Map<string, AccionOption>();
-      for (const a of [...accionesMarco, ...(accRes?.data ?? [])]) {
-        if (a._id && a.estadoAccion !== false) accionesMerge.set(a._id, a);
-      }
-      const accionesLista = [...accionesMerge.values()];
+      const accionesLista = (accRes?.data ?? []).filter(
+        (a) => a._id && a.estadoAccion !== false
+      );
       setAcciones(accionesLista);
 
       if (accionesLista.length === 0) {
         toast.warn(
-          'No se cargaron acciones HTTP. Verifique la colección acciones en BD o cree acciones en Gestión de rutas.'
+          accRes?.message ||
+            'No se cargaron acciones HTTP. Verifique la colección acciones en BD o Gestión de rutas.'
         );
       }
     } catch (err: unknown) {
@@ -84,13 +134,31 @@ export function useMarcoPermisosParametrizacion() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [cargarMarcoParaRol]);
+
+  const seleccionarRol = useCallback(
+    async (rolId: string) => {
+      if (!rolId || rolId === rolSeleccionadoIdRef.current) return;
+      setRolSeleccionadoId(rolId);
+      rolSeleccionadoIdRef.current = rolId;
+      setLoading(true);
+      try {
+        await cargarMarcoParaRol(rolId, false, true);
+      } catch (err: unknown) {
+        toast.error(err instanceof Error ? err.message : 'Error al cargar marco del rol');
+      } finally {
+        setLoading(false);
+      }
+    },
+    [cargarMarcoParaRol]
+  );
 
   useEffect(() => {
     void cargar();
   }, [cargar]);
 
-  const filtroNorm = filtro.trim().toLowerCase();
+  const filtroVistasNorm = filtroVistas.trim().toLowerCase();
+  const filtroAccionesNorm = filtroAcciones.trim().toLowerCase();
 
   const rutasFiltradas = useMemo(
     () =>
@@ -98,21 +166,21 @@ export function useMarcoPermisosParametrizacion() {
         if (soloSugeridas && !SUGERENCIAS_AFILIADO.test(`${r.path} ${r.name} ${r.component}`)) {
           return false;
         }
-        if (!filtroNorm) return true;
-        return `${r.path} ${r.name} ${r.component}`.toLowerCase().includes(filtroNorm);
+        if (!filtroVistasNorm) return true;
+        return `${r.path} ${r.name} ${r.component}`.toLowerCase().includes(filtroVistasNorm);
       }),
-    [rutas, filtroNorm, soloSugeridas]
+    [rutas, filtroVistasNorm, soloSugeridas]
   );
 
   const accionesFiltradas = useMemo(
     () =>
       acciones.filter((a) => {
-        if (!filtroNorm) return true;
+        if (!filtroAccionesNorm) return true;
         return `${a.method} ${a.etiquetas} ${a._id} ${a.iud ?? ''}`
           .toLowerCase()
-          .includes(filtroNorm);
+          .includes(filtroAccionesNorm);
       }),
-    [acciones, filtroNorm]
+    [acciones, filtroAccionesNorm]
   );
 
   const seleccionarTodasVistasVisibles = () => {
@@ -148,6 +216,10 @@ export function useMarcoPermisosParametrizacion() {
   };
 
   const guardar = async () => {
+    if (!rolSeleccionadoId) {
+      toast.warn('Seleccione un rol corporativo antes de guardar.');
+      return;
+    }
     if (vistasSel.size === 0 || accionesSel.size === 0) {
       toast.warn('Seleccione al menos una vista y una acción para el techo del afiliado.');
       return;
@@ -157,6 +229,7 @@ export function useMarcoPermisosParametrizacion() {
       const res = await guardarMarcoAfiliado({
         vistas: Array.from(vistasSel),
         acciones: Array.from(accionesSel),
+        rolCorporativoId: rolSeleccionadoId,
       });
       const r = res?.resultado;
       const syncDetail =
@@ -175,11 +248,11 @@ export function useMarcoPermisosParametrizacion() {
       }
       if (diag?.totalUsuariosConRolCorporativo === 0) {
         toast.warn(
-          'Ningún usuario tiene rolCorporativoId. Las vistas/acciones quedan en marcopermisosafiliados; herenciaCliente se llena por usuario al sincronizar.'
+          'Ningún usuario tiene este rol corporativo. El techo queda guardado; herenciaCliente se llena al sincronizar usuarios.'
         );
       }
       toast.success((res?.msg || 'Marco guardado.') + syncDetail);
-      await cargar();
+      await cargarMarcoParaRol(rolSeleccionadoId, false);
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Error al guardar marco');
     } finally {
@@ -226,9 +299,13 @@ export function useMarcoPermisosParametrizacion() {
   };
 
   const sincronizarLote = async () => {
+    if (!rolSeleccionadoId) {
+      toast.warn('Seleccione un rol corporativo antes de sincronizar.');
+      return;
+    }
     setSyncingLote(true);
     try {
-      const res = await sincronizarLoteAfiliadosAdmin(100);
+      const res = await sincronizarLoteAfiliadosAdmin(100, rolSeleccionadoId);
       const r = res?.resultado;
       toast.success(
         res?.msg ||
@@ -254,9 +331,16 @@ export function useMarcoPermisosParametrizacion() {
     saving,
     syncing,
     syncingLote,
+    roles,
+    rolSeleccionadoId,
+    rolSeleccionado,
+    seleccionarRol,
     marcoActivo,
-    filtro,
-    setFiltro,
+    filtroVistas,
+    setFiltroVistas,
+    filtroAcciones,
+    setFiltroAcciones,
+    accionesTotal: acciones.length,
     soloSugeridas,
     setSoloSugeridas,
     tab,

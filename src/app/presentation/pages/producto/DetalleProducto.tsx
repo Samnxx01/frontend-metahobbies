@@ -106,6 +106,7 @@ export default function DetalleProducto(): React.ReactElement {
     try {
       await addToCart(productToAdd, quantity);
       setIsAdded(true);
+      toast.success(`${productoCard.name} agregado al carrito`, { autoClose: 1500 });
       setTimeout(() => setIsAdded(false), 2000);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'No se pudo agregar el producto al carrito.');

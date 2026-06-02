@@ -3,6 +3,15 @@ import type { Product as ComponentProduct } from '../../types/components';
 
 // ── Tipos del backend ──────────────────────────────────────────────────────
 
+export interface CategoriaMedia {
+  _id?: string;
+  iud?: string;
+  tipo: 'image' | 'video';
+  url: string;
+  duracionSegundos?: number | null;
+  mimetype?: string;
+}
+
 export interface BackendCategoria {
   _id?: string;
   iud?: string;
@@ -12,6 +21,7 @@ export interface BackendCategoria {
   nivel: number;
   padre?: string | BackendCategoria | null;
   estado: boolean;
+  media?: CategoriaMedia | null;
 }
 
 export interface BackendTipoProducto {
@@ -98,6 +108,45 @@ export interface ProductoVentaMedia {
 // ── Mapeo backend → ComponentProduct (para ProductCard) ───────────────────
 
 const PLACEHOLDER = 'https://placehold.co/400x320/f3f4f6/a3a3a3?text=Producto';
+
+const CATEGORY_IMAGES: Record<string, string> = {
+  maquillaje: '/assets/images/products/product1.png',
+  labiales: '/assets/images/products/product2.png',
+  brochas: '/assets/images/products/product3.png',
+  base: '/assets/images/products/product4.png',
+  'cuidado facial': '/assets/images/products/product5.png',
+  cabello: '/assets/images/products/product3.png',
+  uñas: '/assets/images/products/product5.png',
+};
+
+export function getCategoriaId(cat: BackendCategoria, index = 0): string {
+  return String(cat.iud || cat._id || cat.id || `cat-${index}`);
+}
+
+export function getCategoryImage(nombre: string): string {
+  const key = String(nombre || '').toLowerCase();
+  const match = Object.keys(CATEGORY_IMAGES).find((k) => key.includes(k));
+  return CATEGORY_IMAGES[match ?? ''] ?? '/assets/images/products/product1.png';
+}
+
+/** Resuelve query ?categoria= (id o nombre legado) al ObjectId de categoría. */
+export function resolverCategoriaDesdeQuery(
+  param: string | null | undefined,
+  categorias: BackendCategoria[]
+): string | undefined {
+  const raw = String(param || '').trim();
+  if (!raw) return undefined;
+
+  const byId = categorias.find((c) => getCategoriaId(c) === raw);
+  if (byId) return getCategoriaId(byId);
+
+  const norm = raw.toLowerCase();
+  const byName = categorias.find(
+    (c) => String(c.nombre || '').toLowerCase() === norm
+      || String(c.nombre || '').toLowerCase().replace(/\s+/g, '-') === norm
+  );
+  return byName ? getCategoriaId(byName) : raw;
+}
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
 
 const mediaSrc = (url: string): string => {
@@ -105,6 +154,17 @@ const mediaSrc = (url: string): string => {
   if (!value || value.startsWith('http') || value.startsWith('data:') || value.startsWith('blob:')) return value;
   if (!value.startsWith('/api') || !API_BASE_URL.startsWith('http')) return value;
   return `${API_BASE_URL.replace(/\/api\/?$/, '')}${value}`;
+};
+
+export const mapCategoriaConMediaUrl = (cat: BackendCategoria): BackendCategoria => {
+  if (!cat.media?.url) return cat;
+  return {
+    ...cat,
+    media: {
+      ...cat.media,
+      url: mediaSrc(cat.media.url),
+    },
+  };
 };
 
 export function mapProducto(p: BackendProducto): ComponentProduct {
@@ -164,7 +224,26 @@ const productosService = {
   /** Lista categorías activas del catálogo */
   async listarCategorias(): Promise<BackendCategoria[]> {
     const resp = await apiFetchPublic('/api/productos/categorias');
-    return (resp?.data ?? []) as BackendCategoria[];
+    const rows = (resp?.data ?? []) as BackendCategoria[];
+    return rows.map(mapCategoriaConMediaUrl);
+  },
+
+  async subirMediaCategoria(
+    categoriaId: string,
+    file: File,
+    duracionSegundos?: number
+  ): Promise<CategoriaMedia> {
+    const formData = new FormData();
+    formData.append('media', file);
+    if (typeof duracionSegundos === 'number') {
+      formData.append('duracionSegundos', String(duracionSegundos));
+    }
+    const resp = await apiFetch(`/api/productos/categorias/${categoriaId}/media`, {
+      method: 'POST',
+      body: formData,
+    });
+    const media = resp?.data as CategoriaMedia;
+    return { ...media, url: mediaSrc(media.url) };
   },
 
   async listarTiposProducto(): Promise<BackendTipoProducto[]> {
@@ -263,6 +342,17 @@ const productosService = {
       destacado: true,
     });
     return productos.map(mapProducto);
+  },
+
+  /** Catálogo público (/productos) con filtro opcional por categoría. */
+  async listarParaCatalogo(categoriaId?: string): Promise<ComponentProduct[]> {
+    const productos = await productosService.listarProductos({
+      categoria: categoriaId,
+      estadoCatalogo: 'ACTIVO',
+    });
+    return productos
+      .filter((p) => p.estadoProducto !== false)
+      .map(mapProducto);
   },
 };
 

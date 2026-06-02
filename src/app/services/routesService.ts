@@ -622,6 +622,7 @@ export const getAccionesCatalogo = async (): Promise<AccionesResponse> => {
   try {
     const response = await apiFetch(`${API_BASE_URL}/seguridad/rutas/acciones`, {
       method: 'GET',
+      useAuth: true,
     });
     const rows = normalizeAccionesRows(response);
     if (rows.length) sources.push(rows);

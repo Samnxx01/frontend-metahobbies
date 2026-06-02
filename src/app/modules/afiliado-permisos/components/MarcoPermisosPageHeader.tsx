@@ -3,13 +3,18 @@ import { Button } from '@/components/ui/button';
 import { Loader2, RefreshCw, Save, Users } from 'lucide-react';
 import { MARCO_AFILIADO_CODIGO } from '../constants/catalog-filters';
 import { MarcoPermisosApiReferenciaModal } from './MarcoPermisosApiReferenciaModal';
-import type { MarcoPermisosAfiliado } from '../types/marco.types';
+import { MarcoRolSelector } from './MarcoRolSelector';
+import type { MarcoPermisosAfiliado, RolMarcoParametrizable } from '../types/marco.types';
 
 type Props = {
   saving: boolean;
   syncing: boolean;
   hasMarco: boolean;
   marcoActivo: MarcoPermisosAfiliado | null;
+  roles: RolMarcoParametrizable[];
+  rolSeleccionadoId: string | null;
+  rolSeleccionado: RolMarcoParametrizable | null;
+  onRolChange: (rolId: string) => void;
   vistasCount: number;
   accionesCount: number;
   onRecargar: () => void;
@@ -22,21 +27,34 @@ export function MarcoPermisosPageHeader({
   syncing,
   hasMarco,
   marcoActivo,
+  roles,
+  rolSeleccionadoId,
+  rolSeleccionado,
+  onRolChange,
   vistasCount,
   accionesCount,
   onRecargar,
   onSincronizar,
   onGuardar,
 }: Props): React.ReactElement {
+  const codigoMarco = rolSeleccionado?.codigo ?? marcoActivo?.codigo ?? MARCO_AFILIADO_CODIGO;
   return (
     <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Techo permisos afiliado</h1>
-        <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-          Parametrización única del marco{' '}
-          <code className="rounded bg-muted px-1">{MARCO_AFILIADO_CODIGO}</code>. Los afiliados solo
-          pueden usar rutas y métodos HTTP incluidos aquí. No depende de tenant en el JWT.
-        </p>
+      <div className="space-y-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Techo permisos afiliado</h1>
+          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+            Parametrización del marco{' '}
+            <code className="rounded bg-muted px-1">{codigoMarco}</code>. Los usuarios con el rol
+            seleccionado solo pueden usar rutas y métodos HTTP incluidos aquí.
+          </p>
+        </div>
+        <MarcoRolSelector
+          roles={roles}
+          rolSeleccionadoId={rolSeleccionadoId}
+          onRolChange={onRolChange}
+          disabled={saving || syncing}
+        />
       </div>
       <div className="flex flex-wrap gap-2">
         <MarcoPermisosApiReferenciaModal

@@ -4,7 +4,11 @@ import { toast } from 'react-toastify';
 import { useCart } from '../../../providers/CartProvider';
 import type { Product as ComponentProduct } from '../../../../types/components';
 import type { Product as CommonProduct } from '../../../../types/common';
-import productosService, { type BackendCategoria } from '../../../services/productosService';
+import productosService, {
+  type BackendCategoria,
+  getCategoriaId,
+  getCategoryImage,
+} from '../../../services/productosService';
 
 import HeroBanner from '../../components/hero/HeroBanner';
 import CategoryCard from '../../components/common/CategoryCard';
@@ -14,26 +18,6 @@ import AboutUs from '../../components/about/AboutUs';
 
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, ArrowRight } from 'lucide-react';
-
-// ── Fallback de imágenes por nombre de categoría ──────────────────────────
-const CATEGORY_IMAGES: Record<string, string> = {
-  maquillaje: '/assets/images/products/product1.png',
-  labiales: '/assets/images/products/product2.png',
-  brochas: '/assets/images/products/product3.png',
-  base: '/assets/images/products/product4.png',
-  'cuidado facial': '/assets/images/products/product5.png',
-};
-
-function getCategoryImage(nombre: string): string {
-  const key = nombre.toLowerCase();
-  const match = Object.keys(CATEGORY_IMAGES).find(k => key.includes(k));
-  return CATEGORY_IMAGES[match ?? ''] ?? '/assets/images/products/product1.png';
-}
-
-function getCategoryId(cat: BackendCategoria, index: number): string {
-  const raw = cat as BackendCategoria & { _id?: string; id?: string };
-  return String(raw.iud || raw._id || raw.id || `${raw.nombre}-${index}`);
-}
 
 const FALLBACK_CATEGORIES = [
   { id: '1', name: 'Maquillaje', image: '/assets/images/products/product1.png' },
@@ -169,7 +153,7 @@ export default function Home(): React.ReactElement {
                   Todas
                 </button>
                 {categorias.map((cat, index) => {
-                  const categoryId = getCategoryId(cat, index);
+                  const categoryId = getCategoriaId(cat, index);
                   return (
                   <button
                     key={categoryId}
@@ -212,7 +196,14 @@ export default function Home(): React.ReactElement {
 
             {!loadingProductos && productos.length > 0 && (
               <div className="text-center mt-8">
-                <Button variant="outline" onClick={() => navigate('/productos')}>
+                <Button
+                  variant="outline"
+                  onClick={() => navigate(
+                    categoriaSeleccionada !== 'todas'
+                      ? `/productos?categoria=${encodeURIComponent(categoriaSeleccionada)}`
+                      : '/productos'
+                  )}
+                >
                   Ver todos los productos
                 </Button>
               </div>
@@ -229,18 +220,34 @@ export default function Home(): React.ReactElement {
               <>
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
                   {categorias.slice(0, 3).map((cat, index) => {
-                    const categoryId = getCategoryId(cat, index);
+                    const categoryId = getCategoriaId(cat, index);
                     return (
-                      <CategoryCard key={categoryId} category={{ id: categoryId, name: cat.nombre, image: getCategoryImage(cat.nombre) }} />
+                      <CategoryCard
+                        key={categoryId}
+                        category={{
+                          id: categoryId,
+                          name: cat.nombre,
+                          image: getCategoryImage(cat.nombre),
+                          media: cat.media || null,
+                        }}
+                      />
                     );
                   })}
                 </div>
                 {categorias.length > 3 && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mt-6">
-                    {categorias.slice(3, 5).map((cat, index) => {
-                      const categoryId = getCategoryId(cat, index + 3);
+                    {categorias.slice(3).map((cat, index) => {
+                      const categoryId = getCategoriaId(cat, index + 3);
                       return (
-                        <CategoryCard key={categoryId} category={{ id: categoryId, name: cat.nombre, image: getCategoryImage(cat.nombre) }} />
+                        <CategoryCard
+                          key={categoryId}
+                          category={{
+                            id: categoryId,
+                            name: cat.nombre,
+                            image: getCategoryImage(cat.nombre),
+                            media: cat.media || null,
+                          }}
+                        />
                       );
                     })}
                   </div>
