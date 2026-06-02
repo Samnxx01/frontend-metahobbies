@@ -1,12 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { Button } from '@/components/ui/button';
+import { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
-import { Shield, Users, Zap, Target, Eye, Heart, Award, Phone, UserPlus, Building2, Loader2 } from 'lucide-react';
+import { Shield, Users, Zap, Target, Eye, Building2, Loader2 } from 'lucide-react';
 import { apiFetch } from "@/app/services/api";
 
 interface EmpresaData {
     razon_social: string;
+    titulo: string;
     descripcion: string;
     mision: string;
     vision: string;
@@ -15,6 +14,7 @@ interface EmpresaData {
 export default function SobreNosotros() {
     const [empresa, setEmpresa] = useState<EmpresaData>({
         razon_social: 'Nuestra Empresa',
+        titulo: 'un referido a la vez',
         descripcion: 'Dedicada al desarrollo de software empresarial y gestion de redes.',
         mision: 'Brindar soluciones tecnologicas innovadoras para el crecimiento de nuestros clientes.',
         vision: 'Ser lideres globales en transformacion digital y sistemas de referidos.'
@@ -44,6 +44,7 @@ export default function SobreNosotros() {
                     const p = perfilResult.value.perfil;
                     setEmpresa({
                         razon_social: p.razon_social || 'Nuestra Empresa',
+                        titulo: p.titulo || 'un referido a la vez',
                         descripcion: p.descripcion || 'Dedicada al desarrollo de software empresarial.',
                         mision: p.descripcion_mision_empresa || 'Brindar soluciones tecnologicas innovadoras.',
                         vision: p.descripcion_vision_empresa || 'Ser lideres en transformacion digital.'
@@ -85,10 +86,10 @@ export default function SobreNosotros() {
                     <div className="text-center space-y-6">
                         <h1 className="text-4xl md:text-6xl font-bold text-foreground tracking-tight">
                             {empresa.razon_social},
-                            <span className="block text-primary mt-2">un referido a la vez</span>
+                            <span className="block text-primary mt-2">{empresa.titulo}</span>
                         </h1>
                         <p className="text-xl md:text-2xl text-muted-foreground max-w-3xl mx-auto">
-                            La plataforma que transforma tu red en ingresos reales, con tecnologia de pago segura.
+                            {empresa.descripcion}
                         </p>
                         <div className="flex flex-wrap justify-center gap-4 md:gap-6 pt-6">
                             <div className="flex items-center gap-2 text-sm md:text-base text-foreground font-medium">

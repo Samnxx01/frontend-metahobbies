@@ -365,18 +365,25 @@ export interface AccionesResponse {
 }
 
 const normalizeAccionesRows = (payload: any): AccionOption[] => {
-  const source = Array.isArray(payload?.data)
-    ? payload.data
-    : (Array.isArray(payload?.acciones) ? payload.acciones : []);
+  const source = Array.isArray(payload)
+    ? payload
+    : Array.isArray(payload?.data)
+      ? payload.data
+      : Array.isArray(payload?.acciones)
+        ? payload.acciones
+        : [];
 
   return source
-    .map((row: any) => ({
-      _id: String(row?._id || row?.iud || '').trim(),
-      iud: String(row?.iud || row?._id || '').trim() || undefined,
-      method: String(row?.method || '').trim().toUpperCase(),
-      etiquetas: String(row?.etiquetas || '').trim(),
-      estadoAccion: row?.estadoAccion !== false,
-    }))
+    .map((row: any) => {
+      const id = String(row?._id || row?.iud || row?.id || '').trim();
+      return {
+        _id: id,
+        iud: id || undefined,
+        method: String(row?.method || '').trim().toUpperCase(),
+        etiquetas: String(row?.etiquetas || row?.label || '').trim(),
+        estadoAccion: row?.estadoAccion !== false && row?.estado !== false,
+      };
+    })
     .filter((row: AccionOption) => Boolean(row._id));
 };
 
@@ -599,32 +606,59 @@ export const getAccessTypes = async (): Promise<AccessTypesResponse> => {
 };
 
 export const getAccionesCatalogo = async (): Promise<AccionesResponse> => {
+  const sources: AccionOption[][] = [];
+
+  try {
+    const marcoCat = await apiFetch(`${API_BASE_URL}/config/marco-permisos-afiliado/catalogo`, {
+      method: 'GET',
+      useAuth: true,
+    });
+    const fromMarco = normalizeAccionesRows(marcoCat);
+    if (fromMarco.length) sources.push(fromMarco);
+  } catch {
+    // Siguiente fuente
+  }
+
   try {
     const response = await apiFetch(`${API_BASE_URL}/seguridad/rutas/acciones`, {
       method: 'GET',
+      useAuth: true,
     });
     const rows = normalizeAccionesRows(response);
-    if (rows.length > 0) {
-      return {
-        success: true,
-        message: response?.message || 'Acciones cargadas',
-        total: rows.length,
-        data: rows,
-      };
-    }
-  } catch (_error) {
-    // Fallback en caso de ruta no disponible o sin permisos.
+    if (rows.length) sources.push(rows);
+  } catch {
+    // Fallback público
   }
 
-  const fallback = await apiFetchPublic(`${API_BASE_URL}/config/parametrizacion/widget/branding/acciones/publico`, {
-    method: 'GET',
-  });
-  const rowsFallback = normalizeAccionesRows(fallback);
+  if (!sources.length) {
+    try {
+      const fallback = await apiFetchPublic(
+        `${API_BASE_URL}/config/parametrizacion/widget/branding/acciones/publico`,
+        { method: 'GET' }
+      );
+      const rowsFallback = normalizeAccionesRows(fallback);
+      if (rowsFallback.length) sources.push(rowsFallback);
+    } catch {
+      // sin catálogo
+    }
+  }
+
+  const merged = new Map<string, AccionOption>();
+  for (const list of sources) {
+    for (const row of list) {
+      if (row._id) merged.set(row._id, row);
+    }
+  }
+  const data = [...merged.values()];
+
   return {
-    success: rowsFallback.length > 0 || Boolean((fallback as any)?.ok),
-    message: (fallback as any)?.msg || 'Acciones cargadas (fallback)',
-    total: rowsFallback.length,
-    data: rowsFallback,
+    success: data.length > 0,
+    message:
+      data.length > 0
+        ? 'Acciones cargadas'
+        : 'No hay acciones HTTP activas. Revise la colección acciones o Gestión de rutas.',
+    total: data.length,
+    data,
   };
 };
 

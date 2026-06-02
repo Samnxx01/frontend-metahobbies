@@ -53,6 +53,9 @@ export const buildRecepcionItems = (oc: InventarioOrdenCompra) =>
 export const ordenCompraTienePendienteRecepcion = (oc: InventarioOrdenCompra): boolean =>
   buildRecepcionItems(oc).length > 0;
 
+const ordenCompraEstaConfirmada = (oc: InventarioOrdenCompra): boolean =>
+  String(oc?.estado || '').trim().toUpperCase() === 'CONFIRMADO';
+
 export default function InventarioComprobanteEntradaParamModal({
   open,
   onOpenChange,
@@ -67,7 +70,7 @@ export default function InventarioComprobanteEntradaParamModal({
   );
 
   const ordenesElegibles = useMemo(
-    () => ordenesSorted.filter((oc) => ordenCompraTienePendienteRecepcion(oc)),
+    () => ordenesSorted.filter((oc) => ordenCompraEstaConfirmada(oc) && ordenCompraTienePendienteRecepcion(oc)),
     [ordenesSorted],
   );
 
@@ -214,7 +217,7 @@ export default function InventarioComprobanteEntradaParamModal({
                     ordenesElegibles.length
                       ? 'Selecciona OC con pendiente'
                       : ordenesSorted.length
-                        ? 'No hay OC con cantidades pendientes'
+                        ? 'No hay OC CONFIRMADAS con cantidades pendientes'
                         : 'No hay órdenes de compra'
                   }
                 />
@@ -304,7 +307,7 @@ export default function InventarioComprobanteEntradaParamModal({
               }
             }}
           >
-            {submitting ? 'Generando...' : 'Ver comprobante'}
+            {submitting ? 'Generando...' : 'Generar comprobante'}
           </Button>
         </DialogFooter>
       </DialogContent>

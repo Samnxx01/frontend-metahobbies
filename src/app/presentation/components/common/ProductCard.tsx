@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { ProductCardProps } from '@/types/components';
+import { formatCOP } from '@/lib/utils';
 
 export default function ProductCard({ product, onAddToCart }: ProductCardProps): React.ReactElement {
     // Eliminamos useTheme, isHovered, isSwatchHovered, y el manejo manual de onMouseEnter/onMouseLeave 
@@ -44,7 +45,7 @@ export default function ProductCard({ product, onAddToCart }: ProductCardProps):
             onClick={handleProductClick}
             className="
                 relative cursor-pointer 
-                w-full h-[480px] 
+                w-full min-h-[480px] 
                 flex flex-col 
                 overflow-visible 
                 border-none shadow-none 
@@ -57,7 +58,7 @@ export default function ProductCard({ product, onAddToCart }: ProductCardProps):
                 className="
                     relative 
                     overflow-hidden 
-                    h-[80%] w-full 
+                    h-[360px] w-full 
                     flex items-center justify-center 
                     bg-muted/30
                 "
@@ -164,7 +165,7 @@ export default function ProductCard({ product, onAddToCart }: ProductCardProps):
             {/* --- SECCIÓN CONTENIDO (Precio y Nombre) --- */}
             <CardContent
                 className="
-                    h-[20%] 
+                    min-h-[120px] 
                     flex flex-col 
                     justify-center items-center 
                     text-center 
@@ -190,7 +191,7 @@ export default function ProductCard({ product, onAddToCart }: ProductCardProps):
                         text-base font-semibold 
                         text-foreground 
                         mb-1 
-                        line-clamp-1
+                        line-clamp-2 leading-snug
                     "
                 >
                     {product.name}
@@ -198,13 +199,13 @@ export default function ProductCard({ product, onAddToCart }: ProductCardProps):
 
                 {/* Precio */}
                 <p className="text-base font-bold text-foreground">
-                    ${product.price}
+                    {formatCOP(product.price)}
                 </p>
 
                 {/* Precio Original (Si existe) */}
                 {product.originalPrice && (
                     <p className="text-sm text-muted-foreground line-through mt-0.5">
-                        ${product.originalPrice}
+                        {formatCOP(product.originalPrice)}
                     </p>
                 )}
             </CardContent>

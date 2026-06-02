@@ -16,8 +16,11 @@ import { toId } from '../utils/toId';
 type Props = {
   tab: MarcoCatalogTab;
   onTabChange: (tab: MarcoCatalogTab) => void;
-  filtro: string;
-  onFiltroChange: (value: string) => void;
+  filtroVistas: string;
+  onFiltroVistasChange: (value: string) => void;
+  filtroAcciones: string;
+  onFiltroAccionesChange: (value: string) => void;
+  accionesTotal: number;
   soloSugeridas: boolean;
   onSoloSugeridasChange: (value: boolean) => void;
   vistasSel: Set<string>;
@@ -35,8 +38,11 @@ type Props = {
 export function MarcoPermisosCatalogCard({
   tab,
   onTabChange,
-  filtro,
-  onFiltroChange,
+  filtroVistas,
+  onFiltroVistasChange,
+  filtroAcciones,
+  onFiltroAccionesChange,
+  accionesTotal,
   soloSugeridas,
   onSoloSugeridasChange,
   vistasSel,
@@ -50,6 +56,8 @@ export function MarcoPermisosCatalogCard({
   onSeleccionarAccionesVisibles,
   onLimpiarAccionesVisibles,
 }: Props): React.ReactElement {
+  const filtroAccionesNorm = filtroAcciones.trim().toLowerCase();
+
   return (
     <Card>
       <CardHeader>
@@ -62,9 +70,17 @@ export function MarcoPermisosCatalogCard({
             <Label htmlFor="filtro-marco">Buscar</Label>
             <Input
               id="filtro-marco"
-              value={filtro}
-              onChange={(e) => onFiltroChange(e.target.value)}
-              placeholder="path, nombre, GET, referido…"
+              value={tab === 'vistas' ? filtroVistas : filtroAcciones}
+              onChange={(e) =>
+                tab === 'vistas'
+                  ? onFiltroVistasChange(e.target.value)
+                  : onFiltroAccionesChange(e.target.value)
+              }
+              placeholder={
+                tab === 'vistas'
+                  ? 'path, nombre, componente…'
+                  : 'GET, POST, etiqueta, id…'
+              }
             />
           </div>
           <label className="flex cursor-pointer items-center gap-2 pb-2 text-sm">
@@ -78,8 +94,12 @@ export function MarcoPermisosCatalogCard({
 
         <Tabs value={tab} onValueChange={(v) => onTabChange(v as MarcoCatalogTab)}>
           <TabsList>
-            <TabsTrigger value="vistas">Vistas ({vistasSel.size})</TabsTrigger>
-            <TabsTrigger value="acciones">Acciones ({accionesSel.size})</TabsTrigger>
+            <TabsTrigger value="vistas">
+              Vistas ({vistasSel.size}/{rutasFiltradas.length})
+            </TabsTrigger>
+            <TabsTrigger value="acciones">
+              Acciones ({accionesSel.size}/{accionesTotal})
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="vistas" className="mt-4 space-y-2">
@@ -149,7 +169,11 @@ export function MarcoPermisosCatalogCard({
               <ul className="divide-y p-2">
                 {accionesFiltradas.length === 0 ? (
                   <li className="p-4 text-center text-sm text-muted-foreground">
-                    Sin acciones para el filtro
+                    {accionesTotal === 0
+                      ? 'No hay acciones HTTP en el catálogo. Créelas en Gestión de rutas o verifique el backend.'
+                      : filtroAccionesNorm
+                        ? `Ninguna acción coincide con «${filtroAcciones}». Hay ${accionesTotal} en catálogo — limpie el filtro.`
+                        : 'Sin acciones visibles. Use «Marcar visibles».'}
                   </li>
                 ) : (
                   accionesFiltradas.map((a) => {

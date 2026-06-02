@@ -4,7 +4,11 @@ import { toast } from 'react-toastify';
 import { useCart } from '../../../providers/CartProvider';
 import type { Product as ComponentProduct } from '../../../../types/components';
 import type { Product as CommonProduct } from '../../../../types/common';
-import productosService, { type BackendCategoria } from '../../../services/productosService';
+import productosService, {
+  type BackendCategoria,
+  getCategoriaId,
+  getCategoryImage,
+} from '../../../services/productosService';
 
 import HeroBanner from '../../components/hero/HeroBanner';
 import CategoryCard from '../../components/common/CategoryCard';
@@ -15,20 +19,13 @@ import AboutUs from '../../components/about/AboutUs';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, ArrowRight } from 'lucide-react';
 
-// ── Fallback de imágenes por nombre de categoría ──────────────────────────
-const CATEGORY_IMAGES: Record<string, string> = {
-  maquillaje: '/assets/images/products/product1.png',
-  labiales: '/assets/images/products/product2.png',
-  brochas: '/assets/images/products/product3.png',
-  base: '/assets/images/products/product4.png',
-  'cuidado facial': '/assets/images/products/product5.png',
-};
-
-function getCategoryImage(nombre: string): string {
-  const key = nombre.toLowerCase();
-  const match = Object.keys(CATEGORY_IMAGES).find(k => key.includes(k));
-  return CATEGORY_IMAGES[match ?? ''] ?? '/assets/images/products/product1.png';
-}
+const FALLBACK_CATEGORIES = [
+  { id: '1', name: 'Maquillaje', image: '/assets/images/products/product1.png' },
+  { id: '2', name: 'Labiales', image: '/assets/images/products/product2.png' },
+  { id: '3', name: 'Brochas', image: '/assets/images/products/product3.png' },
+  { id: '4', name: 'Base & Corrector', image: '/assets/images/products/product4.png' },
+  { id: '5', name: 'Cuidado Facial', image: '/assets/images/products/product5.png' },
+];
 
 // ── Skeleton de tarjeta ───────────────────────────────────────────────────
 function ProductCardSkeleton(): React.ReactElement {
@@ -155,18 +152,21 @@ export default function Home(): React.ReactElement {
                 >
                   Todas
                 </button>
-                {categorias.map(cat => (
+                {categorias.map((cat, index) => {
+                  const categoryId = getCategoriaId(cat, index);
+                  return (
                   <button
-                    key={cat.iud}
-                    onClick={() => handleSelectCategoria(cat.iud)}
+                    key={categoryId}
+                    onClick={() => handleSelectCategoria(categoryId)}
                     className={`px-4 py-1.5 rounded-full text-sm font-medium border transition-colors capitalize
-                      ${categoriaSeleccionada === cat.iud
+                      ${categoriaSeleccionada === categoryId
                         ? 'bg-foreground text-background border-foreground'
                         : 'bg-background text-foreground border-border hover:bg-muted'}`}
                   >
                     {cat.nombre.toLowerCase()}
                   </button>
-                ))}
+                  );
+                })}
               </div>
             )}
 
@@ -196,7 +196,14 @@ export default function Home(): React.ReactElement {
 
             {!loadingProductos && productos.length > 0 && (
               <div className="text-center mt-8">
-                <Button variant="outline" onClick={() => navigate('/productos')}>
+                <Button
+                  variant="outline"
+                  onClick={() => navigate(
+                    categoriaSeleccionada !== 'todas'
+                      ? `/productos?categoria=${encodeURIComponent(categoriaSeleccionada)}`
+                      : '/productos'
+                  )}
+                >
                   Ver todos los productos
                 </Button>
               </div>
@@ -212,28 +219,51 @@ export default function Home(): React.ReactElement {
             {categorias.length > 0 ? (
               <>
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
-                  {categorias.slice(0, 3).map(cat => (
-                    <CategoryCard key={cat.iud} category={{ id: cat.iud, name: cat.nombre, image: getCategoryImage(cat.nombre) }} />
-                  ))}
+                  {categorias.slice(0, 3).map((cat, index) => {
+                    const categoryId = getCategoriaId(cat, index);
+                    return (
+                      <CategoryCard
+                        key={categoryId}
+                        category={{
+                          id: categoryId,
+                          name: cat.nombre,
+                          image: getCategoryImage(cat.nombre),
+                          media: cat.media || null,
+                        }}
+                      />
+                    );
+                  })}
                 </div>
                 {categorias.length > 3 && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mt-6">
-                    {categorias.slice(3, 5).map(cat => (
-                      <CategoryCard key={cat.iud} category={{ id: cat.iud, name: cat.nombre, image: getCategoryImage(cat.nombre) }} />
-                    ))}
+                    {categorias.slice(3).map((cat, index) => {
+                      const categoryId = getCategoriaId(cat, index + 3);
+                      return (
+                        <CategoryCard
+                          key={categoryId}
+                          category={{
+                            id: categoryId,
+                            name: cat.nombre,
+                            image: getCategoryImage(cat.nombre),
+                            media: cat.media || null,
+                          }}
+                        />
+                      );
+                    })}
                   </div>
                 )}
               </>
             ) : (
               <>
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
-                  <CategoryCard category={{ id: '1', name: 'Maquillaje', image: '/assets/images/products/product1.png' }} />
-                  <CategoryCard category={{ id: '2', name: 'Labiales', image: '/assets/images/products/product2.png' }} />
-                  <CategoryCard category={{ id: '3', name: 'Brochas', image: '/assets/images/products/product3.png' }} />
+                  {FALLBACK_CATEGORIES.slice(0, 3).map(category => (
+                    <CategoryCard key={category.id} category={category} />
+                  ))}
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mt-6">
-                  <CategoryCard category={{ id: '4', name: 'Base & Corrector', image: '/assets/images/products/product4.png' }} />
-                  <CategoryCard category={{ id: '5', name: 'Cuidado Facial', image: '/assets/images/products/product5.png' }} />
+                  {FALLBACK_CATEGORIES.slice(3, 5).map(category => (
+                    <CategoryCard key={category.id} category={category} />
+                  ))}
                 </div>
               </>
             )}

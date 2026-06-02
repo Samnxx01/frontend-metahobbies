@@ -72,7 +72,6 @@ export type {
   GobernanzaTenantMenuAccion,
   GobernanzaTenantMenuResponse,
 } from './gobernanzaTenantMenuTypes';
-export { useGobernanzaModuloMenu } from './useGobernanzaModuloMenu';
 export {
   useParametrosGobernanzaModuloMenu,
   type ParametrosGobernanzaModuloMenuState,

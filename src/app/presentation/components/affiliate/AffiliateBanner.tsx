@@ -1,14 +1,21 @@
-import React from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { toast } from "react-toastify";
 
-// Shadcn UI components
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-
-// Lucide icons
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Loader2 } from "lucide-react";
 
 import type { AffiliateBannerProps } from '@/types/components';
+import {
+    esTokenReferidoAtribucionValido,
+    persistAttributionForReferidosFlow,
+    resolvePublicAttributionContext,
+} from "@/app/services/publicAttributionParams";
+import {
+    buildMembresiaReferidosPath,
+    validarTokenReferidoMembresia,
+} from "@/app/services/referralAttributionService";
 
 const AFFILIATE_BANNER_IMAGE = "/assets/images/banner.jpg";
 
@@ -18,14 +25,56 @@ export default function AffiliateBanner({
     ctaText = "Quiero Unirme",
     onCtaClick
 }: AffiliateBannerProps = {}): React.ReactElement {
-    // Eliminamos useTheme, ya que los colores se manejan con clases de Tailwind
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+    const [loading, setLoading] = useState(false);
 
-    const handleCtaClick = (): void => {
+    const handleCtaClick = async (): Promise<void> => {
         if (onCtaClick) {
             onCtaClick();
-        } else {
-            navigate("/afiliacion");
+            return;
+        }
+
+        const ctx = resolvePublicAttributionContext(
+            searchParams.toString() ? `?${searchParams.toString()}` : window.location.search,
+        );
+
+        if (!ctx.ref) {
+            toast.info(
+                'Para unirte al programa necesitas un enlace de invitación. Solicítalo a quien te refirió.',
+            );
+            navigate("/modelo-negocio");
+            return;
+        }
+
+        if (!esTokenReferidoAtribucionValido(ctx.ref)) {
+            toast.error('El enlace de referido no tiene un formato válido.');
+            return;
+        }
+
+        setLoading(true);
+        try {
+            const tokenValido = await validarTokenReferidoMembresia(
+                ctx.ref,
+                ctx.guestSessionId || undefined,
+            );
+            if (!tokenValido) {
+                toast.error('El enlace de referido no es válido o expiró. Pide uno nuevo a tu patrocinador.');
+                return;
+            }
+
+            persistAttributionForReferidosFlow(ctx);
+
+            navigate(
+                buildMembresiaReferidosPath({
+                    jwtReferido: ctx.ref,
+                    guestSessionId: ctx.guestSessionId,
+                    originType: ctx.originType || 'membresia',
+                    originId: ctx.originId || null,
+                }),
+            );
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -36,8 +85,8 @@ export default function AffiliateBanner({
     };
 
     return (
-        <div className="py-12 md:py-24   bg-background"> {/* Reemplaza Box y sus paddings */}
-            <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8"> {/* Reemplaza Container */}
+        <div className="py-12 md:py-24   bg-background">
+            <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                 <div
                     className="
                         grid grid-cols-1 md:grid-cols-2 
@@ -47,7 +96,6 @@ export default function AffiliateBanner({
                         shadow-2xl overflow-hidden
                     "
                 >
-                    {/* Columna Izquierda: Imagen */}
                     <div
                         className="
                             w-full h-[250px] md:h-full 
@@ -64,7 +112,6 @@ export default function AffiliateBanner({
                         />
                     </div>
 
-                    {/* Columna Derecha: Contenido */}
                     <div
                         className="
                             p-6 md:p-12 
@@ -73,7 +120,6 @@ export default function AffiliateBanner({
                             space-y-4
                         "
                     >
-                        {/* Chip / Badge */}
                         <Badge
                             className="
                                 mb-2 font-semibold 
@@ -85,7 +131,6 @@ export default function AffiliateBanner({
                             Programa de Afiliados
                         </Badge>
 
-                        {/* Título */}
                         <h2
                             className="
                                 text-3xl md:text-4xl 
@@ -97,7 +142,6 @@ export default function AffiliateBanner({
                             {title}
                         </h2>
 
-                        {/* Descripción */}
                         <p
                             className="
                                 text-base text-muted-foreground dark:text-muted-foreground 
@@ -108,17 +152,26 @@ export default function AffiliateBanner({
                             {description}
                         </p>
 
-                        {/* Botón */}
                         <Button
-                            onClick={handleCtaClick}
+                            onClick={() => void handleCtaClick()}
+                            disabled={loading}
                             className="
                                 rounded-lg 
                                 px-6 py-3 h-auto 
                                 text-base font-semibold
                             "
                         >
-                            {ctaText}
-                            <ArrowRight className="h-4 w-4 ml-2" /> {/* Reemplaza ArrowForward */}
+                            {loading ? (
+                                <>
+                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                    Validando enlace…
+                                </>
+                            ) : (
+                                <>
+                                    {ctaText}
+                                    <ArrowRight className="h-4 w-4 ml-2" />
+                                </>
+                            )}
                         </Button>
                     </div>
                 </div>

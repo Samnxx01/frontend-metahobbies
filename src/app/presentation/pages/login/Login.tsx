@@ -344,7 +344,7 @@ export default function Login(): React.ReactElement {
                             <p className="text-sm text-center text-muted-foreground pt-2">
                                 ¿Aún no tienes cuenta?{' '}
                                 <Link
-                                    to={getGovernedRegisterPath()}
+                                    to={`${getGovernedRegisterPath()}?rolCorporativo=INVITADO`}
                                     className="text-primary font-semibold hover:underline transition-colors"
                                 >
                                     Regístrate aquí

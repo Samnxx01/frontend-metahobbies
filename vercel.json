@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://server-mabs-xo9s.onrender.com/api/:path*" 
+      "destination": "https://mabs-frontend-ashy.vercel.app/api/:path*"
     },
     {
       "source": "/(.*)",

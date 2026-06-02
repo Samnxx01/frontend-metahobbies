@@ -128,9 +128,10 @@ const ReferralChain = ({ chain }: { chain: ReferralChainNode[] }) => {
                             >
                                 <div className="min-w-0 flex-1 mr-2">
                                     <p className="text-sm font-medium text-foreground truncate leading-snug">
-                                        {node.nombre || node.correo}
+                                        {node.nombre ||
+                                            (looksLikeObjectId(node.correo) ? 'Usuario sin nombre' : node.correo)}
                                     </p>
-                                    {node.nombre && (
+                                    {node.nombre && !looksLikeObjectId(node.correo) && (
                                         <p className="text-[11px] text-muted-foreground truncate">{node.correo}</p>
                                     )}
                                 </div>
@@ -157,13 +158,35 @@ const ReferralChain = ({ chain }: { chain: ReferralChainNode[] }) => {
     );
 };
 
+const looksLikeObjectId = (value: string): boolean => /^[a-f0-9]{24}$/i.test(String(value || '').trim());
+
+const resolveNodeCorreo = (
+    usuarioId: string,
+    usuario: UsuarioReferido | undefined,
+    hints: { referidoId: string; referidoCorreo?: string | null; propietarioId: string; propietarioCorreo?: string }
+): string => {
+    if (usuario?.correo) return usuario.correo;
+    if (usuarioId === hints.referidoId && hints.referidoCorreo) return hints.referidoCorreo;
+    if (usuarioId === hints.propietarioId && hints.propietarioCorreo) return hints.propietarioCorreo;
+    if (looksLikeObjectId(usuarioId)) return 'Correo no disponible';
+    return usuarioId;
+};
+
 const buildReferralChain = (
     voucherReferidoId: string,
     propietarioId: string,
-    allUsuarios: UsuarioReferido[]
+    allUsuarios: UsuarioReferido[],
+    hints: { referidoCorreo?: string | null; propietarioCorreo?: string } = {}
 ): ReferralChainNode[] => {
     const userMap = new Map<string, UsuarioReferido>();
     allUsuarios.forEach((u) => userMap.set(u.usuarioId, u));
+
+    const correoHints = {
+        referidoId: voucherReferidoId,
+        referidoCorreo: hints.referidoCorreo,
+        propietarioId,
+        propietarioCorreo: hints.propietarioCorreo,
+    };
 
     const findUpstream = (targetId: string): string | null => {
         for (const u of allUsuarios) {
@@ -189,9 +212,10 @@ const buildReferralChain = (
 
     return chainIds.map((id, index) => {
         const u = userMap.get(id);
+        const correo = resolveNodeCorreo(id, u, correoHints);
         return {
             usuarioId: id,
-            correo: u?.correo ?? id,
+            correo,
             nombre: u?.nombre,
             isOrigen: index === 0,
             isDestino: index === chainIds.length - 1,
@@ -310,32 +334,46 @@ function GestionReferidos(): React.ReactElement {
                 const chain = buildReferralChain(
                     voucher.referidoId,
                     usuarioPropietarioId,
-                    data.usuarios
+                    data.usuarios,
+                    {
+                        referidoCorreo: voucher.referidoCorreo,
+                        propietarioCorreo: usuarioPropietarioEmail,
+                    }
                 );
 
                 // Enriquecer nodos del propietario y referido con datos ya fetcheados
                 const preEnrichedChain = chain.map((node) => {
-                    if (node.usuarioId === usuarioPropietarioId && propietario) {
-                        return { ...node, correo: propietario.correo, nombre: propietario.nombre || node.nombre };
+                    if (node.usuarioId === usuarioPropietarioId) {
+                        return {
+                            ...node,
+                            correo: propietario?.correo || usuarioPropietarioEmail || node.correo,
+                            nombre: propietario?.nombre || node.nombre,
+                        };
                     }
-                    if (node.usuarioId === voucher.referidoId && referido) {
-                        return { ...node, correo: referido.correo, nombre: referido.nombre || node.nombre };
+                    if (node.usuarioId === voucher.referidoId) {
+                        return {
+                            ...node,
+                            correo: referido?.correo || voucher.referidoCorreo || node.correo,
+                            nombre: referido?.nombre || node.nombre,
+                        };
                     }
                     return node;
                 });
 
-                // Para nodos intermedios aún sin correo (correo === usuarioId), buscar en cache
+                // Para nodos intermedios aún sin correo, buscar en cache
                 const unresolvedIds = preEnrichedChain
-                    .filter((node) => node.correo === node.usuarioId)
+                    .filter((node) => looksLikeObjectId(node.correo) || node.correo === 'Correo no disponible')
                     .map((node) => node.usuarioId);
 
                 if (unresolvedIds.length > 0) {
                     const { fullCache } = await fetchUserDetails(unresolvedIds[0]);
 
                     const enrichedChain = preEnrichedChain.map((node) => {
-                        if (node.correo !== node.usuarioId) return node;
+                        if (!looksLikeObjectId(node.correo) && node.correo !== 'Correo no disponible') {
+                            return node;
+                        }
                         const detail = fullCache.get(node.usuarioId) || latestCache.get(node.usuarioId);
-                        if (!detail) return node;
+                        if (!detail?.correo) return node;
                         return {
                             ...node,
                             correo: detail.correo,

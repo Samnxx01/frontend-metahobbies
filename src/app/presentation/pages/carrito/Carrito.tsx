@@ -12,8 +12,11 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { getGovernedLoginPath } from '@/app/services/governedNavigation';
+import { formatCOP } from '@/lib/utils';
+import DatosFacturacionInvitadoModal from '@/app/presentation/components/carrito/DatosFacturacionInvitadoModal';
+import carritoService from '@/app/services/carritoService';
 
-import { Trash2, Minus, Plus, ArrowLeft, Info, Tag, X, RefreshCw, AlertTriangle } from 'lucide-react';
+import { Trash2, Minus, Plus, ArrowLeft, Info, Tag, X, AlertTriangle } from 'lucide-react';
 import type { CartItem } from '../../../../types/common';
 
 interface CartItemComponentProps {
@@ -28,12 +31,14 @@ export default function Carrito(): React.ReactElement {
     cartSummary,
     descuentoAplicado,
     totalDescuentoCodigo,
+    totalImpuestos,
+    detalleImpuestos,
+    backendCartId,
     totalBackend,
     alertas,
     loading,
     aplicarDescuento,
     removerDescuento,
-    sincronizar,
   } = useCart();
 
   const { user } = useAuth();
@@ -41,11 +46,12 @@ export default function Carrito(): React.ReactElement {
 
   const [codigoInput, setCodigoInput] = useState('');
   const [applyingCode, setApplyingCode] = useState(false);
-  const [syncing, setSyncing] = useState(false);
+  const [billingGuestOpen, setBillingGuestOpen] = useState(false);
 
   // Usar total del backend cuando está disponible, si no calcular local
   const subtotal = cartSummary.subtotal;
   const totalFinal = totalBackend > 0 ? totalBackend : cartSummary.total;
+  const impuestos = totalBackend > 0 ? totalImpuestos : cartSummary.tax;
 
   // ── Handlers ─────────────────────────────────────────────────────────────
 
@@ -104,31 +110,21 @@ export default function Carrito(): React.ReactElement {
     }
   };
 
-  const handleSincronizar = async (): Promise<void> => {
-    setSyncing(true);
-    try {
-      await sincronizar();
-      toast.success('Carrito sincronizado con inventario');
-    } catch {
-      toast.error('Error sincronizando carrito');
-    } finally {
-      setSyncing(false);
-    }
-  };
-
   const handleProceedToCheckout = async (): Promise<void> => {
     if (!user) {
       const result = await Swal({
         title: 'Iniciar Sesión Requerido',
         text: 'Necesitas iniciar sesión para continuar con la compra.',
         icon: 'info',
+        showCloseButton: true,
         showCancelButton: true,
         confirmButtonColor: '#3085d6',
         cancelButtonColor: '#d33',
         confirmButtonText: 'Ir a Login',
-        cancelButtonText: 'Cancelar',
+        cancelButtonText: 'Seguir sin registrarse',
       });
       if (result.isConfirmed) navigate(getGovernedLoginPath(), { state: { returnUrl: '/checkout' } });
+      if (result.isDismissed && result.dismiss === 'cancel') setBillingGuestOpen(true);
       return;
     }
     navigate('/checkout');
@@ -186,7 +182,7 @@ export default function Carrito(): React.ReactElement {
 
             <div className="flex items-center gap-2">
               <p className="text-base font-bold w-24 text-right">
-                ${(item.price * item.quantity).toLocaleString('es-CO')}
+                {formatCOP(item.price * item.quantity)}
               </p>
               <Button
                 variant="ghost" size="icon"
@@ -206,6 +202,20 @@ export default function Carrito(): React.ReactElement {
 
   return (
     <div className="container max-w-7xl mx-auto py-8 px-4">
+      <DatosFacturacionInvitadoModal
+        open={billingGuestOpen}
+        onOpenChange={setBillingGuestOpen}
+        onContinue={async (datosFacturacion) => {
+          try {
+            if (!backendCartId) throw new Error('No se encontro el carrito activo');
+            await carritoService.guardarDatosFacturacion(backendCartId, datosFacturacion);
+            setBillingGuestOpen(false);
+            navigate('/checkout', { state: { openPayment: true } });
+          } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'No se pudieron guardar los datos de facturacion');
+          }
+        }}
+      />
 
       <div className="flex items-center gap-3 mb-8 border-b pb-4">
         <Button variant="ghost" size="icon" onClick={() => navigate('/productos')}>
@@ -246,16 +256,6 @@ export default function Carrito(): React.ReactElement {
                 ))}
               </CardContent>
             </Card>
-
-            <Button
-              variant="outline" size="sm"
-              onClick={handleSincronizar}
-              disabled={syncing}
-              className="text-muted-foreground"
-            >
-              <RefreshCw className={`w-4 h-4 mr-2 ${syncing ? 'animate-spin' : ''}`} />
-              Verificar precios y stock
-            </Button>
           </div>
 
           {/* ── Resumen ── */}
@@ -273,7 +273,7 @@ export default function Carrito(): React.ReactElement {
                       <span className="text-xs">
                         ({descuentoAplicado.tipo === 'PORCENTAJE'
                           ? `${descuentoAplicado.valor}%`
-                          : `$${descuentoAplicado.valor.toLocaleString('es-CO')}`})
+                          : formatCOP(descuentoAplicado.valor)})
                       </span>
                     </div>
                     <Button variant="ghost" size="icon" className="h-6 w-6 text-secondary-foreground hover:bg-secondary/20" onClick={handleRemoverCodigo}>
@@ -306,22 +306,41 @@ export default function Carrito(): React.ReactElement {
                 <div className="flex flex-col gap-2 text-sm">
                   <div className="flex justify-between">
                     <p className="text-muted-foreground">Subtotal</p>
-                    <p className="font-medium">${subtotal.toLocaleString('es-CO')}</p>
+                    <p className="font-medium">{formatCOP(subtotal)}</p>
                   </div>
 
                   {totalDescuentoCodigo > 0 && (
                     <div className="flex justify-between text-primary">
                       <p>Descuento ({descuentoAplicado?.codigo})</p>
-                      <p className="font-medium">-${totalDescuentoCodigo.toLocaleString('es-CO')}</p>
+                      <p className="font-medium">-{formatCOP(totalDescuentoCodigo)}</p>
                     </div>
                   )}
+
+                  {detalleImpuestos.length > 0 ? (
+                    <div className="space-y-1 rounded-lg border border-primary/20 bg-primary/5 p-2">
+                      <p className="text-xs font-semibold text-muted-foreground">Detalle IVA / reglas contables</p>
+                      {detalleImpuestos.map((regla) => (
+                        <div key={regla.codigo} className="flex justify-between gap-3 text-xs">
+                          <span className="truncate">
+                            {regla.nombre} ({Number(regla.tarifa || 0).toFixed(2)}%)
+                          </span>
+                          <span className="font-medium">{formatCOP(regla.valor)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : impuestos > 0 ? (
+                    <div className="flex justify-between">
+                      <p className="text-muted-foreground">IVA / impuestos</p>
+                      <p className="font-medium">{formatCOP(impuestos)}</p>
+                    </div>
+                  ) : null}
 
                   <Separator />
 
                   <div className="flex justify-between pt-1">
                     <p className="text-lg font-bold">Total</p>
                     <p className="text-lg font-bold text-primary">
-                      ${totalFinal.toLocaleString('es-CO')}
+                      {formatCOP(totalFinal)}
                     </p>
                   </div>
                 </div>

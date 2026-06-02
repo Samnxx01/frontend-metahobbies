@@ -185,6 +185,13 @@ const getHerenciaAdminPermitida = async (): Promise<{
             const vistas = Array.isArray(h.vistas) ? h.vistas : [];
             vistas.forEach((vista) => {
                 if (!vista) return;
+
+                if (typeof vista === 'string' || typeof vista === 'number') {
+                    const vistaId = String(vista).trim();
+                    if (vistaId) idsPermitidos.add(vistaId);
+                    return;
+                }
+
                 if (vista.estadoRuta === false) return;
                 if (vista.layout && !isAdminLayout(vista.layout)) return;
 
@@ -271,7 +278,7 @@ export interface AdminNavTreeItem extends AdminNavItem {
     children: AdminNavTreeItem[];
 }
 
-export type AdminActorTipo = 'SUPERADMIN' | 'GLOBAL' | 'CORPORATIVO' | 'UNKNOWN';
+export type AdminActorTipo = 'SUPERADMIN' | 'GLOBAL' | 'CORPORATIVO' | 'CLIENTE' | 'UNKNOWN';
 
 export interface AdminSidebarTreeContext {
     actorTipo: AdminActorTipo;
@@ -329,11 +336,12 @@ const resolveSidebarSourceCollection = (actorTipo: AdminActorTipo): string | nul
     if (actorTipo === 'SUPERADMIN') return 'rutasSeguridad';
     if (actorTipo === 'GLOBAL') return 'herenciaGlobal';
     if (actorTipo === 'CORPORATIVO') return 'herenciaCorporativa';
+    if (actorTipo === 'CLIENTE') return 'herenciaCliente';
     return null;
 };
 
 const resolveEffectiveAdminActorTipo = (actorTipo?: string | null): AdminActorTipo => {
-    const validActorTipos: string[] = ['SUPERADMIN', 'GLOBAL', 'CORPORATIVO'];
+    const validActorTipos: string[] = ['SUPERADMIN', 'GLOBAL', 'CORPORATIVO', 'CLIENTE'];
     const actorNormalizado = String(actorTipo || '').trim().toUpperCase();
     if (actorNormalizado && actorNormalizado !== 'UNKNOWN' && validActorTipos.includes(actorNormalizado)) {
         return actorNormalizado as AdminActorTipo;
@@ -375,9 +383,18 @@ const readTenantScopeAndRolFromStoredUser = (): {
             tenantSuperAdminId?: string | null;
             tenantGlobalId?: string | null;
             tenantCorporativoId?: string | null;
-            auth?: { tenantScope?: Record<string, string | null | undefined> };
+            auth?: {
+                tenantScope?: Record<string, string | null | undefined>;
+                rolCorporativoScope?: { rolCorporativoId?: string | null };
+                afiliadoScope?: { rolCorporativoId?: string | null; marcoId?: string | null };
+            };
+            rolCorporativoScope?: { rolCorporativoId?: string | null };
+            afiliadoScope?: { rolCorporativoId?: string | null; marcoId?: string | null };
+            contextoCliente?: unknown;
         };
         const ts = u.auth?.tenantScope;
+        const rc = u.auth?.rolCorporativoScope ?? u.rolCorporativoScope;
+        const af = u.auth?.afiliadoScope ?? u.afiliadoScope;
         return {
             tenantScope: {
                 tenantCorporativoId:
@@ -387,9 +404,12 @@ const readTenantScopeAndRolFromStoredUser = (): {
                     String(ts?.tenantSuperAdminId ?? u.tenantSuperAdminId ?? '').trim() || undefined,
             },
             rol: String(u.rol || u.role || '').trim().toUpperCase(),
+            esAfiliadoCliente: Boolean(
+                rc?.rolCorporativoId || af?.rolCorporativoId || af?.marcoId || u.contextoCliente
+            ),
         };
     } catch {
-        return { tenantScope: {}, rol: '' };
+        return { tenantScope: {}, rol: '', esAfiliadoCliente: false };
     }
 };
 
@@ -398,9 +418,21 @@ const resolveAdminActorTipoFromToken = (): AdminActorTipo => {
         const token = localStorage.getItem('token');
         if (!token) return 'UNKNOWN';
 
-        const payload = decodeJwtPayload(token) as any;
+        const payload = decodeJwtPayload(token) as {
+            auth?: {
+                tenantScope?: Record<string, string | null | undefined>;
+                rolCorporativoScope?: { rolCorporativoId?: string };
+                afiliadoScope?: { rolCorporativoId?: string; marcoId?: string };
+            };
+            tenantScope?: Record<string, string | null | undefined>;
+            rol?: { rol?: string } | string;
+        } | null;
         const jwtTenantScope = payload?.auth?.tenantScope || payload?.tenantScope || {};
-        const jwtRol = String(payload?.rol?.rol ?? payload?.rol ?? '').trim().toUpperCase();
+        const jwtRol = String(
+            (typeof payload?.rol === 'object' ? payload?.rol?.rol : payload?.rol) ?? ''
+        )
+            .trim()
+            .toUpperCase();
 
         const stored = readTenantScopeAndRolFromStoredUser();
         const tenantScope = {
@@ -421,17 +453,24 @@ const resolveAdminActorTipoFromToken = (): AdminActorTipo => {
             rolCompact.includes('SUPER_ADMIN') ||
             rol === 'SUPERADMIN' ||
             rol === 'SUPER_ADMIN';
+        const jwtAfiliado = Boolean(
+            payload?.auth?.rolCorporativoScope?.rolCorporativoId ||
+                payload?.auth?.afiliadoScope?.rolCorporativoId ||
+                payload?.auth?.afiliadoScope?.marcoId
+        );
         const actorTipoDetectado = String(tenantScope?.tenantCorporativoId || '').trim()
             ? 'CORPORATIVO'
             : String(tenantScope?.tenantGlobalId || '').trim()
                 ? 'GLOBAL'
                 : String(tenantScope?.tenantSuperAdminId || '').trim()
                     ? 'SUPERADMIN'
-                    : rolEsSuperAdmin
-                        ? 'SUPERADMIN'
-                        : ['DIOS', 'DESAROLLADOR'].includes(rol)
+                    : jwtAfiliado || stored.esAfiliadoCliente || rol === 'CLIENTE'
+                        ? 'CLIENTE'
+                        : rolEsSuperAdmin
                             ? 'SUPERADMIN'
-                            : 'UNKNOWN';
+                            : ['DIOS', 'DESAROLLADOR'].includes(rol)
+                                ? 'SUPERADMIN'
+                                : 'UNKNOWN';
 
         return actorTipoDetectado as AdminActorTipo;
     } catch {
@@ -496,6 +535,7 @@ const debeAplicarFiltroHerenciaSuperAdmin = async (
         const jerarquiaCorp = await fetchSaJerarquiaTieneCorporativoEnCounters();
         return jerarquiaCorp === true;
     }
+    if (actorTipo === 'CLIENTE') return tieneHerenciasEnApi;
     if (!tieneHerenciasEnApi) return false;
     return true;
 };
@@ -581,7 +621,7 @@ const mustEnforceHerenciaForSidebarActor = async (actorTipo: AdminActorTipo): Pr
         const jerarquiaCorp = await fetchSaJerarquiaTieneCorporativoEnCounters();
         return jerarquiaCorp === true;
     }
-    if (actorTipo === 'GLOBAL' || actorTipo === 'CORPORATIVO') return true;
+    if (actorTipo === 'GLOBAL' || actorTipo === 'CORPORATIVO' || actorTipo === 'CLIENTE') return true;
     return false;
 };
 
@@ -673,6 +713,32 @@ export const getRouteCatalog = async (): Promise<RouteCatalogItem[]> => {
 
 const normalizeText = (value: string): string =>
     String(value || '').trim().toLowerCase();
+
+/** Quita extensión de archivo del nombre de componente en BD. */
+export const stripRouteComponentExtension = (name: string): string =>
+    String(name || '').replace(/\.(jsx|tsx|js|ts)$/i, '').replace(/\.+$/, '').trim();
+
+/**
+ * Alinea nombres de componente en BD con archivos `.tsx` del frontend.
+ * Rutas de perfil de afiliado suelen venir como `UsuariosGobernanza*` sin archivo físico.
+ */
+export const normalizeAdminRouteComponent = (component: string, path = ''): string => {
+    const comp = stripRouteComponentExtension(component);
+    const pathNorm = String(path || '').toLowerCase();
+
+    if (
+        pathNorm.includes('perfil-cliente') ||
+        pathNorm.includes('mi-perfil') ||
+        /(?:^|\/)perfil(?:\/|$)/i.test(pathNorm)
+    ) {
+        return 'Perfil';
+    }
+    if (comp === 'ConfiguracionPerfil') return 'Perfil';
+    if (/^UsuariosGobernanza/i.test(comp)) {
+        return pathNorm.includes('perfil') ? 'Perfil' : 'GestionUsuarios';
+    }
+    return comp;
+};
 
 const toAppRoutePath = (route: RouteCatalogItem): string => {
     const normalizedPath = normalizeRoutePath(route.path);
@@ -766,9 +832,8 @@ export const getAuthorizedRoutes = async (): Promise<AuthorizedRoutes> => {
             return { publicRoutes: [], adminRoutes: [], authRoutes: [] };
         }
 
-        // Normaliza nombres de componentes (strip extensiones y puntos trailing de la BD)
-        const normalizeComponent = (name: string) =>
-            String(name || '').replace(/\.(jsx|tsx|js|ts)$/i, "").replace(/\.+$/, "").trim();
+        const normalizeComponent = (name: string, path = '') =>
+            normalizeAdminRouteComponent(name, path);
 
         // Helpers para detectar rutas híbridas (múltiples accessType que cruzan contextos)
         const getAccessTypeEntries = (r: typeof result.data[number]) => {
@@ -790,7 +855,7 @@ export const getAuthorizedRoutes = async (): Promise<AuthorizedRoutes> => {
             .filter(isHybrid)
             .map(r => ({
                 path: toRelativeRoutePath(r.path),
-                component: normalizeComponent(r.component),
+                component: normalizeComponent(r.component, r.path),
             }));
 
         const hybridPaths = new Set(hybridRoutes.map(r => r.path));
@@ -800,7 +865,7 @@ export const getAuthorizedRoutes = async (): Promise<AuthorizedRoutes> => {
             .filter(r => r.estadoRuta && normalizeLayout(r.layout) === "publiclayout" && !isHybrid(r))
             .map(r => ({
                 path: toRelativeRoutePath(r.path),
-                component: normalizeComponent(r.component),
+                component: normalizeComponent(r.component, r.path),
             }));
 
         // AUTH
@@ -808,7 +873,7 @@ export const getAuthorizedRoutes = async (): Promise<AuthorizedRoutes> => {
             .filter(r => r.estadoRuta && normalizeLayout(r.layout) === "authlayout" && !hybridPaths.has(toRelativeRoutePath(r.path)))
             .map(r => ({
                 path: toRelativeRoutePath(r.path),
-                component: normalizeComponent(r.component),
+                component: normalizeComponent(r.component, r.path),
             }));
 
         // ADMIN: priorizar el arbol autorizado backend para evitar desalineacion
@@ -822,7 +887,7 @@ export const getAuthorizedRoutes = async (): Promise<AuthorizedRoutes> => {
 
             const mapNode = (node: AdminNavTreeItem): AdminRouteConfig => ({
                 path: toRelativeRoutePath(node.path.replace(/^\/admin\/?/i, '')),
-                component: normalizeComponent(node.component),
+                component: normalizeComponent(node.component, node.path),
                 ...(node.children?.length ? { children: node.children.map(mapNode) } : {}),
             });
 
@@ -845,7 +910,9 @@ export const getAuthorizedRoutes = async (): Promise<AuthorizedRoutes> => {
                     ];
                     return pathCandidates.some((p) => herencia.pathsPermitidos.has(p));
                 })
-                : (actorTipo === 'SUPERADMIN' ? adminSource : []);
+                : actorTipo === 'SUPERADMIN'
+                  ? adminSource
+                  : [];
 
             /**
              * Si jerarquía obliga filtro pero IDs/rutas no alinean con listado de herencias (p. ej. path con/sin /admin),
@@ -863,7 +930,7 @@ export const getAuthorizedRoutes = async (): Promise<AuthorizedRoutes> => {
             if (tree.length === 0) {
                 adminRoutes = adminFiltrado.map((r) => ({
                     path: toRelativeRoutePath(String(r.path || '').replace(/^\/admin\/?/i, '')),
-                    component: normalizeComponent(r.component),
+                    component: normalizeComponent(r.component, r.path),
                 }));
             } else {
                 const existingPaths = new Set(
@@ -873,7 +940,7 @@ export const getAuthorizedRoutes = async (): Promise<AuthorizedRoutes> => {
                 const rutasFaltantes = adminFiltrado
                     .map((r) => ({
                         path: toRelativeRoutePath(String(r.path || '').replace(/^\/admin\/?/i, '')),
-                        component: normalizeComponent(r.component),
+                        component: normalizeComponent(r.component, r.path),
                     }))
                     .filter((r) => {
                         const normalized = normalizeRoutePath(`/admin/${String(r.path || '').replace(/^\//, '')}`);
@@ -976,6 +1043,85 @@ const compareGuestPublicNavbar = (a: SecurityRouteRow, b: SecurityRouteRow): num
     );
 };
 
+/** Usuario afiliado / rol corporativo con sesión (no debe ver navbar de invitado). */
+export const esUsuarioRolCorporativoAutenticado = (): boolean => {
+    const token = localStorage.getItem('token');
+    if (!token) return false;
+
+    const stored = readTenantScopeAndRolFromStoredUser();
+    if (stored.esAfiliadoCliente) return true;
+    if (String(stored.tenantScope.tenantCorporativoId || '').trim()) return true;
+
+    try {
+        const payload = decodeJwtPayload(token) as {
+            auth?: {
+                rolCorporativoScope?: { rolCorporativoId?: string | null };
+                afiliadoScope?: { rolCorporativoId?: string | null; marcoId?: string | null };
+                tenantScope?: { tenantCorporativoId?: string | null };
+            };
+        } | null;
+        const auth = payload?.auth;
+        if (String(auth?.rolCorporativoScope?.rolCorporativoId || '').trim()) return true;
+        if (String(auth?.afiliadoScope?.rolCorporativoId || auth?.afiliadoScope?.marcoId || '').trim()) {
+            return true;
+        }
+        if (String(auth?.tenantScope?.tenantCorporativoId || '').trim()) return true;
+    } catch {
+        /* ignore */
+    }
+
+    return false;
+};
+
+const mapMenuTagsToNavbarItems = (
+    tags: Array<{
+        estado?: boolean;
+        routePath?: string;
+        ruta?: { path?: string };
+        label?: string;
+        nombreTag?: string;
+        order?: number;
+    }>,
+): PublicNavItem[] =>
+    tags
+        .filter((t) => t?.estado !== false)
+        .map((t) => ({
+            path: normalizeRoutePath(String(t.routePath || t.ruta?.path || '/')),
+            label: String(t.label || t.nombreTag || '').trim(),
+            order: Number(t.order ?? 0),
+        }))
+        .filter((item) => Boolean(item.label && item.path))
+        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
+const fetchMarcoMenuNavbarRoutes = async (menuTipo: 'SIDEBAR_MARCO' | 'USER_DROPDOWN'): Promise<PublicNavItem[]> => {
+    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api';
+    const menuResult = await apiFetch(
+        `${API_BASE_URL}/seguridad/rutas/menu-tags/resolver/actual?menuTipo=${menuTipo}`,
+        { method: 'GET', useAuth: true, logoutOn401: false },
+    );
+    if (!menuResult?.success || !Array.isArray(menuResult.data) || menuResult.data.length === 0) {
+        return [];
+    }
+    return mapMenuTagsToNavbarItems(menuResult.data);
+};
+
+/**
+ * Rutas del navbar según tipo de sesión.
+ * Rol corporativo autenticado: solo menú marco (tags), nunca catálogo público de invitado.
+ */
+export const getNavbarNavigationRoutes = async (isAuthenticated: boolean): Promise<PublicNavItem[]> => {
+    if (isAuthenticated && esUsuarioRolCorporativoAutenticado()) {
+        try {
+            const marco = await fetchMarcoMenuNavbarRoutes('SIDEBAR_MARCO');
+            if (marco.length > 0) return marco;
+        } catch {
+            /* sin menú marco */
+        }
+        return [];
+    }
+    return getPublicNavigationRoutes(isAuthenticated);
+};
+
 // export const getPublicNavigationRoutes = async (): Promise<PublicNavItem[]> => {
 //     try {
 //         const result = await fetchAllSecurityRoutes(false);
@@ -1006,6 +1152,18 @@ export const getPublicNavigationRoutes = async (
     isAuthenticated: boolean = false
 ): Promise<PublicNavItem[]> => {
     try {
+        if (isAuthenticated) {
+            if (esUsuarioRolCorporativoAutenticado()) {
+                return [];
+            }
+            try {
+                const marco = await fetchMarcoMenuNavbarRoutes('SIDEBAR_MARCO');
+                if (marco.length > 0) return marco;
+            } catch {
+                /* usuarios privados no corporativos: fallback catálogo PRIVATE */
+            }
+        }
+
         const result = await fetchAllSecurityRoutes(false);
 
         if (!result?.success || !result?.data) {
@@ -1116,7 +1274,7 @@ export const getAdminSidebarRoutes = async (): Promise<AdminNavItem[]> => {
             .map((r) => ({
                 path: normalizeRoutePath(r.path),
                 label: r.name,
-                component: r.component.replace(/\.(jsx|tsx|js|ts)$/i, ""),
+                component: normalizeAdminRouteComponent(r.component, r.path),
                 order: r.order ?? 0
             }));
     } catch (error) {
@@ -1130,7 +1288,7 @@ const mapTreeNodes = (nodes: RouteTreeResponse['data']): AdminNavTreeItem[] => {
         id: String(node?._id || node?.iud || ''),
         path: normalizeRoutePath(node?.path || ''),
         label: String(node?.name || ''),
-        component: String(node?.component || '').replace(/\.(jsx|tsx|js|ts)$/i, ''),
+        component: normalizeAdminRouteComponent(String(node?.component || ''), normalizeRoutePath(node?.path || '')),
         order: Number(node?.order ?? 0),
         tipoNodo: String(node?.tipoNodoId?.codigo || node?.tipoNodo || '').toUpperCase(),
         children: Array.isArray(node?.children) ? node.children.map(mapper) : []
@@ -1290,7 +1448,7 @@ const _fetchSidebarTreeWithContext = async (): Promise<AdminSidebarTreeContext> 
                 }
             }
 
-            if (actorTipo === 'GLOBAL' || actorTipo === 'CORPORATIVO') {
+            if (actorTipo === 'GLOBAL' || actorTipo === 'CORPORATIVO' || actorTipo === 'CLIENTE') {
                 const herencia = await getHerenciaAdminPermitida();
                 filteredTree = filterTreeByAllowedRoutes(filteredTree, herencia.idsPermitidos, herencia.pathsPermitidos);
                 filteredTree = filterTreeByAllowedRoutes(filteredTree, securityLookup.ids, securityLookup.paths);

@@ -209,6 +209,13 @@ export default function MembershipDashboard(): React.ReactElement {
         fetchReferidos();
     }, []);
 
+    useEffect(() => {
+        if (!localStorage.getItem('token')) return;
+        void refetch().catch(() => {
+            /* El usuario verá el error al pulsar Generar Enlace si aún no tiene membresía activa. */
+        });
+    }, [refetch]);
+
     const fetchReferidos = async (): Promise<void> => {
         try {
             setLoadingReferidos(true);

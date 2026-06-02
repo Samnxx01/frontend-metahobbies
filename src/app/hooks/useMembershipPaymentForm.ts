@@ -246,15 +246,26 @@ export function useMembershipPaymentForm({
 
       // Llamada al backend
       const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api';
+      const guestSessionId =
+        sessionStorage.getItem('mabs_guest_session_id')?.trim() || '';
+
+      const paymentHeaders: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      };
+      if (guestSessionId) {
+        paymentHeaders['x-guest-session-id'] = guestSessionId;
+      }
+
       const response = await fetch(
         `${API_BASE_URL}/membresia/seguridad/crear/crearmembresia/${token}`,
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-          },
-          body: JSON.stringify(paymentData),
+          headers: paymentHeaders,
+          body: JSON.stringify({
+            ...paymentData,
+            ...(guestSessionId ? { guestSessionId } : {}),
+          }),
         }
       );
 

@@ -16,7 +16,18 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import { Loader2, Globe, UserCog } from 'lucide-react';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+import { Loader2, Globe, UserCog, UserX } from 'lucide-react';
 import { apiFetch } from '@/app/services/api';
 import type { TenantGlobalInfo } from '@/app/services/tenantUsuariosService';
 
@@ -28,7 +39,9 @@ interface RolGlobalEditModalProps {
     tenantGlobalActual?: { iud?: string; _id?: string; razon_social?: string | null; titulo?: string | null } | null;
     scope: 'SUPER_ADMIN' | 'TENANT_GLOBAL' | 'CORPORATIVO';
     onSave: (id: string, data: Record<string, string>) => Promise<void>;
+    onDeactivate?: (id: string) => Promise<void>;
     isUpdating?: boolean;
+    isDeactivating?: boolean;
     updateError?: Error | null;
 }
 
@@ -51,7 +64,9 @@ export const RolGlobalEditModal = ({
     tenantGlobalActual,
     scope,
     onSave,
+    onDeactivate,
     isUpdating = false,
+    isDeactivating = false,
     updateError,
 }: RolGlobalEditModalProps): React.ReactElement => {
     const [roles, setRoles] = useState<RolOpcion[]>([]);
@@ -200,15 +215,61 @@ export const RolGlobalEditModal = ({
                         )}
                     </div>
 
-                    <DialogFooter className="pt-4 flex justify-end gap-3">
-                        <Button type="button" variant="outline" onClick={onClose} disabled={isUpdating}>
-                            Cancelar
-                        </Button>
-                        <Button type="submit" disabled={isUpdating || loadingRoles}>
-                            {isUpdating
-                                ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Guardando...</>
-                                : 'Guardar cambios'}
-                        </Button>
+                    <DialogFooter className="pt-4 flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        {onDeactivate ? (
+                            <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                    <Button
+                                        type="button"
+                                        variant="destructive"
+                                        className="sm:mr-auto"
+                                        disabled={isUpdating || isDeactivating}
+                                    >
+                                        {isDeactivating ? (
+                                            <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Desactivando…</>
+                                        ) : (
+                                            <><UserX className="h-4 w-4 mr-2" /> Desactivar usuario</>
+                                        )}
+                                    </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                        <AlertDialogTitle>¿Desactivar este usuario?</AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                            El usuario <strong>{usuario?.correo}</strong> quedará inactivo
+                                            (estado deshabilitado) y dejará de aparecer en listados activos.
+                                            No se borra el registro de la base de datos.
+                                        </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                        <AlertDialogAction
+                                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                            onClick={async () => {
+                                                const uid = String(usuario?.iud || usuario?._id || '');
+                                                if (!uid) return;
+                                                await onDeactivate(uid);
+                                                onClose();
+                                            }}
+                                        >
+                                            Desactivar
+                                        </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                </AlertDialogContent>
+                            </AlertDialog>
+                        ) : (
+                            <span className="hidden sm:block sm:flex-1" />
+                        )}
+                        <div className="flex justify-end gap-3">
+                            <Button type="button" variant="outline" onClick={onClose} disabled={isUpdating || isDeactivating}>
+                                Cancelar
+                            </Button>
+                            <Button type="submit" disabled={isUpdating || isDeactivating || loadingRoles}>
+                                {isUpdating
+                                    ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Guardando...</>
+                                    : 'Guardar cambios'}
+                            </Button>
+                        </div>
                     </DialogFooter>
                 </form>
             </DialogContent>

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { RefreshCw, Shield, Building2, Globe, Plus, Loader2, Trash2, Edit } from 'lucide-react';
+import { RefreshCw, Shield, Building2, Globe, Plus, Loader2, Trash2, Edit, Settings2, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -20,9 +20,13 @@ import { UsuarioCorporativoModal } from '@/app/presentation/components/admin/usu
 import { UsuarioSuperAdminModal } from '@/app/presentation/components/admin/usuarios-tenant/UsuarioSuperAdminModal';
 import { TenantUserActionButtons } from '@/app/presentation/components/admin/usuarios-tenant/TenantUserActionButtons';
 import { RolGlobalEditModal } from '@/app/presentation/components/admin/usuarios-tenant/RolGlobalEditModal';
+import { deactivateUser } from '@/app/services/adminService';
 import { RolCorporativoEditModal } from '@/app/presentation/components/admin/usuarios-tenant/RolCorporativoEditModal';
 import { RolesGlobalesModal } from '@/app/presentation/components/admin/usuarios-tenant/RolesGlobalesModal';
 import { RolesCorporativosModal } from '@/app/presentation/components/admin/usuarios-tenant/RolesCorporativosModal';
+import { ParametrizacionMarcoAfiliadoModal } from '@/app/presentation/components/admin/usuarios-tenant/ParametrizacionMarcoAfiliadoModal';
+import { UsuariosRolCorporativoListadoModal } from '@/app/presentation/components/admin/usuarios-tenant/UsuariosRolCorporativoListadoModal';
+import type { UsuarioRolCorporativoItem } from '@/app/presentation/components/admin/usuarios-tenant/usuariosRolCorporativoTypes';
 import type {
     CorpNode,
     TenantGlobalInfo,
@@ -152,6 +156,8 @@ export default function UsuariosTenant(): React.ReactElement {
     // Modales de gestión de roles
     const [modalRolesGlobales, setModalRolesGlobales] = useState(false);
     const [modalRolesCorporativos, setModalRolesCorporativos] = useState(false);
+    const [modalParametrizacionMarco, setModalParametrizacionMarco] = useState(false);
+    const [modalListadoUsuariosRolCorp, setModalListadoUsuariosRolCorp] = useState(false);
 
     const scope = jerarquia?.scope ?? null;
 
@@ -176,6 +182,7 @@ export default function UsuariosTenant(): React.ReactElement {
     const [editUserModal, setEditUserModal] = useState(false);
     const [editUserTarget, setEditUserTarget] = useState<any | null>(null);
     const [editUserSaving, setEditUserSaving] = useState(false);
+    const [editUserDeactivating, setEditUserDeactivating] = useState(false);
     const [editUserTG, setEditUserTG] = useState<any | null>(null);
 
     const openEditUser = (u: any, tg?: any) => {
@@ -196,6 +203,21 @@ export default function UsuariosTenant(): React.ReactElement {
             throw new Error(String(err?.message || 'Error al guardar'));
         } finally {
             setEditUserSaving(false);
+        }
+    };
+
+    const handleDesactivarGlobal = async (id: string) => {
+        setEditUserDeactivating(true);
+        try {
+            await deactivateUser(id);
+            toast.success('Usuario desactivado');
+            setEditUserModal(false);
+            refetch();
+        } catch (err: unknown) {
+            toast.error(err instanceof Error ? err.message : 'Error al desactivar usuario');
+            throw err;
+        } finally {
+            setEditUserDeactivating(false);
         }
     };
 
@@ -550,6 +572,22 @@ export default function UsuariosTenant(): React.ReactElement {
                             Rol Corporativo
                         </Button>
                     )}
+                    {scope && (
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setModalParametrizacionMarco(true)}
+                        >
+                            <Settings2 className="h-4 w-4 mr-2" />
+                            Parametrizar marco
+                        </Button>
+                    )}
+                    {scope && (
+                        <Button size="sm" onClick={() => setModalListadoUsuariosRolCorp(true)}>
+                            <Users className="h-4 w-4 mr-2" />
+                            Usuarios rol corp.
+                        </Button>
+                    )}
                 </div>
             </div>
 
@@ -629,11 +667,58 @@ export default function UsuariosTenant(): React.ReactElement {
                             orden={ordenCorp}
                             titulo={`Usuarios con rol corporativo (${jerarquia?.usuariosRolCorporativo?.length ?? 0})`}
                             descripcion="Operadores con roles corporativos visibles en el alcance del árbol (entre SA y tenant global)."
+                            headerAction={
+                                <div className="flex flex-wrap gap-1.5">
+                                    <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="secondary"
+                                        className="h-8 text-xs"
+                                        onClick={() => setModalParametrizacionMarco(true)}
+                                    >
+                                        <Settings2 className="h-3.5 w-3.5 mr-1.5" />
+                                        Parametrizar marco
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="default"
+                                        className="h-8 text-xs"
+                                        onClick={() => setModalListadoUsuariosRolCorp(true)}
+                                    >
+                                        <Users className="h-3.5 w-3.5 mr-1.5" />
+                                        Listar usuarios
+                                    </Button>
+                                </div>
+                            }
                         >
                             {(jerarquia?.usuariosRolCorporativo?.length ?? 0) === 0 ? (
-                                <p className="text-sm text-muted-foreground rounded-lg border border-dashed border-border bg-muted/15 px-4 py-3">
-                                    No hay usuarios con rol corporativo asignado en este alcance.
-                                </p>
+                                <div className="space-y-3">
+                                    <p className="text-sm text-muted-foreground rounded-lg border border-dashed border-border bg-muted/15 px-4 py-3">
+                                        No hay usuarios con rol corporativo visibles en el organigrama.
+                                        Los afiliados CLIENTE de plataforma global se gestionan desde
+                                        la parametrización automática de permisos.
+                                    </p>
+                                    <div className="flex flex-wrap gap-2">
+                                        <Button
+                                            type="button"
+                                            size="sm"
+                                            variant="secondary"
+                                            onClick={() => setModalParametrizacionMarco(true)}
+                                        >
+                                            <Settings2 className="h-3.5 w-3.5 mr-1.5" />
+                                            Parametrizar marco
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            size="sm"
+                                            onClick={() => setModalListadoUsuariosRolCorp(true)}
+                                        >
+                                            <Users className="h-3.5 w-3.5 mr-1.5" />
+                                            Listar usuarios
+                                        </Button>
+                                    </div>
+                                </div>
                             ) : (
                                 <div className="overflow-hidden rounded-lg border border-border bg-background divide-y divide-border shadow-inner">
                                     {jerarquia!.usuariosRolCorporativo!.map((u) => (
@@ -866,6 +951,20 @@ export default function UsuariosTenant(): React.ReactElement {
                 onClose={() => setModalRolesCorporativos(false)}
             />
 
+            <ParametrizacionMarcoAfiliadoModal
+                open={modalParametrizacionMarco}
+                onClose={() => setModalParametrizacionMarco(false)}
+            />
+
+            <UsuariosRolCorporativoListadoModal
+                open={modalListadoUsuariosRolCorp}
+                onClose={() => setModalListadoUsuariosRolCorp(false)}
+                onEditUsuario={(u: UsuarioRolCorporativoItem) => {
+                    setModalListadoUsuariosRolCorp(false);
+                    void openEditUser(u);
+                }}
+            />
+
             {/* ── Modal Editar Rol Global ───────────────────────────────────── */}
             <RolGlobalEditModal
                 open={editUserModal}
@@ -875,7 +974,9 @@ export default function UsuariosTenant(): React.ReactElement {
                 tenantsGlobales={scope === 'SUPER_ADMIN' ? tenantsGlobalesInfo : []}
                 scope={scope as 'SUPER_ADMIN' | 'TENANT_GLOBAL' | 'CORPORATIVO'}
                 onSave={handleGuardarGlobal}
+                onDeactivate={handleDesactivarGlobal}
                 isUpdating={editUserSaving}
+                isDeactivating={editUserDeactivating}
             />
 
             {/* ── Modal Editar Rol Corporativo ──────────────────────────────── */}

@@ -8,44 +8,38 @@ import type {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 type StockFiltro = {
   sku: string;
-  bodega: string;
 };
 
 type InventarioStockTabProps = {
   stockFiltro: StockFiltro;
-  setStockFiltro: React.Dispatch<React.SetStateAction<StockFiltro>>;
   stockConsulta: InventarioSaldo | null;
   stockActual: StockActualItem[];
   kardex: InventarioMovimiento[];
   money: Intl.NumberFormat;
-  renderBodegaStockSelect: () => React.ReactElement;
+  renderSkuStockSelect: () => React.ReactElement;
   consultarStock: () => Promise<void>;
-  bodegaSeleccionada?: string;
+  etiquetaVista?: string;
   formatDate: (value?: string) => string;
   getTipoMovimientoLabel: (mov: InventarioMovimiento) => string;
 };
 
 export default function InventarioStockTab({
   stockFiltro,
-  setStockFiltro,
   stockConsulta,
   stockActual,
   kardex,
   money,
-  renderBodegaStockSelect,
+  renderSkuStockSelect,
   consultarStock,
   formatDate,
   getTipoMovimientoLabel,
-  bodegaSeleccionada = '',
+  etiquetaVista = 'Todas las bodegas',
 }: InventarioStockTabProps): React.ReactElement {
-  const etiquetaBodega = bodegaSeleccionada.trim() || 'Todas las bodegas';
-
   return (
     <div className="space-y-4">
       <div className="grid gap-4 lg:grid-cols-[360px_1fr]">
@@ -53,21 +47,13 @@ export default function InventarioStockTab({
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><Search className="h-5 w-5" /> Consultar stock</CardTitle>
             <CardDescription>
-              Selecciona una bodega para actualizar resumen, tabla y kardex. Opcional: filtra por SKU y pulsa Consultar.
+              Opcional: filtra por SKU y pulsa Consultar. Los saldos combinan kardex y documentos de inventario.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label>SKU</Label>
-              <Input
-                value={stockFiltro.sku}
-                onChange={(event) => setStockFiltro((prev) => ({ ...prev, sku: event.target.value }))}
-                placeholder="CAM-BAS-M"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Bodega</Label>
-              {renderBodegaStockSelect()}
+              {renderSkuStockSelect()}
             </div>
             <Button className="w-full" onClick={() => void consultarStock()}>
               <Search className="mr-2 h-4 w-4" />
@@ -88,7 +74,7 @@ export default function InventarioStockTab({
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><Package className="h-5 w-5" /> Stock actual</CardTitle>
             <CardDescription>
-              Saldos en <span className="font-medium text-foreground">{etiquetaBodega}</span>.
+              Saldos en <span className="font-medium text-foreground">{etiquetaVista}</span>.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -131,7 +117,7 @@ export default function InventarioStockTab({
         <CardHeader>
           <CardTitle className="flex items-center gap-2"><ClipboardList className="h-5 w-5" /> Kardex consultado</CardTitle>
           <CardDescription>
-            Movimientos en <span className="font-medium text-foreground">{etiquetaBodega}</span>
+            Movimientos en <span className="font-medium text-foreground">{etiquetaVista}</span>
             {stockFiltro.sku.trim() ? ` · SKU ${stockFiltro.sku.trim()}` : ''}.
           </CardDescription>
         </CardHeader>
@@ -163,7 +149,7 @@ export default function InventarioStockTab({
                 ))}
                 {kardex.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">Consulta una bodega o SKU para ver movimientos.</TableCell>
+                    <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">Pulsa Consultar para ver movimientos del kardex.</TableCell>
                   </TableRow>
                 ) : null}
               </TableBody>
@@ -174,4 +160,3 @@ export default function InventarioStockTab({
     </div>
   );
 }
-
