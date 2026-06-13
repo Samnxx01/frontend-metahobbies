@@ -10,6 +10,7 @@ import {
 import { resolveCurrentRouteMenuTags } from '@/app/services/routesService';
 import { useLoading } from '@/app/providers/LoadingProvider';
 import { getGovernedPublicHomePath } from '@/app/services/governedNavigation';
+import { persistHybridSpaPath } from '@/app/services/api';
 
 import PublicLayout from '@/app/presentation/layouts/PublicLayout';
 import AuthLayout from '@/app/presentation/layouts/AuthLayout';
@@ -107,6 +108,7 @@ const buildComponentMap = (): ComponentMapType => {
         InventarioKardex:              'Inventario',
         // Gobernanza: shell interno; la ruta debe usar ParametrosGobernanza o default de GobernanzaModuloDinamico
         GobernanzaModuloPorRuta:       'ParametrosGobernanza',
+        PermisosGlobal:                'PermisosGlobal',
         MarcoPermisosAfiliado:         'MarcoPermisosAfiliadoParametrizacion',
         TechoPermisosAfiliado:         'MarcoPermisosAfiliadoParametrizacion',
         ParametrizacionMarcoAfiliado:  'MarcoPermisosAfiliadoParametrizacion',
@@ -114,6 +116,11 @@ const buildComponentMap = (): ComponentMapType => {
         UsuariosGobernanza:            'GestionUsuarios',
         UsuariosGobernanzaPerfilCliente: 'Perfil',
         UsuariosGobernanzaAdministracionTenant: 'GestionUsuarios',
+        // Nómina Colombia
+        Nomina:                        'NominaColombia',
+        CalculoNomina:                 'NominaColombia',
+        NominaColombiaAdmin:           'NominaColombia',
+        LiquidacionNomina:             'NominaColombia',
     };
 
     for (const [alias, target] of Object.entries(aliases)) {
@@ -156,15 +163,22 @@ interface AuthorizedRoutes {
     publicRoutes?: RouteConfig[];
     adminRoutes?: RouteConfig[];
     authRoutes?: RouteConfig[];
-    hybridRoutes?: RouteConfig[];
+    hybridStorefrontRoutes?: RouteConfig[];
+    hybridAdminShellRoutes?: RouteConfig[];
 }
 
 // ── Hybrid layout ──────────────────────────────────────────────────────────────
-// Rutas accesibles sin importar el estado de autenticación.
-// Usa AdminLayout cuando hay sesión activa, PublicLayout en caso contrario.
+// Rutas híbridas de panel (/admin/* sin flag de tienda): AdminLayout con sesión.
 function HybridLayout(): ReactElement {
-    const { user } = useAuth();
-    return user ? <AdminLayout /> : <PublicLayout />;
+    const { isAuthenticated, loading } = useAuth();
+    const location = useLocation();
+
+    useEffect(() => {
+        persistHybridSpaPath(location.pathname);
+    }, [location.pathname, isAuthenticated]);
+
+    if (loading) return <LoadingScreen />;
+    return isAuthenticated ? <AdminLayout /> : <PublicLayout />;
 }
 
 // ── Root redirect ──────────────────────────────────────────────────────────────
@@ -242,7 +256,7 @@ export default function LayoutRoutes(): ReactElement {
     const [authorizedRoutes, setAuthorizedRoutes] = useState<AuthorizedRoutes | null>(null);
     const [menuTagRoutes, setMenuTagRoutes] = useState<RouteConfig[]>([]);
     const [routeLoadError, setRouteLoadError] = useState<RouteLoadError | null>(null);
-    const { user } = useAuth();
+    const { user, isAuthenticated } = useAuth();
     const { showLoading, hideLoading } = useLoading();
     const location = useLocation();
 
@@ -283,7 +297,7 @@ export default function LayoutRoutes(): ReactElement {
                     status,
                     message: error?.message || 'Error al cargar las rutas de la aplicacion',
                 });
-                setAuthorizedRoutes({ publicRoutes: [], adminRoutes: [], authRoutes: [] });
+                setAuthorizedRoutes({ publicRoutes: [], adminRoutes: [], authRoutes: [], hybridStorefrontRoutes: [], hybridAdminShellRoutes: [] });
             }
         };
 
@@ -337,6 +351,9 @@ export default function LayoutRoutes(): ReactElement {
     if (!authorizedRoutes) {
         return <LoadingScreen />;
     }
+
+    const hybridStorefrontRoutes = authorizedRoutes.hybridStorefrontRoutes ?? [];
+    const hybridAdminShellRoutes = authorizedRoutes.hybridAdminShellRoutes ?? [];
 
     const renderFallbackElement = (route: RouteConfig): ReactElement => (
         <DynamicRouteFallback routePath={route.path} componentName={route.component} />
@@ -395,6 +412,7 @@ export default function LayoutRoutes(): ReactElement {
                 <Route path="public/render/checkout" element={<Checkout />} />
                 <Route path="public/render/finalizar-compra" element={<Checkout />} />
                 {authorizedRoutes.publicRoutes && renderRoutes(authorizedRoutes.publicRoutes)}
+                {renderRoutes(hybridStorefrontRoutes)}
                 <Route path="membresia/*" element={<MembershipRoutes />} />
                 <Route path="cambiar-contrasena-provisional" element={<CambiarContrasenaProvisional />} />
                 <Route path="activar-cuenta" element={<ActivacionCuenta />} />
@@ -407,13 +425,13 @@ export default function LayoutRoutes(): ReactElement {
                 {authorizedRoutes.authRoutes && renderRoutes(authorizedRoutes.authRoutes)}
             </Route>
 
-            {authorizedRoutes.hybridRoutes && authorizedRoutes.hybridRoutes.length > 0 && (
+            {hybridAdminShellRoutes.length > 0 && (
                 <Route element={<HybridLayout />}>
-                    {renderRoutes(authorizedRoutes.hybridRoutes)}
+                    {renderRoutes(hybridAdminShellRoutes)}
                 </Route>
             )}
 
-            {user && authorizedRoutes?.adminRoutes && authorizedRoutes.adminRoutes.length > 0 && (
+            {isAuthenticated && authorizedRoutes?.adminRoutes && authorizedRoutes.adminRoutes.length > 0 && (
                 <Route path="/admin" element={<AdminLayout />}>
                     <Route index element={<AdminEntryRedirect />} />
                     {renderRoutes(authorizedRoutes.adminRoutes)}

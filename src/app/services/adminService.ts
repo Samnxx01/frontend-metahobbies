@@ -1,5 +1,6 @@
 import { apiFetch } from './api';
 import type { UserId, ApiResponse } from '../../types/common';
+import { encodePublicIdForPath, normalizePublicIdForApi } from '@/app/utils/entityPublicId';
 
 export const listUsers = async () => {
     return apiFetch('/api/registro/listarRegistro', {
@@ -29,14 +30,16 @@ export const registerAdmin = async (adminData: AdminData): Promise<ApiResponse> 
 };
 
 export const updateUser = async (userId: UserId, userData: UpdateUserData): Promise<ApiResponse> => {
-    return apiFetch(`/api/seguridad/pruebas/actualizar/registro/${userId}`, {
+    const id = encodePublicIdForPath(userId);
+    return apiFetch(`/api/seguridad/pruebas/actualizar/registro/${id}`, {
         method: 'PUT',
         body: userData
     });
 };
 
 export const deactivateUser = async (userId: UserId): Promise<ApiResponse> => {
-    return apiFetch(`/api/usuarios/inactivousuario/${userId}`, {
+    const id = encodePublicIdForPath(userId);
+    return apiFetch(`/api/usuarios/inactivousuario/${id}`, {
         method: 'DELETE',
     });
 };

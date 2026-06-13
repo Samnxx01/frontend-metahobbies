@@ -67,6 +67,7 @@ export interface BackendProducto {
   imagenes?: string[];
   estadoCatalogo: string;
   estadoProducto: boolean;
+  productoVentaRelacionId?: string | null;
   productoVentaRelacion?: {
     _id?: string;
     iud?: string;
@@ -80,6 +81,7 @@ export interface BackendProducto {
     descripcionCorta?: string;
     precio?: number;
     moneda?: string;
+    monedaId?: string | null;
     tipo?: string;
     categoria?: BackendCategoria | string | null;
     unidadMedida?: string;
@@ -88,6 +90,7 @@ export interface BackendProducto {
     cantidadColoresRender?: number;
     coloresPermitidos?: Array<{ nombre?: string; valor: string }>;
     reglasContables?: Array<{ codigo: string; aplica?: boolean; reglaContableId?: string | null }>;
+    reglasVentas?: Array<{ codigo: string; aplica?: boolean; reglaVentaId?: string | null; valor?: number }>;
     media?: ProductoVentaMedia[];
     estado: boolean;
   } | null;
@@ -167,6 +170,37 @@ export const mapCategoriaConMediaUrl = (cat: BackendCategoria): BackendCategoria
   };
 };
 
+export function getProductoVentaRelacionId(producto: BackendProducto | null | undefined): string {
+  const resolveId = (value: unknown): string => {
+    if (value == null) return '';
+    if (typeof value === 'string') return value.trim();
+    if (typeof value === 'object') {
+      const row = value as { iud?: unknown; _id?: unknown; id?: unknown };
+      return resolveId(row.iud ?? row._id ?? row.id);
+    }
+    return '';
+  };
+
+  const direct = resolveId(producto?.productoVentaRelacionId);
+  if (direct) return direct;
+
+  const relacion = producto?.productoVentaRelacion;
+  if (!relacion) return '';
+  if (typeof relacion === 'string') return relacion.trim();
+  return resolveId(relacion.iud ?? relacion._id ?? relacion.id);
+}
+
+export function getProductoDescripcionCompleta(p: BackendProducto): string {
+  const relacion = p.productoVentaRelacion;
+  return String(
+    p.descripcion
+    || relacion?.descripcion
+    || p.descripcionCorta
+    || relacion?.descripcionCorta
+    || '',
+  ).trim();
+}
+
 export function mapProducto(p: BackendProducto): ComponentProduct {
   const relacion = p.productoVentaRelacion;
   const categoriaRelacion = relacion?.categoria ?? p.categoria;
@@ -188,6 +222,23 @@ export function mapProducto(p: BackendProducto): ComponentProduct {
 
 // ── Servicio ───────────────────────────────────────────────────────────────
 
+export interface ProductoCatalogoLimites {
+  nombreMax: number;
+  descripcionMax: number;
+  descripcionCortaMax: number;
+  miniCartSidePanelThreshold: number;
+  miniCartMaxProductos: number;
+}
+
+export interface BackendProductoActualizado extends BackendProducto {
+  cambiosReglasVentas?: Array<{
+    codigo: string;
+    valorAnterior: number | null;
+    valorNuevo: number;
+  }>;
+  sincronizarCarritoRecomendado?: boolean;
+}
+
 export interface FiltrosProductos {
   categoria?: string;
   tipo?: string;
@@ -198,11 +249,15 @@ export interface FiltrosProductos {
 export interface AdminProductoPayload {
   nombre: string;
   sku?: string;
+  /** Codigo de barras manual (8-14 alfanumerico). Si se omite, el backend lo genera. */
   codigoBarras?: string;
+  /** Alias de codigoBarras en el payload. */
+  codigo?: string;
   descripcion?: string;
   descripcionCorta?: string;
   precio: number;
   moneda: string;
+  monedaId?: string | null;
   tipo: string;
   categoria?: string | null;
   unidadMedida?: string;
@@ -217,6 +272,7 @@ export interface AdminProductoPayload {
   cantidadColoresRender?: number;
   coloresPermitidos?: Array<{ nombre?: string; valor: string }>;
   reglasContables?: Array<{ codigo: string; aplica?: boolean; reglaContableId?: string | null }>;
+  reglasVentas?: Array<{ codigo: string; aplica?: boolean; reglaVentaId?: string | null; valor?: number }>;
 }
 
 const productosService = {
@@ -310,9 +366,28 @@ const productosService = {
     return resp?.data as BackendProducto;
   },
 
-  async actualizarProductoAdmin(id: string, payload: Partial<AdminProductoPayload>): Promise<BackendProducto> {
+  async actualizarProductoAdmin(id: string, payload: Partial<AdminProductoPayload>): Promise<BackendProductoActualizado> {
     const resp = await apiFetch(`/api/productos/admin/${id}`, { method: 'PUT', body: payload });
-    return resp?.data as BackendProducto;
+    return resp?.data as BackendProductoActualizado;
+  },
+
+  async obtenerLimitesCatalogo(): Promise<ProductoCatalogoLimites> {
+    const resp = await apiFetch('/api/productos/admin/catalogo-config/limites', { method: 'GET' });
+    return resp?.data as ProductoCatalogoLimites;
+  },
+
+  async actualizarLimitesCatalogo(payload: Partial<ProductoCatalogoLimites>): Promise<ProductoCatalogoLimites> {
+    const resp = await apiFetch('/api/productos/admin/catalogo-config/limites', { method: 'PUT', body: payload });
+    return resp?.data as ProductoCatalogoLimites;
+  },
+
+  async obtenerMiniCartConfigPublico(): Promise<{ sidePanelThreshold: number; maxVisibleProducts: number }> {
+    const resp = await apiFetch('/api/productos/catalogo-config/mini-carrito', {
+      method: 'GET',
+      useAuth: false,
+      logoutOn401: false,
+    });
+    return resp?.data as { sidePanelThreshold: number; maxVisibleProducts: number };
   },
 
   async subirMediaProductoVenta(relacionId: string, file: File, duracionSegundos?: number): Promise<ProductoVentaMedia> {

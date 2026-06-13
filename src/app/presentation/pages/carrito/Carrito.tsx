@@ -12,22 +12,32 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { getGovernedLoginPath } from '@/app/services/governedNavigation';
+import {
+  buildCheckoutNavigationState,
+  CHECKOUT_PAYMENT_PATH,
+  getCheckoutPaymentPath,
+} from '@/app/services/checkoutNavigation';
 import { formatCOP } from '@/lib/utils';
 import DatosFacturacionInvitadoModal from '@/app/presentation/components/carrito/DatosFacturacionInvitadoModal';
 import carritoService from '@/app/services/carritoService';
+import { hydrateGeneradorEnlaceVentasAttribution } from '@/app/services/generadorEnlaceVentasFlow';
 
-import { Trash2, Minus, Plus, ArrowLeft, Info, Tag, X, AlertTriangle } from 'lucide-react';
+import CartItemVariantQuantities from '@/app/presentation/components/carrito/CartItemVariantQuantities';
+import { groupCartItemsByProduct } from '@/app/presentation/components/carrito/cartColorQtyCache';
+import { Trash2, ArrowLeft, Info, Tag, X, AlertTriangle } from 'lucide-react';
 import type { CartItem } from '../../../../types/common';
 
-interface CartItemComponentProps {
-  item: CartItem;
+interface CartProductGroupProps {
+  lines: CartItem[];
+  name: string;
+  image: string;
 }
 
 export default function Carrito(): React.ReactElement {
   const {
     cartItems,
     removeFromCart,
-    updateQuantity,
+    updateVariantQuantity,
     cartSummary,
     descuentoAplicado,
     totalDescuentoCodigo,
@@ -55,20 +65,27 @@ export default function Carrito(): React.ReactElement {
 
   // ── Handlers ─────────────────────────────────────────────────────────────
 
-  const handleQuantityChange = async (item: CartItem, newQuantity: number): Promise<void> => {
-    if (newQuantity < 1) return;
+  const handleVariantQuantityChange = async (
+    line: CartItem,
+    color: NonNullable<CartItem['color']>,
+    newQuantity: number,
+  ): Promise<void> => {
     try {
-      await updateQuantity(item.id, item.color?.pantone, newQuantity);
-      toast.success('Cantidad actualizada', { autoClose: 1000 });
-    } catch (err: any) {
-      toast.error(err.message || 'Error actualizando cantidad');
+      await updateVariantQuantity(line, color, newQuantity);
+      if (newQuantity < 1) {
+        toast.success('Tono eliminado del carrito', { autoClose: 1000 });
+      } else {
+        toast.success('Cantidad actualizada', { autoClose: 1000 });
+      }
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Error actualizando cantidad');
     }
   };
 
-  const handleRemoveItem = async (item: CartItem): Promise<void> => {
+  const handleRemoveGroup = async (lines: CartItem[]): Promise<void> => {
     const result = await Swal({
       title: '¿Estás seguro?',
-      text: '¿Deseas eliminar este producto del carrito?',
+      text: `¿Deseas eliminar ${lines[0]?.name || 'este producto'} del carrito?`,
       icon: 'warning',
       showCancelButton: true,
       confirmButtonColor: '#3085d6',
@@ -79,13 +96,17 @@ export default function Carrito(): React.ReactElement {
 
     if (result.isConfirmed) {
       try {
-        await removeFromCart(item.id, item.color?.pantone);
+        for (const line of lines) {
+          await removeFromCart(line.id, line.color?.pantone, line.backendItemId);
+        }
         toast.success('Producto eliminado del carrito');
       } catch {
         toast.error('Error eliminando producto');
       }
     }
   };
+
+  const cartGroups = groupCartItemsByProduct(cartItems);
 
   const handleAplicarCodigo = async (): Promise<void> => {
     if (!codigoInput.trim()) return;
@@ -112,6 +133,12 @@ export default function Carrito(): React.ReactElement {
 
   const handleProceedToCheckout = async (): Promise<void> => {
     if (!user) {
+      const esGenerador = await hydrateGeneradorEnlaceVentasAttribution(window.location.search);
+      if (esGenerador) {
+        setBillingGuestOpen(true);
+        return;
+      }
+
       const result = await Swal({
         title: 'Iniciar Sesión Requerido',
         text: 'Necesitas iniciar sesión para continuar con la compra.',
@@ -132,13 +159,15 @@ export default function Carrito(): React.ReactElement {
 
   // ── Item component ────────────────────────────────────────────────────────
 
-  const CartItemComponent = ({ item }: CartItemComponentProps): React.ReactElement => {
-    const alerta = alertas.find(a => a.sku === (item as any).sku);
+  const CartProductGroupRow = ({ lines, name, image }: CartProductGroupProps): React.ReactElement => {
+    const groupTotal = lines.reduce((sum, line) => sum + line.price * line.quantity, 0);
+    const stockAlert = lines.some((line) => !line.available);
+    const alerta = alertas.find((a) => lines.some((line) => a.sku === (line as { sku?: string }).sku));
     return (
       <div className="p-4 flex items-start sm:items-center gap-4 border-b border-border last:border-b-0 hover:bg-muted/50 transition-colors">
         <img
-          src={item.image}
-          alt={item.name}
+          src={image}
+          alt={name}
           className="w-20 h-20 object-cover rounded-lg flex-shrink-0"
           onError={(e: React.SyntheticEvent<HTMLImageElement>) => {
             const t = e.target as HTMLImageElement;
@@ -149,45 +178,41 @@ export default function Carrito(): React.ReactElement {
 
         <div className="flex-1 space-y-1 sm:space-y-0 sm:flex sm:justify-between sm:items-center">
           <div>
-            <h3 className="text-base font-semibold">{item.name}</h3>
-            {item.color?.name && (
-              <p className="text-sm text-muted-foreground">Tono: {item.color.name}</p>
-            )}
-            {!item.available && (
+            <h3 className="text-base font-semibold">{name}</h3>
+            {stockAlert && (
               <Badge variant="destructive" className="text-xs mt-1">Stock insuficiente</Badge>
+            )}
+            {lines[0]?.stock != null && (
+              <p className="text-xs text-muted-foreground">Disponible para venta: {lines[0].stock}</p>
             )}
             {alerta && (
               <p className="text-xs text-primary mt-1 flex items-center gap-1">
                 <AlertTriangle className="w-3 h-3" /> {alerta.mensaje}
               </p>
             )}
+            <div className="mt-2 space-y-2">
+              {lines.map((line) => (
+                <CartItemVariantQuantities
+                  key={line.backendItemId || `${line.id}-${line.color?.pantone || 'default'}`}
+                  item={line}
+                  max={line.stock ?? null}
+                  onQuantityChange={(color, newQuantity) => {
+                    void handleVariantQuantityChange(line, color, newQuantity);
+                  }}
+                />
+              ))}
+            </div>
           </div>
 
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mt-2 sm:mt-0">
-            <div className="flex items-center border border-input rounded-md">
-              <Button
-                onClick={() => handleQuantityChange(item, item.quantity - 1)}
-                variant="ghost" size="icon" className="h-8 w-8 rounded-r-none"
-              >
-                <Minus className="h-4 w-4" />
-              </Button>
-              <span className="px-3 text-sm font-semibold min-w-[30px] text-center">{item.quantity}</span>
-              <Button
-                onClick={() => handleQuantityChange(item, item.quantity + 1)}
-                variant="ghost" size="icon" className="h-8 w-8 rounded-l-none"
-              >
-                <Plus className="h-4 w-4" />
-              </Button>
-            </div>
-
             <div className="flex items-center gap-2">
               <p className="text-base font-bold w-24 text-right">
-                {formatCOP(item.price * item.quantity)}
+                {formatCOP(groupTotal)}
               </p>
               <Button
                 variant="ghost" size="icon"
                 className="text-destructive hover:bg-destructive/10 h-8 w-8"
-                onClick={() => handleRemoveItem(item)}
+                onClick={() => { void handleRemoveGroup(lines); }}
               >
                 <Trash2 className="h-4 w-4" />
               </Button>
@@ -205,15 +230,12 @@ export default function Carrito(): React.ReactElement {
       <DatosFacturacionInvitadoModal
         open={billingGuestOpen}
         onOpenChange={setBillingGuestOpen}
+        persistDraft={false}
         onContinue={async (datosFacturacion) => {
-          try {
-            if (!backendCartId) throw new Error('No se encontro el carrito activo');
-            await carritoService.guardarDatosFacturacion(backendCartId, datosFacturacion);
-            setBillingGuestOpen(false);
-            navigate('/checkout', { state: { openPayment: true } });
-          } catch (error) {
-            toast.error(error instanceof Error ? error.message : 'No se pudieron guardar los datos de facturacion');
-          }
+          setBillingGuestOpen(false);
+          navigate(getCheckoutPaymentPath(), {
+            state: buildCheckoutNavigationState({ datosFacturacion }),
+          });
         }}
       />
 
@@ -251,8 +273,13 @@ export default function Carrito(): React.ReactElement {
           <div className="md:col-span-8 space-y-4">
             <Card className="shadow-lg border rounded-xl overflow-hidden">
               <CardContent className="p-0">
-                {cartItems.map((item: CartItem) => (
-                  <CartItemComponent key={String(item.id) + (item.color?.pantone || '')} item={item} />
+                {cartGroups.map((group) => (
+                  <CartProductGroupRow
+                    key={group.productId}
+                    lines={group.lines}
+                    name={group.name}
+                    image={group.image}
+                  />
                 ))}
               </CardContent>
             </Card>

@@ -1,3 +1,6 @@
+import type { ResolvedAttributionLink } from '@/app/services/referralAttributionService';
+import { syncCartSessionWithAttribution } from '@/app/utils/cartSessionAttribution';
+
 /**
  * Preserva guestSessionId, ref (JWT), originType, etc. al navegar entre módulos públicos.
  * - Al entrar con ?guestSessionId=…&ref=… en la URL, se guarda en sessionStorage (por pestaña).
@@ -69,6 +72,42 @@ export function resolvePublicAttributionContext(search = ''): PublicAttributionC
     };
 }
 
+/** Extrae código corto ?at=MABS-XXXX de la URL o del storage. */
+export function getAttributionLinkCode(search = ''): string {
+    const query = search.startsWith('?') ? search.slice(1) : search;
+    const fromUrl = query ? new URLSearchParams(query).get('at')?.trim() : '';
+    if (fromUrl) return fromUrl.toUpperCase();
+
+    const stored = readStored();
+    return String(stored.linkCode || stored.codigoReferido || '').trim().toUpperCase();
+}
+
+/** Pipeline B / enlace venta: checkout de producto sin login obligatorio. */
+export function isGeneradorEnlaceVentasFlow(search = ''): boolean {
+    capturePublicAttributionFromSearch(search);
+
+    const stored = readStored();
+    if (stored.pipelineB === '1' || stored.allowGuestProductCheckout === '1') {
+        return true;
+    }
+
+    if (getAttributionLinkCode(search)) {
+        return true;
+    }
+
+    const ctx = resolvePublicAttributionContext(search);
+    if (ctx.originType === 'producto' && Boolean(ctx.guestSessionId || ctx.ref)) {
+        return true;
+    }
+
+    const redirect = String(stored.redirectTo || '').trim().toLowerCase();
+    if ((redirect === 'home' || redirect === 'productos') && Boolean(ctx.guestSessionId || ctx.ref)) {
+        return true;
+    }
+
+    return false;
+}
+
 /** Token mínimo del enlace de referido (JWT encriptado en query `ref`). */
 export function esTokenReferidoAtribucionValido(ref: string): boolean {
     const token = String(ref || '').trim();
@@ -104,6 +143,15 @@ export function capturePublicAttributionFromSearch(search: string): void {
     const incoming = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search);
     const stored = readStored();
     let updated = false;
+
+    const linkCode = incoming.get('at')?.trim();
+    if (linkCode) {
+        stored.linkCode = linkCode.toUpperCase();
+        stored.codigoReferido = stored.linkCode;
+        stored.allowGuestProductCheckout = '1';
+        updated = true;
+    }
+
     for (const k of PUBLIC_ATTRIBUTION_KEYS) {
         const v = incoming.get(k);
         if (v != null && v !== '') {
@@ -116,6 +164,7 @@ export function capturePublicAttributionFromSearch(search: string): void {
         if (stored.guestSessionId) {
             sessionStorage.setItem('mabs_guest_session_id', stored.guestSessionId);
         }
+        syncCartSessionWithAttribution();
     }
 }
 
@@ -124,10 +173,54 @@ export function clearStoredPublicAttribution(): void {
     sessionStorage.removeItem(STORAGE_KEY);
 }
 
+/** Hidrata sessionStorage tras resolver un enlace corto `?at=MABS-XXXXXX`. */
+export function applyResolvedAttributionToStorage(resolved: ResolvedAttributionLink): void {
+    const stored = readStored();
+    if (resolved.ref) stored.ref = resolved.ref;
+    if (resolved.guestSessionId) stored.guestSessionId = resolved.guestSessionId;
+    if (resolved.originType) stored.originType = resolved.originType;
+    if (resolved.originId) stored.originId = resolved.originId;
+    if (resolved.flow) stored.flow = resolved.flow;
+    if (resolved.redirectTo) stored.redirectTo = resolved.redirectTo;
+    if (resolved.linkCode || resolved.codigoReferido) {
+        stored.linkCode = String(resolved.linkCode || resolved.codigoReferido).trim().toUpperCase();
+        stored.codigoReferido = stored.linkCode;
+    }
+    if (resolved.pipelineB || resolved.originType === 'producto') {
+        stored.pipelineB = '1';
+    }
+    if (resolved.allowGuestProductCheckout || stored.linkCode) {
+        stored.allowGuestProductCheckout = '1';
+    }
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
+
+    if (resolved.guestSessionId) {
+        sessionStorage.setItem('mabs_guest_session_id', resolved.guestSessionId);
+    }
+    if (resolved.flow === 'referidos') {
+        sessionStorage.setItem('mabs_referidos_flow', '1');
+    }
+    syncCartSessionWithAttribution();
+}
+
 /**
  * Devuelve la misma ruta interna con la query de atribución aplicada.
  * No modifica enlaces externos (http/https).
  */
+const CHECKOUT_ATTRIBUTION_PATH_SUFFIXES = [
+    '/checkout',
+    '/public/render/checkout',
+    '/public/render/finalizar-compra',
+] as const;
+
+/** En checkout no propagar `ref` (JWT) en la URL: queda en sessionStorage y evita confusión con Wompi. */
+function shouldOmitRefFromAttributionPath(pathname: string): boolean {
+    const path = String(pathname || '').replace(/\/$/, '').toLowerCase();
+    return CHECKOUT_ATTRIBUTION_PATH_SUFFIXES.some(
+        (suffix) => path === suffix || path.endsWith(suffix),
+    );
+}
+
 export function appendPublicAttributionToInternalPath(path: string): string {
     if (!path || typeof path !== 'string') return path;
     const trimmed = path.trim();
@@ -140,7 +233,9 @@ export function appendPublicAttributionToInternalPath(path: string): string {
     const pathname = qMark >= 0 ? trimmed.slice(0, qMark) : trimmed;
     const existing = qMark >= 0 ? trimmed.slice(qMark + 1) : '';
     const params = new URLSearchParams(existing);
+    const omitRef = shouldOmitRefFromAttributionPath(pathname);
     for (const [k, v] of Object.entries(stored)) {
+        if (omitRef && k === 'ref') continue;
         params.set(k, v);
     }
     const q = params.toString();

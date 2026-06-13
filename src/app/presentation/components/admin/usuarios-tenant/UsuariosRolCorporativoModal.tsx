@@ -12,6 +12,7 @@ import { Loader2, RefreshCw, Users, Search } from 'lucide-react';
 import { apiFetch } from '@/app/services/api';
 import { toast } from 'react-toastify';
 import type { TenantUsuario } from '@/app/services/tenantUsuariosService';
+import { resolveEntityPublicId } from '@/app/utils/entityPublicId';
 
 export interface UsuarioRolCorporativoItem extends TenantUsuario {
     origen: 'TENANT_CORPORATIVO' | 'PLATAFORMA_GLOBAL';
@@ -141,7 +142,7 @@ export const UsuariosRolCorporativoModal = ({
                         <div className="divide-y divide-border rounded-lg border border-border overflow-hidden">
                             {filtrados.map((u) => (
                                 <div
-                                    key={String(u.iud)}
+                                    key={resolveEntityPublicId(u)}
                                     className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm bg-background hover:bg-muted/30"
                                 >
                                     <div className="min-w-0 flex-1">

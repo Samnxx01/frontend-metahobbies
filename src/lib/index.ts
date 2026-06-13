@@ -12,3 +12,22 @@ export { initiateMembershipCheckout } from './membership/initiateMembershipCheck
 
 // Type exports from central location
 export type * from './types/wompi';
+
+// Print / PDF HTML documents
+export {
+  buildPrintDocumentHtml,
+  buildPrintFooterHtml,
+  buildPrintDocumentBaseStyles,
+  escapePrintHtml,
+  openPrintDocument,
+  resolveCorporateNameFromSession,
+} from './print/printDocument';
+export type {
+  PrintDocumentFooterConfig,
+  PrintDocumentMargins,
+  PrintDocumentOptions,
+  PrintFooterAlign,
+  PrintFooterLine,
+  PrintPageSize,
+  OpenPrintDocumentOptions,
+} from './print/printDocument';

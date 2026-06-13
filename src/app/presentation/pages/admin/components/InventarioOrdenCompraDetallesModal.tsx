@@ -2,6 +2,12 @@ import React, { useMemo, useState } from 'react';
 import { CheckCircle2, Eye, Loader2 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import inventarioService, { type EstadoOrdenCompraConfig, type InventarioOrdenCompra } from '@/app/services/inventarioService';
+import {
+  formatActualizadaOrdenCompra,
+  formatCreadaOrdenCompra,
+  getOrdenCompraId,
+  textoUsuarioAuditoria,
+} from '@/app/presentation/pages/admin/utils/ordenCompraIdUtils';
 import { descuentoMontoLinea, totalLineaOrdenCompra } from '@/app/presentation/pages/admin/utils/ordenCompraLineaCalculo';
 import {
   estadoOrdenBadgeClass,
@@ -10,7 +16,7 @@ import {
 } from '@/app/presentation/pages/admin/utils/estadoOrdenCompraUi';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 const moneyCo = (n: number): string =>
@@ -54,20 +60,44 @@ export default function InventarioOrdenCompraDetallesModal({
 }: InventarioOrdenCompraDetallesModalProps): React.ReactElement {
   const [ordenLocal, setOrdenLocal] = useState<InventarioOrdenCompra | null>(null);
   const [confirmando, setConfirmando] = useState(false);
+  const [cargandoDetalle, setCargandoDetalle] = useState(false);
 
   const orden = ordenLocal ?? ordenProp;
   const mostrarConfirmar = Boolean(orden && puedeConfirmarOrdenCompra(orden.estado, estadosOrden));
   const total = useMemo(() => (orden?.items ?? []).reduce((acc, it) => acc + calcSubtotalLinea(it), 0), [orden]);
 
   React.useEffect(() => {
-    if (open) setOrdenLocal(ordenProp);
+    if (!open) {
+      setOrdenLocal(null);
+      return;
+    }
+    if (!ordenProp) {
+      setOrdenLocal(null);
+      return;
+    }
+    const ordenId = getOrdenCompraId(ordenProp);
+    if (!ordenId) {
+      setOrdenLocal(ordenProp);
+      return;
+    }
+    setOrdenLocal(ordenProp);
+    setCargandoDetalle(true);
+    void inventarioService
+      .obtenerOrdenCompra(ordenId)
+      .then((detalle) => setOrdenLocal(detalle))
+      .catch(() => setOrdenLocal(ordenProp))
+      .finally(() => setCargandoDetalle(false));
   }, [open, ordenProp]);
 
   const confirmarOrden = async (): Promise<void> => {
-    if (!orden?._id || !mostrarConfirmar) return;
+    const ordenId = getOrdenCompraId(orden);
+    if (!ordenId || !mostrarConfirmar) {
+      if (!ordenId) toast.error('No se pudo identificar la orden de compra.');
+      return;
+    }
     setConfirmando(true);
     try {
-      const data = await inventarioService.confirmarOrdenCompra(orden._id);
+      const data = await inventarioService.confirmarOrdenCompra(ordenId);
       const base = data?.orden ?? orden;
       const actualizada: InventarioOrdenCompra = {
         ...base,
@@ -106,6 +136,9 @@ export default function InventarioOrdenCompraDetallesModal({
               </Button>
             ) : null}
           </div>
+          <DialogDescription className="sr-only">
+            Detalle de la orden de compra, ítems y acción de confirmación contable.
+          </DialogDescription>
         </DialogHeader>
 
         {!orden ? (
@@ -139,19 +172,29 @@ export default function InventarioOrdenCompraDetallesModal({
               <div>
                 <p className="text-xs text-muted-foreground">Creada</p>
                 <p className="text-sm text-foreground">
-                  {orden.createdAt ? new Date(orden.createdAt).toLocaleString('es-CO') : orden.fechaOrden ? new Date(orden.fechaOrden).toLocaleString('es-CO') : '—'}
+                  {cargandoDetalle ? 'Cargando…' : formatCreadaOrdenCompra(orden)}
                 </p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Actualizada</p>
-                <p className="text-sm text-foreground">{orden.updatedAt ? new Date(orden.updatedAt).toLocaleString('es-CO') : '—'}</p>
+                <p className="text-sm text-foreground">
+                  {cargandoDetalle ? 'Cargando…' : formatActualizadaOrdenCompra(orden)}
+                </p>
               </div>
             </div>
 
             {orden.comprobanteContable?.numero ? (
               <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 p-3">
-                <p className="text-xs text-muted-foreground">Comprobante contable vinculado</p>
-                <p className="font-mono text-sm font-semibold text-foreground">{orden.comprobanteContable.numero}</p>
+                <p className="text-xs text-muted-foreground">Comprobante contable (orden de compra)</p>
+                <p className="font-mono text-sm font-semibold text-foreground">
+                  {orden.comprobanteContable.tipo ? `${orden.comprobanteContable.tipo} · ` : ''}
+                  {orden.comprobanteContable.numero}
+                </p>
+                {orden.comprobanteContable.usuario ? (
+                  <p className="text-xs text-muted-foreground">
+                    Ejecutado por: {textoUsuarioAuditoria({ usuario: orden.comprobanteContable.usuario })}
+                  </p>
+                ) : null}
                 {orden.comprobanteContable.confirmadoEn ? (
                   <p className="text-xs text-muted-foreground">
                     Confirmado: {new Date(orden.comprobanteContable.confirmadoEn).toLocaleString('es-CO')}

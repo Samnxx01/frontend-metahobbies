@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Shield, Users, Zap, Target, Eye, Building2, Loader2 } from 'lucide-react';
 import { apiFetch } from "@/app/services/api";
+import { fetchSplashLogo, resolveSplashLogoUrl } from '@/app/services/splashLogoService';
 
 interface EmpresaData {
     razon_social: string;
@@ -33,11 +34,7 @@ export default function SobreNosotros() {
                         useAuth: false,
                         logoutOn401: false,
                     }),
-                    apiFetch('/api/config/parametrizacion/listar/logos/coporativo', {
-                        method: 'GET',
-                        useAuth: false,
-                        logoutOn401: false,
-                    }),
+                    fetchSplashLogo(false),
                 ]);
 
                 if (perfilResult.status === 'fulfilled' && perfilResult.value?.ok && perfilResult.value?.perfil) {
@@ -53,16 +50,8 @@ export default function SobreNosotros() {
                     console.warn('No se pudo cargar el perfil corporativo publico, se usaran valores por defecto.');
                 }
 
-                if (logoResult.status === 'fulfilled' && logoResult.value?.ok && logoResult.value?.logo) {
-                    const { base64, mimetype, dataUrl } = logoResult.value.logo;
-
-                    if (dataUrl) {
-                        setLogoUrl(dataUrl);
-                    } else if (base64 && mimetype) {
-                        setLogoUrl(`data:${mimetype};base64,${base64}`);
-                    } else {
-                        setLogoUrl(null);
-                    }
+                if (logoResult.status === 'fulfilled') {
+                    setLogoUrl(resolveSplashLogoUrl(logoResult.value?.logo));
                 } else {
                     setLogoUrl(null);
                     if (logoResult.status === 'rejected') {

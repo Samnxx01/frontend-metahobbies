@@ -19,8 +19,11 @@ const EAN13_PARITY: Record<string, string> = {
   '5': 'LGGLLG', '6': 'LGGGLL', '7': 'LGLGLG', '8': 'LGLGGL', '9': 'LGGLGL',
 };
 
+export const normalizarCodigoBarrasAlfanumerico = (codigo: string): string =>
+  String(codigo || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+
 export const buildEan13Bits = (codigo: string): string | null => {
-  const digits = String(codigo || '').replace(/\D/g, '');
+  const digits = normalizarCodigoBarrasAlfanumerico(codigo).replace(/[^0-9]/g, '');
   if (digits.length !== 13) return null;
   const parity = EAN13_PARITY[digits[0]];
   const left = digits.slice(1, 7).split('').map((digit, index) => (
@@ -34,18 +37,22 @@ export const getProductoId = (producto: BackendProducto): string =>
   String(producto.iud || producto._id || producto.id || '').trim();
 
 export const BarcodePreview = ({ codigo }: { codigo?: string }): React.ReactElement => {
-  const clean = String(codigo || '').replace(/\D/g, '');
-  const bits = buildEan13Bits(clean);
+  const clean = normalizarCodigoBarrasAlfanumerico(String(codigo || ''));
+  const eanDigits = clean.replace(/[^0-9]/g, '');
+  const bits = eanDigits.length === 13 ? buildEan13Bits(eanDigits) : null;
   if (!clean) return <span className="text-xs text-muted-foreground">Sin codigo</span>;
   if (!bits) {
     return (
       <div className="space-y-1">
         <div className="flex h-8 w-36 items-end gap-px rounded bg-white px-2 py-1">
-          {clean.split('').map((digit, index) => (
+          {clean.split('').map((char, index) => (
             <span
-              key={`${digit}-${index}`}
+              key={`${char}-${index}`}
               className="block bg-foreground"
-              style={{ width: 1 + (Number(digit) % 3), height: 12 + ((Number(digit) + index) % 18) }}
+              style={{
+                width: 1 + (char.charCodeAt(0) % 3),
+                height: 12 + ((char.charCodeAt(0) + index) % 18),
+              }}
             />
           ))}
         </div>
@@ -67,20 +74,22 @@ export const BarcodePreview = ({ codigo }: { codigo?: string }): React.ReactElem
 };
 
 export const imprimirCodigoBarrasSku = (producto: BackendProducto | null): void => {
-  const codigo = String(producto?.codigoBarras || '').replace(/\D/g, '');
+  const codigo = normalizarCodigoBarrasAlfanumerico(String(producto?.codigoBarras || ''));
   if (!producto || !codigo) {
     toast.error('Este SKU no tiene codigo de barras para imprimir.');
     return;
   }
-  const bits = buildEan13Bits(codigo);
-  if (!bits) {
-    toast.error('Solo se puede imprimir la zebra EAN-13 para codigos de 13 digitos.');
-    return;
-  }
-  const bars = bits.split('').map((bit, index) => (
-    bit === '1' ? `<rect x="${index}" y="10" width="1" height="70" fill="#111827" />` : ''
-  )).join('');
-  const label = `${producto.sku || ''} ${producto.nombre || ''}`.trim();
+  const eanDigits = codigo.replace(/[^0-9]/g, '');
+  const bits = eanDigits.length === 13 ? buildEan13Bits(eanDigits) : null;
+  const bars = bits
+    ? bits.split('').map((bit, index) => (
+      bit === '1' ? `<rect x="${index}" y="10" width="1" height="70" fill="#111827" />` : ''
+    )).join('')
+    : codigo.split('').map((char, index) => (
+      `<rect x="${index * 2}" y="10" width="1" height="${50 + (char.charCodeAt(0) % 20)}" fill="#111827" />`
+    )).join('');
+  const viewBoxWidth = bits ? bits.length : codigo.length * 2;
+  const nombre = String(producto.nombre || '').trim();
   const printWindow = window.open('', '_blank', 'width=420,height=320');
   if (!printWindow) {
     toast.error('No se pudo abrir la ventana de impresion.');
@@ -96,15 +105,13 @@ export const imprimirCodigoBarrasSku = (producto: BackendProducto | null): void 
           .label { width: 320px; padding: 18px; text-align: center; }
           .name { font-size: 12px; font-weight: 700; margin-bottom: 8px; }
           svg { width: 260px; height: 120px; }
-          .code { font-family: monospace; font-size: 14px; letter-spacing: 4px; margin-top: 4px; }
           @media print { body { margin: 0; } .label { page-break-inside: avoid; } }
         </style>
       </head>
       <body>
         <div class="label">
-          <div class="name">${label}</div>
-          <svg viewBox="0 0 ${bits.length} 90" preserveAspectRatio="none">${bars}</svg>
-          <div class="code">${codigo}</div>
+          <div class="name">${nombre}</div>
+          <svg viewBox="0 0 ${viewBoxWidth} 90" preserveAspectRatio="none">${bars}</svg>
         </div>
         <script>
           window.onload = function () {

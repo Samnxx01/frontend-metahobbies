@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/select';
 import { Loader2, Building2, UserCog } from 'lucide-react';
 import { apiFetch } from '@/app/services/api';
+import { normalizePublicIdForApi, resolveEntityPublicId } from '@/app/utils/entityPublicId';
 
 interface RolCorporativoEditModalProps {
     open: boolean;
@@ -73,7 +74,7 @@ export const RolCorporativoEditModal = ({
 
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
-        const id = String(usuario?.iud || usuario?._id || '');
+        const id = normalizePublicIdForApi(resolveEntityPublicId(usuario));
         if (!id) return;
 
         const body: Record<string, string> = {};

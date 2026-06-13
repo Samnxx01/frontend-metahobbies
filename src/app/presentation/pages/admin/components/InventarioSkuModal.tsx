@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { RefreshCw, Save, SlidersHorizontal } from 'lucide-react';
 import type { InventarioUnidadMedida } from '@/app/services/inventarioService';
+import { normalizarCodigoBarrasAlfanumerico } from '@/app/presentation/pages/admin/inventario/inventarioBarcodeUtils';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -22,57 +23,100 @@ export type SkuForm = {
   precio: string;
   unidadMedida: string;
   stockMinimo: string;
+  /** Cantidad total en kardex (todas las bodegas). Solo lectura en UI. */
+  stockKardex: string;
   descripcion: string;
 };
 
 type InventarioSkuModalProps = {
   open: boolean;
   saving: boolean;
+  mode?: 'create' | 'edit';
   form: SkuForm;
   unidadesMedida: InventarioUnidadMedida[];
+  codigosBarrasExistentes?: string[];
+  excluirCodigoBarras?: string;
   onOpenChange: (open: boolean) => void;
   onFormChange: (form: SkuForm) => void;
   onOpenUnidadMedida: () => void;
   onSubmit: () => void;
 };
 
+const calcularDisponibleVenta = (stockKardex: number, stockMinimo: number): number => {
+  const total = Math.max(0, Number(stockKardex) || 0);
+  const reserva = Math.max(0, Number(stockMinimo) || 0);
+  return Math.max(0, total - reserva);
+};
+
 export default function InventarioSkuModal({
   open,
   saving,
+  mode = 'create',
   form,
   unidadesMedida,
+  codigosBarrasExistentes = [],
+  excluirCodigoBarras = '',
   onOpenChange,
   onFormChange,
   onOpenUnidadMedida,
   onSubmit,
 }: InventarioSkuModalProps): React.ReactElement {
+  const esEdicion = mode === 'edit';
   const update = (field: keyof SkuForm, value: string): void => {
     onFormChange({ ...form, [field]: value });
   };
-  const calcularDigitoEan13 = (base12: string): string => {
-    const suma = base12.split('').reduce((acc, digit, index) => acc + Number(digit) * (index % 2 === 0 ? 1 : 3), 0);
-    return String((10 - (suma % 10)) % 10);
-  };
+  const codigoExcluido = normalizarCodigoBarrasAlfanumerico(excluirCodigoBarras);
+  const codigosExistentesSet = useMemo(
+    () => new Set(
+      codigosBarrasExistentes
+        .map((codigo) => normalizarCodigoBarrasAlfanumerico(codigo))
+        .filter((codigo) => codigo && codigo !== codigoExcluido),
+    ),
+    [codigosBarrasExistentes, codigoExcluido],
+  );
+  const codigoNormalizado = normalizarCodigoBarrasAlfanumerico(form.codigoBarras);
+  const codigoDuplicado = codigoNormalizado.length >= 8 && codigosExistentesSet.has(codigoNormalizado);
+  const stockKardexNum = Number(form.stockKardex || 0);
+  const stockMinimoNum = Number(form.stockMinimo || 0);
+  const disponibleVenta = calcularDisponibleVenta(stockKardexNum, stockMinimoNum);
+  const stockMinimoExcedeKardex = esEdicion && stockMinimoNum > stockKardexNum;
   const generarCodigoBarras = (): void => {
-    const timestamp = Date.now().toString().slice(-9);
-    const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
-    const base = `${timestamp}${random}`.slice(0, 12).padStart(12, '0');
-    update('codigoBarras', `${base}${calcularDigitoEan13(base)}`);
+    const alphabet = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    for (let intento = 0; intento < 16; intento += 1) {
+      const tsPart = Date.now().toString(36).toUpperCase();
+      let code = `B${tsPart}`;
+      while (code.length < 12) {
+        code += alphabet[Math.floor(Math.random() * alphabet.length)];
+      }
+      const candidato = code.slice(0, 12);
+      if (!codigosExistentesSet.has(candidato)) {
+        update('codigoBarras', candidato);
+        return;
+      }
+    }
+    update('codigoBarras', `B${Date.now().toString(36).toUpperCase()}`.slice(0, 12));
   };
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Crear SKU de inventario</DialogTitle>
+          <DialogTitle>{esEdicion ? 'Editar SKU de inventario' : 'Crear SKU de inventario'}</DialogTitle>
           <DialogDescription>
-            Crea un producto fisico activo para usarlo en los movimientos de kardex.
+            {esEdicion
+              ? 'Actualiza los datos del producto fisico. El stock minimo se valida contra las cantidades del kardex.'
+              : 'Crea un producto fisico activo para usarlo en los movimientos de kardex.'}
           </DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
             <Label>SKU *</Label>
-            <Input value={form.sku} onChange={(event) => update('sku', event.target.value.toUpperCase())} placeholder="CAM-BAS-M" />
+            <Input
+              value={form.sku}
+              disabled={esEdicion}
+              onChange={(event) => update('sku', event.target.value.toUpperCase())}
+              placeholder="CAM-BAS-M"
+            />
           </div>
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-2">
@@ -83,11 +127,20 @@ export default function InventarioSkuModal({
               </Button>
             </div>
             <Input
-              inputMode="numeric"
               value={form.codigoBarras}
-              onChange={(event) => update('codigoBarras', event.target.value.replace(/\D/g, ''))}
-              placeholder="Automatico al crear"
+              onChange={(event) => update('codigoBarras', normalizarCodigoBarrasAlfanumerico(event.target.value))}
+              placeholder="Manual (8-14) o automatico al crear"
+              maxLength={14}
+              aria-invalid={codigoDuplicado}
+              className={codigoDuplicado ? 'border-destructive focus-visible:ring-destructive' : undefined}
             />
+            {codigoDuplicado ? (
+              <p className="text-xs text-destructive">El codigo debe ser unico.</p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Deja vacio para generarlo automaticamente o escribe tu codigo alfanumerico unico (8-14 caracteres).
+              </p>
+            )}
           </div>
           <div className="space-y-2">
             <Label>Nombre *</Label>
@@ -117,9 +170,35 @@ export default function InventarioSkuModal({
             </Select>
           </div>
           <div className="space-y-2">
-            <Label>Stock minimo</Label>
-            <Input type="number" min="0" value={form.stockMinimo} onChange={(event) => update('stockMinimo', event.target.value)} />
+            <Label>Stock minimo (reserva)</Label>
+            <Input
+              type="number"
+              min="0"
+              max={esEdicion ? stockKardexNum : undefined}
+              value={form.stockMinimo}
+              onChange={(event) => update('stockMinimo', event.target.value)}
+              aria-invalid={stockMinimoExcedeKardex}
+              className={stockMinimoExcedeKardex ? 'border-destructive focus-visible:ring-destructive' : undefined}
+            />
+            {stockMinimoExcedeKardex ? (
+              <p className="text-xs text-destructive">
+                La reserva no puede superar el stock kardex ({stockKardexNum.toLocaleString('es-CO')} uds).
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Unidades que no se ofrecen en venta. Disponible para venta: {disponibleVenta.toLocaleString('es-CO')}.
+              </p>
+            )}
           </div>
+          {esEdicion ? (
+            <div className="space-y-2">
+              <Label>Stock kardex actual</Label>
+              <Input type="number" value={stockKardexNum} disabled readOnly />
+              <p className="text-xs text-muted-foreground">
+                Suma de saldos en todas las bodegas. Se recalcula al abrir edicion.
+              </p>
+            </div>
+          ) : null}
           <div className="space-y-2 md:col-span-2">
             <Label>Descripcion</Label>
             <Textarea value={form.descripcion} onChange={(event) => update('descripcion', event.target.value)} placeholder="Detalle interno del producto" />
@@ -128,15 +207,15 @@ export default function InventarioSkuModal({
 
         <DialogFooter className="items-center justify-between gap-2 sm:justify-between">
           <p className="text-xs text-muted-foreground">
-            Se creara activo para movimientos de kardex.
+            {esEdicion ? 'El codigo SKU no se puede modificar.' : 'Se creara activo para movimientos de kardex.'}
           </p>
           <div className="flex gap-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
               Cancelar
             </Button>
-            <Button type="button" onClick={onSubmit} disabled={saving}>
+            <Button type="button" onClick={onSubmit} disabled={saving || codigoDuplicado || stockMinimoExcedeKardex}>
               <Save className="mr-2 h-4 w-4" />
-              Crear y seleccionar
+              {esEdicion ? 'Guardar cambios' : 'Crear y seleccionar'}
             </Button>
           </div>
         </DialogFooter>

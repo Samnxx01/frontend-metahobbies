@@ -7,6 +7,7 @@ import { apiFetch } from '@/app/services/api'
 import { getMenuUsuarioRoutes, getPrivateHomeRoute, getUserShortcutRoutes, readCachedPrivateHomeRoute, type MenuUsuarioItem } from '@/app/services/routeService'
 import { getRouteMenuTags, resolveCurrentRouteMenuTags, type RouteMenuTag } from '@/app/services/routesService'
 import { getGovernedLogoutPath } from '@/app/services/governedNavigation'
+import { resolveUserDisplayName, resolveUserInitial } from '@/app/presentation/utils/resolveUserDisplayName'
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
@@ -174,22 +175,19 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
         }
     }
 
-    const getUserInitials = (): string => {
-        if (user?.nombre && user?.apellido) {
-            return `${user.nombre[0]}${user.apellido[0]}`.toUpperCase()
-        }
-        return user?.nombre?.[0]?.toUpperCase() || 'A'
-    }
+    const getUserInitials = (): string => resolveUserInitial(user)
 
-    const getUserName = (): string => {
-        if (user?.nombre && user?.apellido) {
-            return `${user.nombre} ${user.apellido}`
-        }
-        return user?.nombre || 'Admin'
-    }
+    const getUserName = (): string => resolveUserDisplayName(user)
 
     const getUserEmail = (): string => {
-        return user?.correo || 'admin@example.com'
+        if (!user) return ''
+        return user.correo || ''
+    }
+
+    const getUserRoleLabel = (): string => {
+        if (!user) return ''
+        const tenantRole = user.auth?.tenantScope?.rol?.nombre
+        return String(user.rolInfo?.nombre || tenantRole || user.rol || user.role || '').trim()
     }
 
     const menuItems = [...dynamicMenuItems]
@@ -229,11 +227,19 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
                         </Avatar>
                         <div className="min-w-0 flex-1">
                             <p className="truncate text-sm font-semibold leading-none text-foreground">{getUserName()}</p>
-                            <p className="mt-1 truncate text-xs text-muted-foreground">{getUserEmail()}</p>
+                            {getUserEmail() ? (
+                                <p className="mt-1 truncate text-xs text-muted-foreground">{getUserEmail()}</p>
+                            ) : null}
                             <div className="mt-2 flex flex-wrap items-center gap-2">
-                                <div className="inline-flex items-center rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-medium text-primary">
-                                    Panel privado
-                                </div>
+                                {getUserRoleLabel() ? (
+                                    <div className="inline-flex items-center rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-medium text-primary">
+                                        {getUserRoleLabel()}
+                                    </div>
+                                ) : (
+                                    <div className="inline-flex items-center rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-medium text-primary">
+                                        Panel privado
+                                    </div>
+                                )}
                                 <div className="inline-flex items-center rounded-full bg-secondary/25 px-2.5 py-1 text-[11px] font-medium text-secondary-foreground">
                                     {menuItems.length} accesos
                                 </div>
@@ -245,7 +251,7 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
                     {menuItems.filter((item) => item.visible && item.path).length > 0 ? (
                         <div className="space-y-1.5">
                             <div className="px-2 pb-1 text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-                                Navegacion dinamica
+                                Accesos rapidos
                             </div>
                             {menuItems.filter((item) => item.visible && item.path).map((item) => {
                                 const Icon = item.Icon
@@ -258,14 +264,13 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
                                         <a
                                             href={item.path}
                                             onClick={(e) => { e.preventDefault(); navigate(item.path) }}
-                                            className="group flex min-h-[56px] items-center gap-3 rounded-2xl border border-transparent bg-muted/35 px-3 py-3 transition-all hover:border-primary/15 hover:bg-primary/5"
+                                            className="group flex min-h-[48px] items-center gap-3 rounded-2xl border border-transparent bg-muted/35 px-3 py-2.5 transition-all hover:border-primary/15 hover:bg-primary/5"
                                         >
                                             <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary transition-transform group-hover:scale-105">
                                                 <Icon className="h-4.5 w-4.5" />
                                             </span>
-                                            <span className="min-w-0 flex-1">
-                                                <span className="block truncate text-sm font-medium text-foreground">{item.label}</span>
-                                                <span className="block truncate text-xs text-muted-foreground">{item.path}</span>
+                                            <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+                                                {item.label}
                                             </span>
                                         </a>
                                     </DropdownMenuItem>

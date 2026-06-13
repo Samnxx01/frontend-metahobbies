@@ -30,6 +30,7 @@ import {
 import { Loader2, Globe, UserCog, UserX } from 'lucide-react';
 import { apiFetch } from '@/app/services/api';
 import type { TenantGlobalInfo } from '@/app/services/tenantUsuariosService';
+import { normalizePublicIdForApi, resolveEntityPublicId } from '@/app/utils/entityPublicId';
 
 interface RolGlobalEditModalProps {
     open: boolean;
@@ -80,7 +81,7 @@ export const RolGlobalEditModal = ({
         setForm({
             rol: usuario.rol ?? '',
             password: '',
-            tenantGlobal: String(tenantGlobalActual?.iud || tenantGlobalActual?._id || ''),
+            tenantGlobal: resolveEntityPublicId(tenantGlobalActual),
         });
 
         setLoadingRoles(true);
@@ -95,7 +96,7 @@ export const RolGlobalEditModal = ({
 
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
-        const id = String(usuario?.iud || usuario?._id || '');
+        const id = resolveEntityPublicId(usuario);
         if (!id) return;
 
         const body: Record<string, string> = {};
@@ -104,13 +105,13 @@ export const RolGlobalEditModal = ({
         if (
             scope === 'SUPER_ADMIN' &&
             form.tenantGlobal &&
-            form.tenantGlobal !== String(tenantGlobalActual?.iud || tenantGlobalActual?._id || '')
+            form.tenantGlobal !== resolveEntityPublicId(tenantGlobalActual)
         ) {
-            body.tenantGlobal = form.tenantGlobal;
+            body.tenantGlobal = normalizePublicIdForApi(form.tenantGlobal);
         }
 
         if (!Object.keys(body).length) return;
-        await onSave(id, body);
+        await onSave(normalizePublicIdForApi(id), body);
         onClose();
     };
 
@@ -198,11 +199,14 @@ export const RolGlobalEditModal = ({
                                         <SelectValue placeholder="Tenant actual" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        {tenantsGlobales.map(tg => (
-                                            <SelectItem key={tg.iud} value={tg.iud}>
-                                                {tg.razon_social ?? tg.titulo ?? tg.iud}
+                                        {tenantsGlobales.map(tg => {
+                                            const tgId = resolveEntityPublicId(tg);
+                                            return (
+                                            <SelectItem key={tgId} value={tgId}>
+                                                {tg.razon_social ?? tg.titulo ?? tgId}
                                             </SelectItem>
-                                        ))}
+                                            );
+                                        })}
                                     </SelectContent>
                                 </Select>
                             </div>
@@ -246,7 +250,7 @@ export const RolGlobalEditModal = ({
                                         <AlertDialogAction
                                             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                                             onClick={async () => {
-                                                const uid = String(usuario?.iud || usuario?._id || '');
+                                                const uid = normalizePublicIdForApi(resolveEntityPublicId(usuario));
                                                 if (!uid) return;
                                                 await onDeactivate(uid);
                                                 onClose();

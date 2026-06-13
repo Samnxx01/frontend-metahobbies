@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Copy, Link2, Loader2, Orbit, Sparkles } from 'lucide-react';
 import {
+    buildReferralShareUrl,
     generarEnlaceConAttribution,
     type ReferralAttributionResult,
 } from '@/app/services/referralAttributionService';
@@ -27,6 +28,7 @@ export default function GeneradorEnlaceAttribution(): React.ReactElement {
             const data = await generarEnlaceConAttribution({
                 emailCliente: emailCliente.trim() || undefined,
                 originType: 'membresia',
+                redirectTo: 'referidos',
             });
 
             setResult(data);
@@ -39,9 +41,7 @@ export default function GeneradorEnlaceAttribution(): React.ReactElement {
         }
     };
 
-    const enlaceCompleto = result
-        ? `${window.location.origin}/membresia/pago/${result.jwtReferido}?guestSessionId=${encodeURIComponent(result.guestSessionId)}`
-        : '';
+    const enlaceCompleto = result ? buildReferralShareUrl(result, 'referidos') : '';
 
     return (
         <div className="min-h-screen bg-background px-4 py-8 sm:px-6 lg:px-8">
@@ -143,6 +143,9 @@ export default function GeneradorEnlaceAttribution(): React.ReactElement {
                                     <Copy className="h-4 w-4" />
                                 </Button>
                             </div>
+                            <p className="text-xs text-muted-foreground">
+                                Enlace corto con código de atribución (`?at=MABS-…`). Al abrirlo se cargan guestSessionId, ref y origen automáticamente.
+                            </p>
                         </div>
 
                         <div className="grid gap-4 md:grid-cols-3">

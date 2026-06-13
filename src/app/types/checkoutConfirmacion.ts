@@ -5,7 +5,7 @@ export const CHECKOUT_CONFIRMACION_STORAGE_KEY = 'mabs_checkout_confirmacion_v1'
 
 export interface CheckoutConfirmacionPedido {
   estado: 'aprobada' | 'pendiente' | 'rechazada';
-  /** ID factura único (FAC-000001), distinto de ventaReferencia */
+  /** Consecutivo factura (FACTURA_POS, ej. FACTURA-000001) */
   facturaId: string;
   carritoId: string;
   transactionId: string;

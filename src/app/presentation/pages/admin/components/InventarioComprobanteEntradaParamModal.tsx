@@ -11,8 +11,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import {
   FLUJO_COMPRAS_PASOS,
   mensajeErrorComprasInventario,
+  TIPO_DOCUMENTO_ENTRADA_FISICA,
 } from '../inventario/inventarioComprasMensajes';
+import { getOrdenCompraId } from '@/app/presentation/pages/admin/utils/ordenCompraIdUtils';
 import InventarioDocumentoSoporteConfigModal, {
+  labelDocumentoSoporte,
   nextDocNumero,
   type DocumentoSoporteTipoConfig,
 } from './InventarioDocumentoSoporteConfigModal';
@@ -56,6 +59,22 @@ export const ordenCompraTienePendienteRecepcion = (oc: InventarioOrdenCompra): b
 const ordenCompraEstaConfirmada = (oc: InventarioOrdenCompra): boolean =>
   String(oc?.estado || '').trim().toUpperCase() === 'CONFIRMADO';
 
+const tiposCatalogoActivos = (rows: DocumentoSoporteTipoConfig[]): DocumentoSoporteTipoConfig[] =>
+  rows.filter((t) => t.activo).sort((a, b) => a.codigo.localeCompare(b.codigo));
+
+const resolverTipoDocumentoDefault = (rows: DocumentoSoporteTipoConfig[]): string => {
+  const activos = tiposCatalogoActivos(rows);
+  if (activos.some((t) => t.codigo === TIPO_DOCUMENTO_ENTRADA_FISICA)) return TIPO_DOCUMENTO_ENTRADA_FISICA;
+  return activos[0]?.codigo || TIPO_DOCUMENTO_ENTRADA_FISICA;
+};
+
+const USO_TIPO_CATALOGO: Record<string, string> = {
+  RECEPCION_OC: 'Comprobante fisico · este paso',
+  COMPROBANTE_ENTRADA: 'Contable · al confirmar entrada',
+  COMPROBANTE_ORDEN_COMPRA: 'Contable · al confirmar OC',
+  COMPROBANTE_CONTABLE: 'Ajustes manuales',
+};
+
 export default function InventarioComprobanteEntradaParamModal({
   open,
   onOpenChange,
@@ -76,36 +95,58 @@ export default function InventarioComprobanteEntradaParamModal({
 
   const [values, setValues] = useState<InventarioComprobanteEntradaParamValues>({
     ordenId: '',
-    documentoTipo: 'RECEPCION_OC',
+    documentoTipo: TIPO_DOCUMENTO_ENTRADA_FISICA,
     documentoNumero: '',
   });
   const [tiposDoc, setTiposDoc] = useState<DocumentoSoporteTipoConfig[]>([]);
-  const [todosTiposDoc, setTodosTiposDoc] = useState<DocumentoSoporteTipoConfig[]>([]);
   const [configOpen, setConfigOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  const orden = useMemo(() => ordenesSorted.find((oc) => oc._id === values.ordenId) ?? null, [ordenesSorted, values.ordenId]);
+  const orden = useMemo(
+    () => ordenesSorted.find((oc) => getOrdenCompraId(oc) === values.ordenId) ?? null,
+    [ordenesSorted, values.ordenId],
+  );
   const ordenTienePendienteRecepcion = useMemo(
     () => Boolean(orden) && buildRecepcionItems(orden as InventarioOrdenCompra).length > 0,
     [orden]
   );
 
-  const canPreview = Boolean(orden) && ordenTienePendienteRecepcion && !saving && !submitting;
+  const tieneSecuenciaEntrada = tiposDoc.some((t) => t.codigo === TIPO_DOCUMENTO_ENTRADA_FISICA);
+
+  const tipoEntradaConfig = useMemo(
+    () => tiposDoc.find((t) => t.codigo === TIPO_DOCUMENTO_ENTRADA_FISICA) ?? null,
+    [tiposDoc],
+  );
+
+  const numeroSugerido = useMemo(
+    () => nextDocNumero(TIPO_DOCUMENTO_ENTRADA_FISICA, tiposDoc).numero,
+    [tiposDoc],
+  );
+
+  const canPreview =
+    Boolean(orden)
+    && ordenTienePendienteRecepcion
+    && tieneSecuenciaEntrada
+    && Boolean(values.documentoNumero.trim() || numeroSugerido)
+    && !saving
+    && !submitting;
 
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
     setTiposDoc([]);
-    setTodosTiposDoc([]);
     inventarioService.listarDocumentosSoporte()
       .then((serverRows) => {
         if (cancelled) return;
-        const activos = serverRows.filter((t) => t.activo);
-        setTodosTiposDoc(serverRows);
+        const activos = tiposCatalogoActivos(serverRows);
+        const tipoDefault = resolverTipoDocumentoDefault(serverRows);
         setTiposDoc(activos);
-        if (!activos.some((t) => t.codigo === values.documentoTipo)) {
-          setValues((p) => ({ ...p, documentoTipo: activos[0]?.codigo || '', documentoNumero: '' }));
-        }
+        const { numero } = nextDocNumero(tipoDefault, activos);
+        setValues((p) => ({
+          ...p,
+          documentoTipo: tipoDefault,
+          documentoNumero: numero || '',
+        }));
       })
       .catch((error) => {
         console.error('Error cargando documentos soporte:', error);
@@ -117,12 +158,30 @@ export default function InventarioComprobanteEntradaParamModal({
 
   useEffect(() => {
     if (!open) return;
-    // Si el número está vacío, sugiere el siguiente consecutivo del tipo
-    if (!values.documentoNumero.trim() && values.documentoTipo) {
-      const { numero } = nextDocNumero(values.documentoTipo, tiposDoc);
-      if (numero) setValues((p) => ({ ...p, documentoNumero: numero }));
+    // Si el número está vacío, sugiere el consecutivo de RECEPCION_OC
+    if (!values.documentoNumero.trim() && tiposDoc.length) {
+      const { numero } = nextDocNumero(TIPO_DOCUMENTO_ENTRADA_FISICA, tiposDoc);
+      if (numero) {
+        setValues((p) => ({
+          ...p,
+          documentoTipo: TIPO_DOCUMENTO_ENTRADA_FISICA,
+          documentoNumero: numero,
+        }));
+      }
     }
-  }, [open, values.documentoTipo, values.documentoNumero, tiposDoc]);
+  }, [open, values.documentoNumero, tiposDoc]);
+
+  useEffect(() => {
+    if (!open || !tiposDoc.length || !tieneSecuenciaEntrada) return;
+    if (values.documentoTipo !== TIPO_DOCUMENTO_ENTRADA_FISICA) {
+      const { numero } = nextDocNumero(TIPO_DOCUMENTO_ENTRADA_FISICA, tiposDoc);
+      setValues((p) => ({
+        ...p,
+        documentoTipo: TIPO_DOCUMENTO_ENTRADA_FISICA,
+        documentoNumero: numero || p.documentoNumero,
+      }));
+    }
+  }, [open, values.documentoTipo, tiposDoc, tieneSecuenciaEntrada]);
 
   return (
     <Dialog
@@ -130,7 +189,7 @@ export default function InventarioComprobanteEntradaParamModal({
       onOpenChange={(next) => {
         onOpenChange(next);
         if (!next) {
-          setValues({ ordenId: '', documentoTipo: 'RECEPCION_OC', documentoNumero: '' });
+          setValues({ ordenId: '', documentoTipo: TIPO_DOCUMENTO_ENTRADA_FISICA, documentoNumero: '' });
         }
       }}
     >
@@ -164,23 +223,53 @@ export default function InventarioComprobanteEntradaParamModal({
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label>Tipo documento soporte</Label>
-              <div className="w-full">
-                <Select
-                  value={values.documentoTipo || undefined}
-                  onValueChange={(codigo) => setValues((p) => ({ ...p, documentoTipo: codigo, documentoNumero: '' }))}
-                >
-                  <SelectTrigger className="border-input bg-background">
-                    <SelectValue placeholder={tiposDoc.length ? 'Selecciona tipo' : 'Configura tipos'} />
-                  </SelectTrigger>
-                  <SelectContent className="max-h-72 border-border bg-popover">
-                    {tiposDoc.map((t) => (
-                      <SelectItem key={t.id} value={t.codigo}>
-                        {t.codigo} · {t.prefijo}-{String(t.siguiente).padStart(Math.max(1, t.padding), '0')}
+              <Select
+                value={values.documentoTipo}
+                onValueChange={(codigo) => {
+                  if (codigo !== TIPO_DOCUMENTO_ENTRADA_FISICA) return;
+                  const { numero } = nextDocNumero(TIPO_DOCUMENTO_ENTRADA_FISICA, tiposDoc);
+                  setValues((p) => ({
+                    ...p,
+                    documentoTipo: TIPO_DOCUMENTO_ENTRADA_FISICA,
+                    documentoNumero: numero || '',
+                  }));
+                }}
+                disabled={!tiposDoc.length || !tieneSecuenciaEntrada}
+              >
+                <SelectTrigger className="border-input bg-background [&>span]:line-clamp-none">
+                  <SelectValue placeholder={tiposDoc.length ? 'Selecciona tipo' : 'Configura tipos en Parametrizar'} />
+                </SelectTrigger>
+                <SelectContent className="max-h-72 min-w-[var(--radix-select-trigger-width)] border-border bg-popover">
+                  {tiposDoc.map((t) => {
+                    const esEntradaFisica = t.codigo === TIPO_DOCUMENTO_ENTRADA_FISICA;
+                    const uso = USO_TIPO_CATALOGO[t.codigo] || 'Otro paso del flujo';
+                    return (
+                      <SelectItem
+                        key={t.id || t.codigo}
+                        value={t.codigo}
+                        disabled={!esEntradaFisica}
+                        className={esEntradaFisica ? undefined : 'opacity-60'}
+                      >
+                        {labelDocumentoSoporte(t)} · {uso}
                       </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+              {tipoEntradaConfig ? (
+                <p className="text-xs text-muted-foreground">
+                  Prefijo {tipoEntradaConfig.prefijo} · {tipoEntradaConfig.padding} digitos · siguiente #{tipoEntradaConfig.siguiente}
+                </p>
+              ) : null}
+              {!tieneSecuenciaEntrada ? (
+                <p className="text-xs text-destructive">
+                  Falta {TIPO_DOCUMENTO_ENTRADA_FISICA} en el catalogo. Use «Parametrizar» para crearla o activarla.
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Solo {TIPO_DOCUMENTO_ENTRADA_FISICA} es seleccionable aqui. Los demas tipos del catalogo aparecen como referencia.
+                </p>
+              )}
             </div>
             <div className="space-y-2">
               <Label>Número documento soporte</Label>
@@ -195,22 +284,31 @@ export default function InventarioComprobanteEntradaParamModal({
                 <Button
                   type="button"
                   variant="outline"
-                  disabled={saving || !values.documentoTipo}
+                  disabled={saving || !tieneSecuenciaEntrada}
                   onClick={() => {
-                    const { numero } = nextDocNumero(values.documentoTipo, tiposDoc);
-                    if (numero) setValues((p) => ({ ...p, documentoNumero: numero }));
+                    const { numero } = nextDocNumero(TIPO_DOCUMENTO_ENTRADA_FISICA, tiposDoc);
+                    if (numero) {
+                      setValues((p) => ({
+                        ...p,
+                        documentoTipo: TIPO_DOCUMENTO_ENTRADA_FISICA,
+                        documentoNumero: numero,
+                      }));
+                    }
                   }}
                   title="Sugerir consecutivo"
                 >
                   Generar
                 </Button>
               </div>
+              <p className="text-xs text-muted-foreground">
+                Secuencia del comprobante fisico de entrada ({TIPO_DOCUMENTO_ENTRADA_FISICA}). Al confirmar se genera aparte el comprobante contable (COMPROBANTE_ENTRADA).
+              </p>
             </div>
           </div>
 
           <div className="space-y-2">
             <Label>Orden de compra</Label>
-            <Select value={values.ordenId || undefined} onValueChange={(ordenId) => setValues((p) => ({ ...p, ordenId }))}>
+            <Select value={values.ordenId} onValueChange={(ordenId) => setValues((p) => ({ ...p, ordenId }))}>
               <SelectTrigger className="border-input bg-background">
                 <SelectValue
                   placeholder={
@@ -224,7 +322,7 @@ export default function InventarioComprobanteEntradaParamModal({
               </SelectTrigger>
               <SelectContent className="max-h-72 border-border bg-popover">
                 {ordenesElegibles.map((oc) => (
-                  <SelectItem key={oc._id} value={oc._id}>
+                  <SelectItem key={getOrdenCompraId(oc)} value={getOrdenCompraId(oc)}>
                     {oc.numeroOrden} · {oc.proveedor?.nombre || 'Proveedor'} · {oc.estado}
                   </SelectItem>
                 ))}
@@ -254,8 +352,11 @@ export default function InventarioComprobanteEntradaParamModal({
             disabled={!canPreview}
             onClick={async () => {
               if (!orden) return;
-              const tipo = values.documentoTipo.trim();
-              if (!tipo) return;
+              const tipo = TIPO_DOCUMENTO_ENTRADA_FISICA;
+              if (!tieneSecuenciaEntrada) {
+                toast.error(`Configure la secuencia ${TIPO_DOCUMENTO_ENTRADA_FISICA} en Parametrizar.`);
+                return;
+              }
               const numeroDigitado = values.documentoNumero.trim();
               const expected = nextDocNumero(tipo, tiposDoc).numero;
               const numeroFinal = numeroDigitado || expected;
@@ -263,7 +364,7 @@ export default function InventarioComprobanteEntradaParamModal({
 
               try {
                 setSubmitting(true);
-                const ordenFresh = await inventarioService.obtenerOrdenCompra(orden._id);
+                const ordenFresh = await inventarioService.obtenerOrdenCompra(getOrdenCompraId(orden));
                 const items = buildRecepcionItems(ordenFresh);
                 if (!items.length) {
                   toast.error(
@@ -278,16 +379,14 @@ export default function InventarioComprobanteEntradaParamModal({
                   );
                   return;
                 }
-                const data = await inventarioService.registrarRecepcionOrdenCompra(ordenFresh._id, {
+                const data = await inventarioService.registrarRecepcionOrdenCompra(getOrdenCompraId(ordenFresh), {
                   confirmar: false,
                   numeroRecepcion: numeroFinal,
                   documentoSoporte: { tipo, numero: numeroFinal },
                   items,
                 });
                 const serverRows = await inventarioService.listarDocumentosSoporte();
-                const activos = serverRows.filter((t) => t.activo);
-                setTodosTiposDoc(serverRows);
-                setTiposDoc(activos);
+                setTiposDoc(tiposCatalogoActivos(serverRows));
                 toast.info(
                   `Borrador ${numeroFinal} creado. Confirme el comprobante para mover inventario y ocupar la secuencia.`,
                   { autoClose: 10000 },
@@ -315,15 +414,17 @@ export default function InventarioComprobanteEntradaParamModal({
       <InventarioDocumentoSoporteConfigModal
         open={configOpen}
         onOpenChange={setConfigOpen}
-        onSaved={(next) => {
-          const activos = next.filter((t) => t.activo);
-          setTodosTiposDoc(next);
+        onSaved={async (next) => {
+          const serverRows = next?.length ? next : await inventarioService.listarDocumentosSoporte();
+          const activos = tiposCatalogoActivos(serverRows);
           setTiposDoc(activos);
-          if (activos.length && !activos.some((t) => t.codigo === values.documentoTipo)) {
-            setValues((p) => ({ ...p, documentoTipo: activos[0].codigo, documentoNumero: '' }));
-          } else {
-            setValues((p) => ({ ...p, documentoNumero: '' }));
-          }
+          const tipoActual = TIPO_DOCUMENTO_ENTRADA_FISICA;
+          const { numero } = nextDocNumero(tipoActual, activos);
+          setValues((p) => ({
+            ...p,
+            documentoTipo: tipoActual,
+            documentoNumero: numero || '',
+          }));
         }}
       />
     </Dialog>

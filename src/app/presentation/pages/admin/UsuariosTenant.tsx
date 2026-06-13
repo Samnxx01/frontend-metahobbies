@@ -34,6 +34,11 @@ import type {
     TenantSuperTenantSinCorporativoItem,
 } from '@/app/services/tenantUsuariosService';
 import { useAuth } from '@/app/providers/AuthProvider';
+import {
+    encodePublicIdForPath,
+    normalizePublicIdForApi,
+    resolveEntityPublicId,
+} from '@/app/utils/entityPublicId';
 
 function countTenantSuperSaTree(nodes: TenantSuperTenantSinCorporativoItem[]): number {
     let c = 0;
@@ -168,14 +173,21 @@ export default function UsuariosTenant(): React.ReactElement {
 
     // Funciones de sincronización
     const sincronizarGlobal = async (canReferir: boolean) => {
-        const tenantGlobalId = jerarquia?.tenantsGlobales[0]?.tenantGlobal?.iud;
+        const tenantGlobalId = resolveEntityPublicId(jerarquia?.tenantsGlobales[0]?.tenantGlobal);
         if (!tenantGlobalId) throw new Error('No se pudo determinar el tenant global');
-        return sincronizarCanReferirUsuarios({ tenantGlobalId, canReferir });
+        return sincronizarCanReferirUsuarios({
+            tenantGlobalId: normalizePublicIdForApi(tenantGlobalId),
+            canReferir,
+        });
     };
 
     const sincronizarCorporativo = async (canReferir: boolean) => {
-        if (!nodoCorp?.tenantCorporativo.iud) throw new Error('No se pudo determinar el tenant corporativo');
-        return sincronizarCanReferirUsuarios({ tenantCorporativoId: nodoCorp.tenantCorporativo.iud, canReferir });
+        const tenantCorporativoId = resolveEntityPublicId(nodoCorp?.tenantCorporativo);
+        if (!tenantCorporativoId) throw new Error('No se pudo determinar el tenant corporativo');
+        return sincronizarCanReferirUsuarios({
+            tenantCorporativoId: normalizePublicIdForApi(tenantCorporativoId),
+            canReferir,
+        });
     };
 
     // ─── Editar Usuario Global (SA o TG) ─────────────────────────────────────
@@ -194,7 +206,7 @@ export default function UsuariosTenant(): React.ReactElement {
     const handleGuardarGlobal = async (id: string, body: Record<string, string>) => {
         setEditUserSaving(true);
         try {
-            await apiFetch(`/api/seguridad/pruebas/actualizar/registro/${id}`, { method: 'PUT', body });
+            await apiFetch(`/api/seguridad/pruebas/actualizar/registro/${encodePublicIdForPath(id)}`, { method: 'PUT', body });
             toast.success('Guardado correctamente');
             setEditUserModal(false);
             refetch();
@@ -239,7 +251,7 @@ export default function UsuariosTenant(): React.ReactElement {
         setEditCorpSaving(true);
         setEditCorpError(null);
         try {
-            await apiFetch(`/api/seguridad/pruebas/actualizar/registro/${id}`, { method: 'PUT', body });
+            await apiFetch(`/api/seguridad/pruebas/actualizar/registro/${encodePublicIdForPath(id)}`, { method: 'PUT', body });
             toast.success('Guardado correctamente');
             setEditCorpModal(false);
             refetch();
@@ -263,11 +275,11 @@ export default function UsuariosTenant(): React.ReactElement {
     const openEditTG = async (tg: any) => {
         setEditTGTarget(tg);
         setEditTGForm({
-            tipo_tenant: String(tg?.tipo_tenant?.iud || tg?.tipo_tenant?._id || tg?.tipo_tenant || ''),
-            ownerType: String(tg?.ownerType?.iud || tg?.ownerType?._id || tg?.ownerType || ''),
-            rolesMabs: String(tg?.rolesMabs?.iud || tg?.rolesMabs?._id || tg?.rolesMabs || ''),
-            nvlGeneracionTenant: String(tg?.nvlGeneracionTenant?.iud || tg?.nvlGeneracionTenant?._id || tg?.nvlGeneracionTenant || ''),
-            apisDominios: String(tg?.apisDominios?.iud || tg?.apisDominios?._id || tg?.apisDominios || ''),
+            tipo_tenant: resolveEntityPublicId(tg?.tipo_tenant) || String(tg?.tipo_tenant || ''),
+            ownerType: resolveEntityPublicId(tg?.ownerType) || String(tg?.ownerType || ''),
+            rolesMabs: resolveEntityPublicId(tg?.rolesMabs) || String(tg?.rolesMabs || ''),
+            nvlGeneracionTenant: resolveEntityPublicId(tg?.nvlGeneracionTenant) || String(tg?.nvlGeneracionTenant || ''),
+            apisDominios: resolveEntityPublicId(tg?.apisDominios) || String(tg?.apisDominios || ''),
         });
         setEditTGModal(true);
         setTgSelectsLoading(true);
@@ -288,7 +300,7 @@ export default function UsuariosTenant(): React.ReactElement {
     };
 
     const handleGuardarTG = async () => {
-        const id = String(editTGTarget?.iud || editTGTarget?._id || '');
+        const id = resolveEntityPublicId(editTGTarget);
         if (!id) { toast.error('Sin ID de tenant global'); return; }
         if (!editTGForm.tipo_tenant.trim()) { toast.error('Tipo Tenant es obligatorio'); return; }
 
@@ -296,15 +308,15 @@ export default function UsuariosTenant(): React.ReactElement {
         if (!editTGForm.nvlGeneracionTenant.trim()) { toast.error('Nivel Generación Tenant es obligatorio'); return; }
         if (!editTGForm.apisDominios.trim()) { toast.error('APIs Dominios es obligatorio'); return; }
         const body: Record<string, string> = {
-            tipo_tenant: editTGForm.tipo_tenant.trim(),
-            ...(editTGForm.ownerType.trim() && { ownerType: editTGForm.ownerType.trim() }),
-            rolesMabs: editTGForm.rolesMabs.trim(),
-            nvlGeneracionTenant: editTGForm.nvlGeneracionTenant.trim(),
-            apisDominios: editTGForm.apisDominios.trim(),
+            tipo_tenant: normalizePublicIdForApi(editTGForm.tipo_tenant),
+            ...(editTGForm.ownerType.trim() && { ownerType: normalizePublicIdForApi(editTGForm.ownerType) }),
+            rolesMabs: normalizePublicIdForApi(editTGForm.rolesMabs),
+            nvlGeneracionTenant: normalizePublicIdForApi(editTGForm.nvlGeneracionTenant),
+            apisDominios: normalizePublicIdForApi(editTGForm.apisDominios),
         };
         setEditTGSaving(true);
         try {
-            await apiFetch(`/api/config/global/actualizar/tenant/global/${id}`, { method: 'PUT', body });
+            await apiFetch(`/api/config/global/actualizar/tenant/global/${encodePublicIdForPath(id)}`, { method: 'PUT', body });
             toast.success('Tenant global actualizado');
             setEditTGModal(false);
             refetch();
@@ -344,13 +356,13 @@ export default function UsuariosTenant(): React.ReactElement {
     const [eliminandoId, setEliminandoId] = useState<string | null>(null);
 
     const handleEliminarDominio = async (d: any) => {
-        const id = String(d?.iud || d?._id || '');
+        const id = resolveEntityPublicId(d);
         const esSA = scope === 'SUPER_ADMIN';
         const accion = esSA ? 'eliminar' : 'desactivar';
         if (!window.confirm(`¿${esSA ? 'Eliminar' : 'Desactivar'} dominio "${d?.etiquetas}"?`)) return;
         setEliminandoId(id);
         try {
-            await apiFetch(`/api/seguridad/dominio/${id}`, { method: 'DELETE' });
+            await apiFetch(`/api/seguridad/dominio/${encodePublicIdForPath(id)}`, { method: 'DELETE' });
             toast.success(`Dominio ${accion === 'eliminar' ? 'eliminado' : 'desactivado'} correctamente`);
             await listarDominios(mostrarDesactivados);
         } catch (err: any) {
@@ -361,9 +373,10 @@ export default function UsuariosTenant(): React.ReactElement {
     };
 
     const handleSincronizarDominio = async (id: string) => {
-        setSincronizandoId(id);
+        const normId = normalizePublicIdForApi(id);
+        setSincronizandoId(normId);
         try {
-            await apiFetch(`/api/seguridad/dominio/${id}`, { method: 'PUT' });
+            await apiFetch(`/api/seguridad/dominio/${encodePublicIdForPath(normId)}`, { method: 'PUT' });
             toast.success('Dominio sincronizado con la URL de producción');
             await listarDominios();
         } catch (err: any) {
@@ -879,7 +892,7 @@ export default function UsuariosTenant(): React.ReactElement {
                             ) : (
                                 <div className="space-y-2 max-h-60 overflow-auto pr-1">
                                     {dominiosList.map((d: any, i: number) => {
-                                        const id = String(d?.iud || d?._id || i);
+                                        const id = resolveEntityPublicId(d) || String(i);
                                         const activo = d?.estadoDominio !== false;
                                         return (
                                             <div key={id} className="rounded-lg border border-border bg-background/70 p-3 space-y-1 shadow-sm">
@@ -1014,7 +1027,7 @@ export default function UsuariosTenant(): React.ReactElement {
                                         <SelectTrigger><SelectValue placeholder="Seleccionar tipo tenant" /></SelectTrigger>
                                         <SelectContent>
                                             {tgSelects.tiposTenant.map((t: any) => {
-                                                const id = String(t?.iud || t?.id || t?._id || '');
+                                                const id = resolveEntityPublicId(t);
                                                 return <SelectItem key={id} value={id}>{String(t?.label || t?.tipo_acceso_apis || t?.sigla || id)}</SelectItem>;
                                             })}
                                         </SelectContent>
@@ -1027,7 +1040,7 @@ export default function UsuariosTenant(): React.ReactElement {
                                         <SelectTrigger><SelectValue placeholder="Seleccionar rol" /></SelectTrigger>
                                         <SelectContent>
                                             {tgSelects.rolesMabs.map((r: any) => {
-                                                const id = String(r?.iud || r?.id || r?._id || '');
+                                                const id = resolveEntityPublicId(r);
                                                 return <SelectItem key={id} value={id}>{String(r?.label || r?.rol || id)}</SelectItem>;
                                             })}
                                         </SelectContent>
@@ -1040,7 +1053,7 @@ export default function UsuariosTenant(): React.ReactElement {
                                         <SelectTrigger><SelectValue placeholder="Seleccionar nivel" /></SelectTrigger>
                                         <SelectContent>
                                             {tgSelects.nivelesGlobales.map((n: any) => {
-                                                const id = String(n?.iud || n?.id || n?._id || '');
+                                                const id = resolveEntityPublicId(n);
                                                 return <SelectItem key={id} value={id}>{String(n?.label || n?.generation_tenant || id)}</SelectItem>;
                                             })}
                                         </SelectContent>
@@ -1053,7 +1066,7 @@ export default function UsuariosTenant(): React.ReactElement {
                                         <SelectTrigger><SelectValue placeholder="Seleccionar dominio" /></SelectTrigger>
                                         <SelectContent>
                                             {tgSelects.dominios.map((d: any) => {
-                                                const id = String(d?.iud || d?.id || d?._id || '');
+                                                const id = resolveEntityPublicId(d);
                                                 return <SelectItem key={id} value={id}>{String(d?.label || d?.dominio || id)}</SelectItem>;
                                             })}
                                         </SelectContent>

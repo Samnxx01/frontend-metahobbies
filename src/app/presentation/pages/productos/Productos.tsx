@@ -18,6 +18,7 @@ import productosService, {
   getCategoriaId,
   resolverCategoriaDesdeQuery,
 } from '../../../services/productosService';
+import { esErrorProductoRequiereColor } from '@/app/utils/productColorUtils';
 
 interface SortOption {
   value: string;
@@ -157,6 +158,11 @@ export default function Productos(): React.ReactElement {
       toast.success(`${product.name} agregado al carrito`, { autoClose: 1500 });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Error agregando al carrito';
+      if (esErrorProductoRequiereColor(message)) {
+        toast.info(message, { autoClose: 3000 });
+        navigate(`/producto/${product.id}`);
+        return;
+      }
       toast.error(message);
     }
   };

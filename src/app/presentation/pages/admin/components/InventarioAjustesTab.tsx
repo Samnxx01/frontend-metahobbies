@@ -1,6 +1,13 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Plus, RotateCcw, Settings2 } from 'lucide-react';
-import type { AjusteInventario, AjustePayload, EstadoAjuste } from '@/app/services/inventarioService';
+import inventarioService, {
+  type AjusteInventario,
+  type AjustePayload,
+  type BodegaInventario,
+  type EstadoAjuste,
+  type TipoAjuste,
+  getAjusteInventarioId,
+} from '@/app/services/inventarioService';
 import InventarioComprobanteEntradaSelect, { type ComprobanteEntradaSeleccion } from './InventarioComprobanteEntradaSelect';
 import InventarioCausalAjusteModal from './InventarioCausalAjusteModal';
 import InventarioCausalAjusteSelect from './InventarioCausalAjusteSelect';
@@ -15,17 +22,34 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 
+const CODIGO_CONTEO_ENTRADA = 'ERROR_CONTEO_ENTRADA';
+const CAUSAL_TRASLADO = 'TRASLADO';
+
+const esTipoAjusteNegativo = (codigo?: string, direccion?: TipoAjuste | null): boolean => {
+  if (direccion === 'NEGATIVO') return true;
+  const norm = String(codigo || '').trim().toUpperCase();
+  return ['AJUSTE_NEGATIVO', 'MERMA', 'DANO', 'ERROR_CONTEO_SALIDA'].includes(norm)
+    || norm.includes('NEGATIVO')
+    || norm.includes('SALIDA');
+};
+
 type InventarioAjustesTabProps = {
   ajusteForm: AjustePayload;
   setAjusteForm: React.Dispatch<React.SetStateAction<AjustePayload>>;
   ajusteFiltro: EstadoAjuste | '';
   setAjusteFiltro: React.Dispatch<React.SetStateAction<EstadoAjuste | ''>>;
   ajustes: AjusteInventario[];
+  bodegas?: BodegaInventario[];
   saving: boolean;
   solicitarAjuste: () => Promise<void>;
   refreshAjustes: (estado?: EstadoAjuste | '') => Promise<void>;
   cambiarEstadoAjuste: (ajuste: AjusteInventario, accion: 'aprobar' | 'rechazar') => Promise<void>;
   estadoBadge: (estado: string) => 'default' | 'secondary' | 'destructive' | 'outline';
+};
+
+const etiquetaEstadoAjuste = (estado: string): string => {
+  if (estado === 'SOLICITADO') return 'En espera';
+  return estado;
 };
 
 export default function InventarioAjustesTab({
@@ -34,6 +58,7 @@ export default function InventarioAjustesTab({
   ajusteFiltro,
   setAjusteFiltro,
   ajustes,
+  bodegas = [],
   saving,
   solicitarAjuste,
   refreshAjustes,
@@ -44,6 +69,42 @@ export default function InventarioAjustesTab({
   const [causalAjusteModalOpen, setCausalAjusteModalOpen] = useState(false);
   const [tiposAjusteRefreshKey, setTiposAjusteRefreshKey] = useState(0);
   const [causalesAjusteRefreshKey, setCausalesAjusteRefreshKey] = useState(0);
+  const [tipoAjusteDireccion, setTipoAjusteDireccion] = useState<TipoAjuste | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void inventarioService.listarTiposAjuste().then((tipos) => {
+      if (cancelled) return;
+      const tipo = tipos.find((item) => item.codigo === ajusteForm.tipoAjusteCodigo);
+      if (tipo?.direccion) setTipoAjusteDireccion(tipo.direccion);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [ajusteForm.tipoAjusteCodigo, tiposAjusteRefreshKey]);
+
+  const esNegativo = esTipoAjusteNegativo(ajusteForm.tipoAjusteCodigo, tipoAjusteDireccion);
+  const esConteoEntrada = String(ajusteForm.tipoAjusteCodigo || '').trim().toUpperCase() === CODIGO_CONTEO_ENTRADA;
+  const esTraslado = esNegativo
+    || String(ajusteForm.causal || '').trim().toUpperCase() === CAUSAL_TRASLADO;
+
+  useEffect(() => {
+    if (!esNegativo) return;
+    setAjusteForm((prev) => {
+      if (String(prev.causal || '').trim().toUpperCase() === CAUSAL_TRASLADO) return prev;
+      return { ...prev, causal: CAUSAL_TRASLADO };
+    });
+  }, [esNegativo, setAjusteForm]);
+
+  const bodegasActivas = useMemo(
+    () => bodegas.filter((bodega) => bodega.estado !== false),
+    [bodegas],
+  );
+
+  const bodegasDestino = useMemo(
+    () => bodegasActivas.filter((bodega) => String(bodega.nombre || '').trim() !== String(ajusteForm.bodega || '').trim()),
+    [bodegasActivas, ajusteForm.bodega],
+  );
 
   const handleComprobanteSelect = (seleccion: ComprobanteEntradaSeleccion | null): void => {
     if (!seleccion) {
@@ -52,6 +113,7 @@ export default function InventarioAjustesTab({
         recepcionCompraId: '',
         sku: '',
         bodega: '',
+        bodegaDestino: '',
         costoUnitarioReferencia: 0,
       }));
       return;
@@ -61,7 +123,29 @@ export default function InventarioAjustesTab({
       recepcionCompraId: seleccion.recepcionId,
       sku: seleccion.sku,
       bodega: seleccion.bodega,
+      bodegaDestino: prev.bodegaDestino === seleccion.bodega ? '' : prev.bodegaDestino,
       costoUnitarioReferencia: seleccion.costoUnitario,
+    }));
+  };
+
+  const handleTipoChange = (codigo: string, direccion?: TipoAjuste): void => {
+    const dir = direccion || null;
+    setTipoAjusteDireccion(dir);
+    const negativo = esTipoAjusteNegativo(codigo, dir);
+    setAjusteForm((prev) => ({
+      ...prev,
+      tipoAjusteCodigo: codigo,
+      causal: negativo ? CAUSAL_TRASLADO : prev.causal,
+      bodegaDestino: negativo ? prev.bodegaDestino : '',
+    }));
+  };
+
+  const handleCausalChange = (codigo: string): void => {
+    const traslado = String(codigo || '').trim().toUpperCase() === CAUSAL_TRASLADO;
+    setAjusteForm((prev) => ({
+      ...prev,
+      causal: codigo,
+      bodegaDestino: traslado ? prev.bodegaDestino : '',
     }));
   };
 
@@ -86,7 +170,8 @@ export default function InventarioAjustesTab({
             <div>
               <CardTitle className="flex items-center gap-2"><RotateCcw className="h-5 w-5" /> Solicitar ajuste</CardTitle>
               <CardDescription>
-                Vincula un comprobante de entrada aprobado y confirmado en kardex. La bodega se obtiene del comprobante seleccionado.
+                Vincula un comprobante de entrada aprobado. Los ajustes negativos se registran como traslado entre bodegas.
+                La solicitud queda en espera hasta aprobación.
               </CardDescription>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -108,41 +193,112 @@ export default function InventarioAjustesTab({
             bodega={ajusteForm.bodega}
             onSelect={handleComprobanteSelect}
             disabled={saving}
+            ocultarCampoBodega={esTraslado}
           />
 
           <InventarioTipoAjusteSelect
             value={ajusteForm.tipoAjusteCodigo}
-            onChange={(codigo) => setAjusteForm((prev) => ({ ...prev, tipoAjusteCodigo: codigo }))}
+            onChange={handleTipoChange}
             disabled={saving}
             refreshKey={tiposAjusteRefreshKey}
           />
 
-          <InventarioCausalAjusteSelect
-            value={ajusteForm.causal}
-            onChange={(codigo) => setAjusteForm((prev) => ({ ...prev, causal: codigo }))}
-            disabled={saving}
-            refreshKey={causalesAjusteRefreshKey}
-          />
+          {esTraslado ? (
+            <div className="space-y-2">
+              <Label>Causal</Label>
+              <Input value="Traslado entre bodegas" disabled readOnly />
+              <p className="text-xs text-muted-foreground">
+                Los ajustes de salida mueven stock entre bodegas. La causal TRASLADO se aplica automáticamente.
+              </p>
+            </div>
+          ) : (
+            <InventarioCausalAjusteSelect
+              value={ajusteForm.causal}
+              onChange={handleCausalChange}
+              disabled={saving}
+              refreshKey={causalesAjusteRefreshKey}
+            />
+          )}
+
+          {esTraslado ? (
+            <>
+              <div className="space-y-2">
+                <Label>Bodega origen</Label>
+                <Input value={ajusteForm.bodega || '—'} readOnly className="bg-muted" />
+                <p className="text-xs text-muted-foreground">Tomada del comprobante y SKU seleccionados.</p>
+              </div>
+              <div className="space-y-2">
+                <Label>Bodega destino (traslado)</Label>
+                <Select
+                  value={ajusteForm.bodegaDestino || undefined}
+                  onValueChange={(value) => setAjusteForm((prev) => ({ ...prev, bodegaDestino: value }))}
+                  disabled={saving || !ajusteForm.bodega.trim() || bodegasDestino.length === 0}
+                >
+                  <SelectTrigger>
+                    <SelectValue
+                      placeholder={
+                        !ajusteForm.bodega.trim()
+                          ? 'Primero seleccione comprobante y SKU'
+                          : bodegasDestino.length === 0
+                            ? 'No hay otras bodegas activas'
+                            : 'Selecciona bodega destino'
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {bodegasDestino.map((bodegaItem) => (
+                      <SelectItem
+                        key={String(bodegaItem._id || bodegaItem.iud || bodegaItem.nombre)}
+                        value={bodegaItem.nombre}
+                      >
+                        {bodegaItem.nombre}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Elija a qué bodega se traslada el stock del ajuste negativo.
+                </p>
+              </div>
+            </>
+          ) : (
+            <div className="space-y-2">
+              <Label>Bodega</Label>
+              <Input value={ajusteForm.bodega || '—'} readOnly className="bg-muted" />
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label>Cantidad</Label>
             <Input type="number" min="1" value={ajusteForm.cantidad} onChange={(event) => setAjusteForm((prev) => ({ ...prev, cantidad: Number(event.target.value) }))} />
           </div>
 
-          <div className="space-y-2">
-            <Label>Costo referencia</Label>
-            <Input type="number" min="0" value={ajusteForm.costoUnitarioReferencia} onChange={(event) => setAjusteForm((prev) => ({ ...prev, costoUnitarioReferencia: Number(event.target.value) }))} />
-          </div>
+          {!esTraslado ? (
+            <div className="space-y-2">
+              <Label>Costo referencia</Label>
+              <Input type="number" min="0" value={ajusteForm.costoUnitarioReferencia} onChange={(event) => setAjusteForm((prev) => ({ ...prev, costoUnitarioReferencia: Number(event.target.value) }))} />
+            </div>
+          ) : null}
 
           <div className="space-y-2 md:col-span-2">
             <Label>Observacion</Label>
             <Textarea value={ajusteForm.observacion} onChange={(event) => setAjusteForm((prev) => ({ ...prev, observacion: event.target.value }))} />
           </div>
 
+          {esConteoEntrada ? (
+            <div className="rounded-md border border-primary/25 bg-muted/40 p-3 text-xs md:col-span-2 xl:col-span-4">
+              <p className="font-medium text-foreground">Corrección conteo (entrada)</p>
+              <p className="mt-1 text-muted-foreground">
+                Al aprobar, solo actualiza cantidades en el comprobante de entrada y la orden de compra.
+                El comprobante volverá a aparecer en Movimientos para registrar el kardex pendiente.
+              </p>
+            </div>
+          ) : null}
+
           <div className="md:col-span-2 xl:col-span-4">
             <Button onClick={() => void solicitarAjuste()} disabled={saving}>
               <Plus className="mr-2 h-4 w-4" />
-              Solicitar ajuste
+              Enviar solicitud
             </Button>
           </div>
         </CardContent>
@@ -153,7 +309,7 @@ export default function InventarioAjustesTab({
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
               <CardTitle>Ajustes registrados</CardTitle>
-              <CardDescription>Aprueba o rechaza ajustes pendientes.</CardDescription>
+              <CardDescription>Aprueba o rechaza solicitudes en espera.</CardDescription>
             </div>
             <Select value={ajusteFiltro || 'TODOS'} onValueChange={(value) => {
               const next = value === 'TODOS' ? '' : value as EstadoAjuste;
@@ -163,7 +319,7 @@ export default function InventarioAjustesTab({
               <SelectTrigger className="w-full md:w-48"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="TODOS">Todos</SelectItem>
-                <SelectItem value="SOLICITADO">Solicitados</SelectItem>
+                <SelectItem value="SOLICITADO">En espera</SelectItem>
                 <SelectItem value="APROBADO">Aprobados</SelectItem>
                 <SelectItem value="RECHAZADO">Rechazados</SelectItem>
               </SelectContent>
@@ -176,7 +332,8 @@ export default function InventarioAjustesTab({
               <TableHeader>
                 <TableRow>
                   <TableHead>SKU</TableHead>
-                  <TableHead>Bodega</TableHead>
+                  <TableHead>Bodega origen</TableHead>
+                  <TableHead>Bodega destino</TableHead>
                   <TableHead>Tipo</TableHead>
                   <TableHead>Causal</TableHead>
                   <TableHead className="text-right">Cantidad</TableHead>
@@ -186,13 +343,14 @@ export default function InventarioAjustesTab({
               </TableHeader>
               <TableBody>
                 {ajustes.map((ajuste) => (
-                  <TableRow key={ajuste._id}>
+                  <TableRow key={getAjusteInventarioId(ajuste) || `${ajuste.sku}-${ajuste.bodega}-${ajuste.createdAt}`}>
                     <TableCell className="font-medium">{ajuste.sku}</TableCell>
                     <TableCell>{ajuste.bodega}</TableCell>
+                    <TableCell>{ajuste.bodegaDestino || '—'}</TableCell>
                     <TableCell>{ajuste.tipoAjusteCodigo || ajuste.tipoAjuste}</TableCell>
                     <TableCell>{ajuste.causal}</TableCell>
                     <TableCell className="text-right">{Number(ajuste.cantidad || 0).toLocaleString('es-CO')}</TableCell>
-                    <TableCell><Badge variant={estadoBadge(ajuste.estado)}>{ajuste.estado}</Badge></TableCell>
+                    <TableCell><Badge variant={estadoBadge(ajuste.estado)}>{etiquetaEstadoAjuste(ajuste.estado)}</Badge></TableCell>
                     <TableCell className="text-right">
                       {ajuste.estado === 'SOLICITADO' ? (
                         <div className="flex justify-end gap-2">
@@ -207,7 +365,7 @@ export default function InventarioAjustesTab({
                 ))}
                 {ajustes.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">No hay ajustes para mostrar.</TableCell>
+                    <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">No hay ajustes para mostrar.</TableCell>
                   </TableRow>
                 ) : null}
               </TableBody>

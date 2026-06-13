@@ -96,7 +96,7 @@ export const ENDPOINTS: EndpointSpec[] = [
   },
   {
     id: 'tenant-crear-global-reglas',
-    section: 'tenant',
+    section: 'reglas',
     actor: 'ambos',
     method: 'POST',
     path: '/api/config/tenant/tipo/crear/globales/reglas/jerarquia/roles',
@@ -109,10 +109,10 @@ export const ENDPOINTS: EndpointSpec[] = [
       { name: 'permisos', label: 'Permisos por vista/accion', type: 'permisos', required: true },
     ],
   },
-  { id: 'tenant-listar-reglas', section: 'tenant', actor: 'ambos', method: 'GET', path: '/api/config/tenant/listar/reglas', title: 'Listar reglas tenant', description: 'Consulta de reglas creadas.', fields: [] },
+  { id: 'tenant-listar-reglas', section: 'reglas', actor: 'ambos', method: 'GET', path: '/api/config/tenant/listar/reglas', title: 'Listar reglas tenant', description: 'Consulta de reglas creadas.', fields: [] },
   {
     id: 'tenant-actualizar-global-reglas',
-    section: 'tenant',
+    section: 'reglas',
     actor: 'ambos',
     method: 'PUT',
     path: '/api/config/tenant/tipo/actualizar/globales/reglas/jerarquia',
@@ -126,7 +126,7 @@ export const ENDPOINTS: EndpointSpec[] = [
   },
   {
     id: 'tenant-desactivar-global-reglas',
-    section: 'tenant',
+    section: 'reglas',
     actor: 'ambos',
     method: 'DELETE',
     path: '/api/config/tenant/tipo/desactivar/globales/reglas/jerarquia',
@@ -138,7 +138,7 @@ export const ENDPOINTS: EndpointSpec[] = [
   },
   {
     id: 'tenant-eliminar-global-reglas',
-    section: 'tenant',
+    section: 'reglas',
     actor: 'ambos',
     method: 'DELETE',
     path: '/api/config/tenant/tipo/eliminar/globales/reglas/jerarquia',
@@ -150,7 +150,7 @@ export const ENDPOINTS: EndpointSpec[] = [
   },
   {
     id: 'tenant-crear-dios-reglas',
-    section: 'tenant',
+    section: 'reglas',
     actor: 'tenantSuperAdmin',
     method: 'POST',
     path: '/api/config/tenant/tipo/crear/dios/reglas/jerarquia/roles',
@@ -164,7 +164,7 @@ export const ENDPOINTS: EndpointSpec[] = [
   },
   {
     id: 'tenant-actualizar-dios-reglas',
-    section: 'tenant',
+    section: 'reglas',
     actor: 'tenantSuperAdmin',
     method: 'PUT',
     path: '/api/config/tenant/tipo/actualizar/dios/reglas/jerarquia/roles',
@@ -178,7 +178,7 @@ export const ENDPOINTS: EndpointSpec[] = [
   },
   {
     id: 'tenant-listar-dios-reglas',
-    section: 'tenant',
+    section: 'reglas',
     actor: 'tenantSuperAdmin',
     method: 'GET',
     path: '/api/config/tenant/tipo/listar/dios/reglas/jerarquia/roles/:tenantSuperAdmin',
@@ -191,7 +191,7 @@ export const ENDPOINTS: EndpointSpec[] = [
   },
   {
     id: 'tenant-eliminar-dios-reglas',
-    section: 'tenant',
+    section: 'reglas',
     actor: 'tenantSuperAdmin',
     method: 'DELETE',
     path: '/api/config/tenant/tipo/eliminar/dios/reglas/jerarquia/roles/:tenantSuperAdmin/:id',

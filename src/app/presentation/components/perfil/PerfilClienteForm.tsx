@@ -93,6 +93,7 @@ const DEPARTAMENTO_NOMBRES: Record<string, string> = {
  */
 interface PerfilClienteFormProps {
     profile: ClientProfile | null;
+    profileLoading?: boolean;
     onProfileUpdate: (updatedProfile: ClientProfile) => void;
     token?: string;
 }
@@ -113,8 +114,12 @@ interface PerfilClienteFormProps {
  * - Validación y parseo de campos numéricos (documento, teléfono)
  * - Estado de carga mientras se obtienen datos del servidor
  */
+const catalogItemId = (item: { iud?: string; _id?: string }) =>
+    item.iud || item._id || '';
+
 export default function PerfilClienteForm({
     profile,
+    profileLoading = false,
     onProfileUpdate,
     token,
 }: PerfilClienteFormProps) {
@@ -213,18 +218,31 @@ export default function PerfilClienteForm({
         fetchData();
     }, [token]);
 
-    // Actualizar valores seleccionados cuando cambia el perfil
+    const profileFormKey =
+      profile?._id || String(profile?.documentoIntentidad || 'nuevo');
+
+    // Actualizar selects e inputs cuando llega el perfil desde la API
     useEffect(() => {
-        if (profile) {
-            setSelectedTipoDoc(profile.tipoDeIntendidad || '');
-            setSelectedGenero(profile.genero || '');
-            setSelectedNacionalidad(profile.nacionalidad || '');
-            setSelectedPrefijo(profile.prefijo || '');
-            setSelectedPais(profile.paisId || '1');
-            setSelectedDepartamento(profile.departamentoId || '');
-            setSelectedCiudad(profile.ciudadId || '');
+        if (!profile) return;
+
+        setSelectedTipoDoc(profile.tipoDeIntendidad || '');
+        setSelectedGenero(profile.genero || '');
+        setSelectedNacionalidad(profile.nacionalidad || '');
+        setSelectedPrefijo(profile.prefijo || '');
+        setSelectedPais(profile.paisId || '1');
+        setSelectedDepartamento(profile.departamentoId || '');
+        setSelectedCiudad(profile.ciudadId || '');
+
+        if (nombreRef.current) nombreRef.current.value = profile.nombre_cliente || '';
+        if (apellidoRef.current) apellidoRef.current.value = profile.apellido || '';
+        if (documentoRef.current) {
+            documentoRef.current.value = String(profile.documentoIntentidad ?? '');
         }
-    }, [profile]);
+        if (telefonoRef.current) telefonoRef.current.value = String(profile.telefono ?? '');
+        if (fechaNacimientoRef.current) {
+            fechaNacimientoRef.current.value = formatDateForInput(profile.fecha_nacimiento);
+        }
+    }, [profile, profileFormKey]);
 
     // Actualizar ciudades cuando cambia el departamento seleccionado
     useEffect(() => {
@@ -274,7 +292,7 @@ export default function PerfilClienteForm({
 
             // Determinar si es creación o actualización
             const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api';
-            const isCreating = !profile;
+            const isCreating = !profile?._id;
             const endpoint = isCreating 
                 ? `${API_BASE_URL}/perfil/seguridad/usuario`
                 : `${API_BASE_URL}/perfil/seguridad/actualizar/PerfilUsuario`;
@@ -326,14 +344,24 @@ export default function PerfilClienteForm({
         setIsEditing(false);
     };
 
-    // --- ACTIVAR MODO EDICIÓN SI NO HAY PERFIL ---
-    // Si profile es null, activar automáticamente el modo edición para crear el perfil
     useEffect(() => {
-        if (profile === null && tiposDocumento.length > 0) {
-            // Solo activar edición cuando ya se cargaron los datos de catálogos
-            setIsEditing(true);
+        if (profileLoading) return;
+        if (!profile) {
+            if (tiposDocumento.length > 0) setIsEditing(true);
+            return;
         }
-    }, [profile, tiposDocumento]);
+        setIsEditing(false);
+    }, [profile, profileLoading, tiposDocumento]);
+
+    if (profileLoading) {
+        return (
+            <Card className="shadow-sm border-border bg-card">
+                <CardContent className="py-10 text-center text-muted-foreground">
+                    Cargando perfil...
+                </CardContent>
+            </Card>
+        );
+    }
 
     return (
         <Card className="shadow-sm border-border bg-card">
@@ -354,7 +382,7 @@ export default function PerfilClienteForm({
                             </Button>
                         )}
                         <Button size="sm" onClick={handleSave}>
-                            <Save className="h-4 w-4 mr-2" /> {profile ? 'Guardar' : 'Crear Perfil'}
+                            <Save className="h-4 w-4 mr-2" /> {profile?._id ? 'Guardar' : 'Crear Perfil'}
                         </Button>
                     </div>
                 )}
@@ -370,7 +398,7 @@ export default function PerfilClienteForm({
                             type="text"
                             defaultValue={profile?.nombre_cliente || ''}
                             readOnly={!isEditing}
-                            key={`nombre_cliente-${isEditing}`}
+                            key={`nombre_cliente-${profileFormKey}-${isEditing}`}
                             className={isEditing
                                 ? "text-base bg-background border-border text-foreground"
                                 : "border-none shadow-none text-base pl-0 h-auto bg-transparent focus-visible:ring-0 text-foreground"
@@ -386,7 +414,7 @@ export default function PerfilClienteForm({
                             type="text"
                             defaultValue={profile?.apellido || ''}
                             readOnly={!isEditing}
-                            key={`apellido-${isEditing}`}
+                            key={`apellido-${profileFormKey}-${isEditing}`}
                             className={isEditing
                                 ? "text-base bg-background border-border text-foreground"
                                 : "border-none shadow-none text-base pl-0 h-auto bg-transparent focus-visible:ring-0 text-foreground"
@@ -401,16 +429,19 @@ export default function PerfilClienteForm({
                                     <SelectValue placeholder="Selecciona tipo" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    {tiposDocumento.map((tipo) => (
-                                        <SelectItem key={tipo.iud} value={tipo.iud}>
-                                            {tipo.nombreDocumento}
-                                        </SelectItem>
-                                    ))}
+                                    {tiposDocumento.map((tipo) => {
+                                        const tipoId = tipo.iud || (tipo as TipoDocumento & { _id?: string })._id || '';
+                                        return (
+                                            <SelectItem key={tipoId} value={tipoId}>
+                                                {tipo.nombreDocumento}
+                                            </SelectItem>
+                                        );
+                                    })}
                                 </SelectContent>
                             </Select>
                         ) : (
                             <div className="text-base text-foreground">
-                                {tiposDocumento.find(t => t.iud === selectedTipoDoc)?.nombreDocumento || selectedTipoDoc}
+                                {tiposDocumento.find(t => catalogItemId(t) === selectedTipoDoc)?.nombreDocumento || selectedTipoDoc}
                             </div>
                         )}
                     </div>
@@ -423,7 +454,7 @@ export default function PerfilClienteForm({
                             type="text"
                             defaultValue={profile?.documentoIntentidad || ''}
                             readOnly={!isEditing}
-                            key={`documentoIntentidad-${isEditing}`}
+                            key={`documentoIntentidad-${profileFormKey}-${isEditing}`}
                             className={isEditing
                                 ? "text-base bg-background border-border text-foreground [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                 : "border-none shadow-none text-base pl-0 h-auto bg-transparent focus-visible:ring-0 text-foreground"
@@ -439,7 +470,7 @@ export default function PerfilClienteForm({
                             type="tel"
                             defaultValue={profile?.telefono || ''}
                             readOnly={!isEditing}
-                            key={`telefono-${isEditing}`}
+                            key={`telefono-${profileFormKey}-${isEditing}`}
                             className={isEditing
                                 ? "text-base bg-background border-border text-foreground"
                                 : "border-none shadow-none text-base pl-0 h-auto bg-transparent focus-visible:ring-0 text-foreground"
@@ -518,7 +549,7 @@ export default function PerfilClienteForm({
                             type="date"
                             defaultValue={formatDateForInput(profile?.fecha_nacimiento)}
                             readOnly={!isEditing}
-                            key={`fecha_nacimiento-${isEditing}`}
+                            key={`fecha_nacimiento-${profileFormKey}-${isEditing}`}
                             className={isEditing
                                 ? "text-base bg-background border-border text-foreground"
                                 : "border-none shadow-none text-base pl-0 h-auto bg-transparent focus-visible:ring-0 text-foreground"

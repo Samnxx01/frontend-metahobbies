@@ -8,9 +8,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Copy, Link2, Loader2, Orbit, ShoppingBag, Sparkles } from 'lucide-react';
+import GeneradorEnlaceVentasModals from './components/GeneradorEnlaceVentasModals';
 import {
     generarEnlaceConAttribution,
-    buildMembresiaReferidosUrl,
+    buildShortAttributionUrl,
     type ReferralAttributionResult,
 } from '@/app/services/referralAttributionService';
 
@@ -21,12 +22,6 @@ type GeneradorEnlaceVentasProps = {
 };
 
 type LinkDestination = 'home' | 'productos' | 'referidos';
-
-const destinationPathByType: Record<LinkDestination, (token: string) => string> = {
-    home: () => '/public/render/home',
-    productos: () => '/productos',
-    referidos: (token: string) => `/membresia/pago/${token}`,
-};
 
 async function copyValue(value: string, label: string): Promise<void> {
     try {
@@ -55,28 +50,9 @@ export default function GeneradorEnlaceVentas({
     }, [originId]);
 
     const generatedLink = useMemo(() => {
-        if (!result?.jwtReferido) return '';
-
-        if (destination === 'referidos') {
-            return buildMembresiaReferidosUrl({
-                jwtReferido: result.jwtReferido,
-                guestSessionId: result.guestSessionId,
-                originType: result.originType || originType,
-                originId: result.originId || originId,
-            });
-        }
-
-        const params = new URLSearchParams();
-        params.set('guestSessionId', result.guestSessionId);
-        params.set('originType', result.originType || originType);
-        params.set('ref', result.jwtReferido);
-        params.set('flow', 'venta');
-        params.set('redirectTo', destination);
-        if (result.originId || originId) params.set('originId', String(result.originId || originId));
-
-        const path = destinationPathByType[destination](result.jwtReferido);
-        return `${window.location.origin}${path}?${params.toString()}`;
-    }, [destination, originId, originType, result]);
+        if (!result?.codigoReferido) return '';
+        return buildShortAttributionUrl(result.codigoReferido, destination);
+    }, [destination, result]);
 
     const handleGenerate = async (): Promise<void> => {
         setLoading(true);
@@ -86,6 +62,8 @@ export default function GeneradorEnlaceVentas({
                 guestSessionId: guestSessionId.trim() || undefined,
                 originType,
                 originId: originId || undefined,
+                redirectTo: destination,
+                attributionSource: 'generador_enlace_ventas',
             });
 
             setResult(response);
@@ -108,8 +86,8 @@ export default function GeneradorEnlaceVentas({
                         <Link2 className="h-5 w-5 text-primary" />
                         <CardTitle>Generador de enlace de ventas</CardTitle>
                     </div>
-                    <CardDescription>
-                        Crea un enlace independiente con attribution session para Pipeline B, sin modificar la configuracion de comisiones.
+                    <CardDescription className="mt-1.5">
+                        Crea un enlace independiente con attribution session para Pipeline B.
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-5">
@@ -208,6 +186,9 @@ export default function GeneradorEnlaceVentas({
                                 <Copy className="h-4 w-4" />
                             </Button>
                         </div>
+                        <p className="text-xs text-slate-500">
+                            Enlace corto con código de atribución (`?at=MABS-…`). Al abrirlo el sistema carga guestSessionId, ref y origen automáticamente.
+                        </p>
                     </div>
 
                     <div className="grid gap-3 md:grid-cols-2">
@@ -224,19 +205,31 @@ export default function GeneradorEnlaceVentas({
         </div>
     );
 
-    if (compact) return content;
+    if (compact) {
+        return (
+            <div className="space-y-4">
+                <div className="flex justify-end">
+                    <GeneradorEnlaceVentasModals />
+                </div>
+                {content}
+            </div>
+        );
+    }
 
     return (
         <div className="flex-1 space-y-8 bg-gradient-to-b from-slate-50 via-white to-slate-100 p-4 md:p-6 lg:p-8">
-            <div className="space-y-2">
-                <div className="inline-flex items-center gap-2 rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-xs font-medium uppercase tracking-[0.2em] text-violet-700">
-                    <Orbit className="h-3.5 w-3.5" />
-                    Attribution
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+                <div className="space-y-2">
+                    <div className="inline-flex items-center gap-2 rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-xs font-medium uppercase tracking-[0.2em] text-violet-700">
+                        <Orbit className="h-3.5 w-3.5" />
+                        Attribution
+                    </div>
+                    <h1 className="text-3xl font-semibold tracking-tight text-slate-900">generadorenlaceVentas</h1>
+                    <p className="max-w-3xl text-sm text-slate-600">
+                        Generador independiente para enlaces de venta con attribution session y trazabilidad del sponsor.
+                    </p>
                 </div>
-                <h1 className="text-3xl font-semibold tracking-tight text-slate-900">generadorenlaceVentas</h1>
-                <p className="max-w-3xl text-sm text-slate-600">
-                    Generador independiente para enlaces de venta con attribution session y trazabilidad del sponsor.
-                </p>
+                <GeneradorEnlaceVentasModals />
             </div>
             {content}
         </div>

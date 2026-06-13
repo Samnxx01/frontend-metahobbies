@@ -12,7 +12,6 @@ type InventarioMenuTabsProps = {
   onTabChange: (value: InventarioTabValue) => void;
   /** Si se omite, se listan todas las pestañas del catálogo (salvo `config`). */
   tabs?: Array<{ value: InventarioTabValue; label: string }>;
-  /** Sesión actual: filtra pestañas sensibles (p. ej. TRM) según `tenantScope` del JWT. */
   user?: InventarioJwtScopeUserLike | null;
 };
 

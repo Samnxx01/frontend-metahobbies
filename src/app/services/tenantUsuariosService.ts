@@ -1,4 +1,5 @@
 import { apiFetch, apiFetchPublic } from './api';
+import { normalizePublicIdForApi, resolveEntityPublicId } from '@/app/utils/entityPublicId';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -39,6 +40,8 @@ export interface TenantCorporativoInfo {
 
 export interface TenantGlobalInfo {
     iud: string;
+    _id?: string;
+    id?: string;
     razon_social: string | null;
     nit_ruc_rtn: string | null;
     titulo: string | null;
@@ -271,13 +274,35 @@ export function describeTenantSuperAdminOption(sa: TenantSuperAdminOption): {
 
 // ─── Service functions ────────────────────────────────────────────────────────
 
+const normalizeTenantGlobalInfo = (tg: TenantGlobalInfo | null): TenantGlobalInfo | null => {
+    if (!tg) return null;
+    const iud = resolveEntityPublicId(tg);
+    return iud ? { ...tg, iud } : tg;
+};
+
+const normalizeTenantGlobalNode = (node: TenantGlobalNode): TenantGlobalNode => ({
+    ...node,
+    tenantGlobal: normalizeTenantGlobalInfo(node.tenantGlobal),
+    subTenantGlobales: (node.subTenantGlobales || []).map(normalizeTenantGlobalNode),
+});
+
+const normalizeJerarquiaResponse = (res: JerarquiaResponse): JerarquiaResponse => ({
+    ...res,
+    tenantsGlobales: (res.tenantsGlobales || []).map(normalizeTenantGlobalNode),
+    superAdminTree: (res.superAdminTree || []).map((saNode) => ({
+        ...saNode,
+        tenantsGlobales: (saNode.tenantsGlobales || []).map(normalizeTenantGlobalNode),
+    })),
+});
+
 export const getTenantsSuperAdmin = async (
     useAuth = true,
     opts?: { bajoTenantSuperAdminId?: string },
 ): Promise<{ tenants: TenantSuperAdminOption[] }> => {
     const fetcher = useAuth ? apiFetch : apiFetchPublic;
-    const q = opts?.bajoTenantSuperAdminId
-        ? `?bajoTenantSuperAdminId=${encodeURIComponent(opts.bajoTenantSuperAdminId)}`
+    const ancla = normalizePublicIdForApi(opts?.bajoTenantSuperAdminId);
+    const q = ancla
+        ? `?bajoTenantSuperAdminId=${encodeURIComponent(ancla)}`
         : '';
     return fetcher(`/api/registro/tenants/superadmin${q}`, { method: 'GET' });
 };
@@ -288,27 +313,35 @@ export const getTenantsGlobalRegistro = async (
     tenantSuperAdminId?: string | null,
 ): Promise<{ tenantsGlobales: TenantGlobalRegistroItem[] }> => {
     const fetcher = useAuth ? apiFetch : apiFetchPublic;
-    const q = tenantSuperAdminId
-        ? `?tenantSuperAdminId=${encodeURIComponent(tenantSuperAdminId)}`
+    const ancla = normalizePublicIdForApi(tenantSuperAdminId);
+    const q = ancla
+        ? `?tenantSuperAdminId=${encodeURIComponent(ancla)}`
         : '';
     return fetcher(`/api/registro/tenants/global/registro${q}`, { method: 'GET' });
 };
 
 export const getJerarquiaUsuarios = async (): Promise<JerarquiaResponse> => {
-    return apiFetch('/api/registro/jerarquia/usuarios', { method: 'GET' });
+    const res = await apiFetch('/api/registro/jerarquia/usuarios', { method: 'GET' });
+    return normalizeJerarquiaResponse(res as JerarquiaResponse);
 };
 
 export const createUsuarioGlobal = async (data: CreateUsuarioGlobalData): Promise<any> => {
+    const body = { ...data };
+    if (body.tenantGlobalId) body.tenantGlobalId = normalizePublicIdForApi(body.tenantGlobalId);
     return apiFetch('/api/registro/usuario/global', {
         method: 'POST',
-        body: data,
+        body,
     });
 };
 
 export const createUsuarioCorporativo = async (data: CreateUsuarioCorporativoData): Promise<any> => {
+    const body = { ...data };
+    if (body.tenantCorporativoId) {
+        body.tenantCorporativoId = normalizePublicIdForApi(body.tenantCorporativoId);
+    }
     return apiFetch('/api/registro/usuario/corporativo', {
         method: 'POST',
-        body: data,
+        body,
     });
 };
 
@@ -317,18 +350,28 @@ export const createUsuarioSuperAdmin = async (
     opts?: { useAuth?: boolean }
 ): Promise<any> => {
     const useAuth = opts?.useAuth ?? true;
+    const body = { ...data };
+    if (body.tenantSuperAdminId) {
+        body.tenantSuperAdminId = normalizePublicIdForApi(body.tenantSuperAdminId);
+    }
     return apiFetch('/api/registro/usuario/superadmin', {
         method: 'POST',
-        body: data,
+        body,
         useAuth,
         logoutOn401: useAuth,
     });
 };
 
 export const sincronizarCanReferir = async (data: SincronizarCanReferirData): Promise<any> => {
+    const body: SincronizarCanReferirData = { ...data, canReferir: data.canReferir };
+    if (body.tenantId) body.tenantId = normalizePublicIdForApi(body.tenantId);
+    if (body.tenantGlobalId) body.tenantGlobalId = normalizePublicIdForApi(body.tenantGlobalId);
+    if (body.tenantCorporativoId) {
+        body.tenantCorporativoId = normalizePublicIdForApi(body.tenantCorporativoId);
+    }
     return apiFetch('/api/registro/sincronizar/canReferir', {
         method: 'POST',
-        body: data,
+        body,
     });
 };
 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Eye, PackageSearch, Plus, RefreshCw, Save, Settings2, SlidersHorizontal } from 'lucide-react';
+import { Eye, FileSpreadsheet, PackageSearch, Plus, RefreshCw, Save, Settings2, SlidersHorizontal } from 'lucide-react';
 import type {
   ComprobanteEntradaAjuste,
   InventarioMotivoMovimiento,
@@ -14,6 +14,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { getOrdenCompraId } from '@/app/presentation/pages/admin/utils/ordenCompraIdUtils';
+import {
+  esCodigoEntradaCompra,
+  esIdTipoMovimientoValido,
+  idTipoMovimiento,
+  resolverIdTipoEntradaCompra,
+} from '@/app/presentation/pages/admin/inventario/inventarioTipoMovimientoKardex';
 
 type MovimientoForm = {
   tipoMovimientoConfigId: string;
@@ -44,6 +51,7 @@ type InventarioMovimientosTabProps = {
   onComprobanteSalidaLineChange?: (recepcionCompraId: string, lineaKey: string) => void;
   onComprobanteEntradaLineChange?: (recepcionCompraId: string, lineaKey: string) => void;
   onVerComprobante?: (recepcionId: string) => void;
+  onVerReporteKardex?: (recepcionId: string) => void;
   onRecargarComprobantes?: () => Promise<void>;
   motivos?: InventarioMotivoMovimiento[];
   saving?: boolean;
@@ -85,8 +93,20 @@ const lineaKeyDeItem = (item: { lineaKey?: string; sku: string; bodega: string }
 const esTrasladoBodega = (codigo?: string): boolean =>
   String(codigo || '').trim().toUpperCase() === 'TRASLADO_BODEGA';
 
-const esEntradaCompraTipo = (codigo?: string): boolean =>
-  String(codigo || '').trim().toUpperCase() === 'ENTRADA_COMPRA';
+const esEntradaCompraTipo = (codigo?: string): boolean => esCodigoEntradaCompra(codigo);
+
+const etiquetaComprobanteMovimiento = (comp: ComprobanteEntradaAjuste): string => {
+  const estado = String(comp.estado || 'APROBADA').trim().toUpperCase();
+  const pendienteKardex = (comp.items || []).some(
+    (item) => String(item.estadoKardex || 'NO_CONFIRMADO').toUpperCase() !== 'CONFIRMADO',
+  );
+  const estadoLabel = estado === 'PENDIENTE_APROBACION' ? 'Pendiente confirmación' : 'Confirmado';
+  const kardexLabel = pendienteKardex ? 'Pendiente kardex' : 'Kardex generado';
+  return `${estadoLabel} | ${kardexLabel}`;
+};
+
+const comprobanteTieneKardex = (comp?: ComprobanteEntradaAjuste | null): boolean =>
+  Boolean(comp?.items?.some((item) => String(item.estadoKardex || '').toUpperCase() === 'CONFIRMADO'));
 
 export default function InventarioMovimientosTab({
   movimientoForm,
@@ -99,6 +119,7 @@ export default function InventarioMovimientosTab({
   onComprobanteSalidaLineChange,
   onComprobanteEntradaLineChange,
   onVerComprobante,
+  onVerReporteKardex,
   onRecargarComprobantes,
   motivos,
   saving,
@@ -112,21 +133,34 @@ export default function InventarioMovimientosTab({
 }: InventarioMovimientosTabProps): React.ReactElement {
   const form = movimientoForm ?? movimientoFallback;
   const updateForm = setMovimientoForm ?? noop;
-  const tipos = tiposMovimientoActivos ?? [];
+  const tipos = React.useMemo(
+    () => (tiposMovimientoActivos ?? []).filter(
+      (tipo) => tipo.naturaleza === 'ENTRADA' && esIdTipoMovimientoValido(tipo),
+    ),
+    [tiposMovimientoActivos],
+  );
   const ordenesDisponibles = ordenesCompra ?? [];
   const comprobantes = comprobantesEntrada ?? [];
   const saldosKardex = stockActual ?? [];
   const motivosList = motivos ?? [];
+  const motivoActual = motivosList.find((m) => m.codigo === form.motivo);
 
-  const tipoSeleccionado = tipos.find((t) => t._id === form.tipoMovimientoConfigId);
+  const tipoSeleccionado = tipos.find(
+    (t) => idTipoMovimiento(t) === String(form.tipoMovimientoConfigId || '').trim(),
+  );
   const esTraslado = esTrasladoBodega(tipoSeleccionado?.codigo);
-  const esEntradaCompra = form.tipo === 'ENTRADA' && esEntradaCompraTipo(tipoSeleccionado?.codigo);
+  const esEntradaCompraPorTipo = form.tipo === 'ENTRADA' && esEntradaCompraTipo(tipoSeleccionado?.codigo);
+  const esEntradaCompraPorComprobante = form.tipo === 'ENTRADA'
+    && form.motivo === 'COMPRA'
+    && Boolean(form.recepcionCompraId);
+  const esEntradaCompra = esEntradaCompraPorTipo || esEntradaCompraPorComprobante;
   const esSalidaConComprobante = form.tipo === 'SALIDA' && !esTraslado;
   const esEntradaCompraConComprobante = esEntradaCompra;
   const requiereMotivoPersonalizado = !esTraslado && form.motivo === 'OTRO';
 
-  const ordenSeleccionada = ordenesDisponibles.find((oc) => oc._id === form.ordenCompraId);
+  const ordenSeleccionada = ordenesDisponibles.find((oc) => getOrdenCompraId(oc) === form.ordenCompraId);
   const comprobanteSeleccionado = comprobantes.find((c) => c.recepcionId === form.recepcionCompraId);
+  const comprobanteConKardex = comprobanteTieneKardex(comprobanteSeleccionado);
 
   const lineasComprobante = (comprobanteSeleccionado?.items || []).map((item) => ({
     item,
@@ -199,7 +233,7 @@ export default function InventarioMovimientosTab({
     if (!ordenSeleccionada || lineasVisibles.length === 0) return;
     const lineaActualTienePendiente = lineasVisibles.some((line) => String(line.index) === form.ordenCompraItemIndex);
     if (!lineaActualTienePendiente) {
-      onOrdenCompraLineChange?.(ordenSeleccionada._id, String(lineasVisibles[0].index));
+      onOrdenCompraLineChange?.(getOrdenCompraId(ordenSeleccionada), String(lineasVisibles[0].index));
     }
   }, [
     esEntradaCompra,
@@ -242,6 +276,23 @@ export default function InventarioMovimientosTab({
     onComprobanteEntradaLineChange,
   ]);
 
+  React.useEffect(() => {
+    if (!esEntradaCompraPorComprobante || esEntradaCompraPorTipo) return;
+    const tipoEntradaCompraId = resolverIdTipoEntradaCompra(tipos);
+    if (!tipoEntradaCompraId) return;
+    updateForm((prev) => (
+      idTipoMovimiento({ _id: prev.tipoMovimientoConfigId }) === tipoEntradaCompraId
+        ? prev
+        : { ...prev, tipoMovimientoConfigId: tipoEntradaCompraId }
+    ));
+  }, [
+    esEntradaCompraPorComprobante,
+    esEntradaCompraPorTipo,
+    form.tipoMovimientoConfigId,
+    tipos,
+    updateForm,
+  ]);
+
   return (
     <div>
       <Card>
@@ -273,13 +324,15 @@ export default function InventarioMovimientosTab({
         <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <div className="space-y-2">
             <Label>Tipo</Label>
-            <Select value={form.tipoMovimientoConfigId} onValueChange={(value) => {
-              const selected = tipos.find((tipo) => tipo._id === value);
+            <Select
+              value={form.tipoMovimientoConfigId ? String(form.tipoMovimientoConfigId) : undefined}
+              onValueChange={(value) => {
+              const selected = tipos.find((tipo) => idTipoMovimiento(tipo) === value);
               const traslado = esTrasladoBodega(selected?.codigo);
               updateForm((prev) => ({
                 ...prev,
                 tipoMovimientoConfigId: value,
-                tipo: selected?.naturaleza || prev.tipo,
+                tipo: selected?.naturaleza === 'ENTRADA' ? 'ENTRADA' : prev.tipo,
                 ...limpiarVinculosCompra(),
                 sku: '',
                 bodega: '',
@@ -292,15 +345,26 @@ export default function InventarioMovimientosTab({
                 motivoPersonalizado: traslado || selected?.naturaleza !== 'SALIDA' ? '' : prev.motivoPersonalizado,
               }));
             }}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger>
+                <SelectValue placeholder="Selecciona tipo" />
+              </SelectTrigger>
               <SelectContent>
-                {tipos.map((tipo) => (
-                  <SelectItem key={tipo._id} value={tipo._id}>
-                    {tipo.nombre} ({tipo.naturaleza})
+                {tipos.length === 0 ? (
+                  <SelectItem value="__sin_tipos_entrada" disabled>
+                    Sin tipos de entrada parametrizados
+                  </SelectItem>
+                ) : tipos.map((tipo) => (
+                  <SelectItem key={idTipoMovimiento(tipo)} value={idTipoMovimiento(tipo)}>
+                    {tipo.nombre} ({tipo.codigo})
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            {tipos.length === 0 ? (
+              <p className="text-xs text-destructive">
+                Cree el tipo <strong>ENTRADA_COMPRA</strong> con «Parametrizar tipo» o recargue la página para que el sistema lo genere automáticamente.
+              </p>
+            ) : null}
           </div>
 
           {esEntradaCompraConComprobante ? (
@@ -323,13 +387,14 @@ export default function InventarioMovimientosTab({
                     <SelectContent>
                       {comprobantes.length === 0 ? (
                         <SelectItem value="__empty_comp_entrada" disabled>
-                          Sin comprobantes confirmados
+                          Sin comprobantes de entrada pendientes
                         </SelectItem>
-                      ) : comprobantes.map((comp) => (
+                      ) : comprobantes
+                        .filter((comp) => String(comp.recepcionId || '').trim().length > 0)
+                        .map((comp) => (
                         <SelectItem key={comp.recepcionId} value={comp.recepcionId}>
                           {comp.documentoSoporte?.numero || comp.numeroRecepcion}
-                          {' '}| Confirmado
-                          {' '}| {comp.items.some((item) => String(item.estadoKardex || '').toUpperCase() !== 'CONFIRMADO') ? 'Pendiente kardex' : 'Kardex generado'}
+                          {' '}| {etiquetaComprobanteMovimiento(comp)}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -341,16 +406,36 @@ export default function InventarioMovimientosTab({
                 <Button
                   type="button"
                   variant="outline"
+                  size="sm"
                   disabled={!form.recepcionCompraId}
                   onClick={() => { if (form.recepcionCompraId) onVerComprobante?.(form.recepcionCompraId); }}
                 >
                   <Eye className="mr-2 h-4 w-4" />
                   Ver comprobante
                 </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={!form.recepcionCompraId || !comprobanteConKardex}
+                  title={comprobanteConKardex ? 'Ver reporte inventarioMovimiento / inventarioSaldo' : 'Disponible cuando el kardex esté confirmado'}
+                  onClick={() => { if (form.recepcionCompraId) onVerReporteKardex?.(form.recepcionCompraId); }}
+                >
+                  <FileSpreadsheet className="mr-2 h-4 w-4" />
+                  Reporte kardex
+                </Button>
               </div>
               {comprobantes.length === 0 ? (
                 <p className="text-xs text-muted-foreground">
-                  Confirma primero el comprobante de entrada para poder generar kardex.
+                  Cree el comprobante de entrada en Orden-Compra (recepción pendiente). Al registrar aquí se generará el comprobante contable (COMPROBANTE_ENTRADA) y el movimiento en kardex.
+                </p>
+              ) : !form.recepcionCompraId ? (
+                <p className="text-xs text-muted-foreground">
+                  Seleccione un comprobante de entrada. Al confirmar se asigna el comprobante contable y se registra el kardex físico.
+                </p>
+              ) : form.recepcionCompraId && comprobanteConKardex ? (
+                <p className="text-xs text-muted-foreground">
+                  Kardex confirmado. Use «Reporte kardex» para ver o exportar inventarioMovimiento e inventarioSaldo.
                 </p>
               ) : null}
             </div>
@@ -376,7 +461,9 @@ export default function InventarioMovimientosTab({
                         <SelectItem value="__empty_comp" disabled>
                           Sin comprobantes confirmados
                         </SelectItem>
-                      ) : comprobantes.map((comp) => (
+                      ) : comprobantes
+                        .filter((comp) => String(comp.recepcionId || '').trim().length > 0)
+                        .map((comp) => (
                         <SelectItem key={comp.recepcionId} value={comp.recepcionId}>
                           {comp.documentoSoporte?.numero || comp.numeroRecepcion}
                           {' '}| Confirmado
@@ -392,11 +479,22 @@ export default function InventarioMovimientosTab({
                 <Button
                   type="button"
                   variant="outline"
+                  size="sm"
                   disabled={!form.recepcionCompraId}
                   onClick={() => { if (form.recepcionCompraId) onVerComprobante?.(form.recepcionCompraId); }}
                 >
                   <Eye className="mr-2 h-4 w-4" />
                   Ver comprobante
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={!form.recepcionCompraId || !comprobanteConKardex}
+                  onClick={() => { if (form.recepcionCompraId) onVerReporteKardex?.(form.recepcionCompraId); }}
+                >
+                  <FileSpreadsheet className="mr-2 h-4 w-4" />
+                  Reporte kardex
                 </Button>
               </div>
               {comprobantes.length === 0 ? (
@@ -467,7 +565,9 @@ export default function InventarioMovimientosTab({
                 >
                   <SelectTrigger><SelectValue placeholder={form.bodega ? 'Selecciona SKU' : 'Primero bodega origen'} /></SelectTrigger>
                   <SelectContent>
-                    {skusEnBodegaOrigen.map((saldo) => (
+                    {skusEnBodegaOrigen
+                      .filter((saldo) => String(saldo.sku || '').trim().length > 0)
+                      .map((saldo) => (
                       <SelectItem key={`${saldo.sku}-${saldo.bodega}`} value={saldo.sku}>
                         {saldo.sku} | Disp. {formatQty(Number(saldo.cantidadDisponible || 0))}
                       </SelectItem>
@@ -492,7 +592,9 @@ export default function InventarioMovimientosTab({
                         <SelectItem value="__sin_lineas_entrada" disabled>
                           Sin líneas en el comprobante
                         </SelectItem>
-                      ) : lineasParaEntrada.map(({ item, key }) => (
+                      ) : lineasParaEntrada
+                        .filter(({ key }) => String(key || '').trim().length > 0)
+                        .map(({ item, key }) => (
                         <SelectItem key={key} value={key}>
                           {item.sku} | {item.bodega} | Cant. {formatQty(Number(item.cantidadRecibida || 0))}
                         </SelectItem>
@@ -507,7 +609,7 @@ export default function InventarioMovimientosTab({
                     <SelectTrigger><SelectValue placeholder="Línea de la OC" /></SelectTrigger>
                     <SelectContent>
                       {lineasVisibles.map(({ item, index, pendiente }) => (
-                        <SelectItem key={`${ordenSeleccionada?._id}-${index}`} value={String(index)}>
+                        <SelectItem key={`${getOrdenCompraId(ordenSeleccionada)}-${index}`} value={String(index)}>
                           {item.sku} | {pendiente > 0 ? `Pend. ${pendiente}` : `Rec. ${Number((item as { cantidadRecibida?: number }).cantidadRecibida || 0)}`}
                         </SelectItem>
                       ))}
@@ -525,7 +627,9 @@ export default function InventarioMovimientosTab({
                         <SelectItem value="__sin_lineas" disabled>
                           Registre kardex o revise stock en bodega
                         </SelectItem>
-                      ) : lineasParaSalida.map(({ item, key, disponible }) => (
+                      ) : lineasParaSalida
+                        .filter(({ key }) => String(key || '').trim().length > 0)
+                        .map(({ item, key, disponible }) => (
                         <SelectItem key={key} value={key}>
                           {item.sku} | {item.bodega} | Disp. {formatQty(disponible)}
                         </SelectItem>
@@ -590,9 +694,19 @@ export default function InventarioMovimientosTab({
                 }))}
                 disabled={esEntradaCompraConComprobante}
               >
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecciona motivo">
+                    {motivoActual
+                      ? `${motivoActual.nombre} (${motivoActual.codigo})`
+                      : form.motivo
+                        ? form.motivo
+                        : null}
+                  </SelectValue>
+                </SelectTrigger>
                 <SelectContent>
-                  {motivosList.map((motivo) => (
+                  {motivosList
+                    .filter((motivo) => String(motivo.codigo || '').trim().length > 0)
+                    .map((motivo) => (
                     <SelectItem key={motivo.codigo} value={motivo.codigo}>
                       {motivo.nombre} ({motivo.codigo})
                     </SelectItem>

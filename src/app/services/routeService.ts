@@ -1,4 +1,10 @@
-import { apiFetch, apiFetchPublic } from './api';
+import {
+    apiFetch,
+    apiFetchPublic,
+    clearHybridSpaPath,
+    resolveSeguridadRutasFetchOptions,
+} from './api';
+import { invalidateSplashLogoCache } from './splashLogoService';
 import { normalizeRoutePath, toRelativeRoutePath } from './routePathNormalizer';
 
 const PRIVATE_HOME_ROUTE_CACHE_KEY = 'mabs_private_home_route';
@@ -53,7 +59,8 @@ interface RouteResponse {
             modoAsignacion?: 'TENANT' | 'USUARIO' | 'NINGUNO';
             soloDios?: boolean;
         } | null;
-        accessType: { _id: string; accessType: string; layout?: string } | Array<{ _id: string; accessType: string; layout?: string }>;
+        accessType: { _id: string; accessType: string; layout?: string } | Array<{ _id: string; accessType: string; layout?: string }> | string[];
+        accessTypeCodes?: string[];
         order: number;
     }>;
 }
@@ -113,7 +120,10 @@ interface AuthorizedRoutes {
     publicRoutes?: Array<{ path: string; component: string }>;
     adminRoutes?: AdminRouteConfig[];
     authRoutes?: Array<{ path: string; component: string }>;
-    hybridRoutes?: Array<{ path: string; component: string }>;
+    /** Híbridas de tienda: siempre PublicLayout (navbar horizontal). */
+    hybridStorefrontRoutes?: Array<{ path: string; component: string }>;
+    /** Híbridas de panel: AdminLayout con sesión, PublicLayout sin sesión. */
+    hybridAdminShellRoutes?: Array<{ path: string; component: string }>;
 }
 
 const normalizeLayout = (layout: string): string =>
@@ -181,8 +191,8 @@ const getHerenciaAdminPermitida = async (): Promise<{
 
         const herencias = Array.isArray(result?.herencias) ? result.herencias : [];
 
-        herencias.forEach((h) => {
-            const vistas = Array.isArray(h.vistas) ? h.vistas : [];
+        herencias.filter(Boolean).forEach((h) => {
+            const vistas = Array.isArray(h?.vistas) ? h.vistas : [];
             vistas.forEach((vista) => {
                 if (!vista) return;
 
@@ -550,15 +560,19 @@ let _securityRoutesCache: {
 const _fetchAllSecurityRoutesRaw = async (useAuth: boolean): Promise<RouteResponse | null> => {
     try {
         const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "/api";
-        const endpoint = useAuth
+        const hasToken = Boolean(localStorage.getItem('token'));
+        // Sin JWT el backend rechaza listarRutas/admin; no usar ruta híbrida guardada como excusa.
+        const useAdminEndpoint = hasToken && useAuth;
+        const endpoint = useAdminEndpoint
             ? `${API_BASE_URL}/seguridad/rutas/listarRutas/admin`
             : `${API_BASE_URL}/seguridad/rutas/listarRutas/public`;
 
-        const result: RouteResponse = useAuth
+        const authOpts = resolveSeguridadRutasFetchOptions();
+
+        const result: RouteResponse = useAdminEndpoint
             ? await apiFetch(endpoint, {
                 method: "GET",
-                useAuth: true,
-                logoutOn401: true
+                ...authOpts,
             })
             : await apiFetchPublic(endpoint, {
                 method: "GET"
@@ -818,68 +832,149 @@ export const getUserShortcutRoutes = async (): Promise<UserShortcutRoutes> => {
     }
 };
 
+type RouteCatalogRow = RouteResponse['data'][number];
+
+const KNOWN_ACCESS_TYPE_CODES = new Set(['PUBLIC', 'PRIVATE', 'AUTH', 'ADMIN']);
+
+/** Resuelve PUBLIC/PRIVATE aunque publicIdMiddleware haya colapsado accessType a UUIDs. */
+const resolveRouteAccessTypeCodes = (route: RouteCatalogRow): string[] => {
+    if (Array.isArray(route.accessTypeCodes) && route.accessTypeCodes.length > 0) {
+        return route.accessTypeCodes
+            .map((code) => String(code || '').trim().toUpperCase())
+            .filter(Boolean);
+    }
+
+    const raw = Array.isArray(route.accessType)
+        ? route.accessType
+        : route.accessType
+            ? [route.accessType]
+            : [];
+
+    const fromAccessType = raw
+        .map((entry) => {
+            if (typeof entry === 'string') {
+                const code = entry.trim().toUpperCase();
+                return KNOWN_ACCESS_TYPE_CODES.has(code) ? code : '';
+            }
+            return String((entry as { accessType?: string })?.accessType || '').trim().toUpperCase();
+        })
+        .filter(Boolean);
+
+    if (fromAccessType.length > 0) {
+        return [...new Set(fromAccessType)];
+    }
+
+    const fallback: string[] = [];
+    if (route.renderTag === 'publico-view' || route.mostrarEnNavbarPublico === true) {
+        fallback.push('PUBLIC');
+    }
+    if (route.renderTag === 'private-view' || route.mostrarEnSidebar === true) {
+        fallback.push('PRIVATE');
+    }
+    return [...new Set(fallback)];
+};
+
+const routeHasPublicAccess = (route: RouteCatalogRow): boolean =>
+    resolveRouteAccessTypeCodes(route).includes('PUBLIC');
+
+const routeHasPrivateAccess = (route: RouteCatalogRow): boolean =>
+    resolveRouteAccessTypeCodes(route).some((code) =>
+        code === 'PRIVATE' || code === 'AUTH' || code === 'ADMIN'
+    );
+
+const isHybridSecurityRoute = (route: RouteCatalogRow): boolean =>
+    route.estadoRuta === true && routeHasPublicAccess(route) && routeHasPrivateAccess(route);
+
+const isPublicCatalogRoute = (route: RouteCatalogRow): boolean => {
+    if (!route.estadoRuta || isHybridSecurityRoute(route)) return false;
+    if (!routeHasPublicAccess(route)) return false;
+    if (normalizeLayout(route.layout) === 'publiclayout') return true;
+    return route.mostrarEnNavbarPublico === true || route.renderTag === 'publico-view';
+};
+
+/** Híbrida expuesta en navbar/footer de tienda: conserva PublicLayout aunque haya sesión. */
+const isStorefrontHybridRoute = (route: RouteCatalogRow): boolean => {
+    if (!isHybridSecurityRoute(route)) return false;
+    const path = normalizeRoutePath(String(route.path || '')).toLowerCase();
+    if (path.startsWith('/public/')) return true;
+    return route.mostrarEnNavbarPublico === true || route.renderTag === 'publico-view';
+};
+
+const mergeRouteCatalogRows = (
+    adminRows: RouteCatalogRow[] = [],
+    publicRows: RouteCatalogRow[] = [],
+): RouteCatalogRow[] => {
+    const byPath = new Map<string, RouteCatalogRow>();
+    [...adminRows, ...publicRows].forEach((route) => {
+        const key = normalizeRoutePath(String(route.path || ''));
+        if (!key || key === '/') return;
+        const prev = byPath.get(key);
+        byPath.set(key, prev ? { ...prev, ...route } : route);
+    });
+    return Array.from(byPath.values());
+};
+
+const fetchMergedSecurityRouteCatalog = async (useAuth: boolean): Promise<RouteCatalogRow[]> => {
+    if (!useAuth) {
+        const publicResult = await fetchAllSecurityRoutes(false);
+        return publicResult?.data ?? [];
+    }
+    const [adminResult, publicResult] = await Promise.all([
+        fetchAllSecurityRoutes(true),
+        fetchAllSecurityRoutes(false),
+    ]);
+    return mergeRouteCatalogRows(adminResult?.data, publicResult?.data);
+};
+
 export const getAuthorizedRoutes = async (): Promise<AuthorizedRoutes> => {
     try {
         const token = localStorage.getItem("token");
         const hasToken = Boolean(token);
         const actorTipo = resolveAdminActorTipoFromToken();
 
-        const result: RouteResponse | null = hasToken
-            ? await fetchAllSecurityRoutes(true)
-            : await fetchAllSecurityRoutes(false);
-
-        if (!result?.success || !result?.data) {
-            return { publicRoutes: [], adminRoutes: [], authRoutes: [] };
+        const catalogRows = await fetchMergedSecurityRouteCatalog(hasToken);
+        if (!catalogRows.length) {
+            return { publicRoutes: [], adminRoutes: [], authRoutes: [], hybridStorefrontRoutes: [], hybridAdminShellRoutes: [] };
         }
 
         const normalizeComponent = (name: string, path = '') =>
             normalizeAdminRouteComponent(name, path);
 
-        // Helpers para detectar rutas híbridas (múltiples accessType que cruzan contextos)
-        const getAccessTypeEntries = (r: typeof result.data[number]) => {
-            if (!r.accessType) return [];
-            return Array.isArray(r.accessType) ? r.accessType : [r.accessType];
-        };
-        const hasPublicEntry = (r: typeof result.data[number]) =>
-            getAccessTypeEntries(r).some(t => String(t.accessType || '').toUpperCase().includes('PUBLIC'));
-        const hasPrivateEntry = (r: typeof result.data[number]) =>
-            getAccessTypeEntries(r).some(t => {
-                const v = String(t.accessType || '').toUpperCase();
-                return v.includes('PRIVATE') || v.includes('AUTH') || v.includes('ADMIN');
-            });
-        const isHybrid = (r: typeof result.data[number]) =>
-            r.estadoRuta && getAccessTypeEntries(r).length > 1 && hasPublicEntry(r) && hasPrivateEntry(r);
+        const mapRowToRouteConfig = (r: RouteCatalogRow) => ({
+            path: toRelativeRoutePath(r.path),
+            component: normalizeComponent(r.component, r.path),
+        });
 
-        // HYBRID: accesible tanto sin sesión (PublicLayout) como con sesión (AdminLayout)
-        const hybridRoutes = result.data
-            .filter(isHybrid)
-            .map(r => ({
-                path: toRelativeRoutePath(r.path),
-                component: normalizeComponent(r.component, r.path),
-            }));
+        const hybridStorefrontRoutes = catalogRows
+            .filter(isStorefrontHybridRoute)
+            .map(mapRowToRouteConfig);
 
-        const hybridPaths = new Set(hybridRoutes.map(r => r.path));
+        const hybridAdminShellRoutes = catalogRows
+            .filter((route) => isHybridSecurityRoute(route) && !isStorefrontHybridRoute(route))
+            .map(mapRowToRouteConfig);
 
-        // PUBLIC
-        const publicRoutes = result.data
-            .filter(r => r.estadoRuta && normalizeLayout(r.layout) === "publiclayout" && !isHybrid(r))
-            .map(r => ({
-                path: toRelativeRoutePath(r.path),
-                component: normalizeComponent(r.component, r.path),
-            }));
+        const hybridPaths = new Set([
+            ...hybridStorefrontRoutes.map((r) => r.path),
+            ...hybridAdminShellRoutes.map((r) => r.path),
+        ]);
+
+        // PUBLIC: layout público clásico + rutas del navbar con renderTag publico-view
+        const publicRoutes = catalogRows
+            .filter(isPublicCatalogRoute)
+            .map(mapRowToRouteConfig);
 
         // AUTH
-        const authRoutes = result.data
+        const authRoutes = catalogRows
             .filter(r => r.estadoRuta && normalizeLayout(r.layout) === "authlayout" && !hybridPaths.has(toRelativeRoutePath(r.path)))
-            .map(r => ({
-                path: toRelativeRoutePath(r.path),
-                component: normalizeComponent(r.component, r.path),
-            }));
+            .map(mapRowToRouteConfig);
 
         // ADMIN: priorizar el arbol autorizado backend para evitar desalineacion
         // entre sidebar y rutas registradas en React Router.
         let adminRoutes: AdminRouteConfig[] = [];
         if (hasToken) {
+            const adminResult = await fetchAllSecurityRoutes(true);
+            const adminCatalogRows = adminResult?.data ?? catalogRows;
+
             const [{ tree }, herencia] = await Promise.all([
                 getAdminSidebarTreeWithContext(),
                 getHerenciaAdminPermitida(),
@@ -895,7 +990,7 @@ export const getAuthorizedRoutes = async (): Promise<AuthorizedRoutes> => {
                 adminRoutes = tree.map(mapNode);
             }
 
-            const adminSource = result.data.filter((r) => r.estadoRuta && isAdminLayout(r.layout));
+            const adminSource = adminCatalogRows.filter((r) => r.estadoRuta && isAdminLayout(r.layout));
             const hasHerenciaAdmin = herencia.idsPermitidos.size > 0 || herencia.pathsPermitidos.size > 0;
             const aplicarHerencia = await debeAplicarFiltroHerenciaSuperAdmin(actorTipo, hasHerenciaAdmin);
             let adminFiltrado = aplicarHerencia
@@ -953,11 +1048,11 @@ export const getAuthorizedRoutes = async (): Promise<AuthorizedRoutes> => {
             }
         }
 
-        return { publicRoutes, authRoutes, adminRoutes, hybridRoutes };
+        return { publicRoutes, authRoutes, adminRoutes, hybridStorefrontRoutes, hybridAdminShellRoutes };
 
     } catch (error) {
         console.error("Error al obtener rutas autorizadas:", error);
-        return { publicRoutes: [], adminRoutes: [], authRoutes: [] };
+        return { publicRoutes: [], adminRoutes: [], authRoutes: [], hybridStorefrontRoutes: [], hybridAdminShellRoutes: [] };
     }
 };
 
@@ -1107,19 +1202,24 @@ const fetchMarcoMenuNavbarRoutes = async (menuTipo: 'SIDEBAR_MARCO' | 'USER_DROP
 
 /**
  * Rutas del navbar según tipo de sesión.
- * Rol corporativo autenticado: solo menú marco (tags), nunca catálogo público de invitado.
+ * Con sesión: sidebar privado / marco; si no hay ítems privados, mantiene el navbar público híbrido.
  */
 export const getNavbarNavigationRoutes = async (isAuthenticated: boolean): Promise<PublicNavItem[]> => {
-    if (isAuthenticated && esUsuarioRolCorporativoAutenticado()) {
+    if (!isAuthenticated) {
+        return getPublicNavigationRoutes(false);
+    }
+
+    if (esUsuarioRolCorporativoAutenticado()) {
         try {
             const marco = await fetchMarcoMenuNavbarRoutes('SIDEBAR_MARCO');
             if (marco.length > 0) return marco;
         } catch {
             /* sin menú marco */
         }
-        return [];
+        return getPublicNavigationRoutes(false);
     }
-    return getPublicNavigationRoutes(isAuthenticated);
+
+    return getPublicNavigationRoutes(true);
 };
 
 // export const getPublicNavigationRoutes = async (): Promise<PublicNavItem[]> => {
@@ -1153,52 +1253,41 @@ export const getPublicNavigationRoutes = async (
 ): Promise<PublicNavItem[]> => {
     try {
         if (isAuthenticated) {
-            if (esUsuarioRolCorporativoAutenticado()) {
-                return [];
-            }
             try {
                 const marco = await fetchMarcoMenuNavbarRoutes('SIDEBAR_MARCO');
                 if (marco.length > 0) return marco;
             } catch {
-                /* usuarios privados no corporativos: fallback catálogo PRIVATE */
+                /* fallback catálogo sidebar + navbar público híbrido */
             }
         }
 
-        const result = await fetchAllSecurityRoutes(false);
+        let catalogRows: RouteCatalogRow[] = await fetchMergedSecurityRouteCatalog(isAuthenticated);
 
-        if (!result?.success || !result?.data) {
+        if (!catalogRows.length) {
             return [];
         }
 
-        const targetAccessType = isAuthenticated ? 'PRIVATE' : 'PUBLIC';
-
-        return result.data
+        return catalogRows
             .filter((route) => {
-                // Debe estar activa
                 if (!route.estadoRuta) return false;
 
-                // Debe tener accessType definido
-                const accessTypes = Array.isArray(route.accessType)
-                    ? route.accessType.map((a: any) =>
-                        typeof a === 'string' ? a : a?.accessType
-                    )
-                    : [];
-
+                const accessTypes = resolveRouteAccessTypeCodes(route);
                 if (accessTypes.length === 0) return false;
-
-                // Filtrar por PUBLIC cuando no hay sesión, PRIVATE cuando sí hay
-                if (!accessTypes.includes(targetAccessType)) return false;
 
                 const hasPublic = accessTypes.includes('PUBLIC');
                 const hasPrivate = accessTypes.includes('PRIVATE') || accessTypes.includes('AUTH') || accessTypes.includes('ADMIN');
                 const isHybrid = hasPublic && hasPrivate;
 
                 if (isAuthenticated) {
-                    if (route.mostrarEnSidebar !== true) return false;
-                    if (route.mostrarEnNavbarPublico === true && !isHybrid) return false;
+                    const showInSidebar = route.mostrarEnSidebar === true && hasPrivate;
+                    const showInPublicNav = route.mostrarEnNavbarPublico === true && hasPublic;
+
+                    if (!showInSidebar && !showInPublicNav) return false;
+                    if (showInSidebar && route.mostrarEnNavbarPublico === true && !isHybrid) return false;
                     return true;
                 }
 
+                if (!hasPublic) return false;
                 if (route.mostrarEnNavbarPublico !== true) return false;
                 if (route.mostrarEnSidebar === true && !isHybrid) return false;
                 return true;
@@ -1217,20 +1306,13 @@ export const getPublicNavigationRoutes = async (
 
 export const getFooterPublicRoutes = async (): Promise<FooterNavItem[]> => {
     try {
-        const result = await fetchAllSecurityRoutes(false);
-        if (!result?.success || !Array.isArray(result.data)) return [];
-
-        return result.data
-            .filter((route) =>
-                route.estadoRuta &&
-                normalizeLayout(route.layout) === "publiclayout" &&
-                String(route.path || "").trim() !== "/"
-            )
-            .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-            .map((route) => ({
-                path: normalizeRoutePath(route.path),
-                label: route.name,
-                order: route.order ?? 0
+        const items = await getPublicNavigationRoutes(false);
+        return items
+            .filter((item) => normalizeRoutePath(item.path) !== '/')
+            .map((item) => ({
+                path: item.path,
+                label: item.label,
+                order: item.order ?? 0,
             }));
     } catch (error) {
         console.error("Error al obtener rutas para footer:", error);
@@ -1407,9 +1489,11 @@ export const clearSessionCaches = (): void => {
     if (typeof window !== 'undefined') {
         window.localStorage.removeItem(PRIVATE_HOME_ROUTE_CACHE_KEY);
     }
+    clearHybridSpaPath();
     _sidebarCache = null;
     _securityRoutesCache = null;
     _saJerarquiaCorpSelectsCache = null;
+    invalidateSplashLogoCache();
 };
 
 const _fetchSidebarTreeWithContext = async (): Promise<AdminSidebarTreeContext> => {

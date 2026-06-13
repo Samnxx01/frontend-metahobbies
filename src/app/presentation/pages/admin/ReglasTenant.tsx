@@ -1,19 +1,24 @@
+import { useLocation } from 'react-router-dom';
+
 import ParametrosGobernanza from './ParametrosGobernanza';
 
-const REGLAS_TENANT_IDS = [
-  'tenant-crear-global-reglas',
-  'tenant-listar-reglas',
-  'tenant-actualizar-global-reglas',
-  'tenant-desactivar-global-reglas',
-];
-
+/**
+ * Hub de operaciones reglas: menú desde gobernanzaModuloConfigs (section reglas).
+ * Al elegir una tarjeta navega a la subruta del formulario.
+ */
 export default function ReglasTenant() {
+  const { pathname } = useLocation();
+
   return (
     <ParametrosGobernanza
       mode="full"
-      initialSection="tenant"
-      lockedSection="tenant"
-      allowedEndpointIds={REGLAS_TENANT_IDS}
+      initialSection="reglas"
+      lockedSection="reglas"
+      inlineModuloSlug="reglas"
+      shellVariant="compact"
+      enableCardDesignEditor={false}
+      menuPath={pathname}
+      operacionesHub
     />
   );
 }

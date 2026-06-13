@@ -35,24 +35,52 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useGobernanzaModulosCatalogo, type GobernanzaModuloGridItem } from './useGobernanzaModulosCatalogo';
+import {
+  GOBERNANZA_INVENTARIO_CARD,
+  GOBERNANZA_INVENTARIO_CARD_FOOTER,
+  GOBERNANZA_INVENTARIO_CARD_ICON,
+  GOBERNANZA_INVENTARIO_PATH_BAR,
+} from './gobernanzaInventarioLayout';
 import { useGobernanzaModuloRutasOpciones } from './useGobernanzaModuloRutasOpciones';
 import {
   upsertGobernanzaModulo,
   desactivarGobernanzaModulo,
   sembrarGobernanzaModulosCatalogo,
   fetchGobernanzaModuloFiltrosOpciones,
+  fetchGobernanzaModuloFormularioDetalle,
+  fetchGobernanzaModuloMenu,
 } from './gobernanzaModuloService';
-import { buildGobernanzaModuloUpsertPayload } from './gobernanzaModuloSeedPayload';
+import {
+  accionesCatalogoModuloPorSlug,
+  accionesUpsertDesdeEndpointIds,
+  buildAccionesSeleccionDesdeModuloConfig,
+  buildGobernanzaModuloUpsertPayload,
+  filtrarAccionesFormularioSeleccionadas,
+} from './gobernanzaModuloSeedPayload';
+import { GobernanzaModuloAccionesSelector } from './GobernanzaModuloAccionesSelector';
+import { GobernanzaModuloParametrizarButton } from './GobernanzaModuloParametrizarButton';
+import { getGobernanzaModuloCatalogoLocal, normalizeGobernanzaModuloSlug } from './gobernanzaModulosCatalog';
 import type {
   GobernanzaFiltroTenantGlobalOpcion,
   GobernanzaFiltroTenantSuperAdminOpcion,
   GobernanzaFiltroUsuarioOpcion,
+  GobernanzaFormularioDetalleApi,
   GobernanzaModuloFiltrosVistaApi,
 } from './gobernanzaModuloApiTypes';
 
 export type GobernanzaModuloConfigViewProps = {
   className?: string;
 };
+
+function resolveParametrizarSlug(item: Pick<GobernanzaModuloGridItem, 'slug' | 'section'>): string {
+  const normalized = normalizeGobernanzaModuloSlug(item.slug);
+  const local = getGobernanzaModuloCatalogoLocal(normalized);
+  return local?.slug ?? item.section ?? normalized;
+}
+
+function resolveParametrizarMenuPath(item: Pick<GobernanzaModuloGridItem, 'menuPath' | 'path'>): string | null {
+  return item.menuPath?.trim() || item.path?.trim() || null;
+}
 
 function toCheckedMap(ids: string[]): Record<string, boolean> {
   const m: Record<string, boolean> = {};
@@ -104,6 +132,10 @@ export function GobernanzaModuloConfigView({ className }: GobernanzaModuloConfig
     String(user?.role ?? (user as { rol?: string } | null)?.rol ?? '').toUpperCase() === 'DIOS';
 
   const { grid, loading, modulosDesdeApi, refresh } = useGobernanzaModulosCatalogo();
+  const parametrizarSectionSlug = useMemo(
+    () => (grid[0] ? resolveParametrizarSlug(grid[0]) : 'permisos'),
+    [grid]
+  );
   const [busySlug, setBusySlug] = useState<string | null>(null);
   const [sembrando, setSembrando] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -111,6 +143,17 @@ export function GobernanzaModuloConfigView({ className }: GobernanzaModuloConfig
   const [dialogLabel, setDialogLabel] = useState('');
   const [dialogDescription, setDialogDescription] = useState('');
   const [dialogRutaId, setDialogRutaId] = useState<string>('');
+  const [formularioDetalle, setFormularioDetalle] = useState<GobernanzaFormularioDetalleApi | null>(null);
+  const [formularioError, setFormularioError] = useState<string | null>(null);
+  const [cargandoFormulario, setCargandoFormulario] = useState(false);
+  const [accionesPublicadas, setAccionesPublicadas] = useState<Array<{ id: string; method: string }>>([]);
+  const [cargandoAccionesModulo, setCargandoAccionesModulo] = useState(false);
+
+  const accionesCatalogo = useMemo(
+    () => accionesCatalogoModuloPorSlug(dialogSlug),
+    [dialogSlug]
+  );
+  const [accionesSeleccionadas, setAccionesSeleccionadas] = useState<Record<string, boolean>>({});
 
   const [filtrosLoading, setFiltrosLoading] = useState(false);
   const [tenantSuperAdmins, setTenantSuperAdmins] = useState<GobernanzaFiltroTenantSuperAdminOpcion[]>([]);
@@ -175,6 +218,80 @@ export function GobernanzaModuloConfigView({ className }: GobernanzaModuloConfig
     else if (rutasOpciones[0]?.id) setDialogRutaId(rutasOpciones[0].id);
   }, [dialogOpen, dialogSlug, dialogRutaId, sugerida, rutasOpciones]);
 
+  useEffect(() => {
+    if (!dialogOpen || !dialogRutaId) {
+      setFormularioDetalle(null);
+      setFormularioError(null);
+      return;
+    }
+    let active = true;
+    setCargandoFormulario(true);
+    setFormularioError(null);
+    void fetchGobernanzaModuloFormularioDetalle(dialogRutaId)
+      .then((detalle) => {
+        if (!active) return;
+        if (!detalle?.component) {
+          throw new Error('El formulario no tiene componente asignado en rutasSeguridad.');
+        }
+        setFormularioDetalle(detalle);
+      })
+      .catch((err: unknown) => {
+        if (!active) return;
+        setFormularioDetalle(null);
+        setFormularioError(err instanceof Error ? err.message : 'No se pudo cargar el formulario');
+      })
+      .finally(() => {
+        if (active) setCargandoFormulario(false);
+      });
+    return () => { active = false; };
+  }, [dialogOpen, dialogRutaId]);
+
+  useEffect(() => {
+    if (!dialogOpen || !dialogSlug) return;
+    let active = true;
+    setCargandoAccionesModulo(true);
+    void fetchGobernanzaModuloMenu(dialogSlug)
+      .then((res) => {
+        if (!active) return;
+        const items = Array.isArray(res.acciones) ? res.acciones : [];
+        setAccionesPublicadas(
+          items
+            .map((a) => ({
+              id: String(a.id || ''),
+              method: String(a.method || '').toUpperCase(),
+            }))
+            .filter((a) => a.id)
+        );
+      })
+      .catch(() => {
+        if (active) setAccionesPublicadas([]);
+      })
+      .finally(() => {
+        if (active) setCargandoAccionesModulo(false);
+      });
+    return () => { active = false; };
+  }, [dialogOpen, dialogSlug]);
+
+  useEffect(() => {
+    if (!dialogOpen || !accionesCatalogo.length) {
+      setAccionesSeleccionadas({});
+      return;
+    }
+    setAccionesSeleccionadas(
+      buildAccionesSeleccionDesdeModuloConfig(accionesCatalogo, accionesPublicadas)
+    );
+  }, [dialogOpen, accionesCatalogo, accionesPublicadas]);
+
+  const accionesElegidas = useMemo(
+    () => filtrarAccionesFormularioSeleccionadas(accionesCatalogo, accionesSeleccionadas),
+    [accionesCatalogo, accionesSeleccionadas]
+  );
+
+  const accionesPayloadPreview = useMemo(
+    () => accionesUpsertDesdeEndpointIds(dialogSlug, accionesElegidas.map((a) => a.accionId)),
+    [dialogSlug, accionesElegidas]
+  );
+
   const abrirPublicar = (item: GobernanzaModuloGridItem) => {
     const fv: GobernanzaModuloFiltrosVistaApi = item.filtrosVista ?? {
       tenantSuperAdminIds: [],
@@ -228,16 +345,36 @@ export function GobernanzaModuloConfigView({ className }: GobernanzaModuloConfig
       toast.error('Selecciona una ruta de rutasSeguridad.');
       return;
     }
+    if (!formularioDetalle?.component) {
+      toast.error(formularioError || 'El formulario debe tener componente en rutasSeguridad.');
+      return;
+    }
+    if (!accionesElegidas.length) {
+      toast.error('Selecciona al menos una acción a parametrizar.');
+      return;
+    }
+    const accionesPayload = accionesUpsertDesdeEndpointIds(
+      dialogSlug,
+      accionesElegidas.map((a) => a.accionId)
+    );
+    if (!accionesPayload.length) {
+      toast.error('Las acciones seleccionadas no tienen endpoint en el catálogo de gobernanza.');
+      return;
+    }
     const body = buildGobernanzaModuloUpsertPayload(
       dialogSlug,
       {
         rutaId: dialogRutaId,
         rutaPath: pathDinamico,
+        formularioId: formularioDetalle.id,
+        formularioNombre: formularioDetalle.name,
+        formularioComponent: formularioDetalle.component,
       },
       {
         label: nombre,
         description: dialogDescription.trim(),
         menuPath: pathDinamico,
+        acciones: accionesPayload,
         filtrosVista: {
           tenantSuperAdminIds: idsFromChecked(selectedSaIds),
           tenantGlobalIds: idsFromChecked(selectedTgIds),
@@ -308,8 +445,7 @@ export function GobernanzaModuloConfigView({ className }: GobernanzaModuloConfig
               ConfigGobernanza
             </CardTitle>
             <CardDescription>
-              Parametriza módulos en gobernanzaModuloConfigs: nombre, descripción, path de menú y
-              filtros por tenant/usuario.
+              Centraliza la parametrizacion del modulo de gobernanza y sus secciones operativas.
             </CardDescription>
           </div>
           <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
@@ -325,6 +461,12 @@ export function GobernanzaModuloConfigView({ className }: GobernanzaModuloConfig
                 Importar catálogo
               </Button>
             ) : null}
+            <GobernanzaModuloParametrizarButton
+              moduloSlug={parametrizarSectionSlug}
+              onMenuRefresh={() => void refresh()}
+              size="sm"
+              className="shrink-0"
+            />
             <Button
               type="button"
               variant="outline"
@@ -346,12 +488,11 @@ export function GobernanzaModuloConfigView({ className }: GobernanzaModuloConfig
             </Button>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {loading ? (
-            <p className="py-12 text-center text-sm text-muted-foreground">Cargando módulos…</p>
+            <p className="col-span-full py-12 text-center text-sm text-muted-foreground">Cargando módulos…</p>
           ) : (
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {grid.map((item) => {
+              grid.map((item) => {
                 const Icon = item.icon ?? Building2;
                 const busy = busySlug === item.slug;
                 const filtrosCount =
@@ -359,12 +500,9 @@ export function GobernanzaModuloConfigView({ className }: GobernanzaModuloConfig
                   (item.filtrosVista?.tenantGlobalIds?.length ?? 0) +
                   (item.filtrosVista?.usuarioIds?.length ?? 0);
                 return (
-                  <div
-                    key={item.slug}
-                    className="flex flex-col rounded-lg border border-border bg-card p-4 text-left shadow-sm"
-                  >
+                  <div key={`${item.slug}-${item.menuPath ?? item.path}`} className={GOBERNANZA_INVENTARIO_CARD}>
                     <div className="mb-3 flex items-center justify-between gap-3">
-                      <span className="flex h-9 w-9 items-center justify-center rounded-md border border-border bg-background">
+                      <span className={GOBERNANZA_INVENTARIO_CARD_ICON}>
                         <Icon className="h-4 w-4" />
                       </span>
                       <Button
@@ -380,16 +518,21 @@ export function GobernanzaModuloConfigView({ className }: GobernanzaModuloConfig
                     </div>
                     <p className="text-sm font-semibold text-foreground">{item.title}</p>
                     <p className="mt-1 text-xs leading-5 text-muted-foreground">{item.description}</p>
-                    <p className="mt-3 break-all rounded-md border border-destructive/20 bg-destructive/5 px-2 py-1 font-mono text-[11px] text-destructive/90">
-                      {item.menuPath || item.path}
-                    </p>
+                    <p className={GOBERNANZA_INVENTARIO_PATH_BAR}>{item.menuPath || item.path}</p>
                     {filtrosCount > 0 ? (
                       <p className="mt-2 flex items-center gap-1 text-[11px] text-muted-foreground">
                         <Filter className="h-3 w-3" />
                         {filtrosCount} filtro(s) parametrizados
                       </p>
                     ) : null}
-                    <div className="mt-3 flex flex-wrap gap-2 border-t border-border/60 pt-3">
+                    <div className={GOBERNANZA_INVENTARIO_CARD_FOOTER}>
+                      <GobernanzaModuloParametrizarButton
+                        moduloSlug={resolveParametrizarSlug(item)}
+                        menuPathInicial={resolveParametrizarMenuPath(item)}
+                        onMenuRefresh={() => void refresh()}
+                        size="sm"
+                        className="h-8 gap-1.5 text-xs"
+                      />
                       <Button
                         type="button"
                         variant="outline"
@@ -438,8 +581,7 @@ export function GobernanzaModuloConfigView({ className }: GobernanzaModuloConfig
                     </div>
                   </div>
                 );
-              })}
-            </div>
+              })
           )}
         </CardContent>
       </Card>
@@ -488,20 +630,20 @@ export function GobernanzaModuloConfigView({ className }: GobernanzaModuloConfig
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="gobernanza-ruta-select">Ruta (rutasSeguridad)</Label>
+                <Label htmlFor="gobernanza-ruta-select">Formulario</Label>
                 <Select
                   value={dialogRutaId || undefined}
                   disabled={rutasLoading || rutasOpciones.length === 0}
                   onValueChange={setDialogRutaId}
                 >
-                  <SelectTrigger id="gobernanza-ruta-select" className="font-mono text-xs">
+                  <SelectTrigger id="gobernanza-ruta-select">
                     {rutasLoading ? (
                       <span className="flex items-center gap-2 text-muted-foreground">
                         <Loader2 className="h-4 w-4 animate-spin" />
-                        Cargando rutas…
+                        Cargando formularios…
                       </span>
                     ) : (
-                      <SelectValue placeholder="Selecciona una ruta" />
+                      <SelectValue placeholder="Selecciona un formulario" />
                     )}
                   </SelectTrigger>
                   <SelectContent>
@@ -512,10 +654,10 @@ export function GobernanzaModuloConfigView({ className }: GobernanzaModuloConfig
                           : r.sugerida
                             ? ' · sugerida'
                             : '';
-                      const label =
-                        r.name && r.name !== r.path ? `${r.name} — ${r.path}` : r.path;
+                      const tipoNodo = r.tipoNodoNombre || r.tipoNodoCodigo || 'Formulario';
+                      const label = `${r.name || 'Sin nombre'} · ${tipoNodo}`;
                       return (
-                        <SelectItem key={r.id} value={r.id} className="font-mono text-xs">
+                        <SelectItem key={r.id} value={r.id}>
                           {label}
                           {extra}
                         </SelectItem>
@@ -523,23 +665,43 @@ export function GobernanzaModuloConfigView({ className }: GobernanzaModuloConfig
                     })}
                   </SelectContent>
                 </Select>
-                {rutaSeleccionada?.component ? (
-                  <p className="text-xs text-muted-foreground">
-                    Componente: {rutaSeleccionada.component}
+                {cargandoFormulario ? (
+                  <p className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    Cargando acciones del formulario…
                   </p>
+                ) : formularioError ? (
+                  <p className="text-xs text-destructive">{formularioError}</p>
                 ) : null}
                 {rutasError ? <p className="text-xs text-destructive">{rutasError}</p> : null}
                 {ayudaRutas ? <p className="text-xs text-amber-800">{ayudaRutas}</p> : null}
               </div>
-              <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">Path dinámico (menú)</Label>
-                <p
-                  className="break-all rounded-md border border-primary/20 bg-primary/5 px-3 py-2 font-mono text-xs text-foreground"
-                  aria-live="polite"
-                >
-                  {pathDinamico || 'Selecciona una ruta'}
-                </p>
-              </div>
+
+              <GobernanzaModuloAccionesSelector
+                acciones={accionesCatalogo}
+                seleccion={accionesSeleccionadas}
+                onSeleccionChange={setAccionesSeleccionadas}
+                loading={cargandoAccionesModulo}
+                refreshLoading={cargandoAccionesModulo}
+                onRefresh={() => {
+                  if (!dialogOpen || !dialogSlug) return;
+                  setCargandoAccionesModulo(true);
+                  void fetchGobernanzaModuloMenu(dialogSlug)
+                    .then((res) => {
+                      const items = Array.isArray(res.acciones) ? res.acciones : [];
+                      setAccionesPublicadas(
+                        items
+                          .map((a) => ({
+                            id: String(a.id || ''),
+                            method: String(a.method || '').toUpperCase(),
+                          }))
+                          .filter((a) => a.id)
+                      );
+                    })
+                    .catch(() => setAccionesPublicadas([]))
+                    .finally(() => setCargandoAccionesModulo(false));
+                }}
+              />
             </section>
 
             <Separator />
@@ -671,7 +833,13 @@ export function GobernanzaModuloConfigView({ className }: GobernanzaModuloConfig
             <Button
               type="button"
               disabled={
-                Boolean(busySlug) || !dialogRutaId || rutasLoading || !dialogLabel.trim()
+                Boolean(busySlug)
+                || !dialogRutaId
+                || rutasLoading
+                || !dialogLabel.trim()
+                || !formularioDetalle?.component
+                || accionesElegidas.length === 0
+                || accionesPayloadPreview.length === 0
               }
               onClick={() => void publicarModulo()}
             >

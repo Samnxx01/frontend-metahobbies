@@ -36,10 +36,12 @@ const shortHash = (value?: string | null): string => {
   return raw.length > 16 ? `${raw.slice(0, 10)}...${raw.slice(-6)}` : raw;
 };
 
-const shortId = (value?: string | null): string => {
-  const raw = String(value || '').trim();
-  if (!raw) return '—';
-  return raw.length > 12 ? `${raw.slice(0, 8)}…${raw.slice(-4)}` : raw;
+const textoUsuarioComprobante = (
+  usuario?: { nombre?: string; correo?: string | null } | null,
+): string => {
+  const nombre = String(usuario?.nombre || '').trim();
+  const correo = String(usuario?.correo || '').trim();
+  return nombre || correo || '—';
 };
 
 const formatDate = (value?: string): string => {
@@ -48,6 +50,18 @@ const formatDate = (value?: string): string => {
   if (Number.isNaN(date.getTime())) return '-';
   return date.toLocaleString('es-CO');
 };
+
+/** Etiquetas del campo movementType en inventoryledgers (kardex contable). */
+const MOVEMENT_TYPE_LABELS: Record<string, string> = {
+  PURCHASE: 'Compra',
+  SALE: 'Venta',
+  ADJUSTMENT_IN: 'Ajuste entrada',
+  ADJUSTMENT_OUT: 'Ajuste salida',
+  REVERSAL: 'Reversión',
+};
+
+const labelTipoMovimientoLedger = (tipo: string): string =>
+  MOVEMENT_TYPE_LABELS[String(tipo || '').trim().toUpperCase()] || String(tipo || '').replace(/_/g, ' ');
 
 const emptyForm = (codigo = 'COMPROBANTE_CONTABLE'): CrearComprobanteContablePayload => ({
   sku: '',
@@ -299,7 +313,7 @@ export default function ConfigComprobante(): React.ReactElement {
               Comprobantes contables
             </CardTitle>
             <CardDescription>
-              Un comprobante = un ID unico + numero de secuencia parametrizable (documentos soporte).
+              Un comprobante = numero de secuencia parametrizable (documentos soporte) con auditoria del ejecutor.
             </CardDescription>
           </div>
           <div className="flex flex-wrap justify-end gap-2">
@@ -328,20 +342,22 @@ export default function ConfigComprobante(): React.ReactElement {
               <TableHeader>
                 <TableRow>
                   <TableHead>Comprobante</TableHead>
-                  <TableHead>Ultima fecha</TableHead>
+                  <TableHead>Ejecutado por</TableHead>
+                  <TableHead>Creado</TableHead>
+                  <TableHead>Actualizado</TableHead>
                   <TableHead>Movs</TableHead>
                   <TableHead>Productos</TableHead>
                   <TableHead>Entrada</TableHead>
                   <TableHead>Salida</TableHead>
                   <TableHead>Valor neto</TableHead>
-                  <TableHead>Tipos</TableHead>
+                  <TableHead>Tipo mov.</TableHead>
                   <TableHead>Hash</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={9} className="py-8 text-center text-sm text-muted-foreground">
+                    <TableCell colSpan={11} className="py-8 text-center text-sm text-muted-foreground">
                       Cargando comprobantes contables...
                     </TableCell>
                   </TableRow>
@@ -350,16 +366,27 @@ export default function ConfigComprobante(): React.ReactElement {
                     const neto = Number(row.valorEntrada || 0) - Number(row.valorSalida || 0);
                     return (
                       <TableRow key={row.id}>
-                        <TableCell className="min-w-56">
+                        <TableCell className="min-w-48">
                           <div className="font-medium text-foreground">{row.tipo}</div>
                           <div className="font-mono text-xs text-muted-foreground">{row.numero}</div>
-                          {row.comprobanteId ? (
-                            <div className="text-[10px] text-muted-foreground" title={row.comprobanteId}>
-                              ID: {shortId(row.comprobanteId)}
+                          {row.comprobanteEntrada?.numero ? (
+                            <div className="mt-1 text-xs text-muted-foreground">
+                              Entrada: {row.comprobanteEntrada.tipo || 'RECEPCION'} · {row.comprobanteEntrada.numero}
                             </div>
                           ) : null}
                         </TableCell>
-                        <TableCell className="whitespace-nowrap">{formatDate(row.fechaUltima)}</TableCell>
+                        <TableCell className="min-w-40">
+                          <div className="text-sm text-foreground">{textoUsuarioComprobante(row.usuario)}</div>
+                          {row.usuario?.correo && row.usuario?.nombre ? (
+                            <div className="text-xs text-muted-foreground">{row.usuario.correo}</div>
+                          ) : null}
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap text-sm">
+                          {formatDate(row.creadoEn || row.fechaPrimera)}
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap text-sm">
+                          {formatDate(row.actualizadoEn || row.fechaUltima)}
+                        </TableCell>
                         <TableCell>{row.totalMovimientos}</TableCell>
                         <TableCell>{row.totalProductos}</TableCell>
                         <TableCell>
@@ -376,7 +403,14 @@ export default function ConfigComprobante(): React.ReactElement {
                         <TableCell>
                           <div className="flex max-w-56 flex-wrap gap-1">
                             {row.tiposMovimiento.map((tipo) => (
-                              <Badge key={tipo} variant="secondary" className="rounded-md">{tipo}</Badge>
+                              <Badge
+                                key={tipo}
+                                variant="outline"
+                                className="border-border bg-card font-normal text-foreground"
+                                title={tipo}
+                              >
+                                {labelTipoMovimientoLedger(tipo)}
+                              </Badge>
                             ))}
                           </div>
                         </TableCell>
@@ -386,7 +420,7 @@ export default function ConfigComprobante(): React.ReactElement {
                   })
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={9} className="py-8 text-center text-sm text-muted-foreground">
+                    <TableCell colSpan={11} className="py-8 text-center text-sm text-muted-foreground">
                       No hay comprobantes contables registrados.
                     </TableCell>
                   </TableRow>

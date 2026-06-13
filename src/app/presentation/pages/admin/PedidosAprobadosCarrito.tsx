@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { toast } from 'react-toastify';
 import carritoService, { type PedidoAprobado } from '@/app/services/carritoService';
+import { formatearFechaHoraColombia } from '@/app/utils/fechaColombia';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,14 +22,7 @@ const formatCOP = (value: number): string =>
     minimumFractionDigits: 0,
   }).format(value);
 
-const formatFecha = (value: string): string => {
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleString('es-CO', {
-    dateStyle: 'short',
-    timeStyle: 'short',
-  });
-};
+const formatFecha = (value: string): string => formatearFechaHoraColombia(value);
 
 const formatPorcentaje = (value: number | null | undefined): string =>
   value == null ? '—' : `${value.toFixed(2)} %`;
@@ -75,7 +69,13 @@ export default function PedidosAprobadosCarrito(): React.ReactElement {
     try {
       const result = await carritoService.reaplicarKardexPedido(pedidoId);
       if (result?.ok) {
-        toast.success(result.msg || 'Kardex actualizado correctamente.');
+        const esPendiente = String(result.msg || '').toLowerCase().includes('kardex pendiente')
+          || String(result.msg || '').toLowerCase().includes('kardex no aplicado');
+        if (esPendiente) {
+          toast.warning(result.msg || 'Kardex pendiente.');
+        } else {
+          toast.success(result.msg || 'Kardex actualizado correctamente.');
+        }
         await cargar();
       } else {
         toast.error(result.msg || 'No se pudo reaplicar el kardex.');
@@ -101,7 +101,7 @@ export default function PedidosAprobadosCarrito(): React.ReactElement {
             Pedidos aprobados
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Ventas del carrito con pago confirmado (Wompi) e inventario descontado.
+            Facturas confirmadas (colección invoice) con detalle del carrito, pago Wompi e inventario.
           </p>
         </div>
         <Badge variant="secondary" className="w-fit text-sm px-3 py-1">
@@ -114,7 +114,7 @@ export default function PedidosAprobadosCarrito(): React.ReactElement {
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             className="pl-9"
-            placeholder="Buscar por referencia, cliente, ciudad, producto…"
+            placeholder="Buscar por FAC, venta, carrito, cliente, ciudad, producto…"
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && onBuscar()}
@@ -133,6 +133,7 @@ export default function PedidosAprobadosCarrito(): React.ReactElement {
           <TableHeader>
             <TableRow>
               <TableHead className="w-10" />
+              <TableHead>Factura</TableHead>
               <TableHead>Referencia</TableHead>
               <TableHead>Fecha</TableHead>
               <TableHead>Factura a</TableHead>
@@ -145,14 +146,14 @@ export default function PedidosAprobadosCarrito(): React.ReactElement {
           <TableBody>
             {loading && pedidos.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="py-12 text-center text-muted-foreground">
+                <TableCell colSpan={9} className="py-12 text-center text-muted-foreground">
                   <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
                   Cargando pedidos…
                 </TableCell>
               </TableRow>
             ) : pedidos.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="py-12 text-center text-muted-foreground">
+                <TableCell colSpan={9} className="py-12 text-center text-muted-foreground">
                   No hay pedidos aprobados{qAplicada ? ` para "${qAplicada}"` : ''}.
                 </TableCell>
               </TableRow>
@@ -179,9 +180,24 @@ export default function PedidosAprobadosCarrito(): React.ReactElement {
                         </Button>
                       </TableCell>
                       <TableCell className="font-mono text-xs">
+                        <div className="font-semibold text-primary">
+                          {pedido.invoiceNumber || '—'}
+                        </div>
+                        {pedido.invoiceEstado && (
+                          <Badge variant="default" className="mt-1 text-[10px] px-1.5 py-0">
+                            {pedido.invoiceEstado}
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="font-mono text-xs">
                         <div>{pedido.ventaReferencia || '—'}</div>
                         {pedido.referenciaPago && (
                           <div className="text-muted-foreground mt-0.5">{pedido.referenciaPago}</div>
+                        )}
+                        {pedido.transactionId && (
+                          <div className="text-muted-foreground mt-0.5 truncate max-w-[140px]" title={pedido.transactionId}>
+                            TX: {pedido.transactionId.slice(0, 12)}…
+                          </div>
                         )}
                       </TableCell>
                       <TableCell className="text-sm whitespace-nowrap">
@@ -217,10 +233,10 @@ export default function PedidosAprobadosCarrito(): React.ReactElement {
                         {pedido.cantidadTotalUnidades}
                       </TableCell>
                       <TableCell className="text-right text-sm">
-                        <div className="font-semibold text-emerald-700 dark:text-emerald-400">
+                        <div className="font-semibold text-emerald-700">
                           {formatCOP(pedido.resumenMargen?.margenTotal ?? 0)}
                         </div>
-                        <div className="text-xs text-muted-foreground">
+                        <div className="text-xs font-medium text-emerald-800">
                           {formatPorcentaje(pedido.resumenMargen?.margenPorcentaje)}
                         </div>
                       </TableCell>
@@ -230,9 +246,21 @@ export default function PedidosAprobadosCarrito(): React.ReactElement {
                     </TableRow>
                     {abierto && (
                       <TableRow className="bg-muted/20">
-                        <TableCell colSpan={8} className="p-0">
+                        <TableCell colSpan={9} className="p-0">
                           <div className="px-6 py-4 space-y-3">
                             <div className="flex flex-wrap gap-4 text-sm rounded-md border bg-background/80 px-4 py-3">
+                              <div>
+                                <span className="text-muted-foreground">ID factura: </span>
+                                <span className="font-mono text-xs">{pedido.invoiceId || '—'}</span>
+                              </div>
+                              <div>
+                                <span className="text-muted-foreground">Nº factura: </span>
+                                <span className="font-medium">{pedido.invoiceNumber || '—'}</span>
+                              </div>
+                              <div>
+                                <span className="text-muted-foreground">Estado invoice: </span>
+                                <span className="font-medium">{pedido.invoiceEstado || '—'}</span>
+                              </div>
                               <div>
                                 <span className="text-muted-foreground">Costo (kardex): </span>
                                 <span className="font-medium">
@@ -247,9 +275,11 @@ export default function PedidosAprobadosCarrito(): React.ReactElement {
                               </div>
                               <div>
                                 <span className="text-muted-foreground">Margen: </span>
-                                <span className="font-semibold text-emerald-700 dark:text-emerald-400">
+                                <span className="font-semibold text-emerald-700">
                                   {formatCOP(pedido.resumenMargen?.margenTotal ?? 0)}{' '}
-                                  ({formatPorcentaje(pedido.resumenMargen?.margenPorcentaje)})
+                                  <span className="text-emerald-800">
+                                    ({formatPorcentaje(pedido.resumenMargen?.margenPorcentaje)})
+                                  </span>
                                 </span>
                               </div>
                             </div>
@@ -293,8 +323,10 @@ export default function PedidosAprobadosCarrito(): React.ReactElement {
                                       {formatCOP(item.costoUnitarioSku)}
                                     </TableCell>
                                     <TableCell className="text-right whitespace-nowrap">
-                                      <div>{formatCOP(item.margenTotal)}</div>
-                                      <div className="text-xs text-muted-foreground">
+                                      <div className="font-semibold text-emerald-700">
+                                        {formatCOP(item.margenTotal)}
+                                      </div>
+                                      <div className="text-xs font-medium text-emerald-800">
                                         {formatCOP(item.margenUnitario)} / ud ·{' '}
                                         {formatPorcentaje(item.margenPorcentaje)}
                                       </div>

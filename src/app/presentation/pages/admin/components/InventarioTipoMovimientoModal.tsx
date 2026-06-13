@@ -1,6 +1,7 @@
 import React from 'react';
 import { Save } from 'lucide-react';
 import type { InventarioTipoMovimiento } from '@/app/services/inventarioService';
+import { idTipoMovimiento } from '@/app/presentation/pages/admin/inventario/inventarioTipoMovimientoKardex';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -99,7 +100,7 @@ export default function InventarioTipoMovimientoModal({
         <div className="max-h-56 overflow-auto rounded-md border border-border bg-card">
           {tipos.map((tipo) => (
             <button
-              key={tipo._id}
+              key={idTipoMovimiento(tipo) || tipo.codigo}
               type="button"
               className="flex w-full items-center justify-between gap-3 border-b border-border px-4 py-3 text-left text-foreground last:border-b-0 transition-colors hover:bg-muted/60"
               onClick={() => onEdit(tipo)}
@@ -109,18 +110,22 @@ export default function InventarioTipoMovimientoModal({
                 <span className="block text-xs text-muted-foreground">{tipo.codigo} - {tipo.descripcion || 'Sin descripcion'}</span>
               </span>
               <span className="flex items-center gap-2">
-                <Badge variant={tipo.naturaleza === 'ENTRADA' ? 'default' : 'secondary'}>{tipo.naturaleza}</Badge>
-                <Badge variant={tipo.estado ? 'outline' : 'destructive'}>{tipo.estado ? 'Activo' : 'Inactivo'}</Badge>
+                <Badge variant="outline">
+                  {tipo.naturaleza === 'ENTRADA' ? 'Entrada' : 'Salida'}
+                </Badge>
+                <Badge variant={tipo.estado ? 'outline' : 'destructive'}>
+                  {tipo.estado ? 'Activo' : 'Inactivo'}
+                </Badge>
               </span>
             </button>
           ))}
         </div>
 
-        <DialogFooter>
-          <Button type="button" variant="outline" onClick={onReset} disabled={saving}>
+        <DialogFooter className="gap-2 sm:gap-0">
+          <Button type="button" variant="outline" size="sm" onClick={onReset} disabled={saving}>
             Nuevo
           </Button>
-          <Button type="button" onClick={onSubmit} disabled={saving}>
+          <Button type="button" variant="outline" size="sm" onClick={onSubmit} disabled={saving}>
             <Save className="mr-2 h-4 w-4" />
             {draft._id ? 'Actualizar tipo' : 'Crear tipo'}
           </Button>

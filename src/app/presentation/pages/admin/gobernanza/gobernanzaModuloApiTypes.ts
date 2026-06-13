@@ -11,19 +11,79 @@ export type GobernanzaModuloMenuAccion = {
   section?: EndpointSection;
   orden: number;
   disponible: boolean;
+  /** Formulario publicado en gobernanzaModuloConfigs (path + component). */
+  tipo?: 'formulario' | 'endpoint';
+  menuPath?: string;
+  formularioComponent?: string;
+  /** Endpoint API (catálogo) que alimenta los campos del formulario. */
+  endpointId?: string | null;
+  /** Slug de la tarjeta en gobernanzaModuloConfigs (puede diferir del slug de sección). */
+  configSlug?: string | null;
 };
 
 export type GobernanzaModuloConfigApi = {
+  id?: string | null;
   slug: string;
   section: EndpointSection;
+  /** Alias legacy en respuestas API. */
   label: string;
+  nombre?: string;
   description: string;
   frontPath: string;
+  menuPath?: string | null;
+  rutaId?: string | null;
+  formularioId?: string | null;
+  formularioNombre?: string | null;
+  formularioComponent?: string | null;
+  orden?: number;
   defaultActionId: string | null;
   actionQueryParam: string;
   submenuTitle?: string;
   submenuHint?: string;
   endpointIds: string[];
+  /** Acciones HTTP publicadas en gobernanzaModuloConfigs (mapeo formulario → API). */
+  accionesCatalog?: Array<{
+    id: string;
+    accionRef?: string | null;
+    accionId?: string | null;
+    method: string;
+    title?: string;
+    path?: string;
+    shortLabel?: string;
+  }>;
+  /** Referencia a gobernanzaModuloTipos. */
+  tipoId?: string | null;
+  tipoCodigo?: string | null;
+  tipoNombre?: string | null;
+  tipoFormularioComponent?: string | null;
+  tipoFormularios?: GobernanzaModuloTipoFormularioApi[];
+};
+
+export type GobernanzaModuloTipoFormularioApi = {
+  formularioComponent: string;
+  endpointId?: string | null;
+  titulo?: string;
+  descripcion?: string;
+  orden?: number;
+};
+
+export type GobernanzaModuloTipoApi = {
+  id: string;
+  codigo: string;
+  section: string;
+  nombre: string;
+  descripcion: string;
+  formularioComponent: string;
+  formularios: GobernanzaModuloTipoFormularioApi[];
+  orden: number;
+  estado: boolean;
+};
+
+export type GobernanzaModuloTiposResponse = {
+  ok: boolean;
+  msg?: string;
+  section: string;
+  tipos: GobernanzaModuloTipoApi[];
 };
 
 export type GobernanzaModuloMenuResponse = {
@@ -36,14 +96,58 @@ export type GobernanzaModuloMenuResponse = {
   acciones: GobernanzaModuloMenuAccion[];
 };
 
+/** GET /gobernanza/modulos/operativo — gobernanzaModuloConfigs + acciones para render. */
+export type GobernanzaModuloOperativoResponse = GobernanzaModuloMenuResponse & {
+  section: string;
+  configs: GobernanzaModuloConfigApi[];
+  meta?: {
+    section?: string;
+    configCount?: number;
+    accionesCount?: number;
+    hubOperaciones?: boolean;
+  };
+};
 export type GobernanzaRutaOpcionApi = {
   id: string;
   path: string;
   name: string;
   component?: string | null;
+  tipoNodoCodigo?: string | null;
+  tipoNodoNombre?: string | null;
   order?: number;
   sugerida?: boolean;
   vinculadoSlug?: string | null;
+};
+
+export type GobernanzaFormularioAccionApi = {
+  accionId: string;
+  method: string;
+  title: string;
+  path?: string;
+  orden?: number;
+};
+
+export type GobernanzaFormularioTipoNodoApi = {
+  id?: string | null;
+  codigo?: string | null;
+  nombre?: string | null;
+};
+
+export type GobernanzaFormularioDetalleApi = {
+  id: string;
+  name: string;
+  path: string;
+  component: string;
+  layout?: string | null;
+  order?: number;
+  tipoNodo?: GobernanzaFormularioTipoNodoApi | null;
+  acciones?: GobernanzaFormularioAccionApi[];
+};
+
+export type GobernanzaFormularioDetalleResponse = {
+  ok: boolean;
+  msg?: string;
+  data?: GobernanzaFormularioDetalleApi;
 };
 
 export type GobernanzaModuloRutasOpcionesResponse = {
@@ -121,6 +225,9 @@ export type GobernanzaModuloCatalogoItemApi = {
   menuPath?: string;
   rutaId?: string | null;
   rutaPath?: string | null;
+  formularioId?: string | null;
+  formularioNombre?: string | null;
+  formularioComponent?: string | null;
   filtrosVista?: GobernanzaModuloFiltrosVistaApi;
   orden: number;
   disponible: boolean;

@@ -1,10 +1,9 @@
 /**
-
  * Mensajes orientados al usuario para el flujo OC → comprobante → inventario.
-
  */
 
-
+/** Secuencia del comprobante fisico de entrada (recepcion de mercancia). */
+export const TIPO_DOCUMENTO_ENTRADA_FISICA = 'RECEPCION_OC';
 
 export const FLUJO_COMPRAS_PASOS = {
 
@@ -67,6 +66,14 @@ export function mensajeErrorComprasInventario(error: unknown, contexto?: string)
 
 
   if (/paso bloqueado/i.test(raw)) {
+
+    return raw;
+
+  }
+
+
+
+  if (/PENDIENTE_APROBACION|comprobante de entrada.*ya tiene|ya esta registrado|ya esta asociada/i.test(raw)) {
 
     return raw;
 
@@ -147,9 +154,15 @@ export function mensajeErrorComprasInventario(error: unknown, contexto?: string)
 
 
   if (/solo se puede editar una orden en estado/i.test(raw)) {
+    return 'No se puede editar: solo las órdenes en VERIFICACION admiten cambios. El consecutivo OC no se modifica (salvo permiso de super admin).';
+  }
 
-    return 'No se puede editar: solo las órdenes en VERIFICACION admiten cambios (salvo permiso de super admin).';
+  if (/consecutivo de la orden.*inmutable/i.test(raw)) {
+    return 'El consecutivo de la orden (numeroOrden) no puede modificarse al editar.';
+  }
 
+  if (/solo se puede eliminar una orden en estado VERIFICACION/i.test(raw)) {
+    return 'No se puede eliminar: solo las órdenes en VERIFICACION pueden eliminarse (salvo permiso de super admin).';
   }
 
 

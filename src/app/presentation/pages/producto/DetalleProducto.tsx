@@ -4,8 +4,13 @@ import { toast } from 'react-toastify';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
-import productosService, { mapProducto, type BackendProducto } from '@/app/services/productosService';
-import { ShoppingCart, Heart, Plus, Minus, Check, ArrowLeft } from 'lucide-react';
+import CartQuantityInput from '@/app/presentation/components/carrito/CartQuantityInput';
+import productosService, {
+  getProductoDescripcionCompleta,
+  mapProducto,
+  type BackendProducto,
+} from '@/app/services/productosService';
+import { ShoppingCart, Heart, Check, ArrowLeft } from 'lucide-react';
 import { useCart } from '../../../providers/CartProvider';
 import type { Product as CommonProduct } from '../../../../types/common';
 import { formatCOP } from '@/lib/utils';
@@ -75,6 +80,10 @@ export default function DetalleProducto(): React.ReactElement {
   }, [id, navigate]);
 
   const productoCard = useMemo(() => (producto ? mapProducto(producto) : null), [producto]);
+  const descripcionCompleta = useMemo(
+    () => (producto ? getProductoDescripcionCompleta(producto) : ''),
+    [producto],
+  );
   const imagenes = useMemo(() => (producto ? imagenesProducto(producto) : []), [producto]);
   const colores = useMemo(() => (
     producto?.productoVentaRelacion?.coloresPermitidos || []
@@ -205,22 +214,27 @@ export default function DetalleProducto(): React.ReactElement {
               </div>
             )}
 
-            <p className="text-base text-muted-foreground whitespace-pre-line">
-              {productoCard.description || 'Sin descripcion disponible.'}
-            </p>
+            {descripcionCompleta ? (
+              <div className="space-y-2">
+                <h2 className="text-lg font-semibold text-foreground">Descripcion</h2>
+                <p className="text-base text-muted-foreground whitespace-pre-line leading-relaxed">
+                  {descripcionCompleta}
+                </p>
+              </div>
+            ) : (
+              <p className="text-base text-muted-foreground italic">
+                Sin descripcion disponible.
+              </p>
+            )}
 
             <Separator />
 
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-              <div className="flex items-center border border-input rounded-lg overflow-hidden w-fit">
-                <Button onClick={() => setQuantity(q => Math.max(1, q - 1))} variant="ghost" size="icon" className="h-10 w-10">
-                  <Minus className="w-4 h-4" />
-                </Button>
-                <div className="px-4 font-semibold text-lg min-w-[50px] text-center">{quantity}</div>
-                <Button onClick={() => setQuantity(q => q + 1)} variant="ghost" size="icon" className="h-10 w-10">
-                  <Plus className="w-4 h-4" />
-                </Button>
-              </div>
+              <CartQuantityInput
+                value={quantity}
+                onChange={setQuantity}
+                min={1}
+              />
 
               <Button
                 onClick={() => { void handleAddToCart(); }}

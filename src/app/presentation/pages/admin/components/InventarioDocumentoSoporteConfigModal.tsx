@@ -11,9 +11,32 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 export type DocumentoSoporteTipoConfig = {
   id: string;
   codigo: string; // ej. RECEPCION_OC
+  nombre?: string | null;
+  descripcion?: string | null;
+  dominioSecuencia?: 'VENTA' | 'INVENTARIO' | null;
   prefijo: string; // ej. REC
   padding: number; // digitos de la secuencia, ej. 6 => REC-000001
-  siguiente: number; // ej. 123
+  siguiente: number; // emisiones completadas; próximo = siguiente + 1 (0 → 000001)
+  secuencia?: number; // último consecutivo emitido (espejo en TIPO_CONFIG)
+  proximoConsecutivo?: number;
+  maxRegistrosSecuencia?: number | null;
+  tipoSecuencia?: string | null;
+  clasificacionEmisionId?: number | string | null;
+  tipoLimiteRegistros?: 'CON_LIMITE' | 'SIN_LIMITE' | null;
+  historialLimiteRegistros?: Array<{
+    maxRegistrosAnterior?: number | null;
+    maxRegistrosNuevo: number;
+    totalEmitidos?: number;
+    tipoLimiteRegistros?: 'CON_LIMITE' | 'SIN_LIMITE';
+    codigoConfig?: string | null;
+    prefijo?: string | null;
+    padding?: number;
+    siguiente?: number;
+    registradoEn?: string;
+  }>;
+  limiteAlcanzado?: boolean;
+  facturacionSoporteDocumentoId?: string;
+  billingSecuencialId?: string | null;
   activo: boolean;
   totalRecepciones?: number;
   puedeReiniciarSecuencia?: boolean;
@@ -43,6 +66,9 @@ export const formatDocNumero = (cfg: Pick<DocumentoSoporteTipoConfig, 'prefijo' 
   const num = Math.max(0, Number(n) || 0);
   return `${pref}-${String(num).padStart(pad, '0')}`;
 };
+
+export const labelDocumentoSoporte = (tipo: Pick<DocumentoSoporteTipoConfig, 'codigo' | 'prefijo' | 'padding' | 'siguiente'>): string =>
+  `${tipo.codigo} · ${formatDocNumero(tipo, tipo.siguiente)}`;
 
 export const nextDocNumero = (
   codigo: string,

@@ -23,6 +23,7 @@ import { getTenantsGlobalRegistro, getTenantsSuperAdmin, describeTenantSuperAdmi
 import { RH_OPTIONS } from './catalogos';
 import { useAuth } from '@/app/providers/AuthProvider';
 import { toast } from 'react-toastify';
+import { normalizePublicIdForApi, resolveEntityPublicId } from '@/app/utils/entityPublicId';
 
 interface UsuarioGlobalModalProps {
     open: boolean;
@@ -143,7 +144,7 @@ export const UsuarioGlobalModal = ({
             canReferir: form.canReferir,
         };
         if (scope === 'SUPER_ADMIN' && form.tenantGlobalId) {
-            payload.tenantGlobalId = form.tenantGlobalId;
+            payload.tenantGlobalId = normalizePublicIdForApi(form.tenantGlobalId);
         }
         if (scope === 'SUPER_ADMIN' && !payload.tenantGlobalId) {
             toast.error(
@@ -199,7 +200,7 @@ export const UsuarioGlobalModal = ({
                                                         const { primary, principalLine } =
                                                             describeTenantSuperAdminOption(sa);
                                                         return (
-                                                            <SelectItem key={sa.iud} value={sa.iud}>
+                                                            <SelectItem key={resolveEntityPublicId(sa)} value={resolveEntityPublicId(sa)}>
                                                                 <div className="flex flex-col gap-0.5 py-0.5 text-left">
                                                                     <span className="font-medium leading-tight">{primary}</span>
                                                                     <span className="text-xs text-muted-foreground leading-snug">
@@ -237,7 +238,7 @@ export const UsuarioGlobalModal = ({
                                             </SelectTrigger>
                                             <SelectContent>
                                                 {(token ? tenantsGlobales : globalesJerarquia).map((tg) => {
-                                                    const iud = tg.iud;
+                                                    const iud = resolveEntityPublicId(tg);
                                                     const labelRaw = token
                                                         ? (tg as TenantGlobalInfo).razon_social
                                                             ?? (tg as TenantGlobalInfo).titulo

@@ -2,10 +2,19 @@ import React from 'react';
 import { FileText, Loader2 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import inventarioService, { type ComprobanteEntradaDetalle } from '@/app/services/inventarioService';
+import {
+  estadoComprobanteEntradaBadgeClass,
+  estadoKardexLineaBadgeClass,
+  labelEstadoComprobanteEntrada,
+  labelEstadoKardexLinea,
+  salidaKardexComprobanteBadgeClass,
+} from '@/app/presentation/pages/admin/utils/estadoComprobanteEntradaUi';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import InventarioReporteKardexEntrada from './InventarioReporteKardexEntrada';
+import { subtotalLineaComprobanteEntrada } from '@/app/presentation/pages/admin/utils/ordenCompraLineaCalculo';
 
 const moneyCo = (n: number): string =>
   new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(n);
@@ -61,7 +70,11 @@ export default function InventarioComprobanteEntradaVistaModal({
 
   const total = React.useMemo(
     () => (detalle?.items || []).reduce(
-      (acc, it) => acc + Math.max(0, Number(it.cantidadRecibida || 0) * Number(it.costoUnitario || 0)),
+      (acc, it) => acc + subtotalLineaComprobanteEntrada(
+        Number(it.cantidadRecibida || 0),
+        Number(it.costoUnitario || 0),
+        it.subtotal,
+      ),
       0,
     ),
     [detalle],
@@ -73,8 +86,13 @@ export default function InventarioComprobanteEntradaVistaModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileText className="h-5 w-5 text-primary" />
-            Comprobante de entrada
+            {(detalle?.reporteKardex?.length ?? 0) > 0
+              ? 'Comprobante de entrada · Kardex registrado'
+              : 'Comprobante de entrada'}
           </DialogTitle>
+          <DialogDescription className="sr-only">
+            Consulta del comprobante de entrada, líneas recibidas y movimiento en kardex.
+          </DialogDescription>
         </DialogHeader>
 
         {loading ? (
@@ -99,13 +117,19 @@ export default function InventarioComprobanteEntradaVistaModal({
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Estado comprobante</p>
-                <Badge variant={detalle.estado === 'APROBADA' ? 'outline' : 'secondary'} className="mt-1">
-                  {detalle.estado}
+                <Badge
+                  variant="outline"
+                  className={`mt-1 ${estadoComprobanteEntradaBadgeClass(detalle.estado)}`}
+                >
+                  {labelEstadoComprobanteEntrada(detalle.estado)}
                 </Badge>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Salida en kardex</p>
-                <Badge variant={detalle.puedeSalidaComprobante ? 'default' : 'destructive'} className="mt-1">
+                <Badge
+                  variant="outline"
+                  className={`mt-1 ${salidaKardexComprobanteBadgeClass(detalle.puedeSalidaComprobante)}`}
+                >
                   {detalle.puedeSalidaComprobante ? 'Disponible' : 'Sin stock / pendiente kardex'}
                 </Badge>
               </div>
@@ -147,7 +171,11 @@ export default function InventarioComprobanteEntradaVistaModal({
                   </TableHeader>
                   <TableBody>
                     {detalle.items.map((it) => {
-                      const subtotal = Math.max(0, Number(it.cantidadRecibida || 0) * Number(it.costoUnitario || 0));
+                      const subtotal = subtotalLineaComprobanteEntrada(
+                        Number(it.cantidadRecibida || 0),
+                        Number(it.costoUnitario || 0),
+                        it.subtotal,
+                      );
                       return (
                         <TableRow key={it.lineaKey || `${it.sku}-${it.bodega}`}>
                           <TableCell className="font-mono text-xs">{it.sku}</TableCell>
@@ -155,8 +183,11 @@ export default function InventarioComprobanteEntradaVistaModal({
                           <TableCell className="text-right tabular-nums">{formatQty(Number(it.cantidadRecibida || 0))}</TableCell>
                           <TableCell className="text-right tabular-nums">{formatQty(Number(it.disponibleKardex || 0))}</TableCell>
                           <TableCell>
-                            <Badge variant={it.estadoKardex === 'CONFIRMADO' ? 'outline' : 'secondary'}>
-                              {it.estadoKardex === 'CONFIRMADO' ? 'Confirmado' : 'Pendiente'}
+                            <Badge
+                              variant="outline"
+                              className={estadoKardexLineaBadgeClass(it.estadoKardex)}
+                            >
+                              {labelEstadoKardexLinea(it.estadoKardex)}
                             </Badge>
                           </TableCell>
                           <TableCell className="text-right tabular-nums">{moneyCo(Number(it.costoUnitario || 0))}</TableCell>
@@ -168,6 +199,10 @@ export default function InventarioComprobanteEntradaVistaModal({
                 </Table>
               </div>
             </div>
+
+            {(detalle.reporteKardex?.length ?? 0) > 0 ? (
+              <InventarioReporteKardexEntrada lineas={detalle.reporteKardex ?? []} />
+            ) : null}
           </div>
         )}
 

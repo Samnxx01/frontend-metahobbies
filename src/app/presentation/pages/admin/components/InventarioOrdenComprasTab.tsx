@@ -45,6 +45,7 @@ import InventarioOrdenCompraModal from './InventarioOrdenCompraModal';
 import InventarioOrdenCompraDetallesModal from './InventarioOrdenCompraDetallesModal';
 import InventarioEstadoOrdenCompraConfigModal from './InventarioEstadoOrdenCompraConfigModal';
 import { codigosEstadoPermitenComprobanteEntrada, labelEstadoOrdenCompra } from '@/app/presentation/pages/admin/utils/estadoOrdenCompraUi';
+import { getOrdenCompraId } from '@/app/presentation/pages/admin/utils/ordenCompraIdUtils';
 import InventarioComprobanteEntradaModal from './InventarioComprobanteEntradaModal';
 import InventarioComprobanteEntradaParamModal from './InventarioComprobanteEntradaParamModal';
 import InventarioProveedorModal, { type InventarioProveedorDraft } from './InventarioProveedorModal';
@@ -80,7 +81,7 @@ type InventarioOrdenComprasTabProps = {
   refreshOrdenesCompra?: () => Promise<void>;
   /** Si falta, se calcula con `totalLineaOrdenCompra` (misma regla que `Inventario.tsx`). */
   sumSubtotalOrdenCompra?: (oc: InventarioOrdenCompra) => number;
-  /** SuperAdmin de rama: habilita editar/eliminar OC aunque no estén ABIERTA. */
+  /** SuperAdmin de rama: habilita editar/eliminar OC fuera de VERIFICACION. */
   esTenantSuperAdmin?: boolean;
   /** Config inventario (recepcion automatica al guardar OC). */
   config?: InventarioConfig | null;
@@ -236,7 +237,7 @@ export default function InventarioOrdenComprasTab({
     }
     try {
       setEliminando(true);
-      const result = await inventarioService.eliminarOrdenCompra(ordenEliminar._id, { justificacion: motivo });
+      const result = await inventarioService.eliminarOrdenCompra(getOrdenCompraId(ordenEliminar), { justificacion: motivo });
       toast.success(
         result?.reversionAutomatica
           ? `Orden eliminada. Se reversaron y anularon ${result.recepcionesAnuladas ?? 0} recepcion(es).`
@@ -263,9 +264,9 @@ export default function InventarioOrdenComprasTab({
           onEditar: abrirEditarOrdenCompra,
           onEliminar: (oc) => void eliminarOrden(oc),
         },
-        { esTenantSuperAdmin },
+        { esTenantSuperAdmin, estadosOrden },
       ),
-    [abrirEditarOrdenCompra, esTenantSuperAdmin],
+    [abrirEditarOrdenCompra, esTenantSuperAdmin, estadosOrden],
   );
 
   return (
@@ -318,6 +319,7 @@ export default function InventarioOrdenComprasTab({
               <Button
                 type="button"
                 variant="outline"
+                size="sm"
                 className="shrink-0"
                 disabled={saving || eliminando}
                 onClick={abrirComprobanteEntrada}
@@ -372,7 +374,7 @@ export default function InventarioOrdenComprasTab({
                   </TableHeader>
                   <TableBody>
                     {ordenesUi.map((oc) => (
-                        <TableRow key={oc._id}>
+                        <TableRow key={getOrdenCompraId(oc)}>
                           <TableCell className="font-medium text-foreground">{oc.numeroOrden}</TableCell>
                           <TableCell>{oc.numeroRemision || '-'}</TableCell>
                           <TableCell className="max-w-[200px] truncate text-sm" title={oc.numeroFacturaElectronico || ''}>
@@ -392,7 +394,7 @@ export default function InventarioOrdenComprasTab({
                           <TableCell className="text-right">
                             <ParameterizedActionBar
                               catalog={ordenCompraRowActionCatalog}
-                              allowedIds={resolveOrdenCompraRowAllowedIds(oc, { esTenantSuperAdmin })}
+                              allowedIds={resolveOrdenCompraRowAllowedIds(oc, { esTenantSuperAdmin, estadosOrden })}
                               context={oc}
                               globalDisabled={saving || eliminando}
                             />

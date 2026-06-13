@@ -24,6 +24,10 @@ import {
   deleteTipoNodoRuta,
   deleteCatalogoCodigo,
   migrarTipoNodoRutas,
+  getJerarquiaOpcionesFromCounter,
+  sincronizarJerarquiaCounter,
+  migrarJerarquiaCounter,
+  type SincronizarJerarquiaCounterResult,
   type MigracionTipoNodoResult,
   previewRoute,
   type Route,
@@ -35,6 +39,7 @@ import {
   type CatalogoCodigoItem,
   type CodigoNodoItem,
 } from '@/app/services/routesService';
+import { normalizeMongoId, resolveRouteApiId } from '@/app/utils/normalizeMongoId';
 import { swalFire } from '@/lib/sweetalert';
 import { normalizeRoutePath } from '@/app/services/routePathNormalizer';
 
@@ -72,7 +77,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { ChevronDown, ChevronRight, Edit, Loader2, RefreshCw, Trash2 } from 'lucide-react';
-import { apiFetch } from '@/app/services/api';
+import { apiFetch, persistHybridSpaPath } from '@/app/services/api';
 import { getJerarquiaUsuarios, type JerarquiaResponse } from '@/app/services/tenantUsuariosService';
 import { GestionRutasUsuariosOrganigrama } from '@/app/presentation/pages/admin/components/GestionRutasUsuariosOrganigrama';
 import { OrganigramaLegendaInfoButton } from '@/app/presentation/components/admin/usuarios-tenant/JerarquiaOrganigrama';
@@ -142,9 +147,12 @@ interface NodeTypeCodeOption {
 interface GestionRutasToolbarPolicy {
   mode?: GestionRutasToolbarMode | string;
   actionIds?: string[];
+  rowActionIds?: string[];
   canList?: boolean;
   canCreate?: boolean;
   canManage?: boolean;
+  canEdit?: boolean;
+  canDelete?: boolean;
 }
 
 export default function GestionRutas(): React.ReactElement {
@@ -169,14 +177,21 @@ export default function GestionRutas(): React.ReactElement {
   const [editingAccessTypeId, setEditingAccessTypeId] = useState<string>('');
   const [creationType, setCreationType] = useState<NodeTypeRef>('');
   const [selectedSuiteIdForForm, setSelectedSuiteIdForForm] = useState<string>('');
+  const [selectedSuiteIdForSubForm, setSelectedSuiteIdForSubForm] = useState<string>('');
+  const [selectedModuloIdForSubForm, setSelectedModuloIdForSubForm] = useState<string>('');
   const [expandedTableNodes, setExpandedTableNodes] = useState<Record<string, boolean>>({});
   const [nameFilter, setNameFilter] = useState<string>('');
   const [nodeTypeFilter, setNodeTypeFilter] = useState<string>('ALL');
   const [parentSelectSearch, setParentSelectSearch] = useState<string>('');
+  const [suiteSelectSearch, setSuiteSelectSearch] = useState<string>('');
   const [subFormParentSearch, setSubFormParentSearch] = useState<string>('');
   const [routesActorTipo, setRoutesActorTipo] = useState<string>('UNKNOWN');
   const [routesSourceCollection, setRoutesSourceCollection] = useState<string>('');
   const [formularioPadreId, setFormularioPadreId] = useState<string>('');
+  const [counterJerarquiaSuites, setCounterJerarquiaSuites] = useState<Route[]>([]);
+  const [counterJerarquiaModulos, setCounterJerarquiaModulos] = useState<Route[]>([]);
+  const [counterJerarquiaFormularios, setCounterJerarquiaFormularios] = useState<Route[]>([]);
+  const [syncingCounterJerarquia, setSyncingCounterJerarquia] = useState<boolean>(false);
   const [isSubFormModalOpen, setIsSubFormModalOpen] = useState<boolean>(false);
   const [subFormSubmitting, setSubFormSubmitting] = useState<boolean>(false);
   const [nodeTypeToDelete, setNodeTypeToDelete] = useState<string>('');
@@ -245,20 +260,24 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
   });
 
   useEffect(() => {
-    void Promise.all([loadRoutes(), loadNodeTypes(), loadSubFormCodeOptions(), loadAccessTypes(), loadAccionesCatalogo()]);
+    persistHybridSpaPath();
+
+    const reloadCatalogos = (): void => {
+      void Promise.all([
+        loadRoutes(),
+        loadNodeTypes(),
+        loadSubFormCodeOptions(),
+        loadAccessTypes(),
+        loadAccionesCatalogo(),
+      ]);
+    };
+
+    reloadCatalogos();
+    window.addEventListener('mabs-auth-changed', reloadCatalogos);
+    return () => window.removeEventListener('mabs-auth-changed', reloadCatalogos);
   }, []);
 
-  const resolveRouteId = (route: Route): string =>
-    String((route as any)?._id || route?.iud || '');
-  const normalizeMongoId = (value: unknown): string => {
-    if (!value) return '';
-    if (typeof value === 'string' || typeof value === 'number') return String(value).trim();
-    if (typeof value === 'object') {
-      const obj = value as { _id?: string; iud?: string };
-      return String(obj?._id || obj?.iud || '').trim();
-    }
-    return '';
-  };
+  const resolveRouteId = (route: Route): string => resolveRouteApiId(route);
   const resolveNodeTypeId = (nodeType: TipoNodoRuta | any): string =>
     normalizeMongoId(nodeType);
   const resolveAccessTypeIds = (route: Route, catalog: AccessTypeOption[] = accessTypes): string[] => {
@@ -311,6 +330,21 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
     if (typeof parent === 'string') return parent;
     return String(parent?._id || parent?.iud || '');
   };
+
+  /** padreId directo o último ancestor cuando el listado no trae padreId poblado. */
+  const resolveRouteParentIdFromDoc = (route: Route): string | null => {
+    const direct = resolveParentId(route);
+    if (direct) return direct;
+
+    const ancestors = (route as any)?.ancestors;
+    if (Array.isArray(ancestors) && ancestors.length > 0) {
+      for (let i = ancestors.length - 1; i >= 0; i -= 1) {
+        const id = normalizeMongoId(ancestors[i]);
+        if (id) return id;
+      }
+    }
+    return null;
+  };
   const getRouteIdentitySet = (route?: Route | null): Set<string> => {
     const values = [
       String(route?._id || '').trim(),
@@ -322,7 +356,14 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
   const findRouteByAnyId = (id: string | null | undefined): Route | undefined => {
     const normalized = String(id || '').trim();
     if (!normalized) return undefined;
-    return routes.find((route) => getRouteIdentitySet(route).has(normalized));
+    const fromRoutes = routes.find((route) => getRouteIdentitySet(route).has(normalized));
+    if (fromRoutes) return fromRoutes;
+    const counterPools = [
+      ...counterJerarquiaSuites,
+      ...counterJerarquiaModulos,
+      ...counterJerarquiaFormularios,
+    ];
+    return counterPools.find((route) => getRouteIdentitySet(route).has(normalized));
   };
 
   const getTypeByCode = (code?: string | null): TipoNodoRuta | undefined =>
@@ -372,6 +413,79 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
   const isModuloType = selectedTypeOrder === Number(moduloType?.order ?? 2);
   const isFormularioType = selectedTypeOrder === Number(formularioType?.order ?? 3);
   const isSubFormularioType = selectedTypeOrder === Number(subFormularioType?.order ?? 4);
+
+  const needsCounterHierarchySelects = isModalOpen
+    && (isModuloType || isFormularioType || isSubFormularioType);
+
+  const activeSuiteIdForCounterModulos = isFormularioType
+    ? selectedSuiteIdForForm
+    : isSubFormularioType
+      ? selectedSuiteIdForSubForm
+      : '';
+
+  useEffect(() => {
+    if (!needsCounterHierarchySelects) {
+      setCounterJerarquiaSuites([]);
+      return;
+    }
+    void (async () => {
+      try {
+        const res = await getJerarquiaOpcionesFromCounter({ nivelOrder: 1 });
+        if (res.success && Array.isArray(res.data)) {
+          setCounterJerarquiaSuites(res.data);
+        } else {
+          setCounterJerarquiaSuites([]);
+        }
+      } catch {
+        setCounterJerarquiaSuites([]);
+      }
+    })();
+  }, [needsCounterHierarchySelects]);
+
+  useEffect(() => {
+    if (!isModalOpen || !(isFormularioType || isSubFormularioType) || !String(activeSuiteIdForCounterModulos || '').trim()) {
+      setCounterJerarquiaModulos([]);
+      return;
+    }
+    void (async () => {
+      try {
+        const res = await getJerarquiaOpcionesFromCounter({
+          nivelOrder: 2,
+          padreRutaSeguridadId: activeSuiteIdForCounterModulos,
+        });
+        if (res.success && Array.isArray(res.data)) {
+          setCounterJerarquiaModulos(res.data);
+        } else {
+          setCounterJerarquiaModulos([]);
+        }
+      } catch {
+        setCounterJerarquiaModulos([]);
+      }
+    })();
+  }, [isModalOpen, isFormularioType, isSubFormularioType, activeSuiteIdForCounterModulos]);
+
+  useEffect(() => {
+    if (!isModalOpen || !isSubFormularioType || !String(selectedModuloIdForSubForm || '').trim()) {
+      setCounterJerarquiaFormularios([]);
+      return;
+    }
+    void (async () => {
+      try {
+        const res = await getJerarquiaOpcionesFromCounter({
+          nivelOrder: 3,
+          padreRutaSeguridadId: selectedModuloIdForSubForm,
+          suiteRutaSeguridadId: selectedSuiteIdForSubForm || undefined,
+        });
+        if (res.success && Array.isArray(res.data)) {
+          setCounterJerarquiaFormularios(res.data);
+        } else {
+          setCounterJerarquiaFormularios([]);
+        }
+      } catch {
+        setCounterJerarquiaFormularios([]);
+      }
+    })();
+  }, [isModalOpen, isSubFormularioType, selectedModuloIdForSubForm, selectedSuiteIdForSubForm]);
 
   const getCreateDialogTitle = (): string => {
     if (!selectedTypeDoc) return 'Nueva Ruta';
@@ -446,7 +560,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
     if (!leaf) return '';
     if (nodeOrder <= suiteOrder) return `/${leaf}`;
     if (!parentId) return '';
-    const parent = routes.find((r) => resolveRouteId(r) === String(parentId || ''));
+    const parent = findRouteByAnyId(String(parentId || ''));
     const parentPath = normalizePath(parent?.path || '/');
     return joinPath(parentPath, leaf);
   };
@@ -462,10 +576,78 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
     }
 
     const derived = buildPathByContext(name, parentId, nodeOrder);
-    return derived || '';
+    if (derived) return derived;
+    return fallbackPath ? normalizePath(fallbackPath) : '';
+  };
+
+  /** Alineado a resolverTipoNodoPorRutaDoc (backend): recorre padreId hasta la raíz. */
+  const inferRouteTypeOrderFromDepth = (route: Route): number => {
+    let depth = 1;
+    let current: Route | undefined = route;
+    const visited = new Set<string>();
+    while (current && depth < 20) {
+      const parentId = resolveParentId(current);
+      if (!parentId || visited.has(parentId)) break;
+      visited.add(parentId);
+      depth += 1;
+      current = findRouteByAnyId(parentId);
+    }
+    const byDepth = nodeTypes.find((t) => Number(t.order) === depth);
+    return Number(byDepth?.order ?? depth);
+  };
+
+  /** Profundidad jerárquica: 1=Suite, 2=Modulo, 3=Formulario, 4=SubFormulario. */
+  const calcularProfundidadRuta = (route: Route): number => {
+    const ancestors = (route as any)?.ancestors;
+    if (Array.isArray(ancestors) && ancestors.length > 0) {
+      return ancestors.length + 1;
+    }
+    return inferRouteTypeOrderFromDepth(route);
+  };
+
+  /**
+   * Tipo efectivo alineado al backend: si tipoNodoId no coincide con la profundidad jerárquica,
+   * prevalece el tipo inferido por ancestors/padreId.
+   */
+  const resolveEffectiveRouteTypeDoc = (route: Route): TipoNodoRuta | undefined => {
+    const profundidad = calcularProfundidadRuta(route);
+    const typeByDepth = nodeTypes.find((t) => Number(t.order ?? 0) === profundidad);
+
+    const populatedTipo = (route as any)?.tipoNodoId;
+    let typeByCatalog: TipoNodoRuta | undefined;
+
+    if (typeof populatedTipo === 'object' && populatedTipo != null) {
+      const id = normalizeMongoId(populatedTipo);
+      typeByCatalog = id ? getTypeById(id) : undefined;
+      if (!typeByCatalog) {
+        const codigo = String(populatedTipo.codigo || '').trim();
+        if (codigo) typeByCatalog = getTypeByCode(codigo);
+      }
+    } else {
+      const id = normalizeMongoId(route?.tipoNodoId);
+      if (id) typeByCatalog = getTypeById(id);
+    }
+
+    if (!typeByCatalog) {
+      const legacyCodigo = String(route?.tipoNodo || '').trim();
+      if (legacyCodigo) typeByCatalog = getTypeByCode(legacyCodigo) || getTypeByName(legacyCodigo);
+    }
+
+    if (typeByCatalog && typeByDepth) {
+      const orderCatalogo = Number(typeByCatalog.order ?? 0);
+      const orderProfundidad = Number(typeByDepth.order ?? 0);
+      if (orderCatalogo !== orderProfundidad && profundidad > 1) {
+        return typeByDepth;
+      }
+    }
+
+    return typeByCatalog || typeByDepth;
   };
 
   const resolveTypeIdForRoute = (route: Route): string => {
+    const effective = resolveEffectiveRouteTypeDoc(route);
+    if (effective) return resolveNodeTypeId(effective);
+
     const populatedTipo = (route as any)?.tipoNodoId;
     const routeTypeId = normalizeMongoId(populatedTipo) || normalizeMongoId(route?.tipoNodoId);
     if (routeTypeId) return routeTypeId;
@@ -517,23 +699,199 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
   }, [nodeTypes, editingRoute]);
 
   const getRouteType = (route: Route): string => {
-    const byId = getTypeById(resolveTypeIdForRoute(route));
-    if (byId?.nombre) return String(byId.nombre);
-    if (byId?.codigo) return String(byId.codigo);
+    const effective = resolveEffectiveRouteTypeDoc(route);
+    if (effective?.nombre) return String(effective.nombre);
+    if (effective?.codigo) return String(effective.codigo);
     const populatedTipo = (route as any)?.tipoNodoId;
-    if (populatedTipo?.nombre) return String(populatedTipo.nombre);
-    if (populatedTipo?.codigo) return String(populatedTipo.codigo);
+    if (typeof populatedTipo === 'object' && populatedTipo?.nombre) return String(populatedTipo.nombre);
+    if (typeof populatedTipo === 'object' && populatedTipo?.codigo) return String(populatedTipo.codigo);
     return String(route?.tipoNodo || '-');
   };
 
   const getRouteTypeOrder = (route: Route): number => {
-    const byId = getTypeById(resolveTypeIdForRoute(route));
-    if (byId) return Number(byId.order ?? 0);
+    const effective = resolveEffectiveRouteTypeDoc(route);
+    if (effective) return Number(effective.order ?? 0);
+    return resolveRouteTypeOrderLikeBackend(route);
+  };
+
+  const routeMatchesTypeFilter = (route: Route, filterValue: string): boolean => {
+    const normalizedFilter = String(filterValue || '').trim().toUpperCase();
+    if (!normalizedFilter || normalizedFilter === 'ALL') return true;
+
+    const filterTypeDoc = nodeTypes.find((type) => {
+      const label = String(type.nombre || type.codigo || '').trim().toUpperCase();
+      return label === normalizedFilter;
+    });
+
+    if (filterTypeDoc) {
+      return routeMatchesNodeType(
+        route,
+        filterTypeDoc,
+        String(filterTypeDoc.nombre || filterTypeDoc.codigo || '')
+      );
+    }
+
+    return String(getRouteType(route) || '').trim().toUpperCase() === normalizedFilter;
+  };
+
+  const resolveRouteNodeTypeCodigo = (route: Route): string => {
+    const effective = resolveEffectiveRouteTypeDoc(route);
+    if (effective?.codigo) return String(effective.codigo).trim().toUpperCase();
+
     const populatedTipo = (route as any)?.tipoNodoId;
-    if (typeof populatedTipo === 'object' && populatedTipo?.order != null) {
+
+    if (typeof populatedTipo === 'object' && populatedTipo != null) {
+      const codigo = String(populatedTipo.codigo || '').trim().toUpperCase();
+      if (codigo) return codigo;
+    }
+
+    const typeId = normalizeMongoId(populatedTipo) || normalizeMongoId(route?.tipoNodoId);
+    if (typeId) {
+      const typeDoc = getTypeById(typeId);
+      if (typeDoc?.codigo) return String(typeDoc.codigo).trim().toUpperCase();
+      return '';
+    }
+
+    return String(route?.tipoNodo || '').trim().toUpperCase();
+  };
+
+  const resolveRouteNodeTypeOrder = (route: Route): number => {
+    const populatedTipo = (route as any)?.tipoNodoId;
+    if (typeof populatedTipo === 'object' && populatedTipo != null && populatedTipo.order != null) {
       return Number(populatedTipo.order);
     }
+    const typeId = normalizeMongoId(populatedTipo) || normalizeMongoId(route?.tipoNodoId);
+    if (typeId) {
+      const typeDoc = getTypeById(typeId);
+      if (typeDoc) return Number(typeDoc.order ?? 0);
+    }
     return getTypeOrderByCode(String(route?.tipoNodo || ''));
+  };
+
+  /** Nombre del tipo (SUITE, MODULO, …) alineado al catálogo y profundidad jerárquica. */
+  const resolveRouteNodeTypeNombre = (route: Route): string => {
+    const effective = resolveEffectiveRouteTypeDoc(route);
+    if (effective?.nombre) return String(effective.nombre).trim().toUpperCase();
+    if (effective?.codigo) return String(effective.codigo).trim().toUpperCase();
+
+    const populatedTipo = (route as any)?.tipoNodoId;
+    if (typeof populatedTipo === 'object' && populatedTipo != null) {
+      const nombre = String(populatedTipo.nombre || '').trim().toUpperCase();
+      if (nombre) return nombre;
+    }
+
+    const typeId = normalizeMongoId(populatedTipo) || normalizeMongoId(route?.tipoNodoId);
+    if (typeId) {
+      const typeDoc = getTypeById(typeId);
+      if (typeDoc?.nombre) return String(typeDoc.nombre).trim().toUpperCase();
+    }
+
+    const legacy = String(route?.tipoNodo || '').trim().toUpperCase();
+    if (legacy) {
+      const byName = getTypeByName(legacy);
+      if (byName?.nombre) return String(byName.nombre).trim().toUpperCase();
+      const order = resolveRouteTypeOrderLikeBackend(route);
+      const byOrder = nodeTypes.find((t) => Number(t.order ?? 0) === order);
+      if (byOrder?.nombre) return String(byOrder.nombre).trim().toUpperCase();
+      return legacy;
+    }
+
+    const order = resolveRouteTypeOrderLikeBackend(route);
+    const byOrder = nodeTypes.find((t) => Number(t.order ?? 0) === order);
+    return String(byOrder?.nombre || '').trim().toUpperCase();
+  };
+
+  const routeMatchesNodeType = (
+    route: Route,
+    typeDoc: TipoNodoRuta | undefined,
+    fallbackNombre: string
+  ): boolean => {
+    if (!typeDoc) return false;
+    const expectedOrder = Number(typeDoc.order ?? 0);
+    const expectedNombre = String(typeDoc.nombre || fallbackNombre).trim().toUpperCase();
+    const effective = resolveEffectiveRouteTypeDoc(route);
+    if (effective) {
+      const effectiveNombre = String(effective.nombre || effective.codigo || '').trim().toUpperCase();
+      return effectiveNombre === expectedNombre && Number(effective.order ?? 0) === expectedOrder;
+    }
+    const routeNombre = resolveRouteNodeTypeNombre(route);
+    const routeOrder = resolveRouteTypeOrderLikeBackend(route);
+    return routeNombre === expectedNombre && routeOrder === expectedOrder;
+  };
+
+  const isSuiteTypeRoute = (route: Route): boolean =>
+    routeMatchesNodeType(route, suiteType, 'SUITE');
+
+  const isModuloTypeRoute = (route: Route): boolean =>
+    routeMatchesNodeType(route, moduloType, 'MODULO');
+
+  const isFormularioTypeRoute = (route: Route): boolean =>
+    routeMatchesNodeType(route, formularioType, 'FORMULARIO');
+
+  const routeBelongsToSelectedSuite = (route: Route, suite: Route): boolean => {
+    const suiteIds = getRouteIdentitySet(suite);
+    const parentId = resolveParentId(route);
+    if (parentId && suiteIds.has(parentId)) return true;
+
+    const rootId = normalizeMongoId((route as any)?.root);
+    if (rootId && suiteIds.has(rootId)) return true;
+
+    const ancestors = (route as any)?.ancestors;
+    if (Array.isArray(ancestors)) {
+      if (ancestors.some((ancestor) => suiteIds.has(normalizeMongoId(ancestor)))) return true;
+    }
+
+    return routeBelongsToSuiteBranch(route, suite);
+  };
+
+  const routeBelongsToSuiteBranch = (route: Route, suite: Route): boolean => {
+    const suiteIds = getRouteIdentitySet(suite);
+    let current: Route | undefined = route;
+    const visited = new Set<string>();
+    while (current) {
+      if (suiteIds.has(resolveRouteId(current))) return true;
+      const parentId = resolveParentId(current);
+      if (!parentId || visited.has(parentId)) break;
+      visited.add(parentId);
+      current = findRouteByAnyId(parentId);
+    }
+    return false;
+  };
+
+  const resolveRouteTypeOrderLikeBackend = (route: Route): number => {
+    const effective = resolveEffectiveRouteTypeDoc(route);
+    if (effective) return Number(effective.order ?? 0);
+
+    const populatedTipo = (route as any)?.tipoNodoId;
+    const typeId = normalizeMongoId(populatedTipo) || normalizeMongoId(route?.tipoNodoId);
+
+    if (typeId) {
+      const typeDoc = getTypeById(typeId);
+      if (typeDoc) return Number(typeDoc.order ?? 0);
+      if (typeof populatedTipo === 'object' && populatedTipo != null) {
+        if (populatedTipo.order != null) return Number(populatedTipo.order);
+        const populatedCodigo = String(populatedTipo.codigo || '').trim().toUpperCase();
+        if (populatedCodigo) {
+          const orderByPopulatedCode = getTypeOrderByCode(populatedCodigo);
+          if (orderByPopulatedCode > 0) return orderByPopulatedCode;
+        }
+      }
+      return inferRouteTypeOrderFromDepth(route);
+    }
+
+    const codigo = resolveRouteNodeTypeCodigo(route);
+    if (codigo) {
+      const orderByCode = getTypeOrderByCode(codigo);
+      if (orderByCode > 0) return orderByCode;
+    }
+    return inferRouteTypeOrderFromDepth(route);
+  };
+
+  const isRootSuiteRoute = (route: Route): boolean => {
+    if (!isSuiteTypeRoute(route)) return false;
+    if (resolveParentId(route)) return false;
+    const suiteOrderValue = Number(suiteType?.order ?? 1);
+    return resolveRouteTypeOrderLikeBackend(route) === suiteOrderValue;
   };
 
   const inferSuiteIdFromPath = (path: string): string => {
@@ -541,7 +899,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
     if (!norm) return '';
     const suiteOrderValue = Number(suiteType?.order ?? 1);
     const candidates = routes
-      .filter((r) => getRouteTypeOrder(r) === suiteOrderValue)
+      .filter((r) => isSuiteTypeRoute(r))
       .filter((r) => {
         const suitePath = normalizePath(r.path || '');
         return suitePath && suitePath !== '/' && norm.startsWith(`${suitePath}/`);
@@ -550,40 +908,16 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
     return candidates[0] ? resolveRouteId(candidates[0]) : '';
   };
 
-  const isFormularioRoute = (route: Route): boolean => {
-    const ownOrder = getRouteTypeOrder(route);
-    if (ownOrder === formularioOrder) return true;
-
-    const ownTypeText = String(route?.tipoNodo || route?.tipoNodoId?.codigo || '').trim().toUpperCase();
-    if (ownTypeText === 'FORMULARIO') return true;
-
-    const parentId = resolveParentId(route);
-    if (!parentId) return false;
-
-    const parentRoute = findRouteByAnyId(parentId);
-    if (!parentRoute) return false;
-
-    const parentOrder = getRouteTypeOrder(parentRoute);
-    const parentTypeText = String(parentRoute?.tipoNodo || parentRoute?.tipoNodoId?.codigo || '').trim().toUpperCase();
-    if (parentOrder === Number(moduloType?.order ?? 2) || parentTypeText === 'MODULO') return true;
-
-    // Fallback para datos inconsistentes: si el nodo tiene padre y abuelo, y el abuelo luce como suite,
-    // tratar este nodo como formulario aunque su tipo no haya quedado perfectamente normalizado.
-    const grandParentRoute = findRouteByAnyId(resolveParentId(parentRoute));
-    if (!grandParentRoute) return false;
-    const grandParentOrder = getRouteTypeOrder(grandParentRoute);
-    const grandParentTypeText = String(
-      grandParentRoute?.tipoNodo || grandParentRoute?.tipoNodoId?.codigo || ''
-    ).trim().toUpperCase();
-    return grandParentOrder === Number(suiteType?.order ?? 1) || grandParentTypeText === 'SUITE';
-  };
   const subFormParentOptions = useMemo(
-    () =>
-      routes.filter((route) => {
-        if (route?.estadoRuta === false) return false;
-        return isFormularioRoute(route);
-      }),
-    [routes, formularioOrder, moduloType]
+    () => {
+      if (!selectedModuloIdForSubForm) return [];
+      const editingId = editingRoute ? resolveRouteId(editingRoute) : '';
+      return counterJerarquiaFormularios.filter((route) => {
+        if (editingId && resolveRouteId(route) === editingId) return false;
+        return true;
+      });
+    },
+    [counterJerarquiaFormularios, selectedModuloIdForSubForm, editingRoute]
   );
 
   const getRouteNameById = (id: string | null | undefined): string => {
@@ -606,6 +940,19 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
     }
 
     return hierarchyNames.join(' > ');
+  };
+
+  const getSuiteLabel = (route: Route): string =>
+    String(route.name || '').trim() || 'Sin nombre';
+
+  const getModuloLabel = (route: Route): string =>
+    String(route.name || '').trim() || 'Sin nombre';
+
+  const matchesNodeOptionSearch = (route: Route, search: string, label: string): boolean => {
+    const normalizedSearch = String(search || '').trim().toLowerCase();
+    if (!normalizedSearch) return true;
+    const searchableText = [label, route.name, route.path].filter(Boolean).join(' ').toLowerCase();
+    return searchableText.includes(normalizedSearch);
   };
 
   const matchesRouteSearch = (route: Route, search: string): boolean => {
@@ -632,16 +979,58 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
     if (typeof inherited === 'string') return inherited;
     return String(inherited?._id || inherited?.iud || '');
   };
-  const getAccessTypeLabelsByIds = (ids: string[] = []): string[] => {
+  const getAccessTypeCodesByIds = (ids: string[] = [], catalog: AccessTypeOption[] = accessTypes): string[] => {
     if (!Array.isArray(ids) || ids.length === 0) return [];
-    return ids
-      .map((id) => {
-        const normalized = String(id || '').trim();
-        const found = accessTypes.find((a) => normalizeMongoId(a) === normalized);
-        return String(found?.layout || found?.accessType || '');
-      })
-      .filter(Boolean);
+    return [...new Set(
+      ids
+        .map((id) => {
+          const normalized = String(id || '').trim();
+          const found = catalog.find((a) => normalizeMongoId(a) === normalized);
+          return String(found?.accessType || '').trim().toUpperCase();
+        })
+        .filter(Boolean),
+    )];
   };
+
+  const getAccessTypeCodesFromRoute = (route: Route): string[] => {
+    const raw = (route as any)?.accessType;
+    if (Array.isArray(raw) && raw.length > 0) {
+      const fromPopulated = raw
+        .map((item: any) => {
+          if (typeof item === 'string') {
+            const found = accessTypes.find((a) => normalizeMongoId(a) === String(item).trim());
+            return String(found?.accessType || item).trim().toUpperCase();
+          }
+          return String(item?.accessType || '').trim().toUpperCase();
+        })
+        .filter(Boolean);
+      if (fromPopulated.length > 0) return [...new Set(fromPopulated)];
+    }
+    return getAccessTypeCodesByIds(resolveAccessTypeIds(route));
+  };
+
+  const isPublicAccessRoute = (route: Route): boolean =>
+    getAccessTypeCodesFromRoute(route).includes('PUBLIC');
+
+  const isPrivateAccessRoute = (route: Route): boolean =>
+    getAccessTypeCodesFromRoute(route).includes('PRIVATE');
+
+  const isHybridAccessRoute = (route: Route): boolean =>
+    isPublicAccessRoute(route) && isPrivateAccessRoute(route);
+
+  const isSubFormularioTypeRoute = (route: Route): boolean =>
+    routeMatchesNodeType(route, subFormularioType, 'SUBFORMULARIO');
+
+  const isVisibilityConfigurableRoute = (route: Route): boolean =>
+    isFormularioTypeRoute(route) || isSubFormularioTypeRoute(route);
+
+  const normalizeActionMethodLabel = (method = '', etiqueta = ''): string => {
+    const combined = `${method} ${etiqueta}`.trim();
+    const match = combined.match(/\b(GET|POST|PUT|PATCH|DELETE)\b/i);
+    if (match) return match[1].toUpperCase();
+    return String(method || '').trim().toUpperCase().replace(/[^A-Z]/g, '');
+  };
+
   const getActionLabelsByIds = (ids: string[] = []): string[] => {
     if (!Array.isArray(ids) || ids.length === 0) return [];
     return ids
@@ -649,14 +1038,15 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
         const normalized = String(id || '').trim();
         const found = accionesCatalogo.find((a) => normalizeMongoId(a) === normalized);
         if (!found) return '';
-        const method = String(found.method || '').trim().toUpperCase();
-        const etiqueta = String(found.etiquetas || '').trim();
+        const method = normalizeActionMethodLabel(String(found.method || ''), String(found.etiquetas || ''));
+        const etiqueta = String(found.etiquetas || '').trim().replace(/^(GET|POST|PUT|PATCH|DELETE)\s*,?\s*$/i, '').trim();
         return etiqueta ? `${method} | ${etiqueta}` : method;
       })
       .filter(Boolean);
   };
 
   const resolveCanManageBaja = (route: Route): boolean => {
+    if (toolbarPolicy && toolbarPolicy.canDelete === false) return false;
     const raw = (route as any)?.puedeGestionarBaja;
     if (typeof raw === 'boolean') return raw;
     if (typeof raw === 'number') return raw === 1;
@@ -675,6 +1065,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
   };
 
   const resolveCanEditRoute = (route: Route): boolean => {
+    if (toolbarPolicy && toolbarPolicy.canEdit === false) return false;
     const raw = (route as any)?.puedeEditar;
     if (typeof raw === 'boolean') return raw;
     if (typeof raw === 'number') return raw === 1;
@@ -698,6 +1089,60 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
     }
 
     return String(routesActorTipo || '').trim().toUpperCase() !== 'CORPORATIVO';
+  };
+
+  const resolveCanTogglePublicStatus = (route: Route): boolean => {
+    if (!resolveCanEditRoute(route)) return false;
+    if (!isVisibilityConfigurableRoute(route)) return false;
+    if (route.mostrarEnNavbarPublico === true) return true;
+    if (!isPublicAccessRoute(route)) return false;
+    return true;
+  };
+
+  const resolveFormAccessTypeCodes = (): string[] => {
+    const selectedIds = Array.isArray(formData.accessType)
+      ? formData.accessType.filter(Boolean)
+      : (formData.accessType ? [String(formData.accessType)] : []);
+    return getAccessTypeCodesByIds(selectedIds);
+  };
+
+  const resolveFormIsHybridAccess = (): boolean => {
+    const codes = resolveFormAccessTypeCodes();
+    return codes.includes('PUBLIC') && codes.includes('PRIVATE');
+  };
+
+  const syncFormVisibilityFlags = (
+    accessTypeIds: string[],
+    prev: CreateRouteDto,
+    toggledCode?: string,
+    toggledChecked?: boolean,
+  ): Pick<CreateRouteDto, 'mostrarEnNavbarPublico' | 'mostrarEnSidebar'> => {
+    const codes = getAccessTypeCodesByIds(accessTypeIds);
+    let navbar = codes.includes('PUBLIC') && prev.mostrarEnNavbarPublico === true;
+    let sidebar = codes.includes('PRIVATE') && prev.mostrarEnSidebar === true;
+
+    if (toggledCode === 'PUBLIC') {
+      navbar = toggledChecked === true;
+      if (navbar && !codes.includes('PRIVATE')) sidebar = false;
+    }
+    if (toggledCode === 'PRIVATE') {
+      sidebar = toggledChecked === true;
+      if (sidebar && !codes.includes('PUBLIC')) navbar = false;
+    }
+
+    if (navbar && sidebar && !(codes.includes('PUBLIC') && codes.includes('PRIVATE'))) {
+      if (toggledCode === 'PUBLIC') sidebar = false;
+      else if (toggledCode === 'PRIVATE') navbar = false;
+      else {
+        navbar = false;
+        sidebar = false;
+      }
+    }
+
+    return {
+      mostrarEnNavbarPublico: navbar,
+      mostrarEnSidebar: sidebar,
+    };
   };
 
   const routesScopeSummary = useMemo(() => {
@@ -737,50 +1182,99 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
       return resolveRouteId(route) !== editingId;
     });
   };
-  const suiteOptions = useMemo(
-    () => routes.filter((route) => getRouteTypeOrder(route) === Number(suiteType?.order ?? 1)),
-    [routes, nodeTypes]
+  /** Suites desde countertiponodorutas (nivel 1). */
+  const suiteOptionsFromCounter = useMemo(
+    () => counterJerarquiaSuites,
+    [counterJerarquiaSuites]
+  );
+
+  const suiteOptionsForFormulario = suiteOptionsFromCounter;
+
+  const filteredSuiteOptions = useMemo(
+    () => suiteOptionsFromCounter.filter((route) =>
+      matchesNodeOptionSearch(route, parentSelectSearch, getSuiteLabel(route))
+    ),
+    [suiteOptionsFromCounter, parentSelectSearch]
+  );
+
+  const filteredSuiteOptionsForFormulario = useMemo(
+    () => suiteOptionsForFormulario.filter((route) =>
+      matchesNodeOptionSearch(route, suiteSelectSearch, getSuiteLabel(route))
+    ),
+    [suiteOptionsForFormulario, suiteSelectSearch]
   );
 
   const moduloOptionsBySuite = useMemo(
-    () => routes.filter((route) => {
-      if (!selectedSuiteIdForForm) return false;
+    () => {
+      if (!selectedSuiteIdForForm) return [];
       const editingId = editingRoute ? resolveRouteId(editingRoute) : '';
-      if (editingId && resolveRouteId(route) === editingId) return false;
-      const selectedSuite = findRouteByAnyId(selectedSuiteIdForForm);
-      if (!selectedSuite) return false;
-      const selectedSuiteIds = getRouteIdentitySet(selectedSuite);
-      const parentRoute = findRouteByAnyId(resolveParentId(route));
-      if (!parentRoute) return false;
-      const parentMatchesSuite = Array.from(getRouteIdentitySet(parentRoute)).some((id) => selectedSuiteIds.has(id));
-      if (!parentMatchesSuite) return false;
+      return counterJerarquiaModulos.filter((route) => {
+        if (editingId && resolveRouteId(route) === editingId) return false;
+        return true;
+      });
+    },
+    [selectedSuiteIdForForm, counterJerarquiaModulos, editingRoute]
+  );
 
-      const ownOrder = getRouteTypeOrder(route);
-      const ownTypeText = String(route?.tipoNodo || route?.tipoNodoId?.codigo || '').trim().toUpperCase();
+  const moduloOptionsForSubForm = useMemo(
+    () => {
+      if (!selectedSuiteIdForSubForm) return [];
+      const editingId = editingRoute ? resolveRouteId(editingRoute) : '';
+      return counterJerarquiaModulos.filter((route) => {
+        if (editingId && resolveRouteId(route) === editingId) return false;
+        return true;
+      });
+    },
+    [selectedSuiteIdForSubForm, counterJerarquiaModulos, editingRoute]
+  );
 
-      if (ownOrder === Number(moduloType?.order ?? 2)) return true;
-      if (ownTypeText === 'MODULO') return true;
+  const filteredModuloOptionsForSubForm = useMemo(
+    () => moduloOptionsForSubForm.filter((route) =>
+      matchesNodeOptionSearch(route, parentSelectSearch, getModuloLabel(route))
+    ),
+    [moduloOptionsForSubForm, parentSelectSearch]
+  );
 
-      // Fallback para datos viejos/inconsistentes:
-      // si cuelga directo de la suite seleccionada, permitirlo como candidato a modulo.
-      return true;
-    }),
-    [routes, selectedSuiteIdForForm, nodeTypes, editingRoute]
+  const filteredModuloOptionsBySuite = useMemo(
+    () => moduloOptionsBySuite.filter((route) =>
+      matchesNodeOptionSearch(route, parentSelectSearch, getModuloLabel(route))
+    ),
+    [moduloOptionsBySuite, parentSelectSearch]
   );
 
   const parentOptionsForSelectedType = useMemo(() => {
     let options: Route[] = [];
     if (isFormularioType) options = moduloOptionsBySuite;
     else if (isSubFormularioType) options = subFormParentOptions;
+    else if (isModuloType) {
+      options = suiteOptionsFromCounter.length > 0
+        ? suiteOptionsFromCounter
+        : routes.filter((route) => isSuiteTypeRoute(route));
+    }
     else options = getParentOptions(String(formData.tipoNodoId || ''));
 
     const padreId = String(formData.padreId || '').trim();
     if (editingRoute && padreId) {
       const currentParent = findRouteByAnyId(padreId);
       if (currentParent) {
-        const currentParentKey = resolveRouteId(currentParent);
-        const exists = options.some((r) => resolveRouteId(r) === currentParentKey);
-        if (!exists) options = [currentParent, ...options];
+        const parentValid = isModuloType
+          ? isSuiteTypeRoute(currentParent)
+          : isFormularioType
+            ? isModuloTypeRoute(currentParent)
+              && (() => {
+                const suiteId = String(selectedSuiteIdForForm || '').trim();
+                if (!suiteId) return true;
+                const suite = findRouteByAnyId(suiteId);
+                return suite ? routeBelongsToSelectedSuite(currentParent, suite) : true;
+              })()
+          : isSubFormularioType
+            ? isFormularioTypeRoute(currentParent)
+            : true;
+        if (parentValid) {
+          const currentParentKey = resolveRouteId(currentParent);
+          const exists = options.some((r) => resolveRouteId(r) === currentParentKey);
+          if (!exists) options = [currentParent, ...options];
+        }
       }
     }
     return options;
@@ -788,12 +1282,16 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
     formData.tipoNodoId,
     formData.padreId,
     isFormularioType,
+    isModuloType,
     isSubFormularioType,
+    suiteOptionsFromCounter,
+    suiteOptionsForFormulario,
     moduloOptionsBySuite,
     subFormParentOptions,
     routes,
     nodeTypes,
     editingRoute,
+    selectedSuiteIdForForm,
   ]);
 
   const tipoNodoSelectValue = useMemo(() => {
@@ -801,33 +1299,49 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
     if (fromForm) return fromForm;
     if (editingRoute) {
       const inferred = resolveTypeIdForRoute(editingRoute);
-      return inferred || undefined;
+      return inferred || '';
     }
-    return undefined;
+    return '';
   }, [formData.tipoNodoId, editingRoute, nodeTypes]);
 
   const padreSelectValue = useMemo(() => {
-    const padreId = String(formData.padreId || '').trim();
-    if (!padreId) return undefined;
+    const padreId = String(
+      (isFormularioType && formularioPadreId) ? formularioPadreId : (formData.padreId || '')
+    ).trim();
+    if (!padreId) return '';
     const found = findRouteByAnyId(padreId);
     return found ? resolveRouteId(found) : padreId;
-  }, [formData.padreId, routes]);
+  }, [formData.padreId, formularioPadreId, isFormularioType, routes, counterJerarquiaSuites]);
+
+  const subFormSuiteSelectValue = useMemo(() => {
+    const suiteId = String(selectedSuiteIdForSubForm || '').trim();
+    if (!suiteId) return '';
+    const found = findRouteByAnyId(suiteId);
+    return found ? resolveRouteId(found) : suiteId;
+  }, [selectedSuiteIdForSubForm, routes, counterJerarquiaSuites]);
+
+  const subFormModuloSelectValue = useMemo(() => {
+    const moduloId = String(selectedModuloIdForSubForm || '').trim();
+    if (!moduloId) return '';
+    const found = findRouteByAnyId(moduloId);
+    return found ? resolveRouteId(found) : moduloId;
+  }, [selectedModuloIdForSubForm, routes, counterJerarquiaModulos]);
 
   const suiteSelectValue = useMemo(() => {
     const suiteId = String(selectedSuiteIdForForm || '').trim();
-    if (!suiteId) return undefined;
+    if (!suiteId) return '';
     const found = findRouteByAnyId(suiteId);
     return found ? resolveRouteId(found) : suiteId;
-  }, [selectedSuiteIdForForm, routes]);
+  }, [selectedSuiteIdForForm, routes, counterJerarquiaSuites]);
+
+  const filteredSubFormParentOptions = useMemo(
+    () => subFormParentOptions.filter((route) => matchesRouteSearch(route, parentSelectSearch)),
+    [subFormParentOptions, parentSelectSearch]
+  );
 
   const filteredParentOptionsForSelectedType = useMemo(
     () => parentOptionsForSelectedType.filter((route) => matchesRouteSearch(route, parentSelectSearch)),
     [parentOptionsForSelectedType, parentSelectSearch]
-  );
-
-  const filteredSubFormParentOptions = useMemo(
-    () => subFormParentOptions.filter((route) => matchesRouteSearch(route, subFormParentSearch)),
-    [subFormParentOptions, subFormParentSearch]
   );
 
   const treeNodes = useMemo(() => {
@@ -926,8 +1440,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
       let anyIncluded = false;
       for (const node of nodes) {
         const matchesName = !isNameFiltering || String(node.name || '').toLowerCase().includes(normalizedFilter);
-        const routeTypeName = String(getRouteType(node as Route) || '').toUpperCase();
-        const matchesType = !isTypeFiltering || routeTypeName === normalizedTypeFilter;
+        const matchesType = !isTypeFiltering || routeMatchesTypeFilter(node as Route, normalizedTypeFilter);
         const selfMatches = matchesName && matchesType;
         const childrenIncluded = node.children.length > 0 && markIncluded(node.children);
         if (selfMatches || childrenIncluded) {
@@ -1161,25 +1674,33 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
   const applyRouteToForm = (route: Route): void => {
     const routeTypeId = resolveTypeIdForRoute(route);
     const routeTypeOrder = resolveTypeOrderForRoute(route, routeTypeId);
-    const routeParentId = resolveParentId(route);
+    const routeParentId = resolveRouteParentIdFromDoc(route);
     const parentRoute = routeParentId ? findRouteByAnyId(routeParentId) : undefined;
     const moduloOrder = Number(moduloType?.order ?? 2);
     const formularioOrderValue = Number(formularioType?.order ?? 3);
     const subFormOrder = Number(subFormularioType?.order ?? 4);
 
     let suiteForForm = '';
-    let padreForForm = routeParentId;
+    let moduloForSubForm = '';
+    let padreForForm = routeParentId || '';
 
     if (routeTypeOrder === moduloOrder) {
-      suiteForForm = routeParentId || '';
+      padreForForm = routeParentId || inferSuiteIdFromPath(route.path || '');
+      suiteForForm = padreForForm;
     } else if (routeTypeOrder === formularioOrderValue) {
-      padreForForm = routeParentId;
-      suiteForForm = parentRoute ? (resolveParentId(parentRoute) || '') : '';
+      padreForForm = routeParentId || '';
+      suiteForForm = parentRoute ? (resolveRouteParentIdFromDoc(parentRoute) || resolveParentId(parentRoute) || '') : '';
       if (!suiteForForm) suiteForForm = inferSuiteIdFromPath(route.path || '');
     } else if (routeTypeOrder === subFormOrder) {
+      padreForForm = routeParentId || '';
       const formulario = parentRoute;
-      const modulo = formulario ? findRouteByAnyId(resolveParentId(formulario) || '') : undefined;
-      suiteForForm = modulo ? (resolveParentId(modulo) || '') : '';
+      const modulo = formulario
+        ? findRouteByAnyId(resolveRouteParentIdFromDoc(formulario) || resolveParentId(formulario) || '')
+        : undefined;
+      moduloForSubForm = modulo ? resolveRouteId(modulo) : '';
+      suiteForForm = modulo
+        ? (resolveRouteParentIdFromDoc(modulo) || resolveParentId(modulo) || '')
+        : '';
       if (!suiteForForm) suiteForForm = inferSuiteIdFromPath(route.path || '');
     }
 
@@ -1187,11 +1708,23 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
       const suiteRoute = findRouteByAnyId(suiteForForm);
       if (suiteRoute) suiteForForm = resolveRouteId(suiteRoute);
     }
-    if (padreForForm && parentRoute) {
-      padreForForm = resolveRouteId(parentRoute);
+    if (moduloForSubForm) {
+      const moduloRoute = findRouteByAnyId(moduloForSubForm);
+      if (moduloRoute) moduloForSubForm = resolveRouteId(moduloRoute);
+    }
+    if (padreForForm) {
+      const resolvedParent = findRouteByAnyId(padreForForm);
+      if (resolvedParent) padreForForm = resolveRouteId(resolvedParent);
     }
 
-    setSelectedSuiteIdForForm(suiteForForm);
+    setSelectedSuiteIdForForm(routeTypeOrder === formularioOrderValue ? suiteForForm : '');
+    if (routeTypeOrder === subFormOrder) {
+      setSelectedSuiteIdForSubForm(suiteForForm);
+      setSelectedModuloIdForSubForm(moduloForSubForm);
+    } else {
+      setSelectedSuiteIdForSubForm('');
+      setSelectedModuloIdForSubForm('');
+    }
     if (routeTypeOrder === formularioOrderValue) {
       setFormularioPadreId(padreForForm || '');
     } else {
@@ -1199,28 +1732,32 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
     }
 
     const typeDoc = getTypeById(routeTypeId);
+    const existingPath = String(route.path || '').trim();
+    const routeAccessIds = resolveAccessTypeIds(route);
+    const routeAccessCodes = getAccessTypeCodesFromRoute(route);
     setFormData({
       name: route.name,
-      path: resolveHierarchyPathForDraft(route.name, padreForForm, routeTypeOrder, route.path),
+      path: resolveHierarchyPathForDraft(route.name, padreForForm, routeTypeOrder, existingPath),
       component: String(route.component || ''),
       layout: route.layout,
       tipoNodo: String(typeDoc?.codigo || route.tipoNodo || ''),
       tipoNodoId: routeTypeId,
       padreId: padreForForm,
       heredaDeRuta: resolveInheritedRouteId(route),
-      mostrarEnNavbarPublico: route?.mostrarEnNavbarPublico === true,
-      mostrarEnSidebar: route?.mostrarEnSidebar === true,
+      mostrarEnNavbarPublico: routeAccessCodes.includes('PUBLIC') && route?.mostrarEnNavbarPublico === true,
+      mostrarEnSidebar: routeAccessCodes.includes('PRIVATE') && route?.mostrarEnSidebar === true,
       mostrarEnMenuUsuario: route?.mostrarEnMenuUsuario === true,
       tiquetaNavb: route?.tiquetaNavb || null,
       menuUsuarioLabel: route?.menuUsuarioLabel || '',
       menuUsuarioOrder: Number(route?.menuUsuarioOrder ?? 0),
-      accessType: resolveAccessTypeIds(route),
+      accessType: routeAccessIds,
       acciones: resolveActionIds(route),
     });
   };
 
   const openRouteModal = async (route?: Route, forceTypeId?: string): Promise<void> => {
     setParentSelectSearch('');
+    setSuiteSelectSearch('');
     if (route) {
       setIsModalOpen(true);
       setEditingRoute(route);
@@ -1244,6 +1781,8 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
     setCreationType(typeId);
     setEditingRoute(null);
     setSelectedSuiteIdForForm('');
+    setSelectedSuiteIdForSubForm('');
+    setSelectedModuloIdForSubForm('');
     resetRouteForm(typeId);
     setIsModalOpen(true);
   };
@@ -1261,14 +1800,17 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
     ) {
       applyRouteToForm(editingRoute);
     }
-  }, [isModalOpen, editingRoute, nodeTypes.length, accessTypes.length, routes.length]);
+  }, [isModalOpen, editingRoute, nodeTypes.length, accessTypes.length, routes.length, counterJerarquiaSuites.length]);
 
   const closeRouteModal = (): void => {
     setIsModalOpen(false);
     setEditingRoute(null);
     setSelectedSuiteIdForForm('');
+    setSelectedSuiteIdForSubForm('');
+    setSelectedModuloIdForSubForm('');
     setFormularioPadreId('');
     setParentSelectSearch('');
+    setSuiteSelectSearch('');
     resetRouteForm();
   };
 
@@ -1298,6 +1840,53 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
       return;
     }
 
+    if (isModuloType) {
+      const parentForModulo = findRouteByAnyId(String(formData.padreId || ''));
+      if (!parentForModulo || !isSuiteTypeRoute(parentForModulo)) {
+        toast.error('Selecciona una suite valida como padre del modulo');
+        return;
+      }
+    }
+
+    if (isSubFormularioType) {
+      if (!String(selectedSuiteIdForSubForm || '').trim()) {
+        toast.error('Selecciona una suite (tipo SUITE)');
+        return;
+      }
+      if (!String(selectedModuloIdForSubForm || '').trim()) {
+        toast.error('Selecciona un modulo padre');
+        return;
+      }
+      const formPadreId = String(formData.padreId || '').trim();
+      const formParent = findRouteByAnyId(formPadreId);
+      if (!formParent || !isFormularioTypeRoute(formParent)) {
+        toast.error('Selecciona un formulario padre valido');
+        return;
+      }
+    }
+
+    if (isFormularioType) {
+      if (!String(selectedSuiteIdForForm || '').trim()) {
+        toast.error('Selecciona una suite (tipo SUITE)');
+        return;
+      }
+      const suiteForForm = findRouteByAnyId(selectedSuiteIdForForm);
+      if (!suiteForForm || !isSuiteTypeRoute(suiteForForm)) {
+        toast.error('La suite seleccionada no es válida (debe ser tipo SUITE)');
+        return;
+      }
+      const moduloPadreId = String(formularioPadreId || formData.padreId || '').trim();
+      const moduloParent = findRouteByAnyId(moduloPadreId);
+      if (!moduloParent || !isModuloTypeRoute(moduloParent)) {
+        toast.error('Selecciona un módulo padre válido (tipo MODULO)');
+        return;
+      }
+      if (!routeBelongsToSelectedSuite(moduloParent, suiteForForm)) {
+        toast.error('El módulo seleccionado no pertenece a la suite elegida');
+        return;
+      }
+    }
+
     const selectedAccessTypeIds = Array.isArray(formData.accessType)
       ? formData.accessType.filter(Boolean)
       : (formData.accessType ? [String(formData.accessType)] : []);
@@ -1323,9 +1912,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
     try {
       setSubmitting(true);
 
-      const parentRoute = routes.find(
-        (r) => resolveRouteId(r) === String(formData.padreId || '')
-      );
+      const parentRoute = findRouteByAnyId(String(formData.padreId || ''));
 
       const resolvedLayout = (() => {
         const selectedAtIds = Array.isArray(formData.accessType) ? formData.accessType : [];
@@ -1345,6 +1932,12 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
           ? null
           : (isFormularioType && formularioPadreId ? formularioPadreId : formData.padreId || null),
         heredaDeRuta: formData.heredaDeRuta || null,
+        mostrarEnNavbarPublico: (isFormularioType || isSubFormularioType)
+          ? formData.mostrarEnNavbarPublico === true
+          : false,
+        mostrarEnSidebar: (isFormularioType || isSubFormularioType)
+          ? formData.mostrarEnSidebar === true
+          : false,
         mostrarEnMenuUsuario: formData.mostrarEnMenuUsuario === true,
         tiquetaNavb: formData.mostrarEnMenuUsuario === true ? (formData.tiquetaNavb || null) : null,
         menuUsuarioLabel: formData.mostrarEnMenuUsuario === true
@@ -1409,9 +2002,12 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
   };
   const handleDeleteRoute = async (route: Route): Promise<void> => {
     const actorTipo = String(routesActorTipo || '').trim().toUpperCase();
+    const esSuperAdminActor = actorTipo === 'SUPERADMIN'
+      || actorTipo === 'DIOS'
+      || actorTipo === 'DESARROLLADOR';
     let accionSeleccionada: 'ELIMINAR' | 'DESACTIVAR' | null = null;
 
-    if (actorTipo === 'SUPERADMIN') {
+    if (esSuperAdminActor) {
       const result = await swalFire({
         title: 'Gestionar baja de ruta',
         text: `Selecciona si deseas desactivar o eliminar la ruta "${route.name}".`,
@@ -1469,16 +2065,33 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
     }
   };
 
-  const routeRowActionCatalog = useMemo(
-    () =>
-      buildRouteRowActionCatalog({
-        onPreview: handlePreviewRoute,
-        onEdit: (route) => { void openRouteModal(route); },
-        onDelete: handleDeleteRoute,
-      }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- handlers estables por flujo de pantalla
-    [],
-  );
+  const handleTogglePublicStatus = async (route: Route): Promise<void> => {
+    const next = route?.mostrarEnNavbarPublico !== true;
+    if (next && !isPublicAccessRoute(route)) {
+      toast.error('Para activar navbar publico la ruta debe tener access PUBLIC.');
+      return;
+    }
+    if (next && route.mostrarEnSidebar === true && !isHybridAccessRoute(route)) {
+      toast.error('Solo las rutas HYBRID pueden quedar activas a la vez en navbar publico y sidebar.');
+      return;
+    }
+
+    try {
+      await updateRoute(resolveRouteId(route), { mostrarEnNavbarPublico: next } as CreateRouteDto);
+      toast.success(next ? 'Navbar publico activado' : 'Navbar publico desactivado');
+      notifyRoutesUpdated();
+      await loadRoutes();
+    } catch (error: any) {
+      console.error('Error toggling public route status:', error);
+      toast.error(error?.message || 'Error al cambiar estado publico');
+    }
+  };
+
+  const routeRowActionCatalog = buildRouteRowActionCatalog({
+    onPreview: handlePreviewRoute,
+    onEdit: (route) => { void openRouteModal(route); },
+    onDelete: handleDeleteRoute,
+  });
 
   const toolbarPresetOptions = useMemo(() => [
     {
@@ -1517,15 +2130,22 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
     },
   ], []);
 
+  const formRowActionIds = useMemo((): ActionId[] => {
+    const ids = Array.isArray(toolbarPolicy?.rowActionIds) ? toolbarPolicy.rowActionIds : [];
+    return ids.map((id) => String(id || '').trim()).filter(Boolean) as ActionId[];
+  }, [toolbarPolicy?.rowActionIds]);
+
+  const canNavigateList = toolbarPolicy == null || toolbarPolicy.canList !== false;
+
   const tenantToolbarDraft = useMemo((): GestionRutasToolbarDraft => {
     const mode = String(toolbarPolicy?.mode || '').trim() as GestionRutasToolbarMode;
     const policyIds = Array.isArray(toolbarPolicy?.actionIds)
       ? toolbarPolicy.actionIds.map((id) => String(id || '').trim()).filter(Boolean) as ActionId[]
       : [];
 
-    if (['all', 'consulta', 'parametrizacion', 'crear'].includes(mode)) {
+    if (['all', 'consulta', 'parametrizacion', 'crear', 'sin-acceso'].includes(mode)) {
       return {
-        mode,
+        mode: mode === 'sin-acceso' ? 'consulta' : mode,
         actionIds: policyIds.length > 0 ? policyIds : toolbarPresetOptions.find((item) => item.mode === mode)?.ids,
       };
     }
@@ -1658,11 +2278,80 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
     }
   };
 
+  const handleSincronizarCounterJerarquia = async (): Promise<void> => {
+    setSyncingCounterJerarquia(true);
+    try {
+      const counterRes = await sincronizarJerarquiaCounter();
+      const data = counterRes?.data as SincronizarJerarquiaCounterResult | undefined;
+      if (!counterRes?.success) {
+        toast.error(counterRes?.message || 'No se pudo sincronizar countertiponodorutas');
+        return;
+      }
+      const creadas = Number(data?.creadas ?? 0);
+      const actualizadas = Number(data?.actualizadas ?? 0);
+      const sinCambios = Number(data?.sinCambios ?? data?.omitidas ?? 0);
+      const errores = Number(data?.errores ?? 0);
+      const relacionesActivas = Number(data?.relacionesActivas ?? 0);
+      toast.success(
+        `Counter sincronizado: ${relacionesActivas} relaciones activas (${creadas} creadas, ${actualizadas} actualizadas, ${sinCambios} sin cambios${errores ? `, ${errores} con error` : ''}).`
+      );
+      await loadRoutes();
+      try {
+        const suitesRes = await getJerarquiaOpcionesFromCounter({ nivelOrder: 1 });
+        if (suitesRes.success && Array.isArray(suitesRes.data)) {
+          setCounterJerarquiaSuites(suitesRes.data);
+        }
+        if (String(selectedSuiteIdForForm || '').trim()) {
+          const modulosRes = await getJerarquiaOpcionesFromCounter({
+            nivelOrder: 2,
+            padreRutaSeguridadId: selectedSuiteIdForForm,
+          });
+          if (modulosRes.success && Array.isArray(modulosRes.data)) {
+            setCounterJerarquiaModulos(modulosRes.data);
+          }
+        }
+        if (String(selectedSuiteIdForSubForm || '').trim()) {
+          const modulosSubRes = await getJerarquiaOpcionesFromCounter({
+            nivelOrder: 2,
+            padreRutaSeguridadId: selectedSuiteIdForSubForm,
+          });
+          if (modulosSubRes.success && Array.isArray(modulosSubRes.data)) {
+            setCounterJerarquiaModulos(modulosSubRes.data);
+          }
+          if (String(selectedModuloIdForSubForm || '').trim()) {
+            const formsRes = await getJerarquiaOpcionesFromCounter({
+              nivelOrder: 3,
+              padreRutaSeguridadId: selectedModuloIdForSubForm,
+              suiteRutaSeguridadId: selectedSuiteIdForSubForm,
+            });
+            if (formsRes.success && Array.isArray(formsRes.data)) {
+              setCounterJerarquiaFormularios(formsRes.data);
+            }
+          }
+        }
+      } catch {
+        /* opciones counter opcionales tras sync */
+      }
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Error al sincronizar counter';
+      toast.error(message);
+    } finally {
+      setSyncingCounterJerarquia(false);
+    }
+  };
+
   const handleMigrarTipoNodoRutas = async (): Promise<void> => {
     setMigratingNodeTypes(true);
     try {
       const res = await migrarTipoNodoRutas();
-      setMigracionResult(res);
+      const counterRes = await sincronizarJerarquiaCounter();
+      setMigracionResult({
+        ...res,
+        counterJerarquia: counterRes?.data,
+      } as MigracionTipoNodoResult & { counterJerarquia?: unknown });
+      if (counterRes?.success) {
+        toast.success('Tipos de nodo y relaciones counter sincronizados (sin borrar rutas).');
+      }
     } catch (error: any) {
       toast.error(error?.message || 'Error al ejecutar migración');
     } finally {
@@ -1927,7 +2616,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
   const gestionRutasToolbarCatalog = useMemo(
     () =>
       buildGestionRutasToolbarCatalog({
-        onRefrescar: () => void loadRoutes(),
+        onRefrescar: () => void handleSincronizarCounterJerarquia(),
         onUsuarios: () => void openUserModal(),
         onVerArbol: () => setIsTreeModalOpen(true),
         onParamTipos: () => setIsNodeTypeModalOpen(true),
@@ -1974,7 +2663,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
             <ParameterizedToolbarActionBar
               catalog={gestionRutasToolbarCatalog}
               parametrizedIds={toolbarParametrizedIds}
-              context={{ loading }}
+              context={{ loading: loading || syncingCounterJerarquia }}
             />
           </div>
         </CardHeader>
@@ -2016,6 +2705,11 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
             <div className="flex justify-center items-center py-12">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
             </div>
+          ) : !canNavigateList ? (
+            <div className="text-center py-12 text-muted-foreground space-y-2">
+              <p>Este formulario no tiene accion GET parametrizada.</p>
+              <p className="text-sm">Agrega GET en las acciones del formulario para habilitar consulta y navegacion.</p>
+            </div>
           ) : routes.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
               <p>No routes found</p>
@@ -2033,6 +2727,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
                     <TableHead>Ruta</TableHead>
                     <TableHead>Componente Efectivo</TableHead>
                     <TableHead>Layout</TableHead>
+                    <TableHead>Publico</TableHead>
                     <TableHead>Estado</TableHead>
                     <TableHead className="text-right">Acciones</TableHead>
                   </TableRow>
@@ -2040,7 +2735,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
                 <TableBody>
                   {tableRows.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={10} className="text-center text-muted-foreground">
+                      <TableCell colSpan={11} className="text-center text-muted-foreground">
                         No hay rutas que coincidan con los filtros aplicados.
                       </TableCell>
                     </TableRow>
@@ -2074,15 +2769,18 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
                         </TableCell>
                         <TableCell>
                           <div className="flex flex-wrap gap-1">
-                            {getAccessTypeLabelsByIds(resolveAccessTypeIds(route)).length > 0 ? (
-                              getAccessTypeLabelsByIds(resolveAccessTypeIds(route)).map((label) => (
-                                <Badge key={`${resolveRouteId(route)}-${label}`} variant="outline">
-                                  {label}
+                            {(() => {
+                              const codes = getAccessTypeCodesFromRoute(route);
+                              if (codes.length === 0) return <Badge variant="outline">-</Badge>;
+                              if (isHybridAccessRoute(route)) {
+                                return <Badge variant="outline">HYBRID</Badge>;
+                              }
+                              return codes.map((code) => (
+                                <Badge key={`${resolveRouteId(route)}-${code}`} variant="outline">
+                                  {code}
                                 </Badge>
-                              ))
-                            ) : (
-                              <Badge variant="outline">-</Badge>
-                            )}
+                              ));
+                            })()}
                           </div>
                         </TableCell>
                         <TableCell>
@@ -2107,6 +2805,24 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
                           <Badge variant="outline">{route.layout}</Badge>
                         </TableCell>
                         <TableCell>
+                          {isVisibilityConfigurableRoute(route) ? (
+                            <div className="flex flex-col items-start gap-1">
+                              <Switch
+                                checked={route.mostrarEnNavbarPublico === true}
+                                disabled={!resolveCanTogglePublicStatus(route)}
+                                onCheckedChange={() => void handleTogglePublicStatus(route)}
+                              />
+                              {route.mostrarEnNavbarPublico === true ? (
+                                <span className="text-[10px] text-muted-foreground">Navbar activo</span>
+                              ) : !isPublicAccessRoute(route) ? (
+                                <span className="text-[10px] text-muted-foreground">Sin PUBLIC</span>
+                              ) : null}
+                            </div>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
                           <Switch
                             checked={route.estadoRuta}
                             disabled={!resolveCanToggleRouteStatus(route)}
@@ -2119,6 +2835,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
                             allowedIds={resolveRouteRowAllowedIds(route, {
                               canEdit: resolveCanEditRoute,
                               canManageBaja: resolveCanManageBaja,
+                              parametrizedIds: formRowActionIds.length > 0 ? formRowActionIds : undefined,
                             })}
                             context={route}
                             className="gap-2"
@@ -2135,15 +2852,16 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
       </Card>
 
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-        <DialogContent className="sm:max-w-[980px]">
-          <form onSubmit={(e) => void handleSubmitRoute(e)}>
-            <DialogHeader>
+        <DialogContent className="flex max-h-[90vh] w-[min(980px,calc(100vw-2rem))] flex-col gap-0 overflow-hidden p-0 sm:max-w-[980px]">
+          <form onSubmit={(e) => void handleSubmitRoute(e)} className="flex min-h-0 flex-1 flex-col">
+            <DialogHeader className="shrink-0 space-y-1.5 border-b px-6 py-4 pr-12">
               <DialogTitle>{editingRoute ? 'Editar Ruta' : getCreateDialogTitle()}</DialogTitle>
               <DialogDescription>
                 Parametriza nodos jerarquicos (suite, modulo, formulario y subformulario)
               </DialogDescription>
             </DialogHeader>
-            <div className="grid gap-4 py-4 md:grid-cols-2">
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 py-4">
+            <div className="grid gap-4 md:grid-cols-2">
               {editingRoute ? (
                 <div className="space-y-2">
                   <Label htmlFor="tipoNodo">Tipo de nodo *</Label>
@@ -2199,31 +2917,108 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
                 </div>
               )}
 
-              {isFormularioType && (
+              {(isFormularioType || isSubFormularioType) && (
                 <div className="space-y-2">
                   <Label htmlFor="suiteSelector">Suite asociada *</Label>
                   <Select
-                    value={suiteSelectValue}
+                    value={isFormularioType ? suiteSelectValue : subFormSuiteSelectValue}
+                    onValueChange={(value) => {
+                      setSuiteSelectSearch('');
+                      setParentSelectSearch('');
+                      if (isFormularioType) {
+                        setSelectedSuiteIdForForm(value);
+                        setFormularioPadreId('');
+                        setFormData((prev) => ({
+                          ...prev,
+                          padreId: null,
+                          path: resolveHierarchyPathForDraft(prev.name, null, selectedTypeOrder, ''),
+                        }));
+                      } else {
+                        setSelectedSuiteIdForSubForm(value);
+                        setSelectedModuloIdForSubForm('');
+                        setFormData((prev) => ({
+                          ...prev,
+                          padreId: null,
+                          path: resolveHierarchyPathForDraft(prev.name, null, selectedTypeOrder, ''),
+                        }));
+                      }
+                    }}
+                  >
+                    <SelectTrigger id="suiteSelector">
+                      <SelectValue placeholder="Selecciona suite" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-72 border-border bg-popover text-popover-foreground">
+                      <div className="sticky top-0 z-10 border-b border-border bg-popover p-2">
+                        <Input
+                          value={suiteSelectSearch}
+                          onChange={(e) => setSuiteSelectSearch(e.target.value)}
+                          onKeyDown={(e) => e.stopPropagation()}
+                          placeholder="Buscar suite..."
+                          className="h-9 border-input bg-background text-foreground placeholder:text-muted-foreground"
+                        />
+                      </div>
+                      {filteredSuiteOptionsForFormulario.length > 0 ? (
+                        filteredSuiteOptionsForFormulario.map((suite) => (
+                          <SelectItem key={resolveRouteId(suite)} value={resolveRouteId(suite)}>
+                            {getSuiteLabel(suite)}
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <div className="px-3 py-2 text-sm text-muted-foreground">
+                          {suiteOptionsForFormulario.length === 0
+                            ? 'No hay suites en countertiponodorutas. Sincroniza counter o crea una suite.'
+                            : 'No hay resultados para la busqueda.'}
+                        </div>
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {isSubFormularioType && (
+                <div className="space-y-2">
+                  <Label htmlFor="moduloSubFormSelector">Modulo *</Label>
+                  <Select
+                    value={subFormModuloSelectValue}
                     onValueChange={(value) => {
                       setParentSelectSearch('');
-                      setSelectedSuiteIdForForm(value);
-                      setFormularioPadreId('');
+                      setSelectedModuloIdForSubForm(value);
                       setFormData((prev) => ({
                         ...prev,
                         padreId: null,
                         path: resolveHierarchyPathForDraft(prev.name, null, selectedTypeOrder, ''),
                       }));
                     }}
+                    disabled={!selectedSuiteIdForSubForm}
                   >
-                    <SelectTrigger id="suiteSelector">
-                      <SelectValue placeholder="Selecciona suite" />
+                    <SelectTrigger id="moduloSubFormSelector">
+                      <SelectValue placeholder="Selecciona modulo" />
                     </SelectTrigger>
-                    <SelectContent>
-                      {suiteOptions.map((suite) => (
-                        <SelectItem key={resolveRouteId(suite)} value={resolveRouteId(suite)}>
-                          {getRouteHierarchyLabel(suite)}
-                        </SelectItem>
-                      ))}
+                    <SelectContent className="max-h-72 border-border bg-popover text-popover-foreground">
+                      <div className="sticky top-0 z-10 border-b border-border bg-popover p-2">
+                        <Input
+                          value={parentSelectSearch}
+                          onChange={(e) => setParentSelectSearch(e.target.value)}
+                          onKeyDown={(e) => e.stopPropagation()}
+                          placeholder="Buscar modulo..."
+                          className="h-9 border-input bg-background text-foreground placeholder:text-muted-foreground"
+                        />
+                      </div>
+                      {filteredModuloOptionsForSubForm.length > 0 ? (
+                        filteredModuloOptionsForSubForm.map((modulo) => (
+                          <SelectItem key={resolveRouteId(modulo)} value={resolveRouteId(modulo)}>
+                            {getModuloLabel(modulo)}
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <div className="px-3 py-2 text-sm text-muted-foreground">
+                          {!selectedSuiteIdForSubForm
+                            ? 'Primero selecciona la suite.'
+                            : moduloOptionsForSubForm.length === 0
+                              ? 'No hay modulos en la suite seleccionada (countertiponodorutas).'
+                              : 'No hay resultados para la busqueda.'}
+                        </div>
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
@@ -2249,7 +3044,10 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
                         path: resolveHierarchyPathForDraft(prev.name, value, selectedTypeOrder, prev.path),
                       }));
                     }}
-                    disabled={isFormularioType && !selectedSuiteIdForForm}
+                    disabled={
+                      (isFormularioType && !selectedSuiteIdForForm)
+                      || (isSubFormularioType && !selectedModuloIdForSubForm)
+                    }
                   >
                     <SelectTrigger id="padreId">
                       <SelectValue placeholder={
@@ -2276,7 +3074,55 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
                           className="h-9 border-input bg-background text-foreground placeholder:text-muted-foreground"
                         />
                       </div>
-                      {filteredParentOptionsForSelectedType.length > 0 ? (
+                      {isModuloType ? (
+                        filteredParentOptionsForSelectedType.length > 0 ? (
+                          filteredParentOptionsForSelectedType.map((parent) => (
+                            <SelectItem key={resolveRouteId(parent)} value={resolveRouteId(parent)}>
+                              {getSuiteLabel(parent)}
+                            </SelectItem>
+                          ))
+                        ) : (
+                          <div className="px-3 py-2 text-sm text-muted-foreground">
+                            {parentOptionsForSelectedType.length === 0
+                              ? 'No hay suites disponibles. Sincroniza counter o crea una suite.'
+                              : 'No hay resultados para la busqueda.'}
+                          </div>
+                        )
+                      ) : isFormularioType ? (
+                        filteredModuloOptionsBySuite.length > 0 ? (
+                          filteredModuloOptionsBySuite.map((parent) => (
+                            <SelectItem key={resolveRouteId(parent)} value={resolveRouteId(parent)}>
+                              {getModuloLabel(parent)}
+                            </SelectItem>
+                          ))
+                        ) : (
+                          <div className="px-3 py-2 text-sm text-muted-foreground">
+                            {!selectedSuiteIdForForm
+                              ? 'Primero selecciona la suite.'
+                              : moduloOptionsBySuite.length === 0
+                                ? 'No hay modulos en la suite seleccionada (countertiponodorutas).'
+                                : 'No hay resultados para la busqueda.'}
+                          </div>
+                        )
+                      ) : isSubFormularioType ? (
+                        filteredSubFormParentOptions.length > 0 ? (
+                          filteredSubFormParentOptions.map((parent) => (
+                            <SelectItem key={resolveRouteId(parent)} value={resolveRouteId(parent)}>
+                              {getRouteHierarchyLabel(parent)}
+                            </SelectItem>
+                          ))
+                        ) : (
+                          <div className="px-3 py-2 text-sm text-muted-foreground">
+                            {!selectedSuiteIdForSubForm
+                              ? 'Primero selecciona la suite.'
+                              : !selectedModuloIdForSubForm
+                                ? 'Primero selecciona el modulo.'
+                                : subFormParentOptions.length === 0
+                                  ? 'No hay formularios en el modulo seleccionado (countertiponodorutas).'
+                                  : 'No hay resultados para la busqueda.'}
+                          </div>
+                        )
+                      ) : filteredParentOptionsForSelectedType.length > 0 ? (
                         filteredParentOptionsForSelectedType.map((parent) => (
                           <SelectItem key={resolveRouteId(parent)} value={resolveRouteId(parent)}>
                             {getRouteHierarchyLabel(parent)}
@@ -2289,24 +3135,63 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
                       )}
                     </SelectContent>
                   </Select>
-                  {!editingRoute && isModuloType && getParentOptions(String(formData.tipoNodoId || '')).length === 0 && (
-                    <p className="text-xs text-muted-foreground">
-                      Primero crea una suite para poder crear modulos.
-                    </p>
+                  {!editingRoute && isModuloType && suiteOptionsFromCounter.length === 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs text-muted-foreground">
+                        No hay suites en countertiponodorutas. Sincroniza desde rutaseguridads existentes.
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={syncingCounterJerarquia}
+                        onClick={() => void handleSincronizarCounterJerarquia()}
+                      >
+                        {syncingCounterJerarquia ? 'Sincronizando...' : 'Sincronizar counter con rutas existentes'}
+                      </Button>
+                    </div>
                   )}
-                  {!editingRoute && isFormularioType && !selectedSuiteIdForForm && (
+                  {!editingRoute && (isFormularioType || isSubFormularioType) && !selectedSuiteIdForForm && !selectedSuiteIdForSubForm && (
                     <p className="text-xs text-muted-foreground">
-                      Primero selecciona la suite para habilitar los modulos.
+                      Primero selecciona la suite para habilitar los selectores jerarquicos.
                     </p>
                   )}
                   {!editingRoute && isFormularioType && selectedSuiteIdForForm && moduloOptionsBySuite.length === 0 && (
-                    <p className="text-xs text-muted-foreground">
-                      No hay modulos en la suite seleccionada.
-                    </p>
+                    <div className="space-y-2">
+                      <p className="text-xs text-muted-foreground">
+                        No hay modulos en la suite seleccionada en countertiponodorutas.
+                        Puedes sincronizar desde rutaseguridads existentes sin borrar ni recrear rutas.
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={syncingCounterJerarquia}
+                        onClick={() => void handleSincronizarCounterJerarquia()}
+                      >
+                        {syncingCounterJerarquia ? 'Sincronizando...' : 'Sincronizar counter con rutas existentes'}
+                      </Button>
+                    </div>
                   )}
-                  {!editingRoute && isSubFormularioType && subFormParentOptions.length === 0 && (
+                  {!editingRoute && isSubFormularioType && selectedModuloIdForSubForm && subFormParentOptions.length === 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs text-muted-foreground">
+                        No hay formularios en el modulo seleccionado en countertiponodorutas.
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={syncingCounterJerarquia}
+                        onClick={() => void handleSincronizarCounterJerarquia()}
+                      >
+                        {syncingCounterJerarquia ? 'Sincronizando...' : 'Sincronizar counter con rutas existentes'}
+                      </Button>
+                    </div>
+                  )}
+                  {!editingRoute && isSubFormularioType && !selectedModuloIdForSubForm && selectedSuiteIdForSubForm && (
                     <p className="text-xs text-muted-foreground">
-                      No hay formularios disponibles para asociar el subformulario.
+                      Selecciona el modulo para habilitar los formularios padre.
                     </p>
                   )}
                 </div>
@@ -2400,11 +3285,12 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
               {(
                 <div className="space-y-2 md:col-span-2">
                   <Label>Tipo de acceso {(isFormularioType || isSubFormularioType) ? '*' : ''}</Label>
-                  <div className="rounded-md border p-3 flex flex-wrap gap-6">
+                  <div className="rounded-md border p-4 flex flex-wrap gap-x-6 gap-y-3">
                     {accessTypes
                       .filter((item) => item.estadoAcces !== false)
                       .map((item) => {
                       const id = normalizeMongoId(item);
+                      if (!id) return null;
                       const selected = Array.isArray(formData.accessType) && formData.accessType.includes(id);
                       return (
                         <label key={id} className="flex items-center gap-2 text-sm cursor-pointer">
@@ -2413,6 +3299,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
                             checked={selected}
                             onChange={(e) => {
                               const checked = e.target.checked;
+                              const itemCode = String(item.accessType || '').trim().toUpperCase();
                               setFormData((prev) => {
                                 const current = Array.isArray(prev.accessType)
                                   ? [...prev.accessType]
@@ -2420,11 +3307,24 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
                                 const next = checked
                                   ? [...new Set([...current, id])]
                                   : current.filter((value) => value !== id);
-                                return { ...prev, accessType: next };
+                                const visibility = syncFormVisibilityFlags(
+                                  next,
+                                  prev,
+                                  itemCode === 'PUBLIC' || itemCode === 'PRIVATE' ? itemCode : undefined,
+                                  checked,
+                                );
+                                return {
+                                  ...prev,
+                                  accessType: next,
+                                  ...visibility,
+                                };
                               });
                             }}
                           />
-                          <span>{String(item.layout || item.accessType || 'N/A')}</span>
+                          <span>
+                            {String(item.accessType || 'N/A')}
+                            {item.layout ? ` (${String(item.layout)})` : ''}
+                          </span>
                         </label>
                       );
                     })}
@@ -2434,10 +3334,75 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
                   </p>
                 </div>
               )}
+              {(isFormularioType || isSubFormularioType) && (() => {
+                const formAccessCodes = resolveFormAccessTypeCodes();
+                const canNavbar = formAccessCodes.includes('PUBLIC');
+                const canSidebar = formAccessCodes.includes('PRIVATE');
+                const navbarChecked = canNavbar && formData.mostrarEnNavbarPublico === true;
+                const sidebarChecked = canSidebar && formData.mostrarEnSidebar === true;
+
+                return (
+                <div className="space-y-3 md:col-span-2 rounded-md border p-4">
+                  <p className="text-sm font-medium">Visibilidad en menus</p>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className={`flex min-w-0 items-center justify-between gap-4 rounded-md border px-4 py-3 ${!canNavbar ? 'opacity-70' : ''}`}>
+                      <div className="min-w-0 space-y-1">
+                        <Label>Navbar publico</Label>
+                        <p className="text-xs text-muted-foreground">
+                          {canNavbar
+                            ? 'Expone la ruta en el catalogo publico.'
+                            : 'Marca un tipo de acceso PUBLIC para habilitarlo.'}
+                        </p>
+                      </div>
+                      <Switch
+                        className="shrink-0"
+                        checked={navbarChecked}
+                        onCheckedChange={(checked) => {
+                          if (checked && !canNavbar) {
+                            toast.info('Marca un tipo de acceso PUBLIC antes de activar el navbar publico.');
+                            return;
+                          }
+                          if (checked && sidebarChecked && !resolveFormIsHybridAccess()) {
+                            toast.error('Solo las rutas HYBRID pueden quedar activas a la vez en navbar publico y sidebar.');
+                            return;
+                          }
+                          setFormData((prev) => ({ ...prev, mostrarEnNavbarPublico: checked }));
+                        }}
+                      />
+                    </div>
+                    <div className={`flex min-w-0 items-center justify-between gap-4 rounded-md border px-4 py-3 ${!canSidebar ? 'opacity-70' : ''}`}>
+                      <div className="min-w-0 space-y-1">
+                        <Label>Sidebar privado</Label>
+                        <p className="text-xs text-muted-foreground">
+                          {canSidebar
+                            ? 'Visible en el panel administrativo.'
+                            : 'Marca un tipo de acceso PRIVATE para habilitarlo.'}
+                        </p>
+                      </div>
+                      <Switch
+                        className="shrink-0"
+                        checked={sidebarChecked}
+                        onCheckedChange={(checked) => {
+                          if (checked && !canSidebar) {
+                            toast.info('Marca un tipo de acceso PRIVATE antes de activar el sidebar privado.');
+                            return;
+                          }
+                          if (checked && navbarChecked && !resolveFormIsHybridAccess()) {
+                            toast.error('Solo las rutas HYBRID pueden quedar activas a la vez en navbar publico y sidebar.');
+                            return;
+                          }
+                          setFormData((prev) => ({ ...prev, mostrarEnSidebar: checked }));
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+                );
+              })()}
               {(isFormularioType || isSubFormularioType) && (
                 <div className="space-y-2 md:col-span-2">
                   <Label htmlFor="acciones">Acciones HTTP *</Label>
-                  <div className="rounded-md border p-3 space-y-2">
+                  <div className="rounded-md border p-4 flex flex-wrap gap-x-6 gap-y-3">
                     {accionesCatalogo.length === 0 ? (
                       <p className="text-sm text-muted-foreground">No hay acciones disponibles.</p>
                     ) : (
@@ -2480,8 +3445,9 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
                 </div>
               )}
             </div>
+            </div>
 
-            <DialogFooter>
+            <DialogFooter className="shrink-0 gap-2 border-t px-6 py-4 sm:justify-end">
               <Button type="button" variant="outline" onClick={closeRouteModal} disabled={submitting}>
                 Cancelar
               </Button>

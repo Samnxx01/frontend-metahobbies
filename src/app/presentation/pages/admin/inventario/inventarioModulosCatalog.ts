@@ -137,20 +137,11 @@ export const inventarioUsuarioTieneAnclaScope = (user: InventarioJwtScopeUserLik
   );
 };
 
-/**
- * Pestaña visible según alcance del JWT (`auth.tenantScope` y campos espejo en el usuario).
- * Hoy: `trm` (Configuración TRM) solo con contexto Global o SuperAdmin (parametrización sensible).
- */
+/** Pestaña visible en menú (sin filtro por alcance de tenant). */
 export const inventarioTabVisibleSegunJwt = (
-  tab: InventarioTabValue,
-  user: InventarioJwtScopeUserLike | null | undefined,
-): boolean => {
-  if (tab !== 'trm') return true;
-  const ts = user?.auth?.tenantScope || {};
-  const superAdmin = String(user?.tenantSuperAdminId || ts.tenantSuperAdminId || '').trim();
-  const global = String(user?.tenantGlobalId || ts.tenantGlobalId || '').trim();
-  return Boolean(superAdmin || global);
-};
+  _tab: InventarioTabValue,
+  _user: InventarioJwtScopeUserLike | null | undefined,
+): boolean => true;
 
 /**
  * Pestañas visibles en el menú superior (orden del catálogo).
@@ -161,7 +152,7 @@ export const inventarioTabsDesdeCatalogo = (): Array<{ value: InventarioTabValue
     .filter((m) => m.tab !== 'config')
     .map(({ tab, label }) => ({ value: tab, label }));
 
-/** Pestañas del menú superior filtradas por JWT (`trm` u otras reglas futuras). */
+/** Pestañas del menú superior desde catálogo (sin filtro por tenant). */
 export const inventarioTabsParaMenuConJwt = (
   user: InventarioJwtScopeUserLike | null | undefined,
 ): Array<{ value: InventarioTabValue; label: string }> =>
@@ -187,7 +178,7 @@ const tabValueDesdeTarjeta = (tab: string | null | undefined): InventarioTabValu
 
 /**
  * Pestañas del menú superior desde GET `/api/inventario/config/tarjetas`
- * (misma fuente que ConfigInventario). Sin duplicar `tab`; respeta JWT (`trm`, etc.).
+ * (misma fuente que ConfigInventario). Sin duplicar `tab`.
  */
 export const inventarioTabsDesdeTarjetasDinamicas = (
   tarjetas: Array<{ tab?: string | null; titulo: string; orden?: number }>,

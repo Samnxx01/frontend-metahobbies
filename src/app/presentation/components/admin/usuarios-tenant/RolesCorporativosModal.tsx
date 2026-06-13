@@ -13,11 +13,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Loader2, Building2, Globe, Plus, RefreshCw } from 'lucide-react';
 import { apiFetch } from '@/app/services/api';
 import { toast } from 'react-toastify';
+import { normalizePublicIdForApi, resolveEntityPublicId } from '@/app/utils/entityPublicId';
 
 interface RolCorporativo {
     _id?: string;
+    iud?: string;
     rol: string;
-    tenantCorporativo?: string | { _id?: string } | null;
+    tenantCorporativo?: string | { _id?: string; iud?: string } | null;
 }
 
 interface TenantGlobalOpcion {
@@ -43,7 +45,7 @@ export const RolesCorporativosModal = ({ open, onClose }: RolesCorporativosModal
         const raw = Array.isArray(res?.tenantsGlobales) ? res.tenantsGlobales : [];
         return raw
             .map((t: any) => {
-                const id = String(t?.iud ?? t?._id ?? '').trim();
+                const id = resolveEntityPublicId(t);
                 if (!id) return null;
                 const corp = String(t?.coporativo?.razon_social ?? t?.coporativo?.titulo ?? '').trim();
                 const codigo = String(t?.codigoJerarquia ?? '').trim();
@@ -100,7 +102,7 @@ export const RolesCorporativosModal = ({ open, onClose }: RolesCorporativosModal
     const handleCrear = async () => {
         const nombre = nuevoRol.trim().toUpperCase();
         if (!nombre) { toast.error('El nombre del rol es obligatorio'); return; }
-        const tg = tenantGlobalId.trim();
+        const tg = normalizePublicIdForApi(tenantGlobalId);
         if (tenantGlobales.length > 0 && !tg) {
             toast.error('Selecciona el tenant global al que asociar el rol');
             return;
@@ -212,7 +214,7 @@ export const RolesCorporativosModal = ({ open, onClose }: RolesCorporativosModal
                             <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
                                 {roles.map((r, i) => (
                                     <div
-                                        key={r._id ?? `${r.rol}-${i}`}
+                                        key={resolveEntityPublicId(r) || `${r.rol}-${i}`}
                                         className="flex items-center justify-between rounded-md border px-3 py-2 text-sm"
                                     >
                                         <span className="font-mono font-medium">{r.rol}</span>

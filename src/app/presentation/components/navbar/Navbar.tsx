@@ -13,11 +13,17 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 // Lucide icons
-import { Menu, ShoppingCart, User, X, Trash2, ShieldCheck, LogOut, LogIn, ChevronRight, Crown } from "lucide-react";
+import { Menu, ShoppingCart, User, X, ShieldCheck, LogOut, LogIn, ChevronRight, Crown } from "lucide-react";
 // Theme Toggle
 import ThemeToggle from "@/app/presentation/components/common/ThemeToggle";
+import MiniCartContent from "@/app/presentation/components/carrito/MiniCartContent";
+import { resolveMiniCartConfig, type MiniCartConfig } from "@/app/config/miniCartConfig";
+import productosService from "@/app/services/productosService";
+import { groupCartItemsByProduct } from "@/app/presentation/components/carrito/cartColorQtyCache";
+import type { CartItem as CartItemType } from "@/types/common";
 
 import { apiFetch } from "@/app/services/api";
+import { fetchSplashLogo, invalidateSplashLogoCache, resolveSplashLogoUrl } from '@/app/services/splashLogoService';
 import {
     getNavbarNavigationRoutes,
     getMenuUsuarioRoutes,
@@ -25,7 +31,7 @@ import {
 } from "@/app/services/routeService";
 import { getGovernedLoginPath, getGovernedLogoutPath, getGovernedPublicHomePath } from "@/app/services/governedNavigation";
 import { appendPublicAttributionToInternalPath } from "@/app/services/publicAttributionParams";
-import { formatCOP } from "@/lib/utils";
+import { resolveUserDisplayName, resolveUserInitial } from "@/app/presentation/utils/resolveUserDisplayName";
 
 import type { NavbarProps } from '@/types/components';
 
@@ -34,23 +40,28 @@ interface MenuItem {
     path: string;
 }
 
-interface CartItem {
-    id: string;
-    name: string;
-    price: number;
-    quantity: number;
-    image: string;
-    color?: {
-        pantone?: string;
-        name?: string;
-    };
-}
-
 export default function Navbar({ transparent = false }: NavbarProps = {}): React.ReactElement {
     const navigate = useNavigate();
     const location = useLocation();
     const { user, logout } = useAuth();
-    const { cartItems, removeFromCart } = useCart();
+    const { cartItems, removeFromCart, updateVariantQuantity } = useCart();
+    const cartGroups = groupCartItemsByProduct(cartItems as CartItemType[]);
+    const [miniCartConfig, setMiniCartConfig] = useState<MiniCartConfig>(() => resolveMiniCartConfig());
+    const useSidePanel = cartGroups.length > miniCartConfig.sidePanelThreshold;
+    const [cartPanelOpen, setCartPanelOpen] = useState(false);
+
+    useEffect(() => {
+        productosService.obtenerMiniCartConfigPublico()
+            .then((data) => {
+                setMiniCartConfig({
+                    sidePanelThreshold: data.sidePanelThreshold,
+                    maxVisibleProducts: data.maxVisibleProducts,
+                });
+            })
+            .catch(() => {
+                setMiniCartConfig(resolveMiniCartConfig());
+            });
+    }, []);
     const totalItems = cartItems.reduce((sum, item) => sum + item.quantity, 0);
     const cartTotal = cartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
     const [isScrolled, setIsScrolled] = useState<boolean>(false);
@@ -58,6 +69,7 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
 
     const [logoUrl, setLogoUrl] = useState<string | null>(null);
     const [logoError, setLogoError] = useState<boolean>(false);
+    const [logoLoading, setLogoLoading] = useState<boolean>(true);
     const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
     const [menuUsuarioItems, setMenuUsuarioItems] = useState<MenuUsuarioItem[]>([]);
     const menuItemsWithoutCart = menuItems.filter((item) => {
@@ -66,30 +78,35 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
         return normalizedLabel !== 'carrito' && normalizedPath !== '/carrito';
     });
 
+    const loadHeaderLogo = async (forceRefresh = false): Promise<void> => {
+        setLogoLoading(true);
+        try {
+            const useAuthLogo = Boolean(localStorage.getItem('token'));
+            const logoRes = await fetchSplashLogo(useAuthLogo, { forceRefresh });
+            const nextLogoUrl = resolveSplashLogoUrl(logoRes?.logo);
+            if (nextLogoUrl) {
+                setLogoUrl(nextLogoUrl);
+                setLogoError(false);
+            } else {
+                setLogoUrl(null);
+                setLogoError(false);
+            }
+        } catch (err) {
+            console.error('Error al cargar logo del header:', err);
+            setLogoError(true);
+            setLogoUrl(null);
+        } finally {
+            setLogoLoading(false);
+        }
+    };
+
     useEffect(() => {
         const fetchHeaderData = async (): Promise<void> => {
             try {
-                const [logoRes, dynamicRoutes, usuarioItems] = await Promise.all([
-                    apiFetch('/api/config/parametrizacion/listar/logos/coporativo', {
-                        method: 'GET',
-                        useAuth: false,
-                        logoutOn401: false
-                    }),
+                const [dynamicRoutes, usuarioItems] = await Promise.all([
                     getNavbarNavigationRoutes(!!user),
                     user ? getMenuUsuarioRoutes() : Promise.resolve([])
                 ]);
-
-                if (logoRes?.ok && logoRes?.logo) {
-                    const { base64, mimetype } = logoRes.logo;
-                    if (base64 && mimetype) {
-                        setLogoUrl(`data:${mimetype};base64,${base64}`);
-                        setLogoError(false);
-                    } else {
-                        setLogoUrl(null);
-                    }
-                } else {
-                    setLogoUrl(null);
-                }
 
                 setMenuItems(dynamicRoutes.map((route: any) => ({
                     label: route.label,
@@ -99,13 +116,22 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
                 setMenuUsuarioItems(usuarioItems);
             } catch (err) {
                 console.error('Error en el flujo de header dinamico:', err);
-                setLogoError(true);
-                setLogoUrl(null);
                 setMenuItems([]);
             }
         };
 
-        fetchHeaderData();
+        invalidateSplashLogoCache();
+        void loadHeaderLogo(true);
+        void fetchHeaderData();
+    }, [user]);
+
+    useEffect(() => {
+        const onAuthChanged = (): void => {
+            invalidateSplashLogoCache();
+            void loadHeaderLogo(true);
+        };
+        window.addEventListener('mabs-auth-changed', onAuthChanged);
+        return () => window.removeEventListener('mabs-auth-changed', onAuthChanged);
     }, [user]);
 
     useEffect(() => {
@@ -117,11 +143,11 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
         return () => window.removeEventListener("scroll", handleScroll);
     }, []);
 
-    const handleRemoveItem = async (e: React.MouseEvent, item: CartItem): Promise<void> => {
-        e.stopPropagation();
+    const handleRemoveGroup = async (lines: CartItemType[]): Promise<void> => {
+        const name = lines[0]?.name || 'este producto';
         const result = await Swal({
             title: '¿Eliminar producto?',
-            text: `¿Estás seguro de que quieres eliminar ${item.name} del carrito?`,
+            text: `¿Estás seguro de que quieres eliminar ${name} del carrito?`,
             icon: 'warning',
             showCancelButton: true,
             confirmButtonColor: '#d33',
@@ -130,8 +156,33 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
             cancelButtonText: 'Cancelar'
         });
         if (result.isConfirmed) {
-            removeFromCart(item.id, item.color?.pantone);
-            toast.success('Producto eliminado del carrito');
+            try {
+                for (const line of lines) {
+                    await removeFromCart(line.id, line.color?.pantone, line.backendItemId);
+                }
+                toast.success('Producto eliminado del carrito');
+            } catch (err: unknown) {
+                const msg = err instanceof Error
+                  ? err.message.replace(/^\[\d+\]\s*/, '')
+                  : 'No se pudo eliminar el producto';
+                toast.error(msg);
+            }
+        }
+    };
+
+    const handleVariantQuantityChange = async (
+        line: CartItemType,
+        color: CartItemType['color'],
+        newQuantity: number,
+    ): Promise<void> => {
+        if (!color) return;
+        try {
+            await updateVariantQuantity(line, color, newQuantity);
+            if (newQuantity < 1) {
+                toast.success('Tono eliminado del carrito', { autoClose: 1000 });
+            }
+        } catch (err: unknown) {
+            toast.error(err instanceof Error ? err.message : 'No se pudo actualizar la cantidad');
         }
     };
 
@@ -158,22 +209,9 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
         return location.pathname.startsWith(path);
     };
 
-    const getUserInitials = (): string => {
-        if (!user) return 'U';
-        const perfil = user.perfil;
-        const displayName = perfil?.nombreCompleto || [perfil?.nombre, perfil?.apellido].filter(Boolean).join(' ') || user.nombre || user.correo;
-        return displayName?.charAt(0)?.toUpperCase() || 'U';
-    };
+    const getUserInitials = (): string => resolveUserInitial(user);
 
-    const getUserName = (): string => {
-        if (!user) return 'Usuario';
-        const perfil = user.perfil;
-        return perfil?.nombreCompleto
-            || [perfil?.nombre, perfil?.apellido].filter(Boolean).join(' ')
-            || user.nombre
-            || user.correo?.split('@')[0]
-            || 'Usuario';
-    };
+    const getUserName = (): string => resolveUserDisplayName(user);
 
     const getUserEmail = (): string => {
         if (!user) return '';
@@ -214,21 +252,52 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
         }
     };
 
-    const renderCartDropdown = (
+    const miniCartBodyProps = {
+        groups: cartGroups,
+        cartTotal,
+        config: miniCartConfig,
+        onRemoveGroup: (lines: CartItemType[]) => { void handleRemoveGroup(lines); },
+        onQuantityChange: (line, color, qty) => { void handleVariantQuantityChange(line, color, qty); },
+        onImageError: handleImageError,
+    };
+
+    const cartTriggerButton = (
+        <Button variant="ghost" size="icon" className="relative h-9 w-9 hover:bg-accent transition-colors">
+            <Badge
+                variant="destructive"
+                className="absolute -top-1 -right-1 px-1.5 py-0.5 text-xs font-bold rounded-full h-4 min-w-4 justify-center"
+            >
+                {totalItems}
+            </Badge>
+            <ShoppingCart className="h-5 w-5 text-foreground" />
+        </Button>
+    );
+
+    const renderCartDropdown = useSidePanel ? (
+        <Sheet open={cartPanelOpen} onOpenChange={setCartPanelOpen}>
+            <SheetTrigger asChild>
+                {cartTriggerButton}
+            </SheetTrigger>
+            <SheetContent side="right" className="flex w-full flex-col sm:max-w-md">
+                <SheetHeader className="shrink-0 border-b pb-4">
+                    <SheetTitle>Tu carrito ({totalItems})</SheetTitle>
+                </SheetHeader>
+                <div className="flex-1 overflow-y-auto py-4">
+                    {cartItems.length === 0 ? (
+                        <p className="py-8 text-center text-sm text-muted-foreground">Tu carrito está vacío</p>
+                    ) : (
+                        <MiniCartContent {...miniCartBodyProps} dense />
+                    )}
+                </div>
+            </SheetContent>
+        </Sheet>
+    ) : (
         <DropdownMenu>
             <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="relative h-9 w-9 hover:bg-accent transition-colors">
-                    <Badge
-                        variant="destructive"
-                        className="absolute -top-1 -right-1 px-1.5 py-0.5 text-xs font-bold rounded-full h-4 min-w-4 justify-center"
-                    >
-                        {totalItems}
-                    </Badge>
-                    <ShoppingCart className="h-5 w-5 text-foreground" />
-                </Button>
+                {cartTriggerButton}
             </DropdownMenuTrigger>
             <DropdownMenuContent
-                className="w-80 p-4 backdrop-blur-lg border-none shadow-xl"
+                className="w-[min(22rem,calc(100vw-1.5rem))] p-4 backdrop-blur-lg border-none shadow-xl"
                 align="end"
             >
                 {cartItems.length === 0 ? (
@@ -236,40 +305,7 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
                         Tu carrito está vacío
                     </DropdownMenuItem>
                 ) : (
-                    <>
-                        {cartItems.map((item: CartItem) => (
-                            <DropdownMenuItem key={`${item.id}-${item.color?.pantone}`} className="flex items-center gap-3 py-3 h-auto cursor-default pointer-events-none border-b border-border/30 last:border-b-0">
-                                <img
-                                    src={item.image}
-                                    alt={item.name}
-                                    className="w-12 h-12 object-cover rounded-md flex-shrink-0"
-                                    onError={handleImageError}
-                                />
-                                <div className="flex-1 overflow-hidden pointer-events-auto">
-                                    <p className="font-semibold text-sm truncate leading-tight">{item.name}</p>
-                                    <p className="text-xs text-muted-foreground">Cant: {item.quantity} {item.color?.name ? `- ${item.color.name}` : ''}</p>
-                                </div>
-                                <p className="font-semibold text-sm flex-shrink-0 pointer-events-auto">{formatCOP(item.price * item.quantity)}</p>
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="shrink-0 h-6 w-6 ml-1 text-destructive hover:bg-destructive/10 pointer-events-auto"
-                                    onClick={(e) => handleRemoveItem(e, item)}
-                                >
-                                    <Trash2 className="h-4 w-4" />
-                                </Button>
-                            </DropdownMenuItem>
-                        ))}
-                        <DropdownMenuSeparator className="my-3" />
-                        <div className="flex justify-between items-center p-2 pt-0">
-                            <p className="text-base font-semibold">Total:</p>
-                            <p className="text-lg font-bold text-primary">{formatCOP(cartTotal)}</p>
-                        </div>
-                        <div className="flex gap-2 p-2 pt-0">
-                            <Button variant="outline" className="flex-1" onClick={() => navigate(appendPublicAttributionToInternalPath('/carrito'))}>Ver Carrito</Button>
-                            <Button className="flex-1" onClick={() => navigate(appendPublicAttributionToInternalPath('/checkout'))}>Finalizar Compra</Button>
-                        </div>
-                    </>
+                    <MiniCartContent {...miniCartBodyProps} />
                 )}
             </DropdownMenuContent>
         </DropdownMenu>
@@ -431,7 +467,11 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
                     <div className="flex items-center h-full">
                         <div className="dark:bg-white dark:rounded-lg dark:p-1.5 dark:shadow-sm">
                             {/* LOGO RENDERIZADO AQUÍ */}
-                            {logoUrl && !logoError ? (
+                            {logoLoading ? (
+                                <span className="text-xs text-muted-foreground italic px-1">
+                                    Cargando logo…
+                                </span>
+                            ) : logoUrl && !logoError ? (
                                 <img
                                     src={logoUrl}
                                     alt="Logo"

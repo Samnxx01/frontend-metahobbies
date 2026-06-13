@@ -82,6 +82,9 @@ const normalizeBodegaForm = (form?: Partial<BodegaFormState> | null): BodegaForm
   municipiosExtra: Array.isArray(form?.municipiosExtra) ? form.municipiosExtra : [],
 });
 
+const bodegaId = (bodega: BodegaInventario): string =>
+  String(bodega._id || bodega.iud || bodega.nombre || '').trim();
+
 export default function InventarioBodegasTab({
   bodegaForm: rawBodegaForm,
   setBodegaForm,
@@ -281,8 +284,8 @@ export default function InventarioBodegasTab({
       </Card>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {bodegas.map((bodega) => (
-          <Card key={bodega._id} className="border-border bg-card">
+        {bodegas.map((bodega, index) => (
+          <Card key={bodegaId(bodega) || `bodega-${index}`} className="border-border bg-card">
             <CardHeader>
               <div className="flex items-start justify-between gap-3">
                 <div>

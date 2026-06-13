@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   Barcode,
   Package,
+  Pencil,
   Printer,
   Search,
   Trash2,
@@ -38,6 +39,7 @@ export type InventarioSkuCatalogoModalProps = {
   puedeGestionarSku?: boolean;
   onOpenChange: (open: boolean) => void;
   onSelectSku: (producto: BackendProducto) => void;
+  onEditSku?: (producto: BackendProducto) => void;
   onDesactivarSku: (producto: BackendProducto) => Promise<void>;
   onEliminarSku: (producto: BackendProducto) => Promise<void>;
   onGenerarCodigoBarras: (producto: BackendProducto) => Promise<void>;
@@ -50,6 +52,7 @@ export default function InventarioSkuCatalogoModal({
   puedeGestionarSku = false,
   onOpenChange,
   onSelectSku,
+  onEditSku,
   onDesactivarSku,
   onEliminarSku,
   onGenerarCodigoBarras,
@@ -201,6 +204,18 @@ export default function InventarioSkuCatalogoModal({
                               >
                                 <Trash2 className="h-4 w-4" />
                               </Button>
+                              {onEditSku && (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="icon"
+                                  disabled={saving}
+                                  title="Editar SKU"
+                                  onClick={() => onEditSku(producto)}
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                              )}
                             </>
                           )}
                         </div>

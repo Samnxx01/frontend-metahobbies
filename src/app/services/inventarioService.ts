@@ -188,14 +188,37 @@ export interface MonedaCopOption {
   monedas: string;
   estadoMoneda: boolean;
   activosInventory?: boolean;
+  activoWompi?: boolean;
+}
+
+export interface HistorialCicloSecuencia {
+  ciclo: number;
+  prefijo: string;
+  consecutivoDesde: number;
+  consecutivoHasta: number;
+  totalEmitidos: number;
+  maxRegistros: number;
+  cerradoEn?: string;
 }
 
 export interface DocumentoSoporteTipoConfig {
   id: string;
   codigo: string;
+  nombre?: string | null;
+  descripcion?: string | null;
+  dominioSecuencia?: 'VENTA' | 'INVENTARIO' | null;
   prefijo: string;
   padding: number;
   siguiente: number;
+  /** Tope de emisiones; null = solo límite por dígitos. */
+  maxRegistrosSecuencia?: number | null;
+  cicloActual?: number;
+  consecutivoInicioCiclo?: number;
+  emisionesEnCiclo?: number;
+  maxRegistrosCiclo?: number;
+  disponiblesEnCiclo?: number;
+  cicloCompleto?: boolean;
+  historialCiclos?: HistorialCicloSecuencia[];
   activo: boolean;
   totalRecepciones?: number;
   puedeReiniciarSecuencia?: boolean;
@@ -235,7 +258,8 @@ export interface DocumentoRelacionado {
 }
 
 export interface InventarioTipoMovimiento {
-  _id: string;
+  _id?: string;
+  iud?: string;
   codigo: string;
   nombre: string;
   descripcion?: string;
@@ -330,17 +354,60 @@ export interface RecepcionOrdenCompraPayload {
   }>;
 }
 
+export interface ReporteKardexEntradaLinea {
+  sku: string;
+  bodega: string;
+  movimientoKardexId?: string | null;
+  movimientoLedgerId?: string | null;
+  estadoKardex?: 'CONFIRMADO' | 'NO_CONFIRMADO';
+  movimiento?: {
+    tipoMovimiento?: string;
+    tipoMovimientoConfig?: { codigo?: string; nombre?: string } | null;
+    motivo?: string;
+    cantidad?: number;
+    costoUnitario?: number;
+    costoTotal?: number;
+    metodoValuacionAplicado?: string;
+    documentoRelacionado?: { tipo?: string; numero?: string } | null;
+    saldoBodega?: { cantidadAnterior?: number; cantidadPosterior?: number } | null;
+    registradoEn?: string | null;
+  } | null;
+  saldo?: {
+    cantidadDisponible?: number;
+    costoPromedioUnitario?: number;
+    precioComprobanteEntrada?: number;
+    actualizadoEn?: string | null;
+  } | null;
+}
+
 export interface RecepcionOrdenCompraResponse {
   /** Indica si al confirmar se registró kardex (recepción automática o estado explícito true). */
   aplicoKardex?: boolean;
   aplicoContable?: boolean;
   msg?: string;
+  reporteKardex?: ReporteKardexEntradaLinea[];
+  comprobanteContable?: {
+    tipo?: string;
+    numero?: string;
+    documentoSoporteId?: string | null;
+    confirmadoEn?: string;
+    usuario?: { correo?: string; nombre?: string };
+  } | null;
   orden: InventarioOrdenCompra;
   recepcion: {
-    _id: string;
+    _id?: string;
+    iud?: string;
+    id?: string;
     numeroRecepcion: string;
     estado?: 'PENDIENTE_APROBACION' | 'APROBADA' | 'RECHAZADA' | 'ANULADA';
     documentoSoporte?: { tipo: string; numero: string };
+    comprobanteContable?: {
+      tipo?: string;
+      numero?: string;
+      documentoSoporteId?: string | null;
+      confirmadoEn?: string;
+      usuario?: { correo?: string; nombre?: string };
+    } | null;
     items: Array<{
       sku: string;
       cantidadRecibida: number;
@@ -362,8 +429,20 @@ export interface EliminarOrdenCompraResponse {
   modoRecepcion?: 'AUTOMATICA' | 'MANUAL';
 }
 
+export interface AuditoriaOrdenCompra {
+  usuarioId?: string;
+  timestamp?: string;
+  ipOrigen?: string;
+  usuario?: {
+    correo?: string;
+    nombre?: string;
+  };
+}
+
 export interface InventarioOrdenCompra {
-  _id: string;
+  _id?: string;
+  iud?: string;
+  id?: string;
   numeroOrden: string;
   numeroRemision?: string;
   numeroFacturaElectronico?: string;
@@ -374,22 +453,26 @@ export interface InventarioOrdenCompra {
   documentoLegalCompra: { tipo: string; numero: string; fecha: string };
   estado: string;
   comprobanteContable?: {
+    tipo?: string;
     numero?: string;
     documentoSoporteId?: string | null;
     confirmadoEn?: string;
-    confirmadoPor?: string | null;
+    usuario?: {
+      correo?: string;
+      nombre?: string;
+    };
   } | null;
   procesoCompra?: {
     recepcionAutomatica?: boolean;
     modoRecepcion?: 'AUTOMATICA' | 'MANUAL';
   };
   items: Array<OrdenCompraItemLinea & { cantidadRecibida?: number }>;
+  auditoria?: AuditoriaOrdenCompra;
   createdAt?: string;
   updatedAt?: string;
-  auditoriaUltimaEdicion?: {
+  auditoriaUltimaEdicion?: AuditoriaOrdenCompra & {
     concepto?: string;
     justificacion?: string;
-    timestamp?: string;
   };
 }
 
@@ -427,6 +510,12 @@ export interface InventarioMovimiento {
   bodega: string;
   ubicacion?: UbicacionInventario;
   documentoRelacionado: DocumentoRelacionado;
+  saldoBodega?: {
+    cantidadAnterior: number;
+    cantidadPosterior: number;
+    valorInicial?: number | null;
+    valorActual?: number | null;
+  } | null;
   auditoriaRelacion?: {
     origenColeccion?: string | null;
     origenId?: string | null;
@@ -438,6 +527,12 @@ export interface InventarioMovimiento {
   hashPrevio?: string | null;
   hashIntegridad: string;
   createdAt?: string;
+  updatedAt?: string;
+  auditoria?: {
+    timestamp?: string;
+    ipOrigen?: string;
+    usuarioCorreo?: string | null;
+  };
 }
 
 export interface MovimientoPayload {
@@ -452,7 +547,8 @@ export interface MovimientoPayload {
 }
 
 export interface BodegaInventario {
-  _id: string;
+  _id?: string;
+  iud?: string;
   nombre: string;
   descripcion?: string;
   estado: boolean;
@@ -489,6 +585,8 @@ export interface ComprobanteEntradaAjusteItem {
   bodega: string;
   cantidadRecibida: number;
   costoUnitario: number;
+  /** Subtotal alineado con la línea OC (proporcional); evita deriva por redondeo unitario. */
+  subtotal?: number;
   disponibleKardex?: number;
   costoPromedioKardex?: number;
   movimientoKardexId?: string | null;
@@ -520,6 +618,7 @@ export interface ComprobanteEntradaDetalle {
   numeroRecepcion: string;
   estado: string;
   documentoSoporte: { tipo: string; numero: string };
+  reporteKardex?: ReporteKardexEntradaLinea[];
   orden: {
     _id: string;
     numeroOrden: string;
@@ -533,9 +632,11 @@ export interface ComprobanteEntradaDetalle {
 }
 
 export interface AjusteInventario {
-  _id: string;
+  _id?: string;
+  iud?: string;
   sku: string;
   bodega: string;
+  bodegaDestino?: string | null;
   tipoAjusteCodigo?: string;
   tipoAjuste: TipoAjuste;
   recepcionCompraId?: string | null;
@@ -545,6 +646,7 @@ export interface AjusteInventario {
   observacion?: string;
   estado: EstadoAjuste;
   movimientoId?: string | null;
+  movimientoEntradaId?: string | null;
   createdAt?: string;
 }
 
@@ -552,12 +654,31 @@ export interface AjustePayload {
   recepcionCompraId?: string;
   sku: string;
   bodega: string;
+  bodegaDestino?: string;
   tipoAjusteCodigo: string;
   causal: string;
   cantidad: number;
   costoUnitarioReferencia?: number;
   observacion?: string;
   ubicacion?: UbicacionInventario;
+}
+
+/** Id público del ajuste (`iud` en API; `_id` en respuestas sin enmascarar). */
+export const getAjusteInventarioId = (
+  ajuste: Pick<AjusteInventario, '_id' | 'iud'> | null | undefined,
+): string => String(ajuste?._id || ajuste?.iud || '').trim();
+
+export interface InventarioValorHistoricoEntry {
+  movimientoId?: string;
+  fecha?: string;
+  tipoMovimiento?: string;
+  documentoTipo?: string | null;
+  documentoNumero?: string | null;
+  valorAnterior: number;
+  valorPosterior: number;
+  cantidadAnterior?: number;
+  cantidadPosterior?: number;
+  esPrimerRegistro?: boolean;
 }
 
 export interface StockActualItem {
@@ -567,6 +688,20 @@ export interface StockActualItem {
   cantidadDisponible: number;
   costoPromedioUnitario: number;
   valorTotal?: number;
+  /** Valor del primer registro kardex (referencia histórica). */
+  valorInicial?: number;
+  /** Valor inventario actual (costo). */
+  valorActual?: number;
+  valorPrimerRegistro?: {
+    movimientoId?: string;
+    valor?: number;
+    cantidad?: number;
+    costoUnitario?: number;
+    fecha?: string;
+    documentoTipo?: string | null;
+    documentoNumero?: string | null;
+  } | null;
+  historicoValores?: InventarioValorHistoricoEntry[];
 }
 
 export interface InventoryLedgerMovement {
@@ -591,10 +726,14 @@ export interface InventoryLedgerMovement {
   transactionHash: string;
   previousHash?: string | null;
   audit?: {
-    usuarioId?: string;
+    usuario?: {
+      nombre?: string;
+      correo?: string | null;
+    } | null;
     usuarioCorreo?: string | null;
     ipOrigen?: string;
     timestamp?: string;
+    ejecutadoEn?: string;
   };
   createdAt?: string;
   updatedAt?: string;
@@ -619,7 +758,14 @@ export interface InventarioComprobanteContable {
   numero: string;
   comprobanteId?: string | null;
   documentoSoporteId?: string | null;
+  comprobanteEntrada?: {
+    tipo?: string | null;
+    numero?: string;
+    documentoSoporteId?: string | null;
+  } | null;
   invoiceId?: string | null;
+  creadoEn?: string | null;
+  actualizadoEn?: string | null;
   fechaPrimera?: string;
   fechaUltima?: string;
   totalMovimientos: number;
@@ -632,10 +778,12 @@ export interface InventarioComprobanteContable {
   valorSalida: number;
   ultimoHash?: string | null;
   razonUltima?: string | null;
-  usuarioEjecutorId?: string | null;
-  usuarioEjecutorCorreo?: string | null;
-  ipOrigenEjecutor?: string | null;
+  usuario?: {
+    nombre?: string;
+    correo?: string | null;
+  } | null;
   ejecutadoEn?: string | null;
+  ipOrigenEjecutor?: string | null;
 }
 
 export interface CrearComprobanteContablePayload {
@@ -774,6 +922,93 @@ const inventarioService = {
       body: { documentos },
     });
     return (resp?.data ?? []) as DocumentoSoporteTipoConfig[];
+  },
+
+  async cerrarCicloSecuenciaDocumentoSoporte(codigo: string): Promise<{
+    codigo: string;
+    cicloCerrado: number;
+    cicloActual: number;
+    consecutivoInicioCiclo: number;
+    siguiente: number;
+    siguienteFormateado: string;
+    historial: HistorialCicloSecuencia;
+    config: DocumentoSoporteTipoConfig | null;
+  }> {
+    const resp = await apiFetch('/api/inventario/config/documentos-soporte/cerrar-ciclo', {
+      method: 'POST',
+      body: { codigo },
+    });
+    return resp?.data as {
+      codigo: string;
+      cicloCerrado: number;
+      cicloActual: number;
+      consecutivoInicioCiclo: number;
+      siguiente: number;
+      siguienteFormateado: string;
+      historial: HistorialCicloSecuencia;
+      config: DocumentoSoporteTipoConfig | null;
+    };
+  },
+
+  async registrarEmisionesManualesVinculadas(payload: {
+    codigo: string;
+    desdeSecuencia?: number;
+    hastaSecuencia?: number;
+    reservarSiguiente?: boolean;
+  }): Promise<{
+    codigo: string;
+    documentoSoporteConfigId: string;
+    desde: number;
+    hasta: number;
+    creados: number;
+    vinculados: number;
+    ocupados: number;
+    omitidos: number;
+    registros: Array<{
+      id: string;
+      secuencia: number;
+      numero: string;
+      estado: string;
+      documentoSoporteConfigId: string;
+      omitido?: boolean;
+    }>;
+    reservaSiguiente: {
+      id: string;
+      secuencia: number;
+      numero: string;
+      estado: string;
+      documentoSoporteConfigId: string;
+    } | null;
+  }> {
+    const resp = await apiFetch('/api/inventario/config/documentos-soporte/registrar-emision-manual', {
+      method: 'POST',
+      body: payload,
+    });
+    return resp?.data as {
+      codigo: string;
+      documentoSoporteConfigId: string;
+      desde: number;
+      hasta: number;
+      creados: number;
+      vinculados: number;
+      ocupados: number;
+      omitidos: number;
+      registros: Array<{
+        id: string;
+        secuencia: number;
+        numero: string;
+        estado: string;
+        documentoSoporteConfigId: string;
+        omitido?: boolean;
+      }>;
+      reservaSiguiente: {
+        id: string;
+        secuencia: number;
+        numero: string;
+        estado: string;
+        documentoSoporteConfigId: string;
+      } | null;
+    };
   },
 
   async sincronizarSecuenciaDocumentoSoporte(codigo: string): Promise<{
@@ -969,6 +1204,31 @@ const inventarioService = {
   async listarKardex(params: { sku?: string; bodega?: string; limit?: number }): Promise<InventarioMovimiento[]> {
     const resp = await apiFetch(`/api/inventario/kardex${buildQuery(params)}`, { method: 'GET' });
     return (resp?.data ?? []) as InventarioMovimiento[];
+  },
+
+  async exportarKardexExcel(params: { sku?: string; bodega?: string; desde?: string; hasta?: string }): Promise<void> {
+    const response = await apiFetch(
+      `/api/inventario/reportes/exportar/kardex${buildQuery(params)}`,
+      { method: 'GET', responseType: 'raw' },
+    ) as Response;
+    if (!response.ok) {
+      let msg = 'No se pudo exportar el kardex.';
+      try {
+        const json = await response.json();
+        if (typeof json?.msg === 'string') msg = json.msg;
+      } catch {
+        // ignore
+      }
+      throw new Error(msg);
+    }
+    const blob = await response.blob();
+    const skuLabel = String(params.sku || 'todos').trim().toUpperCase();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `kardex-${skuLabel}.xlsx`;
+    link.click();
+    URL.revokeObjectURL(url);
   },
 
   async obtenerLedgerPorInvoice(invoiceId: string): Promise<LedgerByInvoiceResponse> {
@@ -1196,7 +1456,7 @@ const inventarioService = {
 
   async confirmarRecepcionOrdenCompra(
     recepcionId: string,
-    payload: { estado?: boolean; confirmar?: boolean } = {}
+    payload: { estado?: boolean; confirmar?: boolean; aplicarKardex?: boolean } = {}
   ): Promise<RecepcionOrdenCompraResponse> {
     const resp = await apiFetch(`/api/inventario/compras/recepciones/${recepcionId}/confirmar`, {
       method: 'POST',

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { adminEntityId, adminEntityIdForPath } from '@/app/utils/adminEntityId';
 import { toast } from 'react-toastify';
 import { apiFetch } from '@/app/services/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -18,10 +19,17 @@ import {
 
 interface NivelGeneracion {
     iud: string;
+    _id?: string;
+    id?: string;
     NombreLevel: string;
     GeneracionLevel: number;
     porcentaje: number; // stored as decimal: 0.25 = 25%
 }
+
+const normalizeNivelGeneracion = (row: NivelGeneracion): NivelGeneracion => {
+    const id = adminEntityId(row);
+    return id ? { ...row, iud: id } : row;
+};
 
 interface EditarForm {
     NombreLevel: string;
@@ -97,7 +105,9 @@ export default function ParametrizacionGenyProcent({ scope = 'SUPER_ADMIN' }: Pr
         setLoading(true);
         try {
             const res = await apiFetch('/api/referido/listar/comisiones', { method: 'GET' });
-            const lista: NivelGeneracion[] = Array.isArray(res?.data) ? res.data : [];
+            const lista: NivelGeneracion[] = Array.isArray(res?.data)
+                ? res.data.map(normalizeNivelGeneracion)
+                : [];
             setNiveles(lista.sort((a, b) => a.GeneracionLevel - b.GeneracionLevel));
         } catch (err: any) {
             mostrarError(err.message || 'Error al cargar niveles.');
@@ -129,7 +139,7 @@ export default function ParametrizacionGenyProcent({ scope = 'SUPER_ADMIN' }: Pr
     };
 
     const abrirEditar = (n: NivelGeneracion) => {
-        setEditandoId(n.iud);
+        setEditandoId(adminEntityId(n));
         const pctVal = n.porcentaje * 100;
         setFormEditar({
             NombreLevel: n.NombreLevel,
@@ -151,7 +161,7 @@ export default function ParametrizacionGenyProcent({ scope = 'SUPER_ADMIN' }: Pr
         }
         setLoadingEditar(true);
         try {
-            await apiFetch(`/api/referido/comisiones/${editandoId}`, {
+            await apiFetch(`/api/referido/comisiones/${adminEntityIdForPath(editandoId)}`, {
                 method: 'PUT',
                 body: {
                     NombreLevel: formEditar.NombreLevel.trim(),
@@ -172,7 +182,7 @@ export default function ParametrizacionGenyProcent({ scope = 'SUPER_ADMIN' }: Pr
         if (!window.confirm(`¿Eliminar el nivel ${nombre}? Esta acción no se puede deshacer.`)) return;
         setEliminandoId(id);
         try {
-            await apiFetch(`/api/referido/comisiones/${id}`, { method: 'DELETE' });
+            await apiFetch(`/api/referido/comisiones/${adminEntityIdForPath(id)}`, { method: 'DELETE' });
             toast.success(`Nivel ${nombre} eliminado.`);
             await cargarNiveles();
         } catch (err: any) {

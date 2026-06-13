@@ -1,4 +1,5 @@
 import { apiFetch } from '@/app/services/api';
+import { normalizePublicIdForApi } from '@/app/utils/entityPublicId';
 import { persistBrandingCache } from '@/app/services/brandingCache';
 
 export interface BrandingPalette {
@@ -79,7 +80,7 @@ export const obtenerBrandingPublico = async (): Promise<BrandingConfig | null> =
 
 const buildBrandingScopeQuery = (params?: BrandingScopeParams): string => {
   const query = new URLSearchParams();
-  const tenantGlobalId = String(params?.tenantGlobalId || '').trim();
+  const tenantGlobalId = normalizePublicIdForApi(params?.tenantGlobalId);
   if (tenantGlobalId) {
     query.set('tenantGlobalId', tenantGlobalId);
   }

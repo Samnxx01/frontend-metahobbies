@@ -6,8 +6,10 @@ import carritoService, {
   type BackendCart,
   type BackendCartItem,
 } from '@/app/services/carritoService';
+import { readWompiRetornoContext } from '@/app/utils/checkoutSessionCache';
 
 const IMAGES_KEY = 'cart_images';
+const COLORS_KEY = 'cart_colors';
 
 function getImageCache(): Record<string, string> {
   try {
@@ -18,8 +20,38 @@ function getImageCache(): Record<string, string> {
   }
 }
 
+function getColorCache(): Record<string, CartItem['colors']> {
+  try {
+    const raw = localStorage.getItem(COLORS_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as Record<string, CartItem['color'] | CartItem['colors']>;
+    const map: Record<string, CartItem['colors']> = {};
+    for (const [productoId, value] of Object.entries(parsed)) {
+      if (Array.isArray(value)) map[productoId] = value.filter(Boolean);
+      else if (value && typeof value === 'object') map[productoId] = [value];
+    }
+    return map;
+  } catch {
+    return {};
+  }
+}
+
 export function mapBackendCartItemToCartItem(item: BackendCartItem): CartItem {
   const images = getImageCache();
+  const colors = getColorCache();
+  const pantone = String(item.colorPantone || '').trim();
+  const colorDesdeBackend = pantone
+    ? {
+        pantone,
+        name: String(item.colorNombre || pantone).trim(),
+        hex: String(item.colorHex || pantone).trim(),
+      }
+    : undefined;
+  const coloresCache = colors[item.productoId] ?? [];
+  const color = colorDesdeBackend ?? (coloresCache.length === 1 ? coloresCache[0] : undefined);
+  const coloresItem = colorDesdeBackend
+    ? [colorDesdeBackend]
+    : coloresCache;
   return {
     id: item.productoId,
     name: item.nombre,
@@ -27,6 +59,8 @@ export function mapBackendCartItemToCartItem(item: BackendCartItem): CartItem {
     price: item.precioUnitario,
     image: images[item.productoId] ?? '',
     category: '',
+    color,
+    colors: coloresItem,
     stock: item.stockDisponible,
     available: item.stockSuficiente,
     createdAt: '',
@@ -39,6 +73,22 @@ export function mapBackendCartItemToCartItem(item: BackendCartItem): CartItem {
 
 export function mapBackendCartToCartItems(cart: BackendCart): CartItem[] {
   return (cart.items || []).map(mapBackendCartItemToCartItem);
+}
+
+/** El backend no guarda URL de imagen; conservar las del carrito en memoria/caché. */
+function mergeItemImagesDesdeFallback(
+  primary: CartItem[],
+  fallback: CartItem[],
+): CartItem[] {
+  if (!primary.length || !fallback.length) return primary;
+  const porProducto = new Map(fallback.map((item) => [String(item.id), item]));
+  return primary.map((item) => {
+    const prev = porProducto.get(String(item.id));
+    if (!String(item.image || '').trim() && prev?.image) {
+      return { ...item, image: prev.image };
+    }
+    return item;
+  });
 }
 
 export function datosFacturacionFromCarrito(
@@ -78,6 +128,13 @@ export function buildConfirmacionSnapshot(
   };
 }
 
+function resolverFechaFacturaConfirmacion(
+  consulta?: { emitidaEn?: string | null; fechaFactura?: string | null } | null,
+): string {
+  const emitida = String(consulta?.emitidaEn || consulta?.fechaFactura || '').trim();
+  return emitida || new Date().toISOString();
+}
+
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 type ConsultaConfirmacion = Awaited<
@@ -96,6 +153,9 @@ function itemsDesdeConsulta(consulta: ConsultaConfirmacion): CartItem[] {
       precioUnitario: item.precioUnitario,
       precioActual: item.precioUnitario,
       cantidad: item.cantidad,
+      colorPantone: item.colorPantone,
+      colorNombre: item.colorNombre,
+      colorHex: item.colorHex,
       descuentoItem: { tipo: 'NINGUNO', valor: 0 },
       subtotalBruto: item.subtotalNeto,
       subtotalNeto: item.subtotalNeto,
@@ -108,9 +168,8 @@ function itemsDesdeConsulta(consulta: ConsultaConfirmacion): CartItem[] {
 function consultaTieneDetalle(consulta: ConsultaConfirmacion | null): boolean {
   if (!consulta) return false;
   const tieneItems = Boolean(consulta.items?.length);
-  const confirmado =
-    consulta.carritoEstado === 'COMPLETADO' ||
-    Boolean(consulta.facturaId);
+  const pagoAprobado = String(consulta.status || '').trim().toUpperCase() === 'APPROVED';
+  const confirmado = pagoAprobado && Boolean(consulta.facturaId || consulta.carritoEstado === 'COMPLETADO');
   return tieneItems && confirmado;
 }
 
@@ -131,9 +190,15 @@ export async function enriquecerConfirmacionDesdeBackend(
 ): Promise<CheckoutConfirmacionPedido> {
   let consulta: ConsultaConfirmacion | null = null;
 
+  const wompiCtx = readWompiRetornoContext();
+  const opcionesConsulta = {
+    transactionId: resultado.transactionId || wompiCtx.transactionId || undefined,
+    reference: resultado.referenciaPago || wompiCtx.reference || undefined,
+  };
+
   for (let i = 0; i < maxIntentos; i += 1) {
     try {
-      consulta = await carritoService.consultarEstadoPagoWompi(carritoId);
+      consulta = await carritoService.consultarEstadoPagoWompi('0', opcionesConsulta);
       if (consultaTieneDetalle(consulta)) break;
     } catch {
       /* reintentar */
@@ -160,7 +225,9 @@ export async function enriquecerConfirmacionDesdeBackend(
       monto = Number(consulta.amount_in_cents) / 100;
     }
     const itemsConsulta = itemsDesdeConsulta(consulta);
-    if (itemsConsulta.length) items = itemsConsulta;
+    if (itemsConsulta.length) {
+      items = mergeItemImagesDesdeFallback(itemsConsulta, fallback.items);
+    }
     if (consulta.subtotal != null) subtotal = Number(consulta.subtotal);
     if (consulta.total != null) total = Number(consulta.total);
     if (consulta.datosFacturacion) {
@@ -172,7 +239,7 @@ export async function enriquecerConfirmacionDesdeBackend(
     try {
       const cart = await carritoService.obtenerPorId(carritoId);
       const mapped = mapBackendCartToCartItems(cart);
-      if (mapped.length) items = mapped;
+      if (mapped.length) items = mergeItemImagesDesdeFallback(mapped, fallback.items);
       if (cart.subtotal != null) subtotal = cart.subtotal;
       if (cart.total != null) total = cart.total;
       const df = datosFacturacionFromCarrito(cart);
@@ -182,7 +249,7 @@ export async function enriquecerConfirmacionDesdeBackend(
     }
   }
 
-  return buildConfirmacionSnapshot(
+  const snapshot = buildConfirmacionSnapshot(
     {
       ...resultado,
       facturaId,
@@ -198,4 +265,9 @@ export async function enriquecerConfirmacionDesdeBackend(
     fallback.email,
     carritoId,
   );
+
+  return {
+    ...snapshot,
+    fecha: resolverFechaFacturaConfirmacion(consulta),
+  };
 }

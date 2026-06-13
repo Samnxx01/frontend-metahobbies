@@ -10,6 +10,17 @@ import {
   normalizarExpiryTarjeta,
   wompiStatusToEstadoPago,
 } from '@/app/utils/wompiPaymentStatus';
+import {
+  clearCachesTrasPagoRechazado,
+  clearCheckoutCachesParaReintentoPago,
+  clearCheckoutSessionCompleta,
+  clearWompiRetornoContext,
+  isReferenciaWompiDuplicadaError,
+  marcarCheckoutDeclinadoActivo,
+  persistWompiRetornoContext,
+  readCarritoIdPagoPersistido,
+  readWompiRetornoContext,
+} from '@/app/utils/checkoutSessionCache';
 
 export interface CartPaymentInfo {
   paymentMethod: 'nequi' | 'card' | 'pse' | '';
@@ -30,8 +41,31 @@ export interface CartPaymentInfo {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/** Solo hay pago Nequi/tarjeta en curso si Wompi ya registró una transacción (no basta la referencia del checkout). */
+function tieneTransaccionWompiEnCurso(
+  consulta: { transactionId?: string | null } | null | undefined,
+): boolean {
+  return Boolean(String(consulta?.transactionId || '').trim());
+}
+
 const POLL_MAX_INTENTOS = 80;
 const POLL_INTERVALO_MS = 4000;
+
+/** transactionId/reference de la URL de retorno Wompi o de la caché de sesión. */
+function resolveWompiQueryContext(): { transactionId?: string; reference?: string } {
+  if (typeof window === 'undefined') return {};
+  const params = new URLSearchParams(window.location.search);
+  const transactionId =
+    String(
+      params.get('id') || params.get('transactionId') || params.get('transaction_id') || '',
+    ).trim();
+  const reference = String(params.get('reference') || '').trim();
+  const stored = readWompiRetornoContext();
+  return {
+    transactionId: transactionId || String(stored.transactionId || '').trim() || undefined,
+    reference: reference || String(stored.reference || '').trim() || undefined,
+  };
+}
 
 const buildInitialPaymentFromFacturacion = (
   datos: DatosFacturacionInvitado | null,
@@ -59,6 +93,8 @@ const buildInitialPaymentFromFacturacion = (
 function mapConsultaAResultado(
   consulta: {
     status?: string;
+    carritoEstado?: string | null;
+    carritoId?: string | null;
     reference?: string;
     ventaReferencia?: string | null;
     facturaId?: string | null;
@@ -89,6 +125,7 @@ function mapConsultaAResultado(
     ventaReferencia,
     facturaId,
     metodoPago,
+    carritoId: String(consulta?.carritoId || '').trim() || undefined,
   };
 }
 
@@ -116,11 +153,17 @@ async function resolverEstadoFinalPago(
     return { wompiStatus, referencia, referenciaPago, ventaReferencia, facturaId, transactionId, monto };
   }
 
+  const wompiCtx = readWompiRetornoContext();
   const maxIntentos = 8;
   for (let i = 0; i < maxIntentos; i += 1) {
     await sleep(2000);
     try {
-      const consulta = await carritoService.consultarEstadoPagoWompi(carritoId);
+      const txHint = transactionId || wompiCtx.transactionId || undefined;
+      const refHint = referenciaPago || wompiCtx.reference || undefined;
+      const consulta = await carritoService.consultarEstadoPagoWompi(
+        (txHint || refHint) ? '0' : (carritoId || '0'),
+        { transactionId: txHint, reference: refHint },
+      );
       wompiStatus = String(consulta?.status || wompiStatus);
       referenciaPago = String(consulta?.reference || referenciaPago);
       ventaReferencia = String(consulta?.ventaReferencia || ventaReferencia);
@@ -153,6 +196,10 @@ export function useCartCheckoutPayment(
   );
   const [loading, setLoading] = useState(false);
   const [monitoreandoPago, setMonitoreandoPago] = useState(false);
+  /** true solo tras ejecutarPagoWompi (Nequi/tarjeta API); evita bloquear el botón al llegar al paso de pago. */
+  const [pagoEnviadoAWompi, setPagoEnviadoAWompi] = useState(false);
+  const [pagoRechazado, setPagoRechazado] = useState(false);
+  const [mensajePagoRechazado, setMensajePagoRechazado] = useState('');
   const [pollCount, setPollCount] = useState(0);
 
   const onPagoResultadoRef = useRef(onPagoResultado);
@@ -161,20 +208,93 @@ export function useCartCheckoutPayment(
   const metodoPagoRef = useRef(paymentInfo.paymentMethod);
   metodoPagoRef.current = paymentInfo.paymentMethod;
 
+  const resultadoNotificadoRef = useRef<string | null>(null);
+  const pagoContextoRef = useRef<{ reference: string; transactionId: string }>({
+    reference: '',
+    transactionId: '',
+  });
+
+  const marcarPagoRechazado = useCallback((mensaje?: string) => {
+    clearCachesTrasPagoRechazado();
+    marcarCheckoutDeclinadoActivo();
+    pagoContextoRef.current = { reference: '', transactionId: '' };
+    resultadoNotificadoRef.current = null;
+    setPagoRechazado(true);
+    setMensajePagoRechazado(
+      mensaje?.trim()
+        || 'Tu banco o Nequi no aprobó el pago. Revisa tu saldo o intenta con otro método.',
+    );
+    setMonitoreandoPago(false);
+    setPagoEnviadoAWompi(false);
+    setPollCount(0);
+  }, []);
+
+  const reintentarPago = useCallback(() => {
+    clearWompiRetornoContext();
+    pagoContextoRef.current = { reference: '', transactionId: '' };
+    resultadoNotificadoRef.current = null;
+    setPagoRechazado(false);
+    setMensajePagoRechazado('');
+    setMonitoreandoPago(false);
+    setPagoEnviadoAWompi(false);
+    setPollCount(0);
+    setLoading(false);
+  }, []);
+
+  /** Tras cancelar pedido: limpia caché de checkout y reinicia el formulario de pago. */
+  const resetTrasCancelarPedido = useCallback(() => {
+    clearCheckoutSessionCompleta();
+    reintentarPago();
+    setPaymentInfo(buildInitialPaymentFromFacturacion(datosFacturacion));
+  }, [datosFacturacion, reintentarPago]);
+
   const consultarYNotificar = useCallback(
     async (id: string): Promise<ResultadoPago | null> => {
-      const consulta = await carritoService.consultarEstadoPagoWompi(id);
+      const urlCtx = resolveWompiQueryContext();
+      const reference =
+        pagoContextoRef.current.reference || urlCtx.reference || undefined;
+      const transactionId =
+        pagoContextoRef.current.transactionId || urlCtx.transactionId || undefined;
+      const usarResolucionPorTransaccion = Boolean(transactionId || reference);
+
+      const consulta = await carritoService.consultarEstadoPagoWompi(
+        usarResolucionPorTransaccion ? '0' : (id || '0'),
+        { transactionId, reference },
+      );
+
       const resultado = mapConsultaAResultado(
         consulta,
         email,
         String(metodoPagoRef.current || ''),
       );
+
+      if (resultado.estado === 'rechazada') {
+        const mensajeBackend =
+          typeof consulta?.mensajePago === 'string' ? consulta.mensajePago : undefined;
+        marcarPagoRechazado(mensajeBackend);
+      } else if (tieneTransaccionWompiEnCurso(consulta)) {
+        pagoContextoRef.current = {
+          reference: String(consulta.reference || reference || ''),
+          transactionId: String(consulta.transactionId || transactionId || ''),
+        };
+        persistWompiRetornoContext(pagoContextoRef.current);
+      }
+
       if (resultado.estado !== 'pendiente') {
-        onPagoResultadoRef.current?.(resultado);
+        const clave = `${resultado.estado}:${resultado.transactionId || resultado.referenciaPago || id}`;
+        if (resultadoNotificadoRef.current !== clave) {
+          try {
+            await onPagoResultadoRef.current?.(resultado);
+            resultadoNotificadoRef.current = clave;
+          } catch {
+            resultadoNotificadoRef.current = null;
+            throw new Error('No se pudo completar la confirmación del pedido.');
+          }
+        }
       }
       return resultado;
     },
-    [email],
+    [email, marcarPagoRechazado],
   );
 
   const verificarEstadoPagoAhora = useCallback(async (): Promise<void> => {
@@ -188,32 +308,52 @@ export function useCartCheckoutPayment(
       if (!resultado) return;
       if (resultado.estado === 'aprobada') {
         setMonitoreandoPago(false);
-        toast.success('¡Pago confirmado!');
       } else if (resultado.estado === 'rechazada') {
-        setMonitoreandoPago(false);
-        toast.error('El pago fue rechazado.');
+        marcarPagoRechazado();
+      } else if (!tieneTransaccionWompiEnCurso(resultado)) {
+        const metodo = metodoPagoRef.current;
+        toast.info(
+          metodo === 'pse'
+            ? 'Pulsa «Pagar pedido» para ir a la pasarela PSE.'
+            : 'Pulsa «Pagar pedido» para enviar la solicitud de pago.',
+        );
       } else {
-        toast.info('El pago sigue pendiente. Aprueba en Nequi y vuelve a verificar.');
+        const metodo = metodoPagoRef.current;
+        toast.info(
+          metodo === 'card'
+            ? 'El pago sigue pendiente. Vuelve a verificar en unos segundos.'
+            : metodo === 'pse'
+              ? 'El pago sigue pendiente. Completa la aprobación en tu banco y vuelve a verificar.'
+              : 'El pago sigue pendiente. Aprueba en Nequi y vuelve a verificar.',
+        );
       }
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'No se pudo consultar el pago');
     } finally {
       setLoading(false);
     }
-  }, [carritoId, consultarYNotificar]);
+  }, [carritoId, consultarYNotificar, marcarPagoRechazado]);
 
-  // Polling prolongado (Nequi / aprobación tardía o vía API directa)
+  const metodoSoportaPollingEnPagina =
+    paymentInfo.paymentMethod === 'nequi' || paymentInfo.paymentMethod === 'card';
+
+  // Polling prolongado (Nequi / tarjeta API). PSE se valida solo al volver de Wompi.
   useEffect(() => {
     const debeMonitorear =
       Boolean(carritoId) &&
-      (monitoreandoPago || options?.monitoreoActivo === true);
+      metodoSoportaPollingEnPagina &&
+      !pagoRechazado &&
+      pagoEnviadoAWompi &&
+      monitoreandoPago;
 
     if (!debeMonitorear) return undefined;
 
     if (pollCount >= POLL_MAX_INTENTOS) {
       setMonitoreandoPago(false);
       toast.info(
-        'La verificación tardó demasiado. Usa «Ya aprobé en Nequi» o revisa tu correo.',
+        paymentInfo.paymentMethod === 'card'
+          ? 'La verificación tardó demasiado. Usa «Verificar pago con tarjeta» o revisa tu correo.'
+          : 'La verificación tardó demasiado. Usa «Ya aprobé en Nequi» o revisa tu correo.',
       );
       return undefined;
     }
@@ -224,10 +364,8 @@ export function useCartCheckoutPayment(
         const resultado = await consultarYNotificar(carritoId);
         if (resultado?.estado === 'aprobada') {
           setMonitoreandoPago(false);
-          toast.success('¡Pago confirmado!');
         } else if (resultado?.estado === 'rechazada') {
-          setMonitoreandoPago(false);
-          toast.error('El pago fue rechazado.');
+          marcarPagoRechazado();
         } else {
           setPollCount((c) => c + 1);
         }
@@ -239,32 +377,94 @@ export function useCartCheckoutPayment(
     return () => clearTimeout(timer);
   }, [
     carritoId,
+    pagoEnviadoAWompi,
     monitoreandoPago,
-    options?.monitoreoActivo,
+    pagoRechazado,
+    metodoSoportaPollingEnPagina,
     pollCount,
     consultarYNotificar,
+    marcarPagoRechazado,
   ]);
 
-  // Al entrar al paso de pago, sincronizar por si ya está APPROVED en Wompi/auditoría
+  // Al salir del paso de pago, detener monitoreo y polling.
+  useEffect(() => {
+    if (options?.monitoreoActivo === true) return undefined;
+    setMonitoreandoPago(false);
+    setPagoEnviadoAWompi(false);
+    setPollCount(0);
+    return undefined;
+  }, [options?.monitoreoActivo]);
+
+  /**
+   * Reanudar solo si ya existía un pago Wompi enviado (refresh con transactionId en caché).
+   * No consulta al elegir Nequi ni al llegar por primera vez al paso de pago.
+   */
   useEffect(() => {
     if (!carritoId || options?.monitoreoActivo !== true) return undefined;
+
+    const metodoActual = paymentInfo.paymentMethod;
+    if (metodoActual === 'pse') {
+      setMonitoreandoPago(false);
+      setPagoEnviadoAWompi(false);
+      setPollCount(0);
+      return undefined;
+    }
+    if (metodoActual && metodoActual !== 'nequi' && metodoActual !== 'card') {
+      return undefined;
+    }
+
+    const wompiCtx = readWompiRetornoContext();
+    const carritoPagoPersistido = readCarritoIdPagoPersistido();
+    const mismoCarrito =
+      Boolean(carritoPagoPersistido)
+      && String(carritoPagoPersistido) === String(carritoId).trim();
+    const transactionIdPersistido = String(wompiCtx.transactionId || '').trim();
+
+    if (!mismoCarrito || !transactionIdPersistido) {
+      setMonitoreandoPago(false);
+      setPagoEnviadoAWompi(false);
+      setPollCount(0);
+      return undefined;
+    }
+
+    pagoContextoRef.current = {
+      reference: String(wompiCtx.reference || ''),
+      transactionId: transactionIdPersistido,
+    };
+    setPagoEnviadoAWompi(true);
+    setMonitoreandoPago(true);
+    setPollCount(0);
+
     let cancelled = false;
     (async () => {
       try {
         const resultado = await consultarYNotificar(carritoId);
         if (cancelled || !resultado) return;
-        if (resultado.estado === 'pendiente') {
-          setMonitoreandoPago(true);
-          setPollCount(0);
+        if (resultado.estado === 'rechazada') {
+          marcarPagoRechazado();
+        } else if (resultado.estado === 'aprobada') {
+          setMonitoreandoPago(false);
+        } else if (!tieneTransaccionWompiEnCurso(resultado)) {
+          setMonitoreandoPago(false);
+          setPagoEnviadoAWompi(false);
+          clearWompiRetornoContext();
+          pagoContextoRef.current = { reference: '', transactionId: '' };
         }
       } catch {
-        /* sin referencia de pago aún */
+        /* sin cambios: el polling reintentará */
       }
     })();
+
     return () => {
       cancelled = true;
     };
-  }, [carritoId, options?.monitoreoActivo, consultarYNotificar]);
+  }, [
+    carritoId,
+    options?.monitoreoActivo,
+    paymentInfo.paymentMethod,
+    consultarYNotificar,
+    marcarPagoRechazado,
+  ]);
 
   const handleFormChange = useCallback(
     (_section: 'personalInfo' | 'paymentInfo', field: string, value: unknown) => {
@@ -306,6 +506,8 @@ export function useCartCheckoutPayment(
       return;
     }
 
+    setPagoRechazado(false);
+    setMensajePagoRechazado('');
     setLoading(true);
     try {
       let payload: Parameters<typeof carritoService.ejecutarPagoWompi>[1] = {
@@ -389,15 +591,44 @@ export function useCartCheckoutPayment(
       };
 
       if (paymentInfo.paymentMethod === 'pse' && data?.wompiCheckoutUrl) {
+        const referenciaPagoPse = String(data.reference || '');
+        const transactionIdPse = String(data.transactionId || data.transaccion?.id || '');
+        if (referenciaPagoPse || transactionIdPse) {
+          pagoContextoRef.current = {
+            reference: referenciaPagoPse,
+            transactionId: transactionIdPse,
+          };
+          persistWompiRetornoContext(pagoContextoRef.current);
+        }
+        setMonitoreandoPago(false);
+        setPagoEnviadoAWompi(false);
         toast.success('Redirigiendo a la pasarela de pago…');
         window.location.href = String(data.wompiCheckoutUrl);
         return;
       }
 
+      const referenciaPago = String(data.reference || '');
+      const transactionId = String(data.transactionId || data.transaccion?.id || '');
+      if (referenciaPago || transactionId) {
+        pagoContextoRef.current = { reference: referenciaPago, transactionId };
+        persistWompiRetornoContext(pagoContextoRef.current);
+      }
+      if (paymentInfo.paymentMethod === 'nequi' || paymentInfo.paymentMethod === 'card') {
+        setPagoEnviadoAWompi(true);
+      }
+
       const resolved = await resolverEstadoFinalPago(carritoId, data);
       const estado = wompiStatusToEstadoPago(resolved.wompiStatus);
 
-      onPagoResultado?.({
+      if (resolved.referenciaPago || resolved.transactionId) {
+        pagoContextoRef.current = {
+          reference: resolved.referenciaPago || referenciaPago,
+          transactionId: resolved.transactionId || transactionId,
+        };
+        persistWompiRetornoContext(pagoContextoRef.current);
+      }
+
+      await onPagoResultado?.({
         estado,
         referencia: resolved.referencia,
         monto: resolved.monto,
@@ -415,13 +646,41 @@ export function useCartCheckoutPayment(
         return;
       }
       if (estado === 'pendiente') {
-        setMonitoreandoPago(true);
-        setPollCount(0);
-        toast.info('Aprueba el pago en Nequi. Te llevaremos a confirmación al detectarlo.');
+        if (
+          paymentInfo.paymentMethod === 'nequi'
+          || paymentInfo.paymentMethod === 'card'
+        ) {
+          setMonitoreandoPago(true);
+          setPollCount(0);
+          toast.info(
+            paymentInfo.paymentMethod === 'card'
+              ? 'Procesando el pago con tarjeta. Te llevaremos a confirmación al detectarlo.'
+              : 'Aprueba el pago en Nequi. Te llevaremos a confirmación al detectarlo.',
+          );
+        }
+        return;
+      }
+      if (estado === 'rechazada') {
+        marcarPagoRechazado();
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Error al procesar el pago';
-      toast.error(message.replace(/^\[\d+\]\s*/, ''));
+      const clean = message.replace(/^\[\d+\]\s*/, '');
+      if (isReferenciaWompiDuplicadaError(clean)) {
+        clearCheckoutCachesParaReintentoPago();
+        toast.error(
+          'La referencia de pago ya fue usada en Wompi. Cierra la pestaña de Wompi, vuelve al carrito y confirma el pedido de nuevo para generar una referencia nueva.',
+          { autoClose: 12000 },
+        );
+      } else if (/\[404\]/i.test(message) && /carrito no encontrado/i.test(clean)) {
+        clearCheckoutCachesParaReintentoPago();
+        toast.error(
+          'No se encontró el carrito del pago. Vuelve al paso anterior y pulsa «Continuar al pago» de nuevo.',
+          { autoClose: 10000 },
+        );
+      } else {
+        toast.error(clean);
+      }
     } finally {
       setLoading(false);
     }
@@ -436,9 +695,16 @@ export function useCartCheckoutPayment(
     loading,
     paymentInfo,
     monitoreandoPago,
+    pagoEnviadoAWompi,
+    pagoRechazado,
+    mensajePagoRechazado,
     formDataForMembershipUi,
     handleFormChange,
     handlePayment,
     verificarEstadoPagoAhora,
+    reintentarPago,
+    resetTrasCancelarPedido,
+    mostrarPagoRechazado: marcarPagoRechazado,
   };
 }
+

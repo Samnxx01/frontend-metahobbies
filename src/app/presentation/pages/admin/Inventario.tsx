@@ -33,8 +33,10 @@ import inventarioService, {
   type InventarioMotivoMovimiento,
   type MotivoMovimiento,
   type StockActualItem,
+  getAjusteInventarioId,
 } from '@/app/services/inventarioService';
 import { totalLineaOrdenCompra } from '@/app/presentation/pages/admin/utils/ordenCompraLineaCalculo';
+import { getOrdenCompraId } from '@/app/presentation/pages/admin/utils/ordenCompraIdUtils';
 import productosService, { type BackendProducto } from '@/app/services/productosService';
 import { apiFetch } from '@/app/services/api';
 import { useAuth } from '@/app/providers/AuthProvider';
@@ -51,13 +53,21 @@ import InventarioTrmConfiguracionTab from './components/InventarioTrmConfiguraci
 import InventarioMovimientosTab from './components/InventarioMovimientosTab';
 import InventarioComprobanteEntradaModal, { type DocumentoSoporte } from './components/InventarioComprobanteEntradaModal';
 import InventarioComprobanteEntradaVistaModal from './components/InventarioComprobanteEntradaVistaModal';
+import InventarioReporteKardexModal from './components/InventarioReporteKardexModal';
 import InventarioCausalAjusteModal from './components/InventarioCausalAjusteModal';
 import InventarioOrdenCompraModal from './components/InventarioOrdenCompraModal';
 import InventarioOrdenComprasTab from './components/InventarioOrdenComprasTab';
 import InventarioProveedorModal, { type InventarioProveedorDraft } from './components/InventarioProveedorModal';
 import InventarioSkuCatalogoModal from './components/InventarioSkuCatalogoModal';
 import InventarioSkuModal, { type SkuForm } from './components/InventarioSkuModal';
-import { getProductoId } from './inventario/inventarioBarcodeUtils';
+import { getProductoId, normalizarCodigoBarrasAlfanumerico } from './inventario/inventarioBarcodeUtils';
+import {
+  esCodigoEntradaCompra,
+  filtrarTiposMovimientoKardexEntrada,
+  idTipoMovimiento,
+  resolverIdTipoEntradaCompra,
+  resolverTipoMovimientoKardexEntradaPorDefecto,
+} from './inventario/inventarioTipoMovimientoKardex';
 import InventarioStockTab from './components/InventarioStockTab';
 import InventarioTipoMovimientoModal, { type TipoMovimientoDraft } from './components/InventarioTipoMovimientoModal';
 import InventarioUnidadMedidaModal, { type UnidadMedidaDraft } from './components/InventarioUnidadMedidaModal';
@@ -176,6 +186,7 @@ const ajusteInicial: AjustePayload = {
   recepcionCompraId: '',
   sku: '',
   bodega: '',
+  bodegaDestino: '',
   tipoAjusteCodigo: 'AJUSTE_POSITIVO',
   causal: 'OTRO',
   cantidad: 1,
@@ -190,6 +201,7 @@ const skuFormInicial: SkuForm = {
   precio: '1',
   unidadMedida: 'UNIDAD',
   stockMinimo: '0',
+  stockKardex: '0',
   descripcion: '',
 };
 
@@ -212,12 +224,20 @@ const unidadMedidaDraftInicial: UnidadMedidaDraft = {
   factorConversionHaciaBase: '',
 };
 
-const formatDate = (value?: string): string => {
+const formatDate = (value?: string | Date | null | { $date?: string }): string => {
   if (!value) return 'Sin fecha';
-  const date = new Date(value);
+  if (typeof value === 'object' && !(value instanceof Date)) {
+    const nested = (value as { $date?: string }).$date;
+    if (nested) return formatDate(nested);
+    return 'Sin fecha';
+  }
+  const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return 'Sin fecha';
   return date.toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' });
 };
+
+const fechaMovimientoKardex = (mov: InventarioMovimiento): string | Date | undefined =>
+  mov.createdAt || mov.auditoria?.timestamp || mov.auditoriaRelacion?.confirmadoEn || mov.updatedAt;
 
 const estadoBadge = (estado: string): 'default' | 'secondary' | 'destructive' | 'outline' => {
   if (estado === 'APROBADO' || estado === 'REINGRESADA') return 'default';
@@ -266,6 +286,7 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
   });
   const [skuModalOpen, setSkuModalOpen] = useState(false);
   const [skuCatalogoOpen, setSkuCatalogoOpen] = useState(false);
+  const [skuEditandoId, setSkuEditandoId] = useState<string | null>(null);
   const [skuForm, setSkuForm] = useState<SkuForm>(skuFormInicial);
   const [tipoModalOpen, setTipoModalOpen] = useState(false);
   const [tipoMovimientoDraft, setTipoMovimientoDraft] = useState<TipoMovimientoDraft>(tipoMovimientoDraftInicial);
@@ -283,6 +304,8 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
   const [comprobantesEntradaMov, setComprobantesEntradaMov] = useState<ComprobanteEntradaAjuste[]>([]);
   const [comprobanteVistaOpen, setComprobanteVistaOpen] = useState(false);
   const [comprobanteVistaId, setComprobanteVistaId] = useState<string | null>(null);
+  const [reporteKardexOpen, setReporteKardexOpen] = useState(false);
+  const [reporteKardexRecepcionId, setReporteKardexRecepcionId] = useState<string | null>(null);
   const [causalMotivoModalOpen, setCausalMotivoModalOpen] = useState(false);
   const [comprobanteEntradaOpen, setComprobanteEntradaOpen] = useState(false);
   const [comprobanteEntradaData, setComprobanteEntradaData] = useState<RecepcionOrdenCompraResponse | null>(null);
@@ -298,9 +321,42 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
     setOrdenCompraModalOpen(true);
   };
 
-  const abrirEditarOrdenCompra = (oc: InventarioOrdenCompra): void => {
-    setOrdenEditando(oc);
-    setOrdenCompraModalOpen(true);
+  const abrirEditarOrdenCompra = async (oc: InventarioOrdenCompra): Promise<void> => {
+    const id = getOrdenCompraId(oc);
+    if (!id) {
+      toast.error('No se identificó la orden de compra.');
+      return;
+    }
+    try {
+      setSaving(true);
+      const completa = await inventarioService.obtenerOrdenCompra(id);
+      setOrdenEditando(completa);
+      setOrdenCompraModalOpen(true);
+    } catch (error) {
+      console.error('Error cargando orden para editar:', error);
+      setOrdenEditando(oc);
+      setOrdenCompraModalOpen(true);
+      toast.warning('Se abrió con datos del listado. Si faltan campos, recargue e intente de nuevo.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const resolverStockKardexSku = (sku: string, filas: StockActualItem[] = stockActual): number => {
+    const skuNorm = String(sku || '').trim().toUpperCase();
+    if (!skuNorm) return 0;
+    return filas
+      .filter((item) => String(item.sku || '').trim().toUpperCase() === skuNorm)
+      .reduce((acc, item) => acc + Number(item.cantidadDisponible || 0), 0);
+  };
+
+  const refrescarStockResumen = async (filtros?: { sku?: string; bodega?: string }): Promise<StockActualItem[]> => {
+    const stock = await inventarioService.stockActual({
+      sku: filtros?.sku?.trim() || undefined,
+      bodega: filtros?.bodega?.trim() || undefined,
+    });
+    setStockActual(stock);
+    return stock;
   };
 
   const resumen = useMemo(() => {
@@ -329,6 +385,13 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
       .filter((producto) => producto.sku)
       .sort((a, b) => String(a.sku).localeCompare(String(b.sku))),
     [productosSku]
+  );
+
+  const codigosBarrasExistentes = useMemo(
+    () => productosSku
+      .map((producto) => normalizarCodigoBarrasAlfanumerico(String(producto.codigoBarras || '')))
+      .filter(Boolean),
+    [productosSku],
   );
 
   const skuOptionsFiltradasStock = useMemo(() => {
@@ -367,6 +430,11 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
   const tiposMovimientoActivos = useMemo(
     () => tiposMovimiento.filter((tipo) => tipo.estado),
     [tiposMovimiento]
+  );
+
+  const tiposMovimientoEntradaActivos = useMemo(
+    () => filtrarTiposMovimientoKardexEntrada(tiposMovimientoActivos),
+    [tiposMovimientoActivos]
   );
 
   const sumSubtotalOrdenCompra = (oc: InventarioOrdenCompra): number =>
@@ -431,6 +499,7 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
     const comprobante = comprobantesEntradaMov.find((c) => c.recepcionId === recepcionCompraId);
     const linea = comprobante?.items.find((item) => (item.lineaKey || `${item.sku}::${item.bodega}`) === lineaKey);
     const doc = comprobante?.documentoSoporte;
+    const tipoEntradaCompraId = resolverIdTipoEntradaCompra(tiposMovimientoEntradaActivos);
     if (!comprobante || !linea) {
       setMovimientoForm((prev) => ({
         ...prev,
@@ -444,6 +513,7 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
         costoUnitario: '',
         motivo: 'COMPRA',
         tipo: 'ENTRADA',
+        tipoMovimientoConfigId: tipoEntradaCompraId || prev.tipoMovimientoConfigId,
         documentoTipo: doc?.tipo || 'RECEPCION_OC',
         documentoNumero: doc?.numero || comprobante?.numeroRecepcion || '',
       }));
@@ -456,6 +526,7 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
       recepcionCompraId,
       recepcionLineaKey: lineaKey,
       tipo: 'ENTRADA',
+      tipoMovimientoConfigId: tipoEntradaCompraId || prev.tipoMovimientoConfigId,
       sku: linea.sku,
       bodega: linea.bodega,
       cantidad: String(Number(linea.cantidadRecibida || 0) || ''),
@@ -467,7 +538,7 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
   };
 
   const seleccionarLineaOrdenCompraMovimiento = (ordenCompraId: string, itemIndexText: string): void => {
-    const orden = ordenesCompra.find((oc) => oc._id === ordenCompraId);
+    const orden = ordenesCompra.find((oc) => getOrdenCompraId(oc) === ordenCompraId);
     const itemIndex = Number(itemIndexText);
     const item = orden?.items?.[itemIndex];
     const documentoNumero = orden?.numeroRemision?.trim() || orden?.numeroFacturaElectronico?.trim() || orden?.numeroOrden || '';
@@ -535,16 +606,20 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
       setOrdenesCompra(ordenesResp);
       aplicarMotivosDesdeCausales(causalesResp || []);
       setComprobantesEntradaMov(comprobantesEntradaResp || []);
-      if (!movimientoForm.tipoMovimientoConfigId) {
-        const first = tiposResp.find((tipo) => tipo.estado);
-        if (first) {
-          setMovimientoForm((prev) => ({
-            ...prev,
-            tipo: first.naturaleza,
-            tipoMovimientoConfigId: first._id,
-          }));
-        }
-      }
+      setMovimientoForm((prev) => {
+        const kardexEntrada = filtrarTiposMovimientoKardexEntrada(tiposResp);
+        const seleccionValida = kardexEntrada.some(
+          (tipo) => idTipoMovimiento(tipo) === String(prev.tipoMovimientoConfigId || '').trim(),
+        );
+        if (seleccionValida) return prev;
+        const porDefecto = resolverTipoMovimientoKardexEntradaPorDefecto(tiposResp);
+        if (!porDefecto) return prev;
+        return {
+          ...prev,
+          tipo: 'ENTRADA',
+          tipoMovimientoConfigId: idTipoMovimiento(porDefecto),
+        };
+      });
       if (!unidadesResp.some((unidad) => unidad.estado && unidad.codigo === skuForm.unidadMedida)) {
         const firstUnidad = unidadesResp.find((unidad) => unidad.estado);
         if (firstUnidad) {
@@ -601,7 +676,6 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
     };
   }, [activeTab, loading]);
 
-  /** Pestaña TRM solo con contexto JWT Global o SuperAdmin; si no aplica, evita quedar en TRM sin trigger. */
   /** Si el menú dinámico (GET tarjetas) no incluye la pestaña activa, ir a la primera visible. */
   useEffect(() => {
     if (!inventarioMenuTabs.length) return;
@@ -745,7 +819,7 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
   };
 
   const iniciarEdicionBodega = (doc: BodegaInventario): void => {
-    setEditingBodegaId(doc._id);
+    setEditingBodegaId(String(doc._id || doc.iud || '').trim());
     const principalId = doc.ciudadId || '';
     const extras = (doc.municipiosSubnodo ?? [])
       .map((m) => m.ciudadId)
@@ -868,11 +942,13 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
   const registrarMovimiento = async (): Promise<void> => {
     const cantidad = Number(movimientoForm.cantidad);
     const costoUnitario = Number(movimientoForm.costoUnitario || 0);
-    const tipoSeleccionado = tiposMovimientoActivos.find((tipo) => tipo._id === movimientoForm.tipoMovimientoConfigId);
+    const tipoSeleccionado = tiposMovimientoEntradaActivos.find(
+      (tipo) => idTipoMovimiento(tipo) === String(movimientoForm.tipoMovimientoConfigId || '').trim(),
+    );
     const esTraslado = esTipoTrasladoBodega(tipoSeleccionado?.codigo);
     const esSalidaConComprobante = tipoSeleccionado?.naturaleza === 'SALIDA' && !esTraslado;
     const esEntradaCompraPorTipo = tipoSeleccionado?.naturaleza === 'ENTRADA'
-      && String(tipoSeleccionado?.codigo || '').trim().toUpperCase() === 'ENTRADA_COMPRA';
+      && esCodigoEntradaCompra(tipoSeleccionado?.codigo);
     const motivoRegistro = movimientoForm.motivo === 'OTRO'
       ? movimientoForm.motivoPersonalizado.trim().toUpperCase()
       : movimientoForm.motivo;
@@ -897,8 +973,19 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
         toast.error('La bodega destino debe ser distinta a la origen.');
         return;
       }
-    } else if (!movimientoForm.documentoTipo.trim() || !movimientoForm.documentoNumero.trim()) {
+    } else if (!esEntradaCompraPorTipo && (!movimientoForm.documentoTipo.trim() || !movimientoForm.documentoNumero.trim())) {
       toast.error('El documento soporte es obligatorio.');
+      return;
+    }
+    if (esEntradaCompraPorTipo && !movimientoForm.recepcionCompraId) {
+      toast.error(
+        'Selecciona un comprobante de entrada. Créelo y confírmelo primero en la pestaña Orden-Compra si aún no aparece en la lista.',
+        { autoClose: 10000 },
+      );
+      return;
+    }
+    if (esEntradaCompraPorTipo && !movimientoForm.recepcionLineaKey) {
+      toast.error('Selecciona la línea / SKU del comprobante de entrada.');
       return;
     }
     if (esSalidaConComprobante && !movimientoForm.recepcionCompraId) {
@@ -914,7 +1001,7 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
       return;
     }
     if (tipoSeleccionado.naturaleza === 'ENTRADA' && movimientoForm.motivo === 'COMPRA' && movimientoForm.ordenCompraId) {
-      const orden = ordenesCompra.find((oc) => oc._id === movimientoForm.ordenCompraId);
+      const orden = ordenesCompra.find((oc) => getOrdenCompraId(oc) === movimientoForm.ordenCompraId);
       const itemIndex = Number(movimientoForm.ordenCompraItemIndex);
       const item = orden?.items?.[itemIndex];
       const pendiente = item ? Math.max(0, Number(item.cantidadOrdenada || 0) - Number(item.cantidadRecibida || 0)) : 0;
@@ -951,13 +1038,19 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
       setSaving(true);
       if (esEntradaCompraPorTipo && movimientoForm.recepcionCompraId) {
         // Subproceso manual: el comprobante (recepción) ya existe en borrador; aquí se confirma para aplicar kardex+contable.
-        const data = await inventarioService.confirmarRecepcionOrdenCompra(movimientoForm.recepcionCompraId, { estado: true });
+        const data = await inventarioService.confirmarRecepcionOrdenCompra(movimientoForm.recepcionCompraId, {
+          estado: true,
+          aplicarKardex: true,
+          confirmar: true,
+        });
         setComprobanteEntradaData(data);
         setComprobanteEntradaDoc({
           tipo: movimientoForm.documentoTipo.trim(),
           numero: movimientoForm.documentoNumero.trim(),
         });
         setComprobanteEntradaOpen(true);
+        setReporteKardexRecepcionId(movimientoForm.recepcionCompraId);
+        setReporteKardexOpen(true);
         setMovimientoForm((prev) => ({
           ...movimientoInicial,
           tipo: tipoSeleccionado.naturaleza,
@@ -972,7 +1065,13 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
         setStockActual(stock);
         setKardex(kardexActualizado);
         setComprobantesEntradaMov(comprobantesActualizados);
-        toast.success('Comprobante confirmado. Kardex y contabilidad actualizados.');
+        const contable = data?.comprobanteContable;
+        toast.success(
+          contable?.numero
+            ? `Comprobante confirmado. Contable ${contable.tipo || 'COMPROBANTE_ENTRADA'} · ${contable.numero}. Kardex e inventario actualizados.`
+            : (data?.msg || 'Comprobante confirmado. Kardex y contabilidad actualizados.'),
+          { autoClose: 9000 },
+        );
         return;
       }
 
@@ -998,7 +1097,9 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
           numero: movimientoForm.documentoNumero.trim(),
         });
         setComprobanteEntradaOpen(true);
-        setOrdenesCompra((prev) => prev.map((oc) => (oc._id === data.orden._id ? data.orden : oc)));
+        setOrdenesCompra((prev) =>
+          prev.map((oc) => (getOrdenCompraId(oc) === getOrdenCompraId(data.orden) ? data.orden : oc)),
+        );
         setMovimientoForm((prev) => ({
           ...movimientoInicial,
           tipo: tipoSeleccionado.naturaleza,
@@ -1073,7 +1174,10 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
       setComprobantesEntradaMov(comprobantesActualizados);
     } catch (error) {
       console.error('Error registrando movimiento:', error);
-      toast.error('No se pudo registrar el movimiento.');
+      toast.error(
+        mensajeErrorComprasInventario(error, 'No se pudo registrar el movimiento.'),
+        { autoClose: 10000 },
+      );
     } finally {
       setSaving(false);
     }
@@ -1086,18 +1190,30 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
       return;
     }
 
+    if (String(ajusteForm.causal || '').trim().toUpperCase() === 'TRASLADO') {
+      if (!ajusteForm.bodegaDestino?.trim()) {
+        toast.error('Seleccione la bodega destino del traslado.');
+        return;
+      }
+      if (ajusteForm.bodegaDestino.trim() === ajusteForm.bodega.trim()) {
+        toast.error('La bodega destino debe ser diferente a la bodega origen.');
+        return;
+      }
+    }
+
     try {
       setSaving(true);
       const { data: created, msg } = await inventarioService.solicitarAjuste({
         ...ajusteForm,
         sku: ajusteForm.sku.trim(),
         bodega: ajusteForm.bodega.trim(),
+        bodegaDestino: ajusteForm.bodegaDestino?.trim() || undefined,
         cantidad: Number(ajusteForm.cantidad),
         costoUnitarioReferencia: Number(ajusteForm.costoUnitarioReferencia || 0),
       });
       setAjustes((prev) => [created, ...prev]);
       setAjusteForm(ajusteInicial);
-      toast.success(msg || 'Ajuste solicitado correctamente. Queda pendiente de aprobación.');
+      toast.success(msg || 'Solicitud enviada. Queda en espera de aprobación.');
     } catch (error) {
       console.error('Error solicitando ajuste:', error);
       toast.error(error instanceof Error ? error.message.replace(/^\[\d+\]\s*/, '') : 'No se pudo solicitar el ajuste.');
@@ -1107,14 +1223,26 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
   };
 
   const cambiarEstadoAjuste = async (ajuste: AjusteInventario, accion: 'aprobar' | 'rechazar'): Promise<void> => {
+    const ajusteId = getAjusteInventarioId(ajuste);
+    if (!ajusteId) {
+      toast.error('No se pudo identificar el ajuste. Recargue la lista e intente de nuevo.');
+      return;
+    }
+
     try {
       setSaving(true);
       const resultado = accion === 'aprobar'
-        ? await inventarioService.aprobarAjuste(ajuste._id)
-        : await inventarioService.rechazarAjuste(ajuste._id, 'Rechazado desde panel de inventario');
-      setAjustes((prev) => prev.map((item) => item._id === ajuste._id ? resultado.data : item));
-      const stock = await inventarioService.stockActual();
+        ? await inventarioService.aprobarAjuste(ajusteId)
+        : await inventarioService.rechazarAjuste(ajusteId, 'Rechazado desde panel de inventario');
+      setAjustes((prev) => prev.map((item) => (
+        getAjusteInventarioId(item) === ajusteId ? resultado.data : item
+      )));
+      const [stock, comprobantesActualizados] = await Promise.all([
+        inventarioService.stockActual(),
+        inventarioService.listarComprobantesEntradaMovimientos(200),
+      ]);
       setStockActual(stock);
+      setComprobantesEntradaMov(comprobantesActualizados);
       toast.success(
         resultado.msg
         || (accion === 'aprobar' ? 'Ajuste aprobado y movimiento registrado en kardex.' : 'Ajuste rechazado correctamente.'),
@@ -1132,6 +1260,7 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
     const nombre = skuForm.nombre.trim();
     const precio = Number(skuForm.precio);
     const stockMinimo = Number(skuForm.stockMinimo || 0);
+    const codigoManual = skuForm.codigoBarras.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
 
     if (!sku || !nombre) {
       toast.error('SKU y nombre son obligatorios.');
@@ -1141,21 +1270,59 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
       toast.error('El precio debe ser mayor a 0.');
       return;
     }
+    if (codigoManual && (codigoManual.length < 8 || codigoManual.length > 14)) {
+      toast.error('Codigo de barras manual: entre 8 y 14 caracteres alfanumericos.');
+      return;
+    }
+    const productoEditando = skuEditandoId
+      ? productosSku.find((item) => getProductoId(item) === skuEditandoId)
+      : null;
+    const codigoOriginal = normalizarCodigoBarrasAlfanumerico(String(productoEditando?.codigoBarras || ''));
+    const codigosDuplicados = codigosBarrasExistentes.filter((codigo) => codigo !== codigoOriginal);
+    if (codigoManual && codigosDuplicados.includes(codigoManual)) {
+      toast.error('El codigo debe ser unico.');
+      return;
+    }
+    const stockKardex = Number(skuForm.stockKardex || 0);
+    if (skuEditandoId && stockMinimo > stockKardex) {
+      toast.error(`El stock minimo (${stockMinimo}) no puede superar el stock kardex (${stockKardex}).`);
+      return;
+    }
+
+    const payloadBase = {
+      nombre,
+      precio,
+      moneda: 'COP' as const,
+      tipo: 'FISICO',
+      unidadMedida: skuForm.unidadMedida,
+      stockMinimo: Number.isNaN(stockMinimo) ? 0 : stockMinimo,
+      descripcion: skuForm.descripcion.trim(),
+      descripcionCorta: nombre,
+      estadoCatalogo: 'ACTIVO',
+      ...(codigoManual ? { codigoBarras: codigoManual } : {}),
+    };
 
     try {
       setSaving(true);
+      if (skuEditandoId) {
+        const updated = await productosService.actualizarProductoAdmin(skuEditandoId, payloadBase);
+        const updatedId = getProductoId(updated);
+        setProductosSku((prev) => [...prev.filter((producto) => getProductoId(producto) !== updatedId), updated]);
+        setSkuEditandoId(null);
+        setSkuForm(skuFormInicial);
+        setSkuModalOpen(false);
+        if (activeTab === 'stock' && (stockFiltro.sku.trim() || bodegaVistaStock.trim())) {
+          await aplicarFiltroStock();
+        } else {
+          await refrescarStockResumen();
+        }
+        toast.success('SKU actualizado.');
+        return;
+      }
+
       const created = await productosService.crearProductoAdmin({
         sku,
-        codigoBarras: skuForm.codigoBarras.trim() || undefined,
-        nombre,
-        precio,
-        moneda: 'COP',
-        tipo: 'FISICO',
-        unidadMedida: skuForm.unidadMedida,
-        stockMinimo: Number.isNaN(stockMinimo) ? 0 : stockMinimo,
-        descripcion: skuForm.descripcion.trim(),
-        descripcionCorta: nombre,
-        estadoCatalogo: 'ACTIVO',
+        ...payloadBase,
       });
       const createdId = getProductoId(created);
       setProductosSku((prev) => [...prev.filter((producto) => getProductoId(producto) !== createdId), created]);
@@ -1164,8 +1331,12 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
       setSkuModalOpen(false);
       toast.success('SKU creado y seleccionado.');
     } catch (error) {
-      console.error('Error creando SKU:', error);
-      toast.error('No se pudo crear el SKU.');
+      console.error(skuEditandoId ? 'Error actualizando SKU:' : 'Error creando SKU:', error);
+      toast.error(
+        error instanceof Error
+          ? error.message.replace(/^\[\d+\]\s*/, '')
+          : skuEditandoId ? 'No se pudo actualizar el SKU.' : 'No se pudo crear el SKU.',
+      );
     } finally {
       setSaving(false);
     }
@@ -1176,11 +1347,15 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
       codigo: c.codigo,
       nombre: c.nombre,
     }));
-    setMotivosMovimiento(motivosDesdeCausales.length ? motivosDesdeCausales : MOTIVOS_FALLBACK);
-    const codigosValidos = new Set(motivosDesdeCausales.map((m) => m.codigo));
+    const merged = [...motivosDesdeCausales];
+    for (const fallback of MOTIVOS_FALLBACK) {
+      if (!merged.some((m) => m.codigo === fallback.codigo)) merged.push(fallback);
+    }
+    setMotivosMovimiento(merged);
+    const codigosValidos = new Set(merged.map((m) => m.codigo));
     setMovimientoForm((prev) => {
       if (!prev.motivo || codigosValidos.has(prev.motivo)) return prev;
-      return { ...prev, motivo: motivosDesdeCausales[0]?.codigo || 'OTRO' };
+      return { ...prev, motivo: merged[0]?.codigo || 'OTRO' };
     });
   };
 
@@ -1200,6 +1375,57 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
 
   const abrirModalSkuCatalogo = (): void => {
     setSkuCatalogoOpen(true);
+  };
+
+  const abrirModalCrearSku = (): void => {
+    setSkuEditandoId(null);
+    setSkuForm(skuFormInicial);
+    setSkuModalOpen(true);
+  };
+
+  const editarSkuCatalogo = async (producto: BackendProducto): Promise<void> => {
+    const productoId = getProductoId(producto);
+    if (!productoId) {
+      toast.error('No se encontro el ID del SKU.');
+      return;
+    }
+    if (!puedeGestionarSku) {
+      toast.error('Tu scope no permite editar SKU.');
+      return;
+    }
+
+    try {
+      setSaving(true);
+      const sku = String(producto.sku || '').trim().toUpperCase();
+      const stockRows = await inventarioService.stockActual({ sku });
+      const stockKardex = resolverStockKardexSku(sku, stockRows);
+      setSkuEditandoId(productoId);
+      setSkuForm({
+        sku,
+        codigoBarras: String(producto.codigoBarras || ''),
+        nombre: String(producto.nombre || ''),
+        precio: String(Number(producto.precio || 0) || ''),
+        unidadMedida: String(producto.unidadMedida || 'UNIDAD'),
+        stockMinimo: String(Number(producto.stockMinimo || 0)),
+        stockKardex: String(stockKardex),
+        descripcion: String(producto.descripcion || producto.descripcionCorta || ''),
+      });
+      setSkuCatalogoOpen(false);
+      setSkuModalOpen(true);
+    } catch (error) {
+      console.error('Error cargando stock kardex para edicion:', error);
+      toast.error('No se pudo cargar el stock kardex del SKU.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const cerrarModalSku = (open: boolean): void => {
+    setSkuModalOpen(open);
+    if (!open) {
+      setSkuEditandoId(null);
+      setSkuForm(skuFormInicial);
+    }
   };
 
   const seleccionarSkuCatalogo = (producto: BackendProducto): void => {
@@ -1280,7 +1506,7 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
 
   const editarTipoMovimiento = (tipo: InventarioTipoMovimiento): void => {
     setTipoMovimientoDraft({
-      _id: tipo._id,
+      _id: idTipoMovimiento(tipo) || undefined,
       codigo: tipo.codigo,
       nombre: tipo.nombre,
       descripcion: tipo.descripcion || '',
@@ -1302,14 +1528,19 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
         : await inventarioService.crearTipoMovimiento(tipoMovimientoDraft);
 
       setTiposMovimiento((prev) => {
-        const exists = prev.some((tipo) => tipo._id === saved._id);
-        const next = exists ? prev.map((tipo) => (tipo._id === saved._id ? saved : tipo)) : [...prev, saved];
+        const savedId = idTipoMovimiento(saved);
+        const exists = prev.some((tipo) => idTipoMovimiento(tipo) === savedId);
+        const next = exists
+          ? prev.map((tipo) => (idTipoMovimiento(tipo) === savedId ? saved : tipo))
+          : [...prev, saved];
         return next.sort((a, b) => a.naturaleza.localeCompare(b.naturaleza) || a.nombre.localeCompare(b.nombre));
       });
       setMovimientoForm((prev) => ({
         ...prev,
-        tipo: saved.naturaleza,
-        tipoMovimientoConfigId: saved._id,
+        tipo: 'ENTRADA',
+        tipoMovimientoConfigId: saved.naturaleza === 'ENTRADA' && saved.estado
+          ? idTipoMovimiento(saved)
+          : prev.tipoMovimientoConfigId,
       }));
       setTipoMovimientoDraft(tipoMovimientoDraftInicial);
       toast.success(tipoMovimientoDraft._id ? 'Tipo actualizado.' : 'Tipo creado.');
@@ -1665,6 +1896,7 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
             renderSkuStockSelect={renderSkuStockSelect}
             consultarStock={consultarStock}
             formatDate={formatDate}
+            fechaMovimiento={fechaMovimientoKardex}
             getTipoMovimientoLabel={getTipoMovimientoLabel}
             etiquetaVista={bodegaVistaStock.trim() || 'Todas las bodegas'}
           />
@@ -1684,8 +1916,12 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
               setComprobanteVistaId(recepcionId);
               setComprobanteVistaOpen(true);
             }}
+            onVerReporteKardex={(recepcionId) => {
+              setReporteKardexRecepcionId(recepcionId);
+              setReporteKardexOpen(true);
+            }}
             onRecargarComprobantes={recargarComprobantesEntrada}
-            tiposMovimientoActivos={tiposMovimientoActivos}
+            tiposMovimientoActivos={tiposMovimientoEntradaActivos}
             motivos={motivosMovimiento}
             metodoValuacion={config?.metodoValuacion}
             saving={saving}
@@ -1694,7 +1930,7 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
             abrirModalTiposMovimiento={abrirModalTiposMovimiento}
             abrirModalCausalesMotivo={abrirModalCausalesMotivo}
             abrirModalSkuCatalogo={abrirModalSkuCatalogo}
-            abrirModalSku={() => setSkuModalOpen(true)}
+            abrirModalSku={abrirModalCrearSku}
             registrarMovimiento={registrarMovimiento}
           />
         </TabsContent>
@@ -1730,6 +1966,7 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
             ajusteFiltro={ajusteFiltro}
             setAjusteFiltro={setAjusteFiltro}
             ajustes={ajustes}
+            bodegas={bodegas}
             saving={saving}
             solicitarAjuste={solicitarAjuste}
             refreshAjustes={refreshAjustes}
@@ -1800,9 +2037,12 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
       <InventarioSkuModal
         open={skuModalOpen}
         saving={saving}
+        mode={skuEditandoId ? 'edit' : 'create'}
         form={skuForm}
         unidadesMedida={unidadesMedida}
-        onOpenChange={setSkuModalOpen}
+        codigosBarrasExistentes={codigosBarrasExistentes}
+        excluirCodigoBarras={skuForm.codigoBarras}
+        onOpenChange={cerrarModalSku}
         onFormChange={setSkuForm}
         onOpenUnidadMedida={abrirModalUnidadMedida}
         onSubmit={() => void crearSku()}
@@ -1815,6 +2055,7 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
         puedeGestionarSku={puedeGestionarSku}
         onOpenChange={setSkuCatalogoOpen}
         onSelectSku={seleccionarSkuCatalogo}
+        onEditSku={puedeGestionarSku ? editarSkuCatalogo : undefined}
         onDesactivarSku={desactivarSkuCatalogo}
         onEliminarSku={eliminarSkuCatalogo}
         onGenerarCodigoBarras={generarCodigoSkuCatalogo}
@@ -1868,6 +2109,16 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
         onOpenChange={(open) => {
           setComprobanteVistaOpen(open);
           if (!open) setComprobanteVistaId(null);
+        }}
+      />
+
+      <InventarioReporteKardexModal
+        open={reporteKardexOpen}
+        recepcionId={reporteKardexRecepcionId}
+        nombreCorporativo={nombreCorporativoImpresion}
+        onOpenChange={(open) => {
+          setReporteKardexOpen(open);
+          if (!open) setReporteKardexRecepcionId(null);
         }}
       />
 

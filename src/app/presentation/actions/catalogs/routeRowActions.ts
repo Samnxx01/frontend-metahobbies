@@ -29,13 +29,27 @@ function fallbackRouteRowAllowedIds(route: Route, helpers: Pick<RouteRowActionHe
   return ids;
 }
 
-/** IDs permitidos: parametrización del API o reglas locales. */
+/** IDs permitidos: parametrización del API cruzada con reglas por fila. */
 export function resolveRouteRowAllowedIds(route: Route, helpers: RouteRowActionHelpers): ActionId[] {
   const parametrized = (helpers.parametrizedIds ?? [])
     .map((id) => String(id).trim())
-    .filter(Boolean);
-  if (parametrized.length > 0) return parametrized;
-  return fallbackRouteRowAllowedIds(route, helpers);
+    .filter(Boolean) as ActionId[];
+
+  if (parametrized.length === 0) {
+    return fallbackRouteRowAllowedIds(route, helpers);
+  }
+
+  const allowed: ActionId[] = [];
+  if (parametrized.includes(ROUTE_ROW_ACTION_IDS.PREVIEW)) {
+    allowed.push(ROUTE_ROW_ACTION_IDS.PREVIEW);
+  }
+  if (parametrized.includes(ROUTE_ROW_ACTION_IDS.EDITAR) && helpers.canEdit(route)) {
+    allowed.push(ROUTE_ROW_ACTION_IDS.EDITAR);
+  }
+  if (parametrized.includes(ROUTE_ROW_ACTION_IDS.BAJA) && helpers.canManageBaja(route)) {
+    allowed.push(ROUTE_ROW_ACTION_IDS.BAJA);
+  }
+  return allowed;
 }
 
 /** Catálogo de fila — solo enlaza handlers; metadatos vienen del registro central. */

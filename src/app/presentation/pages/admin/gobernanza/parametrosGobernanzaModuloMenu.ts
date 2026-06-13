@@ -6,7 +6,7 @@ import type { GobernanzaModuloConfigApi } from './gobernanzaModuloApiTypes';
 
 /**
  * Parametrización del menú inline de ParametrosGobernanza (pestañas + query `?accion=`).
- * Fuente local; se fusiona con la respuesta POST /gobernanza/modulos/menu.
+ * Fuente local; se fusiona con la respuesta GET /gobernanza/modulos/menu.
  */
 export type ParametrosGobernanzaModuloMenuParametrizacion = {
   slug: string;
@@ -39,8 +39,8 @@ const MENU_PERMISOS: ParametrosGobernanzaModuloMenuParametrizacion = {
   panelTitle: 'Gobernanza Permisos',
   panelHint: 'Gestiona herencias y permisos según tu alcance en el JWT.',
   actionQueryParam: GOBERNANZA_MODULO_ACTION_QUERY_DEFAULT,
-  submenuTitle: 'Operaciones',
-  submenuHint: 'Acciones de permisos disponibles para tu sesión.',
+  submenuTitle: 'Operaciones de permisos',
+  submenuHint: 'Menú parametrizable desde rutaSeguridad (API gobernanza/modulos).',
   defaultActionId: '',
   syncDefaultAction: true,
 };
@@ -98,26 +98,33 @@ export function mergeParametrizacionConModuloApi(
   parametrizacion: ParametrosGobernanzaModuloMenuParametrizacion,
   apiModulo?: GobernanzaModuloConfigApi | null
 ): GobernanzaModuloConfig {
+  const apiEndpointIds = apiModulo?.endpointIds?.filter(Boolean) ?? [];
   return {
     slug: apiModulo?.slug ?? parametrizacion.slug,
     section: apiModulo?.section ?? parametrizacion.section,
-    label: apiModulo?.label ?? parametrizacion.panelTitle,
+    label: apiModulo?.nombre ?? apiModulo?.label ?? parametrizacion.panelTitle,
     description: apiModulo?.description ?? parametrizacion.panelHint,
-    endpointIds: apiModulo?.endpointIds ?? [],
-    defaultActionId: apiModulo?.defaultActionId || parametrizacion.defaultActionId,
+    endpointIds: apiEndpointIds,
+    defaultActionId: apiModulo?.defaultActionId ?? parametrizacion.defaultActionId ?? '',
     actionQueryParam: apiModulo?.actionQueryParam ?? parametrizacion.actionQueryParam,
     submenuTitle: apiModulo?.submenuTitle ?? parametrizacion.submenuTitle,
     submenuHint: apiModulo?.submenuHint ?? parametrizacion.submenuHint,
     basePath: apiModulo?.frontPath,
+    formularioComponent: apiModulo?.formularioComponent ?? null,
+    formularioId: apiModulo?.formularioId ?? null,
+    rutaId: apiModulo?.rutaId ?? null,
+    menuPath: apiModulo?.menuPath ?? null,
   };
 }
 
 export function resolvePanelCopy(
   parametrizacion: ParametrosGobernanzaModuloMenuParametrizacion,
   config: GobernanzaModuloConfig
-): { panelTitle: string; panelHint: string } {
+): { panelTitle: string; panelHint: string; submenuTitle: string; submenuHint: string } {
   return {
     panelTitle: config.label || parametrizacion.panelTitle,
-    panelHint: parametrizacion.panelHint,
+    panelHint: config.description || config.submenuHint || parametrizacion.panelHint,
+    submenuTitle: config.submenuTitle || parametrizacion.submenuTitle,
+    submenuHint: config.submenuHint || parametrizacion.submenuHint,
   };
 }

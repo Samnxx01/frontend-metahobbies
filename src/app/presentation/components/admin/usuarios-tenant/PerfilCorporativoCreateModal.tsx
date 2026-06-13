@@ -21,6 +21,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
+import { resolveEntityPublicId } from '@/app/utils/entityPublicId';
 
 interface PerfilCorporativoCreateModalProps {
   open: boolean;
@@ -73,9 +74,9 @@ export function PerfilCorporativoCreateModal({
   const [loadingCatalogos, setLoadingCatalogos] = useState(false);
 
   const tiposSociedadUnicos = tiposSociedad.filter((item, index, array) => {
-    const id = String(item?._id || '').trim();
+    const id = resolveEntityPublicId(item);
     if (id) {
-      return array.findIndex((candidate) => String(candidate?._id || '').trim() === id) === index;
+      return array.findIndex((candidate) => resolveEntityPublicId(candidate) === id) === index;
     }
 
     const key = `${String(item?.tipo_sociedad || '').trim()}|${String(item?.nombre_sociedad || '').trim()}`;
@@ -200,11 +201,14 @@ export function PerfilCorporativoCreateModal({
                     <SelectValue placeholder="Seleccione..." />
                   </SelectTrigger>
                   <SelectContent>
-                    {tiposSociedadUnicos.map((item) => (
-                      <SelectItem key={item._id} value={item._id}>
+                    {tiposSociedadUnicos.map((item) => {
+                      const id = resolveEntityPublicId(item);
+                      return (
+                      <SelectItem key={id} value={id}>
                         {item.tipo_sociedad} - {item.nombre_sociedad}
                       </SelectItem>
-                    ))}
+                      );
+                    })}
                   </SelectContent>
                 </Select>
               </div>
@@ -216,11 +220,14 @@ export function PerfilCorporativoCreateModal({
                     <SelectValue placeholder="Seleccione..." />
                   </SelectTrigger>
                   <SelectContent>
-                    {representantes.map((item) => (
-                      <SelectItem key={item._id} value={item._id}>
+                    {representantes.map((item) => {
+                      const id = resolveEntityPublicId(item);
+                      return (
+                      <SelectItem key={id} value={id}>
                         {item.nombre_representante_legal}
                       </SelectItem>
-                    ))}
+                      );
+                    })}
                   </SelectContent>
                 </Select>
               </div>
@@ -235,11 +242,14 @@ export function PerfilCorporativoCreateModal({
                     <SelectValue placeholder="Seleccione..." />
                   </SelectTrigger>
                   <SelectContent>
-                    {direcciones.map((item) => (
-                      <SelectItem key={item._id} value={item._id}>
+                    {direcciones.map((item) => {
+                      const id = resolveEntityPublicId(item);
+                      return (
+                      <SelectItem key={id} value={id}>
                         {item.ciudad?.nombre_ciudad} - {item.telefono_empresa}
                       </SelectItem>
-                    ))}
+                      );
+                    })}
                   </SelectContent>
                 </Select>
               </div>

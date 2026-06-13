@@ -1,5 +1,6 @@
 import { MARCO_AFILIADO_CODIGO } from '../constants/catalog-filters';
 import type { RolMarcoParametrizable } from '../types/marco.types';
+import { normalizePublicIdForApi, resolveEntityPublicId } from '@/app/utils/entityPublicId';
 
 export function buildMarcoCodigoFromRolNombre(rolNombre: string): string {
   const nombre = String(rolNombre || 'ROL').trim().toUpperCase();
@@ -16,7 +17,7 @@ export function mapRolCorporativoAMarco(
 ): RolMarcoParametrizable {
   const nombre = String(rol.rol || '').trim().toUpperCase();
   const tenantCorporativo = rol.tenantCorporativo
-    ? String(rol.tenantCorporativo)
+    ? normalizePublicIdForApi(rol.tenantCorporativo)
     : null;
   const codigo =
     nombre === 'CLIENTE' && !tenantCorporativo
@@ -24,7 +25,7 @@ export function mapRolCorporativoAMarco(
       : buildMarcoCodigoFromRolNombre(nombre);
 
   return {
-    _id: String(rol._id || rol.iud || ''),
+    _id: resolveEntityPublicId(rol as { iud?: string; _id?: string; id?: string }),
     rol: nombre,
     codigo,
     scopeKey: buildMarcoScopeKeyFromRolNombre(nombre),

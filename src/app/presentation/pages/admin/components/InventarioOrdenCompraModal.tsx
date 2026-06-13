@@ -26,6 +26,7 @@ import {
   mensajeErrorComprasInventario,
   mensajeExitoCrearOrden,
 } from '../inventario/inventarioComprasMensajes';
+import { getOrdenCompraId } from '@/app/presentation/pages/admin/utils/ordenCompraIdUtils';
 
 const moneyCo = (n: number): string =>
   new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(n);
@@ -117,10 +118,13 @@ export default function InventarioOrdenCompraModal({
   const [enviando, setEnviando] = useState(false);
   const [siguienteNumeroOrden, setSiguienteNumeroOrden] = useState('');
 
+  const ordenEdicionId = getOrdenCompraId(ordenEdicion);
+  const esEdicion = Boolean(ordenEdicionId);
+
   useEffect(() => {
     if (!open) return;
     const b0 = bodegasActivas[0]?.nombre ?? '';
-    if (ordenEdicion?._id) {
+    if (esEdicion && ordenEdicion) {
       const oc = ordenEdicion;
       setNumeroRemision(oc.numeroRemision?.trim() || '');
       setNumeroFacturaElectronico(oc.numeroFacturaElectronico?.trim() || '');
@@ -178,20 +182,24 @@ export default function InventarioOrdenCompraModal({
         },
       ]);
     }
-  }, [open, bodegasActivas, ordenEdicion]);
+  }, [open, bodegasActivas, esEdicion, ordenEdicion, ordenEdicionId]);
 
   /** Resolver proveedor al editar cuando ya cargó el catálogo (no incluir `proveedores` en el efecto anterior: borraba la selección en «nueva orden» al refrescar la lista). */
   useEffect(() => {
-    if (!open || !ordenEdicion?._id) return;
+    if (!open || !esEdicion || !ordenEdicion) return;
     const oc = ordenEdicion;
+    const nitOc = String(oc.proveedor?.nit || '').trim().replace(/\s+/g, '');
     const prov =
-      proveedores.find((p) => p.nit === oc.proveedor?.nit && p.nombre === oc.proveedor?.nombre) ||
-      proveedores.find((p) => p.nit === oc.proveedor?.nit);
+      proveedores.find((p) => {
+        const nitP = String(p.nit || '').trim().replace(/\s+/g, '');
+        return nitP === nitOc || nitP.replace(/-\d+$/, '') === nitOc.replace(/-\d+$/, '');
+      }) ||
+      proveedores.find((p) => p.nombre === oc.proveedor?.nombre);
     setProveedorId(prov ? getProveedorId(prov) : '');
-  }, [open, ordenEdicion, proveedores]);
+  }, [open, esEdicion, ordenEdicion, proveedores]);
 
   useEffect(() => {
-    if (!open || ordenEdicion?._id) return;
+    if (!open || esEdicion) return;
 
     let activo = true;
     setSiguienteNumeroOrden('');
@@ -208,7 +216,7 @@ export default function InventarioOrdenCompraModal({
     return () => {
       activo = false;
     };
-  }, [open, ordenEdicion]);
+  }, [open, esEdicion]);
 
   const addLine = (): void => {
     const b0 = bodegasActivas[0]?.nombre ?? '';
@@ -258,11 +266,11 @@ export default function InventarioOrdenCompraModal({
     }
     const c = concepto.trim();
     const j = justificacion.trim();
-    if (!ordenEdicion?._id && !c) {
+    if (!esEdicion && !c) {
       toast.error('El concepto es obligatorio.');
       return;
     }
-    if (ordenEdicion?._id && !j) {
+    if (esEdicion && !j) {
       toast.error('La justificación del cambio es obligatoria.');
       return;
     }
@@ -307,8 +315,8 @@ export default function InventarioOrdenCompraModal({
 
     try {
       setEnviando(true);
-      if (ordenEdicion?._id) {
-        await inventarioService.actualizarOrdenCompra(ordenEdicion._id, {
+      if (esEdicion && ordenEdicionId) {
+        await inventarioService.actualizarOrdenCompra(ordenEdicionId, {
           justificacion: j,
           ...(tieneRem ? { numeroRemision: rem } : {}),
           ...(tieneFac ? { numeroFacturaElectronico: factura } : {}),
@@ -345,7 +353,8 @@ export default function InventarioOrdenCompraModal({
       {showTrigger ? (
         <Button
           type="button"
-          variant="secondary"
+          variant="outline"
+          size="sm"
           className={triggerClassName}
           onClick={() => {
             onAntesNuevaOrden?.();
@@ -362,10 +371,13 @@ export default function InventarioOrdenCompraModal({
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <ClipboardList className="h-5 w-5 text-primary" />
-              {ordenEdicion?._id ? 'Editar orden de compra' : 'Nueva orden de compra'}
+              {esEdicion ? 'Editar orden de compra' : 'Nueva orden de compra'}
             </DialogTitle>
             <DialogDescription className="text-muted-foreground">
-              Remisión o factura electrónica (uno solo). El concepto queda en el documento. El número OC lo genera el servidor al crear; la fecha de creación también.
+              Remisión o factura electrónica (uno solo). El concepto queda en el documento.
+              {esEdicion
+                ? ' Solo editable en Verificación; el consecutivo OC no cambia.'
+                : ' El número OC lo genera el servidor al crear; la fecha de creación también.'}
             </DialogDescription>
           </DialogHeader>
 
@@ -374,8 +386,10 @@ export default function InventarioOrdenCompraModal({
             <span className="font-mono font-semibold text-foreground">
               {(ordenEdicion?.numeroOrden ?? siguienteNumeroOrden) || '(consultando consecutivo...)'}
             </span>
-            {!ordenEdicion?._id && siguienteNumeroOrden ? (
+            {!esEdicion && siguienteNumeroOrden ? (
               <span className="ml-2 text-xs text-muted-foreground">se confirma al guardar</span>
+            ) : esEdicion ? (
+              <span className="ml-2 text-xs text-muted-foreground">consecutivo inmutable</span>
             ) : null}
           </div>
 
@@ -422,24 +436,24 @@ export default function InventarioOrdenCompraModal({
             </div>
           </div>
 
-          <div className={`grid gap-4 ${ordenEdicion?._id ? 'md:grid-cols-2' : 'md:grid-cols-1'}`}>
+          <div className={`grid gap-4 ${esEdicion ? 'md:grid-cols-2' : 'md:grid-cols-1'}`}>
             <div className="space-y-2">
-              <Label>Concepto {ordenEdicion?._id ? '' : '*'}</Label>
+              <Label>Concepto {esEdicion ? '' : '*'}</Label>
               <Textarea
                 value={concepto}
                 onChange={(e) => setConcepto(e.target.value)}
                 placeholder="Ej. Compra de insumos para producción Q2"
                 rows={3}
-                readOnly={!!ordenEdicion?._id}
-                className={`border-input bg-background resize-y min-h-[72px] ${ordenEdicion?._id ? 'cursor-not-allowed bg-muted/40 text-muted-foreground' : ''}`}
+                readOnly={esEdicion}
+                className={`border-input bg-background resize-y min-h-[72px] ${esEdicion ? 'cursor-not-allowed bg-muted/40 text-muted-foreground' : ''}`}
               />
-              {ordenEdicion?._id ? (
+              {esEdicion ? (
                 <p className="text-[11px] text-muted-foreground">
                   El concepto queda en el documento original y no puede modificarse al editar.
                 </p>
               ) : null}
             </div>
-            {ordenEdicion?._id ? (
+            {esEdicion ? (
               <div className="space-y-2">
                 <Label>Justificación de este cambio *</Label>
                 <Textarea
@@ -594,7 +608,7 @@ export default function InventarioOrdenCompraModal({
             </Button>
             <Button type="button" onClick={() => void guardar()} disabled={saving || enviando}>
               <Save className="mr-2 h-4 w-4" />
-              {ordenEdicion?._id ? 'Guardar cambios' : 'Guardar orden'}
+              {esEdicion ? 'Guardar cambios' : 'Guardar orden'}
             </Button>
           </DialogFooter>
         </DialogContent>

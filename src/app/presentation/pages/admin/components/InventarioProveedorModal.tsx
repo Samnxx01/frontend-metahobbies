@@ -299,6 +299,8 @@ export default function InventarioProveedorModal({
       {showTrigger ? (
         <Button
           type="button"
+          variant="outline"
+          size="sm"
           className={triggerClassName}
           onClick={() => onOpenChange(true)}
           disabled={saving}

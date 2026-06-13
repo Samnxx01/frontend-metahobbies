@@ -14,6 +14,7 @@ import type {
 } from '../types/marco.types';
 import { SUGERENCIAS_AFILIADO } from '../constants/catalog-filters';
 import { toId } from '../utils/toId';
+import { normalizePublicIdForApi } from '@/app/utils/entityPublicId';
 import { getAllRoutes, getAccionesCatalogo, type Route } from '@/app/services/routesService';
 import type { AccionOption } from '@/app/services/routesService';
 
@@ -229,7 +230,7 @@ export function useMarcoPermisosParametrizacion() {
       const res = await guardarMarcoAfiliado({
         vistas: Array.from(vistasSel),
         acciones: Array.from(accionesSel),
-        rolCorporativoId: rolSeleccionadoId,
+        rolCorporativoId: normalizePublicIdForApi(rolSeleccionadoId),
       });
       const r = res?.resultado;
       const syncDetail =

@@ -30,7 +30,9 @@ const documentoTipoLabel: Record<NonNullable<LedgerByInvoiceResponse['documentoT
   ORDEN_COMPRA: 'Orden de compra',
   FACTURA_DIAN_COMPRA: 'Factura DIAN (compra)',
   FACTURA_DIAN_VENTA: 'Factura DIAN (venta)',
-  COMPROBANTE_ENTRADA: 'Comprobante de entrada',
+  COMPROBANTE_ENTRADA: 'Comprobante contable (entrada)',
+  COMPROBANTE_ORDEN_COMPRA: 'Comprobante contable (orden compra)',
+  COMPROBANTE_CONTABLE: 'Comprobante contable (manual)',
 };
 
 const Hash = ({ value }: { value?: string | null }): React.ReactElement => (

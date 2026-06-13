@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
-import { apiFetch } from '@/app/services/api';
 import {
-    buildMembresiaReferidosUrl,
+    buildReferralShareUrl,
+    generarEnlaceConAttribution,
     type ReferralAttributionResult,
 } from '@/app/services/referralAttributionService';
 
@@ -23,7 +23,7 @@ interface UseReferralLinkReturn {
 const mapAttributionToReferralData = (data: ReferralAttributionResult): ReferralData => ({
     codigoReferido: data.codigoReferido,
     jwtReferido: data.jwtReferido,
-    enlaceCompleto: buildMembresiaReferidosUrl(data),
+    enlaceCompleto: buildReferralShareUrl(data, 'referidos'),
     guestSessionId: data?.guestSessionId || null,
     attributionId: data?.attributionId || null,
 });
@@ -43,13 +43,10 @@ export const useReferralLink = (): UseReferralLinkReturn => {
                 throw new Error('No se encontro la sesion autenticada. Inicia sesion nuevamente para generar tu enlace.');
             }
 
-            const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api';
-            const data = await apiFetch(`${API_BASE_URL}/referido/enlace/attribution`, {
-                method: 'POST',
-                body: {
-                    originType: 'membresia',
-                },
-            }) as ReferralAttributionResult;
+            const data = await generarEnlaceConAttribution({
+                originType: 'membresia',
+                redirectTo: 'referidos',
+            });
 
             const mapped = mapAttributionToReferralData(data);
             setReferralData(mapped);

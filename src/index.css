@@ -282,12 +282,16 @@
   [class~="text-amber-500"],
   [class~="text-amber-600"],
   [class~="text-amber-700"],
-  [class~="text-amber-800"],
+  [class~="text-amber-800"] {
+    color: hsl(var(--secondary-foreground)) !important;
+  }
+
+  /* Verde legible sobre fondos rosados (margen, éxito, KPI) */
   [class~="text-emerald-600"],
   [class~="text-emerald-700"],
   [class~="text-emerald-800"],
   [class~="text-emerald-900"] {
-    color: hsl(var(--secondary-foreground)) !important;
+    color: hsl(152 69% 26%) !important;
   }
 
   [class~="border-amber-200"],
@@ -402,7 +406,7 @@
   .dark [class~="dark:text-emerald-400"],
   .dark [class~="dark:text-green-300"],
   .dark [class~="dark:text-green-400"] {
-    color: hsl(var(--secondary-foreground)) !important;
+    color: hsl(152 55% 62%) !important;
   }
 
   .dark [class~="dark:border-emerald-700"],

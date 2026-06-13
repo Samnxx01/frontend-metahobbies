@@ -23,6 +23,9 @@ type InventarioComprobanteEntradaSelectProps = {
   bodega: string;
   onSelect: (seleccion: ComprobanteEntradaSeleccion | null) => void;
   disabled?: boolean;
+  /** Oculta el campo bodega duplicado cuando el padre muestra «Bodega origen». */
+  ocultarCampoBodega?: boolean;
+  etiquetaBodega?: string;
 };
 
 const formatComprobanteLabel = (comprobante: ComprobanteEntradaAjuste): string => {
@@ -40,6 +43,8 @@ export default function InventarioComprobanteEntradaSelect({
   bodega,
   onSelect,
   disabled = false,
+  ocultarCampoBodega = false,
+  etiquetaBodega = 'Bodega',
 }: InventarioComprobanteEntradaSelectProps): React.ReactElement {
   const [comprobantes, setComprobantes] = useState<ComprobanteEntradaAjuste[]>([]);
   const [loading, setLoading] = useState(true);
@@ -137,7 +142,7 @@ export default function InventarioComprobanteEntradaSelect({
 
   return (
     <div className="space-y-4 md:col-span-2 xl:col-span-4">
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className={`grid gap-4 ${ocultarCampoBodega ? 'md:grid-cols-2' : 'md:grid-cols-3'}`}>
         <div className="space-y-2">
           <Label>Comprobante de entrada (aprobado)</Label>
           <Select
@@ -187,16 +192,18 @@ export default function InventarioComprobanteEntradaSelect({
           </Select>
         </div>
 
-        <div className="space-y-2">
-          <Label>Bodega</Label>
-          <Input
-            value={bodega}
-            readOnly
-            disabled
-            placeholder="Se completa al elegir comprobante"
-            className="bg-muted"
-          />
-        </div>
+        {ocultarCampoBodega ? null : (
+          <div className="space-y-2">
+            <Label>{etiquetaBodega}</Label>
+            <Input
+              value={bodega}
+              readOnly
+              disabled
+              placeholder="Se completa al elegir comprobante"
+              className="bg-muted"
+            />
+          </div>
+        )}
       </div>
     </div>
   );

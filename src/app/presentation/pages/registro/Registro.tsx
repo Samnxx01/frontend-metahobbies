@@ -21,6 +21,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { apiFetch } from '@/app/services/api';
+import { fetchSplashLogo, resolveSplashLogoUrl } from '@/app/services/splashLogoService';
 import { obtenerBrandingPublico } from '@/app/services/brandingWidget';
 import { getGovernedLoginPath } from '@/app/services/governedNavigation';
 
@@ -101,21 +102,9 @@ export default function Registro(): React.ReactElement {
     useEffect(() => {
         const fetchPublicLogo = async (): Promise<void> => {
             try {
-                const logoRes = await apiFetch('/api/config/parametrizacion/listar/logos/coporativo', {
-                    method: 'GET',
-                    useAuth: false,
-                    logoutOn401: false
-                });
-
-                if (logoRes?.ok && logoRes?.logo) {
-                    const { base64, mimetype } = logoRes.logo;
-                    if (base64 && mimetype) {
-                        setLogoUrl(`data:${mimetype};base64,${base64}`);
-                        return;
-                    }
-                }
-
-                setLogoUrl(null);
+                const logoRes = await fetchSplashLogo(false);
+                const nextLogoUrl = resolveSplashLogoUrl(logoRes?.logo);
+                setLogoUrl(nextLogoUrl);
             } catch (error) {
                 console.warn('No se pudo cargar el logo publico para registro:', error);
                 setLogoUrl(null);
