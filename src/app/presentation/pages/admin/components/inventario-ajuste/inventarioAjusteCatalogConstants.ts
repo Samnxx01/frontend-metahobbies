@@ -15,6 +15,7 @@ export const CODIGOS_TIPO_AJUSTE_PRESET: Array<{ codigo: string; nombre: string;
 ];
 
 export const CODIGOS_CAUSAL_AJUSTE_PRESET: Array<{ codigo: string; nombre: string }> = [
+  { codigo: 'TRASLADO', nombre: 'Traslado entre bodegas' },
   { codigo: 'MERMA', nombre: 'Merma' },
   { codigo: 'DANO', nombre: 'Daño' },
   { codigo: 'ERROR_CONTEO', nombre: 'Error de conteo' },

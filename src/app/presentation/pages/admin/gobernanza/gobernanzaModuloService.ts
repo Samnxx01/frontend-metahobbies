@@ -1,18 +1,38 @@
 import { apiFetch } from '@/app/services/api';
+import { getAccionesCatalogo, type AccionOption } from '@/app/services/routesService';
 import type {
+  GobernanzaFormularioDetalleResponse,
   GobernanzaModuloMenuResponse,
+  GobernanzaModuloOperativoResponse,
   GobernanzaModuloFiltrosOpcionesResponse,
   GobernanzaModuloRutasOpcionesResponse,
   GobernanzaModuloSembrarResponse,
   GobernanzaModulosCatalogoResponse,
+  GobernanzaModuloTiposResponse,
+  GobernanzaModuloTipoApi,
 } from './gobernanzaModuloApiTypes';
+import {
+  errorGobernanzaOperativo,
+  logGobernanzaOperativo,
+  warnGobernanzaOperativo,
+} from './gobernanzaModuloDebug';
 
 const CATALOGO_PATH = '/api/config/global/gobernanza/modulos/catalogo';
-const MENU_PATH = '/api/config/global/gobernanza/modulos/menu';
+const CONFIGS_PATH = '/api/config/global/gobernanza/modulos/configs';
+const OPERATIVO_PATH = '/api/config/global/gobernanza/modulos/operativo';
 const UPSERT_PATH = '/api/config/global/gobernanza/modulos/upsert';
 const RUTAS_OPCIONES_PATH = '/api/config/global/gobernanza/modulos/rutas-opciones';
+const FORMULARIO_DETALLE_PATH = '/api/config/global/gobernanza/modulos/formulario-detalle';
 const FILTROS_OPCIONES_PATH = '/api/config/global/gobernanza/modulos/filtros-opciones';
 const SEMBRAR_PATH = '/api/config/global/gobernanza/modulos/sembrar';
+const TIPOS_PATH = '/api/config/global/gobernanza/modulos/tipos';
+const TIPOS_SECTIONS_PATH = '/api/config/global/gobernanza/modulos/tipos/sections';
+const TIPOS_UPSERT_PATH = '/api/config/global/gobernanza/modulos/tipos/upsert';
+
+export async function fetchGobernanzaAccionesCatalogo(): Promise<AccionOption[]> {
+  const res = await getAccionesCatalogo();
+  return Array.isArray(res.data) ? res.data.filter((row) => row.estadoAccion !== false) : [];
+}
 
 export async function fetchGobernanzaModulosCatalogo(): Promise<GobernanzaModulosCatalogoResponse> {
   const payload = await apiFetch(CATALOGO_PATH, {
@@ -27,17 +47,153 @@ export async function fetchGobernanzaModulosCatalogo(): Promise<GobernanzaModulo
   return payload as GobernanzaModulosCatalogoResponse;
 }
 
-export async function fetchGobernanzaModuloMenu(modulo: string): Promise<GobernanzaModuloMenuResponse> {
-  const payload = await apiFetch(MENU_PATH, {
-    method: 'POST',
-    body: { modulo },
+export type FetchGobernanzaModuloMenuOptions = {
+  modulo?: string;
+  menuPath?: string;
+};
+
+export type FetchGobernanzaModuloOperativoOptions = {
+  section?: string;
+  modulo?: string;
+  menuPath?: string;
+  /** Hub contenedor (PermisosGlobal): lista tarjetas de gobernanzaModuloConfigs, no la ruta hub. */
+  hubOperaciones?: boolean;
+};
+
+/** GET directo desde gobernanzaModuloConfigs (acciones + formularios para la vista). */
+export async function fetchGobernanzaModuloOperativo(
+  opts: string | FetchGobernanzaModuloOperativoOptions
+): Promise<GobernanzaModuloOperativoResponse> {
+  const section =
+    typeof opts === 'string'
+      ? opts.trim()
+      : String(opts.section || opts.modulo || 'permisos').trim();
+  const menuPath =
+    typeof opts === 'string' ? '' : String(opts.menuPath || '').trim();
+  const hubOperaciones =
+    typeof opts === 'string' ? false : opts.hubOperaciones === true;
+  const params = new URLSearchParams({ section });
+  if (menuPath) params.set('menuPath', menuPath);
+  if (hubOperaciones) params.set('hubOperaciones', '1');
+  const url = `${OPERATIVO_PATH}?${params.toString()}`;
+  logGobernanzaOperativo('apiFetch operativo →', url);
+
+  let payload: unknown;
+  try {
+    payload = await apiFetch(url, {
+      method: 'GET',
+      cache: 'no-store',
+      headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' },
+    });
+  } catch (err) {
+    errorGobernanzaOperativo('apiFetch operativo falló', err);
+    throw err;
+  }
+
+  logGobernanzaOperativo('apiFetch operativo ←', payload);
+
+  if (!payload || (payload as { ok?: boolean }).ok === false) {
+    const msg = (payload as { msg?: string })?.msg || 'No se pudo cargar gobernanzaModuloConfigs';
+    warnGobernanzaOperativo('operativo ok=false', { msg, payload });
+    throw new Error(msg);
+  }
+
+  return payload as GobernanzaModuloOperativoResponse;
+}
+
+/** GET crudo de gobernanzaModuloConfigs por sección. */
+export async function fetchGobernanzaModuloConfigs(
+  section: string
+): Promise<{ ok: boolean; configs: GobernanzaModuloOperativoResponse['configs'] }> {
+  const payload = await apiFetch(
+    `${CONFIGS_PATH}?section=${encodeURIComponent(section.trim())}`,
+    {
+      method: 'GET',
+      cache: 'no-store',
+      headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' },
+    }
+  );
+
+  if (!payload || payload.ok === false) {
+    throw new Error(payload?.msg || 'No se pudo cargar gobernanzaModuloConfigs');
+  }
+
+  return payload as { ok: boolean; configs: GobernanzaModuloOperativoResponse['configs'] };
+}
+
+/** GET sections distintas ya creadas en gobernanzaModuloTipos. */
+export async function fetchGobernanzaModuloTiposSections(): Promise<string[]> {
+  const payload = await apiFetch(TIPOS_SECTIONS_PATH, {
+    method: 'GET',
+    cache: 'no-store',
+    headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' },
   });
 
   if (!payload || payload.ok === false) {
-    throw new Error(payload?.msg || 'No se pudo cargar el menú del módulo');
+    throw new Error(payload?.msg || 'No se pudieron cargar las sections de tipos');
   }
 
-  return payload as GobernanzaModuloMenuResponse;
+  const sections = Array.isArray((payload as { sections?: unknown }).sections)
+    ? (payload as { sections: unknown[] }).sections
+    : [];
+  return sections.map((s) => String(s || '').trim().toLowerCase()).filter(Boolean);
+}
+
+/** GET gobernanzaModuloTipos por sección (colección independiente). */
+export async function fetchGobernanzaModuloTipos(
+  section: string
+): Promise<GobernanzaModuloTiposResponse> {
+  const payload = await apiFetch(
+    `${TIPOS_PATH}?section=${encodeURIComponent(section.trim())}`,
+    {
+      method: 'GET',
+      cache: 'no-store',
+      headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' },
+    }
+  );
+
+  if (!payload || payload.ok === false) {
+    throw new Error(payload?.msg || 'No se pudieron cargar los tipos de módulo');
+  }
+
+  return payload as GobernanzaModuloTiposResponse;
+}
+
+export type UpsertGobernanzaModuloTipoPayload = {
+  section: string;
+  nombre: string;
+  codigo?: string;
+  descripcion?: string;
+  formularioComponent?: string;
+  endpointId?: string;
+  orden?: number;
+};
+
+export async function upsertGobernanzaModuloTipo(
+  body: UpsertGobernanzaModuloTipoPayload
+): Promise<GobernanzaModuloTipoApi> {
+  const payload = await apiFetch(TIPOS_UPSERT_PATH, {
+    method: 'POST',
+    body,
+  });
+
+  if (!payload || payload.ok === false) {
+    throw new Error(payload?.msg || 'No se pudo guardar el tipo de módulo');
+  }
+
+  return (payload as { tipo: GobernanzaModuloTipoApi }).tipo;
+}
+
+export async function fetchGobernanzaModuloMenu(
+  opts: string | FetchGobernanzaModuloMenuOptions
+): Promise<GobernanzaModuloMenuResponse> {
+  const modulo =
+    typeof opts === 'string' ? opts.trim() : String(opts.modulo || 'permisos').trim();
+  const menuPath = typeof opts === 'string' ? '' : String(opts.menuPath || '').trim();
+  if (menuPath) {
+    return fetchGobernanzaModuloOperativo({ section: modulo, menuPath });
+  }
+  return fetchGobernanzaModuloOperativo(modulo);
 }
 
 export async function upsertGobernanzaModulo(
@@ -87,6 +243,21 @@ export async function fetchGobernanzaModuloRutasOpciones(
   }
 
   return (payload as GobernanzaModuloRutasOpcionesResponse).data;
+}
+
+export async function fetchGobernanzaModuloFormularioDetalle(
+  rutaId: string
+): Promise<GobernanzaFormularioDetalleResponse['data']> {
+  const payload = await apiFetch(FORMULARIO_DETALLE_PATH, {
+    method: 'POST',
+    body: { rutaId, formularioId: rutaId },
+  });
+
+  if (!payload || payload.ok === false) {
+    throw new Error(payload?.msg || 'No se pudo cargar el formulario');
+  }
+
+  return (payload as GobernanzaFormularioDetalleResponse).data;
 }
 
 export async function sembrarGobernanzaModulosCatalogo(): Promise<GobernanzaModuloSembrarResponse['data']> {

@@ -24,6 +24,12 @@ export type PipelineBOriginPayload = {
   estado?: boolean;
 };
 
+/** Configuración única del árbol de comisiones por venta referida (sponsor en refeClient). */
+export const VENTA_REFERIDO_ARBOL = {
+  originType: 'venta-referido',
+  originId: '000000000000000000000001',
+} as const;
+
 const dashboardVentaService = {
   async listarProductos(): Promise<BackendProducto[]> {
     return productosService.listarProductosVentasAdmin();
@@ -32,6 +38,13 @@ const dashboardVentaService = {
   async listarConfiguraciones(): Promise<PipelineBOriginConfig[]> {
     const response = await apiFetch('/api/comisiones-origen/', { method: 'GET' });
     return (response?.data ?? []) as PipelineBOriginConfig[];
+  },
+
+  async obtenerConfiguracionArbolReferido(): Promise<PipelineBOriginConfig | null> {
+    const response = await apiFetch('/api/comisiones-origen/arbol-venta-referido', {
+      method: 'GET',
+    });
+    return (response?.data ?? null) as PipelineBOriginConfig | null;
   },
 
   async crearConfiguracion(payload: PipelineBOriginPayload): Promise<PipelineBOriginConfig> {

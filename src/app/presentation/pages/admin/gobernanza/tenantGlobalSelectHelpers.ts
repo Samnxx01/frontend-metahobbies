@@ -11,7 +11,7 @@ const mapRows = (rows: unknown[] | undefined, fallbackKey: string): GenericSelec
   (Array.isArray(rows) ? rows : [])
     .map((row: unknown) => {
       const r = row as Record<string, unknown>;
-      const id = String(r?.id || r?._id || r?.iud || '').trim();
+      const id = String(r?.iud || r?.id || r?._id || '').trim();
       if (!id) return null;
       const label =
         String(

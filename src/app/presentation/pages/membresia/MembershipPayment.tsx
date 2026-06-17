@@ -35,6 +35,8 @@ export interface ResultadoPago {
     ventaReferencia?: string;
     facturaId?: string;
     metodoPago?: string;
+    /** Carrito de la secuencia de pago (no el carrito activo del navegador). */
+    carritoId?: string;
 }
 
 interface MembresiaPlan {
@@ -191,9 +193,15 @@ const steps = [
 
 export default function MembershipPayment(): React.ReactElement {
     const navigate = useNavigate();
-    const { token } = useParams<{ token: string }>();
+    const { token: tokenFromPath } = useParams<{ token?: string }>();
     const [searchParams] = useSearchParams();
     const { purchaseMembership: originalPurchaseMembership } = useMembership();
+
+    const attributionCtx = resolvePublicAttributionContext(
+        searchParams.toString() ? `?${searchParams.toString()}` : '',
+    );
+    const token = tokenFromPath || attributionCtx.ref || '';
+    const isResolvingShortLink = Boolean(searchParams.get('at')?.trim()) && !token;
 
     const guestSessionIdFromUrl = searchParams.get('guestSessionId')?.trim() || '';
     const flowReferidos = searchParams.get('flow') === 'referidos'
@@ -516,6 +524,15 @@ export default function MembershipPayment(): React.ReactElement {
             </div>
         );
     };
+
+    if (isResolvingShortLink) {
+        return (
+            <div className="min-h-screen flex flex-col items-center justify-center gap-3 bg-background">
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                <p className="text-sm text-muted-foreground">Cargando enlace de atribución…</p>
+            </div>
+        );
+    }
 
     return (
         <>

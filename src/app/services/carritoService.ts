@@ -1,9 +1,21 @@
 import { apiFetch } from './api';
 import type { DatosFacturacionInvitado } from '@/app/presentation/components/carrito/DatosFacturacionInvitadoModal';
-
-const CART_SESSION_KEY = 'mabs_cart_session_id';
+import {
+  CART_SESSION_KEY,
+  isGuestSessionIdMisusedAsCarritoId,
+  resolveAttributionGuestSessionId,
+  syncCartSessionWithAttribution,
+} from '@/app/utils/cartSessionAttribution';
 
 const getCartSessionId = (): string => {
+  syncCartSessionWithAttribution();
+
+  const attributionGuest = resolveAttributionGuestSessionId();
+  if (attributionGuest) {
+    localStorage.setItem(CART_SESSION_KEY, attributionGuest);
+    return attributionGuest;
+  }
+
   const current = localStorage.getItem(CART_SESSION_KEY);
   if (current) return current;
 
@@ -39,6 +51,9 @@ export interface BackendCartItem {
   precioUnitario: number;
   precioActual: number;
   cantidad: number;
+  colorPantone?: string | null;
+  colorNombre?: string | null;
+  colorHex?: string | null;
   descuentoItem: { tipo: 'PORCENTAJE' | 'FIJO' | 'NINGUNO'; valor: number };
   subtotalBruto: number;
   subtotalNeto: number;
@@ -75,8 +90,10 @@ export interface BackendCart {
   totalImpuestos?: number;
   detalleImpuestos?: BackendCartTaxDetail[];
   total: number;
-  estado: 'ACTIVO' | 'ABANDONADO' | 'COMPLETADO' | 'CANCELADO';
+  estado: 'ACTIVO' | 'ABANDONADO' | 'COMPLETADO' | 'CANCELADO' | 'PENDIENTE_PAGO';
+  estadoVentaReferencia?: 'PENDIENTE' | 'CONFIRMADO' | 'CANCELADO' | null;
   moneda: string;
+  monedaId?: string | null;
 }
 
 export interface CartAlerta {
@@ -107,7 +124,12 @@ export interface CheckoutResult {
 const normalizeCartItem = (item: BackendCartItem): BackendCartItem => ({
   ...item,
   _id: String(item._id || item.iud || ''),
+  productoId: String(item.productoId || ''),
 });
+
+/** Id público del carrito o ítem (`iud` en API). */
+export const getCarritoPublicId = (cart: { _id?: string; iud?: string } | null | undefined): string =>
+  String(cart?._id || cart?.iud || '').trim();
 
 const normalizeCart = (cart: BackendCart): BackendCart => ({
   ...cart,
@@ -125,6 +147,25 @@ const carritoService = {
     return normalizeCart(resp.data as BackendCart);
   },
 
+  /** Obtiene un carrito por id; devuelve null si el backend responde 404. */
+  async obtenerPorIdSeguro(carritoId: string): Promise<
+    (BackendCart & {
+      datosFacturacion?: DatosFacturacionInvitado | null;
+      facturaId?: string | null;
+      ventaReferencia?: string | null;
+    }) | null
+  > {
+    try {
+      return await this.obtenerPorId(carritoId);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err || '');
+      if (/\[404\]/i.test(msg) && /carrito no encontrado/i.test(msg)) {
+        return null;
+      }
+      throw err;
+    }
+  },
+
   /** Obtiene un carrito por id (incluye COMPLETADO tras pago) */
   async obtenerPorId(carritoId: string): Promise<
     BackendCart & {
@@ -133,15 +174,25 @@ const carritoService = {
       ventaReferencia?: string | null;
     }
   > {
+    if (isGuestSessionIdMisusedAsCarritoId(carritoId)) {
+      return this.obtenerOCrear();
+    }
     const resp = await cartFetch(`/api/carrito/${carritoId}`, { method: 'GET' });
     return normalizeCart(resp.data as BackendCart);
   },
 
-  /** Agrega un producto al carrito */
-  async agregarItem(carritoId: string, productoId: string, cantidad: number): Promise<BackendCart> {
-    const resp = await cartFetch(`/api/carrito/${carritoId}/items`, {
+  /** Agrega un producto al carrito (crea carrito si no hay id activo). */
+  async agregarItem(
+    carritoId: string,
+    productoId: string,
+    cantidad: number,
+    options?: { color?: { pantone: string; name: string; hex: string } },
+  ): Promise<BackendCart> {
+    const cartId = String(carritoId || '').trim();
+    const endpoint = cartId ? `/api/carrito/${cartId}/items` : '/api/carrito/items';
+    const resp = await cartFetch(endpoint, {
       method: 'POST',
-      body: { productoId, cantidad },
+      body: { productoId, cantidad, color: options?.color },
     });
     return normalizeCart(resp.data as BackendCart);
   },
@@ -186,8 +237,28 @@ const carritoService = {
 
   /** Sincroniza precios y stock con inventario actual */
   async sincronizar(carritoId: string): Promise<{ carrito: BackendCart; alertas: CartAlerta[] }> {
-    const resp = await cartFetch(`/api/carrito/${carritoId}/sincronizar`, { method: 'POST' });
+    const id = String(carritoId || '').trim();
+    if (!id) {
+      throw new Error('No hay carrito activo para sincronizar.');
+    }
+    const resp = await cartFetch(`/api/carrito/${id}/sincronizar`, { method: 'POST' });
     return { carrito: normalizeCart(resp.carrito as BackendCart), alertas: (resp.alertas ?? []) as CartAlerta[] };
+  },
+
+  /** Reabre carrito CANCELADO/PENDIENTE_PAGO tras pago fallido → ACTIVO */
+  async reabrirTrasPagoFallido(carritoId: string): Promise<BackendCart> {
+    const resp = await cartFetch(`/api/carrito/${carritoId}/reabrir-checkout`, { method: 'POST' });
+    return normalizeCart(resp.data as BackendCart);
+  },
+
+  /**
+   * Abandona checkout con pago DECLINED: reabre carrito para generar nuevo pago al volver.
+   */
+  async abandonarCheckoutPagoDeclinado(carritoId: string): Promise<{ ok: boolean; motivo?: string }> {
+    const resp = await cartFetch(`/api/carrito/${carritoId}/abandonar-pago-declinado`, {
+      method: 'POST',
+    });
+    return { ok: Boolean(resp.ok), motivo: String(resp.motivo || '') };
   },
 
   /** Guarda datos de facturacion de usuario registrado o invitado */
@@ -302,13 +373,19 @@ const carritoService = {
     return { blob, fileName };
   },
 
-  async consultarEstadoPagoWompi(carritoId: string): Promise<{
+  async consultarEstadoPagoWompi(
+    carritoId: string,
+    options?: { transactionId?: string; reference?: string },
+  ): Promise<{
     ok?: boolean;
     reference?: string;
     ventaReferencia?: string | null;
     facturaId?: string | null;
     invoiceId?: string | null;
     carritoEstado?: string | null;
+    carritoId?: string | null;
+    emitidaEn?: string | null;
+    fechaFactura?: string | null;
     status?: string;
     transactionId?: string | null;
     amount_in_cents?: number | null;
@@ -326,9 +403,30 @@ const carritoService = {
       subtotalNeto: number;
       stockDisponible?: number;
       stockSuficiente?: boolean;
+      colorPantone?: string | null;
+      colorNombre?: string | null;
+      colorHex?: string | null;
     }>;
   }> {
-    return cartFetch(`/api/carrito/${carritoId}/pago/estado`, { method: 'GET' });
+    const txId = String(options?.transactionId || '').trim();
+    const reference = String(options?.reference || '').trim();
+    /**
+     * El `id` de Wompi NO es el carrito. Con transactionId/reference el backend resuelve
+     * por transacción (ruta sentinel `0`), no por el carrito activo del navegador.
+     */
+    const idRuta = (txId || reference) ? '0' : (String(carritoId || '').trim() || '0');
+
+    const params = new URLSearchParams();
+    if (txId) {
+      params.set('transactionId', txId);
+      params.set('id', txId);
+    }
+    if (reference) params.set('reference', reference);
+    const qs = params.toString();
+    return cartFetch(
+      `/api/carrito/${idRuta}/pago/estado${qs ? `?${qs}` : ''}`,
+      { method: 'GET' },
+    );
   },
 
   /** Pedidos completados del usuario invitado/cliente autenticado */
@@ -361,6 +459,19 @@ const carritoService = {
   async cancelar(carritoId: string): Promise<BackendCart> {
     const resp = await cartFetch(`/api/carrito/${carritoId}/cancelar`, { method: 'POST' });
     return normalizeCart(resp.data as BackendCart);
+  },
+
+  /**
+   * Cancela pedido en paso de pago: anula carrito, pedido pendiente, invoice y referencia Wompi.
+   */
+  async cancelarPedido(carritoId: string): Promise<BackendCart> {
+    const resp = await cartFetch(`/api/carrito/${carritoId}/cancelar-pedido`, { method: 'POST' });
+    return normalizeCart(resp.data as BackendCart);
+  },
+
+  /** @deprecated Usar cancelarPedido */
+  async cancelarCompra(carritoId: string): Promise<BackendCart> {
+    return this.cancelarPedido(carritoId);
   },
 
   /** Admin: pedidos con pago aprobado y venta completada */
@@ -418,6 +529,11 @@ export interface PedidoResumenMargen {
 
 export interface PedidoAprobado {
   id: string;
+  invoiceId: string | null;
+  invoiceNumber: string | null;
+  invoiceEstado: string | null;
+  transactionId: string | null;
+  emitidaEn: string | null;
   ventaReferencia: string | null;
   referenciaPago: string | null;
   pagoEstado: string;

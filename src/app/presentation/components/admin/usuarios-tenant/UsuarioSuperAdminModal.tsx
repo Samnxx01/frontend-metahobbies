@@ -28,6 +28,7 @@ import {
 import { RH_OPTIONS } from './catalogos';
 import { useAuth } from '@/app/providers/AuthProvider';
 import { toast } from 'react-toastify';
+import { normalizePublicIdForApi, resolveEntityPublicId } from '@/app/utils/entityPublicId';
 
 interface UsuarioSuperAdminModalProps {
     open: boolean;
@@ -166,9 +167,9 @@ export const UsuarioSuperAdminModal = ({
             canReferir: form.canReferir,
         };
 
-        const tenantDestino =
-            (tenantSuperAdminIdFromJwt.trim() ? tenantSuperAdminIdFromJwt : '') ||
-            form.tenantSuperAdminId.trim();
+        const tenantDestino = normalizePublicIdForApi(
+            tenantSuperAdminIdFromJwt || form.tenantSuperAdminId,
+        );
         const esBootstrapDiosPublico =
             !token &&
             !loadingPublicTenants &&
@@ -261,7 +262,7 @@ export const UsuarioSuperAdminModal = ({
                                                 const { primary, principalLine } =
                                                     describeTenantSuperAdminOption(tenant);
                                                 return (
-                                                    <SelectItem key={tenant.iud} value={tenant.iud}>
+                                                    <SelectItem key={resolveEntityPublicId(tenant)} value={resolveEntityPublicId(tenant)}>
                                                         <div className="flex flex-col gap-0.5 py-0.5 text-left">
                                                             <span className="font-medium leading-tight">{primary}</span>
                                                             {principalLine ? (

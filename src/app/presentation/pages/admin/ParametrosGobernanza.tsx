@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useLocation, useSearchParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { cn } from '@/lib/utils';
 import { apiFetch } from '@/app/services/api';
@@ -32,13 +32,30 @@ import {
 } from './gobernanza/gobernanzaCardDesignTypes';
 import { GobernanzaCardDesignForm } from './gobernanza/GobernanzaCardDesignForm';
 import { GobernanzaModuloDinamico } from './gobernanza/GobernanzaModuloDinamico';
+import { GobernanzaModuloOperativoShell } from './gobernanza/GobernanzaModuloOperativoShell';
+import {
+  envolverFormularioInline,
+  validarGobernanzaModuloInline,
+} from './gobernanza/gobernanzaModuloFormularioGuard';
 import { useParametrosGobernanzaModuloMenu } from './gobernanza/useParametrosGobernanzaModuloMenu';
 import {
-  getGobernanzaModuloBySlug,
+  GOBERNANZA_MODULO_PERMISOS,
+  GOBERNANZA_MODULO_REGLAS,
   GOBERNANZA_MODULO_TENANT,
-  moduloEndpointIdSet,
+  gobernanzaModuloOperativoStub,
   type GobernanzaModuloConfig,
 } from './gobernanza/gobernanzaModuloConfig';
+import {
+  esRutaHubGobernanzaPermisos,
+  esRutaHubGobernanzaReglas,
+  normalizarGobernanzaMenuPath,
+  resolverGobernanzaEndpointId,
+} from './gobernanza/gobernanzaActionIds';
+import { ENDPOINTS_BY_ID } from './gobernanza/gobernanzaEndpointCatalog';
+import { gobernanzaEntityId, gobernanzaEntityIdForPath } from './gobernanza/gobernanzaEntityId';
+import { resolveReglaLegacyId, resolveReglaPublicId } from './gobernanza/gobernanzaReglaEntityId';
+import { GobernanzaPermisosFormByEndpoint } from './gobernanza/permisos-forms';
+import { GobernanzaReglasFormByEndpoint } from './gobernanza/reglas-forms';
 import { getGobernanzaModuloCatalogoLocal } from './gobernanza/gobernanzaModulosCatalog';
 import {
   computeGobernanzaEndpointCapabilities,
@@ -58,6 +75,14 @@ import {
   filtrarTenantGlobalesPorJerarquiaSuperAdmin,
   tenantGlobalOptionsFromJerarquiaUsuarios,
 } from './gobernanza/tenantGlobalJerarquiaHelpers';
+import {
+  filtrarSaJerarquiaMetaPorSubarbol,
+  type SaJerarquiaCounterIndice,
+} from './gobernanza/saJerarquiaCounterFilter';
+import {
+  formatSaJerarquiaOptionLabel,
+  SaJerarquiaUsuariosPanel,
+} from './gobernanza/SaJerarquiaUsuariosPanel';
 import {
   buildTenantGlobalSelectsEnriched,
   mergeSelectOptionForValue,
@@ -95,7 +120,7 @@ function computeRuleCatalogPermisosDigest(catalog: Record<string, any>): string 
 const POLL_HERENCIA_ADMIN_MS = 45_000;
 
 type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE';
-export type EndpointSection = 'tenant' | 'permisos' | 'corporativo';
+export type EndpointSection = 'tenant' | 'permisos' | 'corporativo' | 'reglas';
 export type EndpointActor = 'tenantSuperAdmin' | 'tenantGlobal' | 'ambos';
 type FieldType = 'text' | 'textarea' | 'json' | 'id' | 'permisos' | 'context';
 
@@ -138,6 +163,14 @@ export interface ParametrosGobernanzaProps {
   cardDesignQueryParam?: string;
   /** Menú horizontal + diálogo de diseño de tarjetas (default true). */
   enableCardDesignEditor?: boolean;
+  inlineModuloConfig?: any | null;
+  inlineModuloSlug?: string;
+  shellVariant?: 'full' | 'compact';
+  menuPath?: string | null;
+  /** Acción del catálogo al abrir subruta (Perm*Form → endpointId). */
+  preferredActionId?: string | null;
+  /** Hub contenedor (PermisosGlobal): menú desde gobernanzaModuloConfigs. */
+  operacionesHub?: boolean;
 }
 
 const SUPERADMIN_RULES_ENDPOINT_IDS = new Set([
@@ -307,8 +340,7 @@ const collectAllNodes = (nodes: any[] = []): any[] => {
   return collected;
 };
 
-const getEntityId = (value: any): string =>
-  String(value?._id || value?.iud || value?.id || value || '').trim();
+const getEntityId = (value: any): string => gobernanzaEntityId(value);
 
 const getEntityLabel = (value: any): string =>
   String(
@@ -433,6 +465,11 @@ const SECTION_META: Record<
     label: 'Gobernanza Corporativo',
     description: 'Catalogos, roles y niveles corporativos.',
     icon: Building2,
+  },
+  reglas: {
+    label: 'Gobernanza Reglas',
+    description: 'Reglas de jerarquia por tenant global.',
+    icon: ShieldCheck,
   },
 };
 
@@ -1066,6 +1103,119 @@ const pickTenantCorreo = (row: any): string => {
 const isTenantSuperAdminScopeOption = (value: string): boolean =>
   String(value || '').trim().startsWith(TENANT_SUPERADMIN_SCOPE_PREFIX);
 
+/** MongoId en query: 24 hex sin guiones (evita UUID mal formados en tenantSuperTenant). */
+const toMongoIdQueryParam = (raw: string): string => {
+  const hex = String(raw || '').replace(/[^a-f0-9]/gi, '');
+  if (/^[a-f0-9]{24}$/i.test(hex)) return hex;
+  if (hex.length > 24) return hex.slice(0, 24);
+  return String(raw || '').trim();
+};
+
+/** Agrupa el combo TG/SA: ramas SuperAdmin vs tenants globales. */
+function renderTenantGlobalSelectOptionGroups(
+  tenantOptions: TenantGlobal[],
+  saMetas: SaJerarquiaMeta[] = [],
+): React.ReactNode {
+  const saOpts = tenantOptions.filter((t) => isTenantSuperAdminScopeOption(String(t.id || '')));
+  const tgOpts = tenantOptions.filter((t) => !isTenantSuperAdminScopeOption(String(t.id || '')));
+  const metaById = new Map(saMetas.map((m) => [String(m.id), m]));
+  return (
+    <>
+      {saOpts.length > 0 ? (
+        <optgroup label="Ramas Tenant SuperAdmin">
+          {saOpts.map((t) => {
+            const saId = t.id.slice(TENANT_SUPERADMIN_SCOPE_PREFIX.length);
+            const meta = metaById.get(saId);
+            const label = meta ? formatSaJerarquiaOptionLabel(meta) : t.label;
+            return (
+              <option key={t.id} value={t.id}>
+                {label}
+              </option>
+            );
+          })}
+        </optgroup>
+      ) : null}
+      {tgOpts.length > 0 ? (
+        <optgroup label="Tenants globales (TG bajo una rama SA)">
+          {tgOpts.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.label}
+            </option>
+          ))}
+        </optgroup>
+      ) : null}
+    </>
+  );
+}
+
+type SaJerarquiaMeta = {
+  id: string;
+  label?: string;
+  codigoJerarquia?: string | null;
+  codigoPadre?: string | null;
+  secuenciaJerarquia?: number | null;
+  usuarioId?: string | null;
+  rolNombre?: string | null;
+  usuarioNombre?: string | null;
+  usuarioCorreo?: string | null;
+  coporativoNombre?: string | null;
+  counterJerarquia?: {
+    codigoJerarquia?: string | null;
+    codigoPadre?: string | null;
+    secuenciaJerarquia?: number | null;
+  } | null;
+  saPadre?: {
+    id: string | null;
+    codigoJerarquia: string | null;
+    secuenciaJerarquia?: number | null;
+    usuarioNombre: string | null;
+    usuarioCorreo: string | null;
+  } | null;
+  mandoJerarquia?: {
+    id: string;
+    codigoJerarquia: string | null;
+    secuenciaJerarquia: number | null;
+    usuarioNombre: string | null;
+    usuarioCorreo: string | null;
+    cadenaJerarquica?: {
+      id: string;
+      codigoJerarquia: string | null;
+      secuenciaJerarquia: number | null;
+      usuarioNombre: string | null;
+      usuarioCorreo: string | null;
+    }[];
+  } | null;
+  usuariosJerarquia?: {
+    id: string;
+    nombre: string | null;
+    apellido?: string | null;
+    correo: string | null;
+    tienePerfil?: boolean;
+    perfilCc?: string | null;
+    perfilTelefono?: string | null;
+  }[];
+};
+
+function resolveSaIdFromTenantGlobalSelection(
+  tenantGlobalSelected: string,
+  tenantGlobales: TenantGlobal[]
+): string {
+  const raw = String(tenantGlobalSelected || '').trim();
+  if (!raw) return '';
+  if (isTenantSuperAdminScopeOption(raw)) {
+    return raw.slice(TENANT_SUPERADMIN_SCOPE_PREFIX.length).trim();
+  }
+  const tg = tenantGlobales.find((t) => String(t.id || '').trim() === raw);
+  return String(tg?.tenantSuperAdmin || '').trim();
+}
+
+function renderSaRamaUsuariosPanel(
+  meta: SaJerarquiaMeta | null | undefined,
+  indice: SaJerarquiaCounterIndice[] = [],
+): React.ReactNode {
+  return <SaJerarquiaUsuariosPanel meta={meta} indice={indice} />;
+}
+
 /**
  * SuperAdmin (Mongo) asociado al valor del select "tenant global": opción __tsa_scope__ (SA explícito)
  * o tenant global real vía `tenantGlobales` (y padre tenantGlobalAdmin si hace falta), con respaldo al JWT.
@@ -1092,6 +1242,48 @@ const resolveTenantSuperAdminIdForHerenciaSelect = (
   return sa || String(jwtTenantSuperAdminId || '').trim();
 };
 
+function resolveTenantGlobalDisplayMeta(
+  tenantGlobalId: string,
+  globales: Array<{
+    id: string;
+    label: string;
+    corporativo?: string;
+    tenantSuperAdmin?: string;
+    tenantGlobalAdmin?: string;
+  }>,
+  refs: Array<{ id: string; label: string; meta?: Record<string, string | number | undefined> }> = []
+): {
+  id: string;
+  label: string;
+  corporativo: string;
+  tenantSuperAdmin?: string;
+  tenantGlobalAdmin?: string;
+} | null {
+  const id = String(tenantGlobalId || '').trim();
+  if (!id || isTenantSuperAdminScopeOption(id)) return null;
+  const fromState = globales.find((t) => String(t.id || '').trim() === id);
+  if (fromState) {
+    return {
+      id,
+      label: fromState.label,
+      corporativo: String(fromState.corporativo || ''),
+      tenantSuperAdmin: fromState.tenantSuperAdmin,
+      tenantGlobalAdmin: fromState.tenantGlobalAdmin,
+    };
+  }
+  const fromRef = refs.find((r) => String(r.id || '').trim() === id);
+  if (fromRef) {
+    return {
+      id,
+      label: fromRef.label,
+      corporativo: String(fromRef.meta?.corporativo || ''),
+      tenantSuperAdmin: String(fromRef.meta?.tenantSuperAdmin || ''),
+      tenantGlobalAdmin: String(fromRef.meta?.tenantGlobalAdmin || ''),
+    };
+  }
+  return { id, label: id, corporativo: '' };
+};
+
 const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
   mode = 'full',
   initialSection = 'tenant',
@@ -1104,8 +1296,27 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
   enableCardDesignEditor = true,
   inlineModuloConfig: inlineModuloConfigProp = null,
   inlineModuloSlug,
+  shellVariant = 'full',
+  menuPath: menuPathProp,
+  preferredActionId: preferredActionIdProp = null,
+  operacionesHub = false,
 }) => {
+  const { pathname } = useLocation();
+  const explicitMenuPath = String(menuPathProp || '').trim();
+  const resolvedMenuPath = explicitMenuPath || pathname || null;
+  const effectiveOperacionesHub = useMemo(
+    () => operacionesHub || esRutaHubGobernanzaPermisos(resolvedMenuPath) || esRutaHubGobernanzaReglas(resolvedMenuPath),
+    [operacionesHub, resolvedMenuPath]
+  );
+  const preferredActionId = String(preferredActionIdProp || '').trim() || null;
   const isRulesMode = mode === 'rules' || mode === 'superAdminRules';
+  const shellModuloParametrizado = Boolean(
+    lockedSection
+    && !allowedEndpointIds
+    && !isRulesMode
+    && (inlineModuloSlug || lockedSection === 'permisos' || lockedSection === 'reglas' || lockedSection === 'tenant')
+  );
+  const compactShell = shellVariant === 'compact' || shellModuloParametrizado;
   const initialResolvedSection = lockedSection ?? initialSection;
   const [activeSection, setActiveSection] = useState<EndpointSection>(initialResolvedSection);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -1136,17 +1347,10 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
   const [tenantGlobales, setTenantGlobales] = useState<TenantGlobal[]>([]);
   /** Desde GET selects: tenantSuperAdmin con filas en tenantjerarquiacounters (+ corporativo) */
   const [tenantSuperAdminsJerarquiaCounters, setTenantSuperAdminsJerarquiaCounters] = useState<
-    {
-      id: string;
-      label: string;
-      coporativoNombre?: string | null;
-      codigoJerarquia?: string | null;
-      usuarioNombre?: string | null;
-      usuarioCorreo?: string | null;
-      /** RegisUsu enlazados por tenantId, rol tenantSuperAdmin o usuarioId en el doc SA (mismo criterio que Usuarios tenant). */
-      usuariosJerarquia?: { id: string; nombre: string | null; correo: string | null }[];
-    }[]
+    SaJerarquiaMeta[]
   >([]);
+  /** Índice crudo counters (codigoPadre) para filtrar subárbol SA en combo. */
+  const [jerarquiaSaCounters, setJerarquiaSaCounters] = useState<SaJerarquiaCounterIndice[]>([]);
   const [vistas, setVistas] = useState<Vista[]>([]);
   const [acciones, setAcciones] = useState<Accion[]>([]);
   const [reglas, setReglas] = useState<ReglaOption[]>([]);
@@ -1386,7 +1590,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
           acc[endpoint.section] += 1;
           return acc;
         },
-        { tenant: 0, permisos: 0, corporativo: 0 } as Record<EndpointSection, number>
+        { tenant: 0, permisos: 0, corporativo: 0, reglas: 0 } as Record<EndpointSection, number>
       ),
     [availableEndpoints]
   );
@@ -1458,23 +1662,37 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
   const inlineModuloResolved = useMemo((): GobernanzaModuloConfig | null => {
     if (inlineModuloConfigProp) return inlineModuloConfigProp;
     if (inlineModuloSlug) {
-      const reg = getGobernanzaModuloBySlug(inlineModuloSlug);
-      if (reg) return reg;
       const local = getGobernanzaModuloCatalogoLocal(inlineModuloSlug);
-      if (local) {
-        return {
-          slug: local.slug,
-          section: local.section,
-          label: local.label,
-          description: local.description,
-          endpointIds: [],
-          defaultActionId: '',
-        };
-      }
-      return null;
+      return gobernanzaModuloOperativoStub(inlineModuloSlug, local
+        ? { section: local.section, label: local.label, description: local.description }
+        : undefined);
     }
     if (mode === 'full' && !allowedEndpointIds && !lockedSection && !isRulesMode && activeSection === 'tenant') {
-      return GOBERNANZA_MODULO_TENANT;
+      return gobernanzaModuloOperativoStub(GOBERNANZA_MODULO_TENANT.slug, {
+        section: GOBERNANZA_MODULO_TENANT.section,
+        label: GOBERNANZA_MODULO_TENANT.label,
+        description: GOBERNANZA_MODULO_TENANT.description,
+        submenuTitle: GOBERNANZA_MODULO_TENANT.submenuTitle,
+        submenuHint: GOBERNANZA_MODULO_TENANT.submenuHint,
+      });
+    }
+    if (mode === 'full' && !allowedEndpointIds && !isRulesMode && activeSection === 'permisos') {
+      return gobernanzaModuloOperativoStub(GOBERNANZA_MODULO_PERMISOS.slug, {
+        section: GOBERNANZA_MODULO_PERMISOS.section,
+        label: GOBERNANZA_MODULO_PERMISOS.label,
+        description: GOBERNANZA_MODULO_PERMISOS.description,
+        submenuTitle: GOBERNANZA_MODULO_PERMISOS.submenuTitle,
+        submenuHint: GOBERNANZA_MODULO_PERMISOS.submenuHint,
+      });
+    }
+    if (mode === 'full' && !allowedEndpointIds && activeSection === 'reglas') {
+      return gobernanzaModuloOperativoStub(GOBERNANZA_MODULO_REGLAS.slug, {
+        section: GOBERNANZA_MODULO_REGLAS.section,
+        label: GOBERNANZA_MODULO_REGLAS.label,
+        description: GOBERNANZA_MODULO_REGLAS.description,
+        submenuTitle: GOBERNANZA_MODULO_REGLAS.submenuTitle,
+        submenuHint: GOBERNANZA_MODULO_REGLAS.submenuHint,
+      });
     }
     return null;
   }, [inlineModuloConfigProp, inlineModuloSlug, mode, allowedEndpointIds, lockedSection, isRulesMode, activeSection]);
@@ -1485,13 +1703,74 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
 
   const inlineModuloMenu = useParametrosGobernanzaModuloMenu({
     moduloSlug: inlineModuloResolved?.slug,
-    enabled: useModuloInlineFlow,
-    syncDefaultAction: true,
+    menuPath: resolvedMenuPath,
+    preferredActionId,
+    operacionesHub: effectiveOperacionesHub,
+    enabled: Boolean(inlineModuloSlug) || useModuloInlineFlow,
+    syncDefaultAction: !effectiveOperacionesHub && !resolvedMenuPath,
   });
 
+  const resolveEndpointInlineDesdeMenu = useCallback(
+    (endpoint: EndpointSpec): EndpointSpec => {
+      if (!useModuloInlineFlow) return endpoint;
+      const accion = inlineModuloMenu.activeAccionMenu;
+      const catalogFromMenu = inlineModuloMenu.activeEndpoint;
+      const catalogId = resolverGobernanzaEndpointId({
+        endpointId: accion?.endpointId,
+        formularioComponent:
+          accion?.formularioComponent ?? inlineModuloMenu.config.formularioComponent,
+        menuPath: accion?.menuPath,
+      });
+      const base =
+        (catalogFromMenu && ENDPOINTS_BY_ID[catalogFromMenu.id]
+          ? catalogFromMenu
+          : null)
+        ?? (catalogId && ENDPOINTS_BY_ID[catalogId] ? ENDPOINTS_BY_ID[catalogId] : null);
+      if (!base) return endpoint;
+      return {
+        ...base,
+        title: String(accion?.shortLabel || accion?.title || base.title).trim(),
+        description: String(accion?.description || base.description).trim(),
+      };
+    },
+    [useModuloInlineFlow, inlineModuloMenu.activeAccionMenu, inlineModuloMenu.activeEndpoint, inlineModuloMenu.config.formularioComponent]
+  );
+
+  const esFormularioHojaPublicado = useMemo(() => {
+    if (effectiveOperacionesHub || !resolvedMenuPath) return false;
+    const pathKey = normalizarGobernanzaMenuPath(resolvedMenuPath).toLowerCase();
+    return (inlineModuloMenu.menuConfigs ?? []).some((cfg) => {
+      const cfgPath = normalizarGobernanzaMenuPath(cfg.menuPath || cfg.frontPath || cfg.rutaPath)?.toLowerCase();
+      return cfgPath && cfgPath === pathKey;
+    });
+  }, [effectiveOperacionesHub, resolvedMenuPath, inlineModuloMenu.menuConfigs]);
+
+  const coincideRutaFormularioActivo = useMemo(() => {
+    const pathKey = String(resolvedMenuPath || '').replace(/\/+$/, '').toLowerCase();
+    const activeKey = String(inlineModuloMenu.activeActionId || '').replace(/\/+$/, '').toLowerCase();
+    return Boolean(pathKey && activeKey && pathKey === activeKey);
+  }, [resolvedMenuPath, inlineModuloMenu.activeActionId]);
+
+  const inlineModuloValidacion = useMemo(() => {
+    if (!useModuloInlineFlow || !inlineModuloResolved) return null;
+    const accion = inlineModuloMenu.activeAccionMenu;
+    return validarGobernanzaModuloInline({
+      config: {
+        ...inlineModuloMenu.config,
+        formularioComponent: accion?.formularioComponent ?? inlineModuloMenu.config.formularioComponent,
+        menuPath: accion?.menuPath ?? inlineModuloMenu.config.menuPath,
+      },
+      activeEndpoint: inlineModuloMenu.activeEndpoint,
+      menuEndpointIds: inlineModuloMenu.endpoints.map((e) => e.id),
+      menuDesdeApi: inlineModuloMenu.menuDesdeApi,
+      menuLoading: inlineModuloMenu.menuLoading,
+      paginaComponent: 'ParametrosGobernanza',
+    });
+  }, [useModuloInlineFlow, inlineModuloResolved, inlineModuloMenu]);
+
   const inlineModuloEndpointIds = useMemo(
-    () => (inlineModuloResolved ? moduloEndpointIdSet(inlineModuloResolved) : new Set<string>()),
-    [inlineModuloResolved]
+    () => new Set(inlineModuloMenu.endpoints.map((e) => e.id)),
+    [inlineModuloMenu.endpoints]
   );
 
   const clearDesignRoute = useCallback(() => {
@@ -1642,6 +1921,19 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
         setTenantSuperAdminsJerarquiaCounters(
           Array.isArray(data.tenantSuperAdminsDesdeJerarquiaCounters) ? data.tenantSuperAdminsDesdeJerarquiaCounters : []
         );
+        setJerarquiaSaCounters(
+          Array.isArray(data.jerarquiaSaCounters)
+            ? data.jerarquiaSaCounters
+                .map((r: any) => ({
+                  tenantSuperAdminId: String(r?.tenantSuperAdminId || '').trim(),
+                  codigoJerarquia: r?.codigoJerarquia ?? null,
+                  codigoPadre: r?.codigoPadre ?? null,
+                  secuenciaJerarquia: r?.secuenciaJerarquia ?? null,
+                  corporativoId: r?.corporativoId ?? null,
+                }))
+                .filter((r: SaJerarquiaCounterIndice) => Boolean(r.tenantSuperAdminId))
+            : []
+        );
       } else {
         const reason = (selectsRes as PromiseRejectedResult)?.reason as any;
         const msg = String(
@@ -1653,6 +1945,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
         setTenantGlobalSelects({});
         setTenantGlobalActor({});
         setTenantSuperAdminsJerarquiaCounters([]);
+        setJerarquiaSaCounters([]);
         setTenantGlobalSelectsDebug(`Error selects: ${msg}`);
       }
 
@@ -1971,9 +2264,8 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
         setReglas(
           rows
             .map((r: any) => {
-              const ridEncrypted = String(r?.['x-regla-id'] || r?.reglaIdEncrypted || r?.iud || '').trim();
-              const ridRaw = String(r?.rid || r?._id || '').trim();
-              const rid = ridEncrypted || ridRaw;
+              const rid = resolveReglaPublicId(r);
+              const ridRaw = resolveReglaLegacyId(r);
               if (rid) rulesMap[rid] = r;
               // Also index by ridRaw so lookups by raw _id work even when ridEncrypted differs
               if (ridRaw && ridRaw !== rid) rulesMap[ridRaw] = r;
@@ -2290,6 +2582,23 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
   const setCatalogSelectionFor = (endpointId: string, next: CatalogSelection) => {
     setCatalogSelection((prev) => ({ ...prev, [endpointId]: next }));
   };
+  /** MongoId del tenant global en flujos de reglas globales (crear / actualizar / desactivar / eliminar). */
+  const resolveTenantGlobalParaReglasEndpoint = (endpointId: string): string => {
+    if (
+      endpointId === 'tenant-actualizar-global-reglas' ||
+      endpointId === 'tenant-desactivar-global-reglas' ||
+      endpointId === 'tenant-eliminar-global-reglas'
+    ) {
+      return String(tenantFilterByEndpoint[endpointId] || '').trim();
+    }
+    const tg = getFieldValue(endpointId, 'tenantGlobal').trim();
+    if (!tg || isTenantSuperAdminScopeOption(tg)) return '';
+    return tg;
+  };
+
+  const endpointEsReglasGlobalesTenant = (endpointId: string): boolean =>
+    endpointId === 'tenant-crear-global-reglas' || endpointId === 'tenant-actualizar-global-reglas';
+
   const getReglasFiltradasPorTenant = (endpointId: string): ReglaOption[] => {
     const filtroReglasGlobalesView =
       endpointId === 'tenant-actualizar-global-reglas' ||
@@ -2304,11 +2613,15 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
 
     let tenantFiltro = tenantFilterByEndpoint[endpointId] || '';
     if (endpointId === 'tenant-crear-global-reglas') {
-      const tg = getFieldValue(endpointId, 'tenantGlobal').trim();
-      if (!tg || isTenantSuperAdminScopeOption(tg)) {
-        return [];
-      }
-      tenantFiltro = tg;
+      tenantFiltro = resolveTenantGlobalParaReglasEndpoint(endpointId);
+      if (!tenantFiltro) return [];
+    }
+    if (
+      endpointId === 'tenant-actualizar-global-reglas' ||
+      endpointId === 'tenant-desactivar-global-reglas' ||
+      endpointId === 'tenant-eliminar-global-reglas'
+    ) {
+      tenantFiltro = resolveTenantGlobalParaReglasEndpoint(endpointId);
     }
 
     if (!tenantFiltro) return base;
@@ -2396,8 +2709,15 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
     const extraIdsPlantillaCrear = getExtraVistaIdsReglaPlantillaCrear(endpointId);
     const esSA = actorEsTenantSuperAdmin();
     const forzarTechoCatalogo = endpointId === 'perm-usuario-tenant-global';
+    const esReglasGlobalesTenant = endpointEsReglasGlobalesTenant(endpointId);
+    const tgSelReglas = esReglasGlobalesTenant ? getFieldValue(endpointId, 'tenantGlobal').trim() : '';
+    const tenantGlobalElegidoReglas = Boolean(
+      esReglasGlobalesTenant && tgSelReglas && !isTenantSuperAdminScopeOption(tgSelReglas)
+    );
     const allowedVistaIds: Set<string> = esSA
-      ? (forzarTechoCatalogo ? new Set(vistasCatalogo.map((v) => v.id)) : new Set<string>())
+      ? (forzarTechoCatalogo || esReglasGlobalesTenant
+          ? new Set(vistasCatalogo.map((v) => v.id))
+          : new Set<string>())
       : new Set(vistasCatalogo.map((v) => v.id));
     const catalogIds = new Set(vistasCatalogo.map((v) => v.id));
     const hasCatalogFilter = catalogIds.size > 0;
@@ -2412,6 +2732,9 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
         const fid = String(f._id || '');
         if (!fid) return false;
         if (allowedVistaIds.size > 0 && !allowedVistaIds.has(fid)) return false;
+        if ((esReglaSeleccionada || tenantGlobalElegidoReglas) && esReglasGlobalesTenant) {
+          return catalogIds.has(fid) || extraIdsPlantillaCrear.has(fid) || esNodoFormularioLike(f);
+        }
         if (esReglaSeleccionada) {
           return (
             vistaIdsActivos.has(fid) ||
@@ -2446,6 +2769,8 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
     if (
       endpointId === 'perm-admin-tenant-global' ||
       endpointId === 'perm-usuario-tenant-global' ||
+      endpointId === 'tenant-crear-global-reglas' ||
+      endpointId === 'tenant-actualizar-global-reglas' ||
       PERM_ADMIN_TENANT_GLOBAL_ACTUALIZAR_IDS.has(endpointId)
     ) {
       vistasCatalogo.forEach((vista) => {
@@ -2902,6 +3227,19 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
     return jwtSa;
   };
 
+  /** SA visibles en combo según subárbol tenantjerarquiacounters (codigoPadre). */
+  const resolveSaJerarquiaMetasVisibles = (endpointId: string): SaJerarquiaMeta[] => {
+    const anclaSa = resolveEffectiveSaParaComboTg(endpointId);
+    if (!jerarquiaSaCounters.length || !anclaSa) {
+      return tenantSuperAdminsJerarquiaCounters;
+    }
+    return filtrarSaJerarquiaMetaPorSubarbol(
+      tenantSuperAdminsJerarquiaCounters,
+      jerarquiaSaCounters,
+      anclaSa,
+    );
+  };
+
   const getTenantGlobalOptions = (endpointId: string): TenantGlobal[] => {
     const actorTenantGlobal = String(tenantGlobalActor.tenantGlobalId || '').trim();
     const actorTenantSuper = String(tenantGlobalActor.tenantSuperAdminId || '').trim();
@@ -2933,25 +3271,28 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
         tenantGlobalActor?.saJerarquiaTieneCorporativoEnCounters === true
       );
       /** Permisos heredados / actualizar / desactivar / eliminar: una opción por SA del jerarquía counter (misma herencia que GET). */
-      if (ENDPOINT_IDS_SELECT_MULTI_SA_JERARQUIA.has(endpointId) && tenantSuperAdminsJerarquiaCounters.length > 0) {
-        const saScopeOptions: TenantGlobal[] = tenantSuperAdminsJerarquiaCounters
-          .map((s: any) => {
-            const sid = String(s?.id || '').trim();
-            if (!sid) return null;
-            return {
-              id: `${TENANT_SUPERADMIN_SCOPE_PREFIX}${sid}`,
-              label: String(s?.label || `tenantSuperAdmin · ${sid}`).trim(),
-              corporativo: 'SCOPE_DIOS',
-              tenantSuperAdmin: sid,
-            };
-          })
-          .filter(Boolean) as TenantGlobal[];
-        const byKey = new Map<string, TenantGlobal>();
-        saScopeOptions.forEach((o) => byKey.set(o.id, o));
-        const mergedSa = Array.from(byKey.values()).sort((a, b) =>
-          String(a.tenantSuperAdmin || '').localeCompare(String(b.tenantSuperAdmin || ''))
-        );
-        return [...mergedSa, ...baseLista];
+      if (ENDPOINT_IDS_SELECT_MULTI_SA_JERARQUIA.has(endpointId)) {
+        const saMetasVisibles = resolveSaJerarquiaMetasVisibles(endpointId);
+        if (saMetasVisibles.length > 0) {
+          const saScopeOptions: TenantGlobal[] = saMetasVisibles
+            .map((s: any) => {
+              const sid = String(s?.id || '').trim();
+              if (!sid) return null;
+              return {
+                id: `${TENANT_SUPERADMIN_SCOPE_PREFIX}${sid}`,
+                label: formatSaJerarquiaOptionLabel(s),
+                corporativo: 'SCOPE_DIOS',
+                tenantSuperAdmin: sid,
+              };
+            })
+            .filter(Boolean) as TenantGlobal[];
+          const byKey = new Map<string, TenantGlobal>();
+          saScopeOptions.forEach((o) => byKey.set(o.id, o));
+          const mergedSa = Array.from(byKey.values()).sort((a, b) =>
+            String(a.tenantSuperAdmin || '').localeCompare(String(b.tenantSuperAdmin || ''))
+          );
+          return [...mergedSa, ...baseLista];
+        }
       }
       return [scopeOptionDios(), ...baseLista];
     }
@@ -3047,6 +3388,13 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
       const qs = new URLSearchParams();
       if (tenantGlobalId) qs.set('tenantGlobal', tenantGlobalId);
       if (tenantCorporativoId) qs.set('tenantCorporativo', tenantCorporativoId);
+      if (isTenantSuperAdminScopeOption(tenantGlobalSelection)) {
+        const saPicked = tenantGlobalSelection.slice(TENANT_SUPERADMIN_SCOPE_PREFIX.length).trim();
+        if (saPicked) {
+          qs.set('tenantSuperTenant', toMongoIdQueryParam(saPicked));
+          qs.set('incluirSuperAdmin', 'true');
+        }
+      }
       if (sincronizar) qs.set('sincronizar', 'true');
 
       const payload = await apiFetch(`/api/config/permisos/creacion/admin/tenant/global?${qs.toString()}`, {
@@ -3063,7 +3411,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
         if (sincronizados > 0) toast.success(`Sincronizacion aplicada en ${sincronizados} contexto(s)`);
         else toast.success('Sincronizacion ejecutada (sin cambios pendientes)');
 
-        // Para el endpoint actualizar: despuÃ©s del sync, re-ejecutar el PUT con todas las vistas de la herencia recargada
+        // Tras sincronizar: solo refrescar selección en UI (GET). El PUT se ejecuta al pulsar Guardar en la tarjeta actualizar.
         if (PERM_ADMIN_TENANT_GLOBAL_ACTUALIZAR_IDS.has(endpointId)) {
           const herenciaId = getFieldValue(endpointId, 'herenciaAsociada').trim();
           if (herenciaId) {
@@ -3071,10 +3419,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
             const todasVistas = vistasCatalogo.map((v) => v.id);
             const todasAcciones = accionesCatalogo.map((a) => a.id);
             setCatalogSelectionFor(endpointId, { vistas: todasVistas, acciones: todasAcciones });
-            const endpointSpec = ENDPOINTS.find((e) => e.id === endpointId);
-            if (endpointSpec) {
-              setTimeout(() => { void runEndpoint(endpointSpec); }, 300);
-            }
+            applyHerenciaAsociadaSelection(endpointId, herenciaId);
           }
         }
       }
@@ -3136,6 +3481,13 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
       const qs = new URLSearchParams();
       if (tg) qs.set('tenantGlobal', tg);
       if (tg) qs.set('incluirSuperAdmin', 'false');
+      if (isTsaScope) {
+        const saPicked = tgSelection.slice(TENANT_SUPERADMIN_SCOPE_PREFIX.length).trim();
+        if (saPicked) {
+          qs.set('tenantSuperTenant', toMongoIdQueryParam(saPicked));
+          qs.set('incluirSuperAdmin', 'true');
+        }
+      }
       qs.set('soloActivos', 'true');
       const res: any = await apiFetch(
         `/api/config/permisos/creacion/admin/tenant/global?${qs.toString()}`,
@@ -3360,9 +3712,8 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
       const rows = pickArray(res, ['data', 'reglas', 'items']);
       const rulesMap: Record<string, any> = {};
       rows.forEach((r: any) => {
-        const ridEncrypted = String(r?.['x-regla-id'] || r?.reglaIdEncrypted || r?.iud || '').trim();
-        const ridRaw = String(r?.rid || r?._id || '').trim();
-        const rid = ridEncrypted || ridRaw;
+        const rid = resolveReglaPublicId(r);
+        const ridRaw = resolveReglaLegacyId(r);
         if (rid) rulesMap[rid] = r;
         if (ridRaw && ridRaw !== rid) rulesMap[ridRaw] = r;
       });
@@ -4164,8 +4515,13 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
     }
 
     if (endpointId === 'tenant-actualizar-global-reglas') {
+      const tenantRaw = resolveTenantGlobalParaReglasEndpoint(endpointId);
       const ruleId = getFieldValue(endpointId, 'x-regla-id').trim();
-      const rule = ruleId ? ruleCatalog[ruleId] : null;
+      if (!tenantRaw || !ruleId) {
+        return { vistasCatalogo: [], accionesCatalogo: [] };
+      }
+
+      const rule = ruleCatalog[ruleId] || null;
       const recursoIdsRule =
         rule && Array.isArray(rule.recurso)
           ? rule.recurso.map((v: any) => String(v?._id || v || '').trim()).filter(Boolean)
@@ -4208,7 +4564,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
         const accionesMerged = Array.from(accMer.values());
         return {
           vistasCatalogo: vistasMerged,
-          accionesCatalogo: accionesMerged.length ? accionesMerged : acciones,
+          accionesCatalogo: accionesMerged.length ? accionesMerged : accionesDesdeReglaDoc,
         };
       }
 
@@ -4219,7 +4575,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
             accionesCatalogo: accionesDesdeReglaDoc.length ? accionesDesdeReglaDoc : acciones,
           };
         }
-        return { vistasCatalogo: [], accionesCatalogo: acciones };
+        return { vistasCatalogo: [], accionesCatalogo: [] };
       }
 
       if (rule && vistasDesdeReglaDoc.length) {
@@ -4228,9 +4584,11 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
           accionesCatalogo: accionesDesdeReglaDoc.length ? accionesDesdeReglaDoc : acciones,
         };
       }
+
+      return { vistasCatalogo: [], accionesCatalogo: [] };
     }
 
-    if (endpointId === 'tenant-crear-global-reglas' || endpointId === 'tenant-actualizar-global-reglas') {
+    if (endpointId === 'tenant-crear-global-reglas') {
       // Derivar vistas desde rutasJerarquia para incluir rutas nuevas no sincronizadas aún en `vistas`
       const seenTreeIds = new Set<string>();
       const allVistasFromTree: Vista[] = [];
@@ -4247,27 +4605,50 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
       traverseForReglas(rutasJerarquia);
       const vistasFallback = allVistasFromTree.length ? allVistasFromTree : vistas;
 
-      let tenantGlobalRaw = getFieldValue(endpointId, 'tenantGlobal').trim();
-      if (endpointId === 'tenant-actualizar-global-reglas' && !tenantGlobalRaw) {
-        tenantGlobalRaw = String(tenantFilterByEndpoint[endpointId] || '').trim();
-      }
-      if (!tenantGlobalRaw) return { vistasCatalogo: vistasFallback, accionesCatalogo: acciones };
+      const tenantGlobalRaw = resolveTenantGlobalParaReglasEndpoint(endpointId);
+      if (!tenantGlobalRaw) return { vistasCatalogo: [], accionesCatalogo: [] };
 
       let superAdminRef = '';
-      if (isTenantSuperAdminScopeOption(tenantGlobalRaw)) {
-        superAdminRef = String(tenantGlobalActor?.tenantSuperAdminId || '').trim();
-      } else {
-        const tenantSel = tenantGlobales.find((t) => t.id === tenantGlobalRaw);
-        superAdminRef = String(tenantSel?.tenantSuperAdmin || '').trim();
-        if (!superAdminRef) {
-          const parentTenantId = String(tenantSel?.tenantGlobalAdmin || '').trim();
-          if (parentTenantId) {
-            const tenantPadre = tenantGlobales.find((t) => t.id === parentTenantId);
-            superAdminRef = String(tenantPadre?.tenantSuperAdmin || '').trim();
-          }
+      const tenantSel = tenantGlobales.find((t) => t.id === tenantGlobalRaw);
+      superAdminRef = String(tenantSel?.tenantSuperAdmin || '').trim();
+      if (!superAdminRef) {
+        const parentTenantId = String(tenantSel?.tenantGlobalAdmin || '').trim();
+        if (parentTenantId) {
+          const tenantPadre = tenantGlobales.find((t) => t.id === parentTenantId);
+          superAdminRef = String(tenantPadre?.tenantSuperAdmin || '').trim();
         }
       }
+      if (!superAdminRef) {
+        superAdminRef = String(tenantGlobalActor?.tenantSuperAdminId || '').trim();
+      }
       if (!superAdminRef) return { vistasCatalogo: vistasFallback, accionesCatalogo: acciones };
+
+      const reglasTenant = getReglasFiltradasPorTenant(endpointId);
+      if (reglasTenant.length) {
+        const accionByIdMerged = new Map(acciones.map((a) => [a.id, a]));
+        const vistaMer = new Map<string, Vista>();
+        const accMer = new Map<string, Accion>();
+        for (const opt of reglasTenant) {
+          const regla = ruleCatalog[opt.id];
+          if (!regla) continue;
+          const recursoIds = (Array.isArray(regla?.recurso) ? regla.recurso : [])
+            .map((v: any) => String(v?._id || v || '').trim())
+            .filter(Boolean);
+          resolveVistaCatalogByIds(recursoIds).forEach((v) => vistaMer.set(v.id, v));
+          (Array.isArray(regla?.accionesUsu) ? regla.accionesUsu : [])
+            .map((a: any) => String(a?._id || a || '').trim())
+            .filter(Boolean)
+            .forEach((id: string) => {
+              accMer.set(id, accionByIdMerged.get(id) || { id, label: id, method: '' });
+            });
+        }
+        if (vistaMer.size) {
+          return {
+            vistasCatalogo: Array.from(vistaMer.values()),
+            accionesCatalogo: accMer.size ? Array.from(accMer.values()) : acciones,
+          };
+        }
+      }
 
       const reglaDios = findReglaPlataformaPorSuperAdmin(ruleCatalog, superAdminRef) as any;
 
@@ -4289,7 +4670,10 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
         ? accionIds.map((id: string) => accionById.get(id) || { id, label: id, method: '' })
         : acciones;
 
-      return { vistasCatalogo: vistasDesdeRegla, accionesCatalogo: accionesDesdeRegla };
+      return {
+        vistasCatalogo: vistasDesdeRegla.length ? vistasDesdeRegla : vistasFallback,
+        accionesCatalogo: accionesDesdeRegla.length ? accionesDesdeRegla : acciones,
+      };
     }
 
     if (endpointId !== 'perm-admin-tenant-global' && !PERM_ADMIN_TENANT_GLOBAL_ACTUALIZAR_IDS.has(endpointId)) {
@@ -4743,6 +5127,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
     loadingData,
     tenantGlobales.length,
     tenantSuperAdminsJerarquiaCounters.length,
+    jerarquiaSaCounters.length,
     herenciasUsuario.length,
     tenantGlobalActor?.tenantSuperAdminId,
     tenantGlobalActor?.tenantGlobalId,
@@ -5060,9 +5445,11 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
         }
         if (field.pathParam) {
           if (value) {
+            const pathSegment =
+              field.type === 'id' ? gobernanzaEntityIdForPath(value) : encodeURIComponent(String(value));
             resolvedPath = resolvedPath
-              .replace(`:${field.name}`, encodeURIComponent(String(value)))
-              .replace(`{${field.name}}`, encodeURIComponent(String(value)));
+              .replace(`:${field.name}`, pathSegment)
+              .replace(`{${field.name}}`, pathSegment);
           }
           return;
         }
@@ -5111,9 +5498,8 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
           setFieldValue(endpoint.id, 'herenciaAsociada', '');
           throw new Error('La herencia seleccionada ya no estÃ¡ disponible. Selecciona otra.');
         }
-        resolvedPath = resolvedPath
-          .replace(':id', encodeURIComponent(herenciaId))
-          .replace('{id}', encodeURIComponent(herenciaId));
+        const herenciaPathId = gobernanzaEntityIdForPath(herenciaId);
+        resolvedPath = resolvedPath.replace(':id', herenciaPathId).replace('{id}', herenciaPathId);
         delete (body as any).herenciaAsociada;
       }
       if (
@@ -5124,10 +5510,9 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
         const herenciaId = getFieldValue(endpoint.id, 'herenciaAsociada').trim() || getFieldValue(endpoint.id, 'id').trim();
         if (!tenantGlobalSel) throw new Error('Selecciona tenant global');
         if (!herenciaId) throw new Error('Selecciona herencia asociada');
-        resolvedPath = resolvedPath
-          .replace(':id', encodeURIComponent(herenciaId))
-          .replace('{id}', encodeURIComponent(herenciaId));
-        setFieldValue(endpoint.id, 'id', herenciaId);
+        const herenciaPathId = gobernanzaEntityIdForPath(herenciaId);
+        resolvedPath = resolvedPath.replace(':id', herenciaPathId).replace('{id}', herenciaPathId);
+        setFieldValue(endpoint.id, 'id', gobernanzaEntityId(herenciaId));
       }
 
       let payload: any = { method: endpoint.method, headers };
@@ -5143,7 +5528,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
         const legacySingle = getFieldValue(endpoint.id, 'vistaObjetivoId').trim();
         const vistaIds = desdeChecks.length ? desdeChecks : legacySingle ? [legacySingle] : [];
         if (vistaIds.length > 0 && herenciaId) {
-          resolvedPath = `/api/config/permisos/creacion/admin/tenant/global/${encodeURIComponent(herenciaId)}/vista`;
+          resolvedPath = `/api/config/permisos/creacion/admin/tenant/global/${gobernanzaEntityIdForPath(herenciaId)}/vista`;
           payload = {
             method: 'PATCH',
             headers,
@@ -5316,7 +5701,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
         const tenantGlobalRaw = getFieldValue(endpoint.id, 'tenantGlobal').trim();
         if (isTenantSuperAdminScopeOption(tenantGlobalRaw)) {
           const saPick = tenantGlobalRaw.slice(TENANT_SUPERADMIN_SCOPE_PREFIX.length).trim();
-          if (saPick) qs.set('tenantSuperTenant', saPick);
+          if (saPick) qs.set('tenantSuperTenant', toMongoIdQueryParam(saPick));
         } else if (tenantGlobalRaw) {
           qs.set('tenantGlobal', tenantGlobalRaw);
         }
@@ -5491,7 +5876,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
           </thead>
           <tbody>
             {filteredRows.map((row: any, idx: number) => {
-              const reglaId = String(row?.['x-regla-id'] || row?.reglaIdEncrypted || row?.iud || row?.rid || row?._id || '');
+              const reglaId = resolveReglaPublicId(row);
               const tenant = Array.isArray(row?.generacionGlovallNvlRoles) ? row.generacionGlovallNvlRoles[0] : null;
               const corp = tenant?.coporativo;
               const userLabel = resolveRuleUserLabel(row);
@@ -5810,9 +6195,6 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
       rows = rows.filter((row: any) => String(row?._id || row?.iud || '').trim() === herenciaListarId);
     }
     const gruposRaw = Array.isArray(raw?.grupos) ? raw.grupos : [];
-    const contexto = raw?.contexto || {};
-    const jerarquia = raw?.jerarquia || {};
-    const soloMios = Boolean(contexto?.soloMios);
 
     const grupos = gruposRaw.length && !herenciaListarId
       ? gruposRaw
@@ -5856,86 +6238,14 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
           accionesPromedio: Number(((g._accionesTotal || 0) / (g.totalHerencias || 1)).toFixed(2)),
         }));
 
-    const tgPermitidos = Array.isArray(jerarquia?.tenantGlobalesPermitidos) ? jerarquia.tenantGlobalesPermitidos.length : 0;
-    const tcPermitidos = Array.isArray(jerarquia?.tenantCorporativosPermitidos) ? jerarquia.tenantCorporativosPermitidos.length : 0;
-    const relacionesCounters = Array.isArray(jerarquia?.tenantJerarquiaCounters) ? jerarquia.tenantJerarquiaCounters : [];
-    const tenantSuperConsulta = String(
-      contexto?.tenantSuperTenantConsulta ||
-      contexto?.tenantSuperTenant ||
-      contexto?.tenantSuperAdmin ||
-      ''
-    ).trim();
-    const usuarioSaCounters = (() => {
-      const row = relacionesCounters.find((item: any) => item?.tenantSuperAdmin?.usuarioId);
-      const user = row?.tenantSuperAdmin?.usuarioId;
-      if (!user) return null;
-      const perfil = user?.perfilSuperAdmin || {};
-      const nombre = [perfil?.nombre, perfil?.apellido].filter(Boolean).join(' ').trim();
-      return {
-        nombre,
-        correo: String(user?.correo || '').trim(),
-        id: String(user?._id || '').trim(),
-      };
-    })();
-
     return (
-      <div className="space-y-3">
-        <div className="grid gap-2 text-xs md:grid-cols-3">
-          <div className="rounded border border-border bg-muted/50 p-2">
-            Usuario JWT: <span className="font-semibold">{String(raw?.usuarioId || '-')}</span>
+      <div className="space-y-4">
+        <div className="overflow-auto rounded-lg border border-border bg-card shadow-sm">
+          <div className="border-b border-border bg-muted/40 px-4 py-2.5 text-sm font-medium text-foreground">
+            Vistas heredadas
           </div>
-          <div className="rounded border border-border bg-muted/50 p-2">
-            Scope: <span className="font-semibold">{String(contexto?.scope || '-')}</span>
-          </div>
-          <div className="rounded border border-border bg-muted/50 p-2">
-            Rol JWT: <span className="font-semibold">{String(contexto?.rolJWT || '-')}</span>
-          </div>
-          <div className="rounded border border-border bg-muted/50 p-2">
-            Total herencias: <span className="font-semibold">{Number(raw?.total || rows.length || 0)}</span>
-          </div>
-          <div className="rounded border border-border bg-muted/50 p-2">
-            TenantSuperAdmin: <span className="font-semibold">{tenantSuperConsulta || '-'}</span>
-          </div>
-          <div className="rounded border border-border bg-muted/50 p-2">
-            TenantGlobal JWT: <span className="font-semibold">{String(contexto?.tenantGlobal || '-')}</span>
-          </div>
-          <div className="rounded border border-border bg-muted/50 p-2">
-            TenantCorporativo JWT: <span className="font-semibold">{String(contexto?.tenantCorporativo || '-')}</span>
-          </div>
-        </div>
-
-        <div className="rounded border border-emerald-200 bg-emerald-50 p-2 text-xs text-emerald-800">
-          Jerarquia visible - TenantGlobal: <span className="font-semibold">{tgPermitidos}</span> | TenantCorporativo: <span className="font-semibold">{tcPermitidos}</span>
-        </div>
-        {tenantSuperConsulta || relacionesCounters.length > 0 ? (
-          <div className="rounded border border-border bg-muted/50 p-2 text-xs text-foreground">
-            <div>
-              tenantjerarquiacounters del scope:{' '}
-              <span className="font-semibold">{relacionesCounters.length}</span>
-              {!relacionesCounters.length ? (
-                <span className="ml-1 text-muted-foreground">(sin filas para este tenantSuperAdmin)</span>
-              ) : null}
-            </div>
-            {usuarioSaCounters ? (
-              <div className="mt-1">
-                Usuario SA:{' '}
-                <span className="font-semibold">
-                  {[usuarioSaCounters.nombre, usuarioSaCounters.correo].filter(Boolean).join(' · ') || usuarioSaCounters.id}
-                </span>
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-        <div className="rounded border border-border bg-muted/50 p-2 text-xs text-foreground">
-          Modo consulta: <span className="font-semibold">{soloMios ? 'solo mis herencias (JWT)' : 'todas las herencias del alcance JWT'}</span>
-        </div>
-
-        <div className="overflow-auto rounded-lg border border-border bg-card">
-          <div className="border-b border-border bg-muted/50 px-3 py-2 text-xs font-semibold text-foreground">
-            Vistas heredadas (filtro actual)
-          </div>
-          <table className="w-full min-w-[720px] text-left text-xs">
-            <thead className="bg-muted text-foreground">
+          <table className="w-full min-w-[720px] text-left text-sm">
+            <thead className="bg-muted/60 text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
                 <th className="px-3 py-2">Usuario</th>
                 <th className="px-3 py-2">Vista (nombre)</th>
@@ -6008,9 +6318,12 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
           </table>
         </div>
 
-        <div className="overflow-auto rounded-lg border border-border bg-card">
-          <table className="w-full min-w-[980px] text-left text-xs">
-            <thead className="bg-muted text-foreground">
+        <div className="overflow-auto rounded-lg border border-border bg-card shadow-sm">
+          <div className="border-b border-border bg-muted/40 px-4 py-2.5 text-sm font-medium text-foreground">
+            Resumen por usuario
+          </div>
+          <table className="w-full min-w-[980px] text-left text-sm">
+            <thead className="bg-muted/60 text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
                 <th className="px-3 py-2">Usuario</th>
                 <th className="px-3 py-2">Total herencias</th>
@@ -6282,7 +6595,8 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
             <Button
               type="button"
               size="sm"
-              variant="secondary"
+              variant="outline"
+              className="border-border bg-background text-foreground shadow-xs hover:bg-accent hover:text-accent-foreground"
               disabled={reglasHerenciaSyncBusy}
               title={
                 actorEsTenantCorporativoScope()
@@ -6291,7 +6605,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
               }
               onClick={() => {
                 if (actorEsTenantCorporativoScope()) {
-                  toast.error('Sin permisos para actualizar catÃ¡logo y herencia.');
+                  toast.error('Sin permisos para actualizar catálogo y herencia.');
                   return;
                 }
                 void sincronizarCatalogoReglasYHerencia(endpoint.id);
@@ -6326,8 +6640,17 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
 
                 const esSA = actorEsTenantSuperAdmin();
                 const forzarTechoCatalogo = endpoint.id === 'perm-usuario-tenant-global';
+                const esReglasGlobalesTenant = endpointEsReglasGlobalesTenant(endpoint.id);
+                const tgSelReglas = esReglasGlobalesTenant
+                  ? getFieldValue(endpoint.id, 'tenantGlobal').trim()
+                  : '';
+                const tenantGlobalElegidoReglas = Boolean(
+                  esReglasGlobalesTenant && tgSelReglas && !isTenantSuperAdminScopeOption(tgSelReglas)
+                );
                 const allowedVistaIds: Set<string> = esSA
-                  ? (forzarTechoCatalogo ? new Set(vistasCatalogo.map((v) => v.id)) : new Set<string>())
+                  ? (forzarTechoCatalogo || esReglasGlobalesTenant
+                      ? new Set(vistasCatalogo.map((v) => v.id))
+                      : new Set<string>())
                   : new Set(vistasCatalogo.map((v) => v.id));
 
                 const catalogIds = new Set(vistasCatalogo.map((v) => v.id));
@@ -6360,8 +6683,11 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
                     const fid = String(f._id);
                     if (allowedVistaIds.size > 0 && !allowedVistaIds.has(fid)) return false;
                     if (!matchesVistaSearch(f)) return false;
+                    if ((esReglaSeleccionada || tenantGlobalElegidoReglas) && esReglasGlobalesTenant) {
+                      return catalogIds.has(fid) || extraIdsPlantillaCrear.has(fid) || esNodoFormularioLike(f);
+                    }
                     if (esReglaSeleccionada) {
-                      // Mostrar cualquier nodo que estÃ© activo en el Ã¡rbol de rutas
+                      // Mostrar cualquier nodo que esté activo en el árbol de rutas
                       return (
                         vistaIdsActivos.has(fid) ||
                         esNodoFormularioLike(f) ||
@@ -6505,7 +6831,13 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
                 }
 
                 // Regla seleccionada sin suite - mostrar TODAS las suites con jerarquia completa
-                if (esReglaSeleccionada || endpoint.id === 'perm-usuario-tenant-global' || endpoint.id === 'perm-admin-tenant-global' || endpoint.id === 'tenant-crear-global-reglas') {
+                if (
+                  esReglaSeleccionada ||
+                  tenantGlobalElegidoReglas ||
+                  endpoint.id === 'perm-usuario-tenant-global' ||
+                  endpoint.id === 'perm-admin-tenant-global' ||
+                  endpoint.id === 'tenant-crear-global-reglas'
+                ) {
                   const suitesConNodos = rutasJerarquia.filter((s) => Array.isArray(s.children) && s.children.length > 0);
                   const totalCatalog = catalogRelacionadasIds.length;
                   const vistasFueraArbol = vistasCatalogo.filter(
@@ -6526,7 +6858,9 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
                         })
                       : [];
                   const mostrarHuerfanosCatalogo =
-                    (permAdminGlobalUx || endpoint.id === 'perm-usuario-tenant-global') &&
+                    (permAdminGlobalUx ||
+                      endpoint.id === 'perm-usuario-tenant-global' ||
+                      tenantGlobalElegidoReglas) &&
                     vistasFueraArbol.some((v) => matchesVistaSearch(v));
                   return (
                     <>
@@ -6734,7 +7068,11 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
     const fallbackJson = result[endpoint.id];
     const genericPre = (
       <pre className="max-h-48 overflow-auto rounded-lg border border-border bg-muted/50 p-3 text-xs text-foreground">
-        {fallbackJson || (useModuloInlineFlow ? '' : 'Aun sin respuesta')}
+        {fallbackJson != null && fallbackJson !== ''
+          ? fallbackJson
+          : useModuloInlineFlow
+            ? ''
+            : 'Aun sin respuesta'}
       </pre>
     );
     const inlineEmpty = useModuloInlineFlow && !fallbackJson;
@@ -6845,19 +7183,8 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
         return (
           <div className="space-y-3">
             <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-[11px] leading-snug text-muted-foreground">
-              Alcance del combo: opciones <span className="font-medium text-foreground">Tenant SuperAdmin · …</span> desde{' '}
-              <code className="rounded bg-muted px-1">tenantjerarquiacounters</code>. Tenant global listados:{' '}
-              {saJerarquiaConCorporativo ? (
-                <>
-                  tu SA tiene fila SA+corporativo en counters → solo la <span className="font-medium">rama</span> del SA efectivo
-                  (JWT o selección sintética), más sub-TG por parent.
-                </>
-              ) : (
-                <>
-                  sin corporativo materializado para tu SA en counters → puedes ver <span className="font-medium">todas</span> las
-                  ramas TG cargadas en sesión (consulta amplia).
-                </>
-              )}
+              Elige la rama Tenant SuperAdmin o un tenant global. Los permisos y acciones se validan en servidor según{' '}
+              <code className="rounded bg-muted px-1">tenantjerarquiacounters</code> (sin mostrar rangos jerárquicos al usuario).
             </p>
             <div className="grid gap-3 md:grid-cols-2">
               <div>
@@ -6878,22 +7205,27 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
                   <option value="">
                     Sin filtro TG/SA explícito en la URL (el servidor aplica solo el alcance del JWT)
                   </option>
-                  {tenantOptions.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.label}
-                    </option>
-                  ))}
+                  {renderTenantGlobalSelectOptionGroups(
+                    tenantOptions,
+                    resolveSaJerarquiaMetasVisibles(endpoint.id),
+                  )}
                 </select>
+                <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
+                  Si ves el mismo nombre o correo más de una vez, no es un duplicado: cada fila es un{' '}
+                  <span className="font-medium text-foreground">Tenant SuperAdmin distinto</span> (código SA-0001,
+                  SA-0002, sufijo …id). Un usuario puede administrar varias ramas. Los TG (SA-0002-TG-0004…) son
+                  tenants globales bajo esa rama.
+                </p>
+                {(() => {
+                  const saId = resolveSaIdFromTenantGlobalSelection(tenantGlobalSelected, tenantGlobales);
+                  const meta = saId
+                    ? tenantSuperAdminsJerarquiaCounters.find((x) => String(x.id) === saId)
+                    : null;
+                  return renderSaRamaUsuariosPanel(meta, jerarquiaSaCounters);
+                })()}
                 {(actorRolJwt || actorTsaJwt || actorTgJwt || actorTcJwt) ? (
                   <p className="mt-1 text-xs text-muted-foreground">
                     {`JWT: ${actorRolJwt || 'SIN_ROL'} | TSA:${actorTsaJwt || '-'} | TG:${actorTgJwt || '-'} | TC:${actorTcJwt || '-'}`}
-                  </p>
-                ) : null}
-                {actorTsaJwt ? (
-                  <p className="mt-1 text-[11px] text-muted-foreground">
-                    {saJerarquiaConCorporativo
-                      ? 'Con jerarquía corporativa en counters: los TG del listado se acotan al tenantSuperAdmin efectivo (JWT o SA elegido).'
-                      : 'Sin fila SA+corporativo en counters para tu SA: el listado de TG incluye todas las ramas disponibles en estado (no solo una SA).'}
                   </p>
                 ) : null}
               </div>
@@ -6908,6 +7240,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
                     const row = herenciaById[nextId];
                     const tc = String(row?.tenantCorporativo?._id || row?.tenantCorporativo || '').trim();
                     setFieldValue(endpoint.id, 'tenantCorporativo', tc);
+                    if (nextId) applyHerenciaAsociadaSelection(endpoint.id, nextId);
                   }}
                   disabled={!tenantGlobalSelected}
                 >
@@ -7152,34 +7485,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
               {(() => {
                 const v = getFieldValue(endpoint.id, 'tenantSuperAdmin').trim();
                 const meta = tenantSuperAdminsJerarquiaCounters.find((x) => String(x.id) === v);
-                if (!meta) return null;
-                const jer = meta.usuariosJerarquia ?? [];
-                return (
-                  <div className="mt-1 space-y-1">
-                    {meta.usuarioNombre || meta.usuarioCorreo ? (
-                      <p className="text-xs text-muted-foreground">
-                        Usuario del documento tenant (SA · <span className="font-mono">usuarioId</span>):{' '}
-                        <span className="font-medium text-foreground">
-                          {[meta.usuarioNombre, meta.usuarioCorreo].filter(Boolean).join(' · ')}
-                        </span>
-                      </p>
-                    ) : null}
-                    {jer.length > 0 ? (
-                      <div className="text-xs text-muted-foreground">
-                        <span className="block text-[11px] uppercase tracking-wide text-muted-foreground/90">
-                          Usuarios asociados por jerarquía (tenantId / rol SA / vínculo nodo)
-                        </span>
-                        <ul className="mt-0.5 list-disc space-y-0.5 pl-4 text-foreground">
-                          {jer.map((u) => (
-                            <li key={u.id}>
-                              {[u.nombre, u.correo].filter(Boolean).join(' · ') || u.id}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    ) : null}
-                  </div>
-                );
+                return renderSaRamaUsuariosPanel(meta, jerarquiaSaCounters);
               })()}
               {String(tenantGlobalActor?.tenantSuperAdminId || '').trim() ? (
                 <p className="mt-1 text-xs text-muted-foreground">
@@ -7481,6 +7787,8 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
                   setFieldValue(endpoint.id, field.name, v);
                   if (endpoint.id === 'tenant-crear-global-reglas') {
                     setFieldValue(endpoint.id, 'reglaPlantillaId', '');
+                    setCatalogSelectionFor(endpoint.id, { vistas: [], acciones: [] });
+                    setPermisos(endpoint.id, [{ vistaId: '', accionId: [] }]);
                   }
                   const trimmed = v.trim();
                   if (
@@ -7501,9 +7809,55 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
               </select>
               {(actorRolJwt || actorTsaJwt || actorTgJwt || actorTcJwt) ? (
                 <p className="mt-1 text-xs text-muted-foreground">
-                  {`JWT: ${actorRolJwt || 'SIN_ROL'} | TSA:${actorTsaJwt || '-'} | TG:${actorTgJwt || '-'} | TC:${actorTcJwt || '-'}`}
+                  {(() => {
+                    const tgSelDbg = getFieldValue(endpoint.id, field.name).trim();
+                    const esTgSelReal = Boolean(tgSelDbg && !isTenantSuperAdminScopeOption(tgSelDbg));
+                    return `JWT: ${actorRolJwt || 'SIN_ROL'} | TSA:${actorTsaJwt || '-'} | TG sesión:${actorTgJwt || '-'} | TC:${actorTcJwt || '-'}${esTgSelReal ? ` | TG filtro:${tgSelDbg}` : ''}`;
+                  })()}
                 </p>
               ) : null}
+              {(() => {
+                const tgSelVis = getFieldValue(endpoint.id, field.name).trim();
+                if (!tgSelVis || isTenantSuperAdminScopeOption(tgSelVis)) return null;
+                const meta = resolveTenantGlobalDisplayMeta(
+                  tgSelVis,
+                  tenantGlobales,
+                  tenantGlobalSelects.tenantGlobalRef || []
+                );
+                const saRef = resolveTenantSuperAdminIdForHerenciaSelect(tgSelVis, tenantGlobales, actorTsaJwt);
+                const padre = meta?.tenantGlobalAdmin
+                  ? tenantGlobales.find((t) => String(t.id) === String(meta.tenantGlobalAdmin))
+                  : null;
+                return (
+                  <div className="mt-2 space-y-1 rounded-md border border-sky-200 bg-sky-50/90 px-3 py-2">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-sky-900">
+                      Tenant global en filtro
+                    </p>
+                    <p className="text-sm font-medium leading-snug text-foreground">
+                      {meta?.label || tgSelVis}
+                    </p>
+                    <p className="font-mono text-[10px] text-muted-foreground break-all" title={tgSelVis}>
+                      MongoId: {tgSelVis}
+                    </p>
+                    {meta?.corporativo ? (
+                      <p className="text-[10px] text-muted-foreground">
+                        Corporativo: <span className="font-medium text-foreground">{meta.corporativo}</span>
+                      </p>
+                    ) : null}
+                    {saRef ? (
+                      <p className="text-[10px] text-muted-foreground">
+                        SuperAdmin ref:{' '}
+                        <span className="font-mono text-foreground">{saRef}</span>
+                      </p>
+                    ) : null}
+                    {padre ? (
+                      <p className="text-[10px] text-muted-foreground">
+                        Tenant padre: <span className="font-medium text-foreground">{padre.label}</span>
+                      </p>
+                    ) : null}
+                  </div>
+                );
+              })()}
               {(() => {
                 const tgSel = getFieldValue(endpoint.id, field.name).trim();
                 if (!tgSel || !isTenantSuperAdminScopeOption(tgSel)) return null;
@@ -8111,10 +8465,12 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
                   onChange={(e) => {
                     const nextTenant = e.target.value;
                     setTenantFilterByEndpoint((prev) => ({ ...prev, [endpoint.id]: nextTenant }));
+                    setFieldValue(endpoint.id, 'tenantGlobal', nextTenant);
                     // Limpiar regla seleccionada y delta al cambiar de tenant
                     setFieldValue(endpoint.id, field.name, '');
                     setDeltaByEndpoint((prev) => { const next = { ...prev }; delete next[endpoint.id]; return next; });
                     setCatalogSelectionFor(endpoint.id, { vistas: [], acciones: [] });
+                    setPermisos(endpoint.id, [{ vistaId: '', accionId: [] }]);
                   }}
                 >
                   <option value="">Selecciona tenant global</option>
@@ -8859,25 +9215,27 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
   );
 
   const renderForm = (endpoint: EndpointSpec) => {
+    const endpointOperativo = resolveEndpointInlineDesdeMenu(endpoint);
     const endpointSyncDios = ENDPOINTS.find((e) => e.id === 'tenant-actualizar-dios-reglas');
-    const disponibleModal = diosReglasDisponibleModal(endpoint);
-    const ejecutarSoloLecturaDios = modoSoloLecturaReglasDios(endpoint);
+    const disponibleModal = diosReglasDisponibleModal(endpointOperativo);
+    const ejecutarSoloLecturaDios = modoSoloLecturaReglasDios(endpointOperativo);
     const runningSync = !!running['tenant-actualizar-dios-reglas'];
-    const runningMain = !!running[endpoint.id];
+    const runningMain = !!running[endpointOperativo.id];
     const esModalReglasGlobalesCrearOActualizar =
-      endpoint.id === 'tenant-crear-global-reglas' || endpoint.id === 'tenant-actualizar-global-reglas';
+      endpointOperativo.id === 'tenant-crear-global-reglas' || endpointOperativo.id === 'tenant-actualizar-global-reglas';
     /** Visible con JWT tenantSuperAdmin (crear POST y actualizar PUT). El API puede exigir corporativo en counters. */
     const mostrarSincJerarquiaReglasGlobales =
       esModalReglasGlobalesCrearOActualizar && actorEsTenantSuperAdmin();
-    return (
+    const esModuloInlineParametrizado = useModuloInlineFlow && Boolean(inlineModuloValidacion);
+    const formLayout = (
       <ParametrosGobernanzaModalFormLayout
-        path={endpoint.path}
+        path={endpointOperativo.path}
         showApiPath={!useModuloInlineFlow}
-        executeLabel={useModuloInlineFlow ? inlineExecuteLabel(endpoint) : 'Ejecutar'}
-        actorLabel={endpoint.actor}
+        executeLabel={useModuloInlineFlow ? inlineExecuteLabel(endpointOperativo) : 'Ejecutar'}
+        actorLabel={endpointOperativo.actor}
         running={
           runningMain ||
-          (endpoint.id === 'tenant-crear-dios-reglas' && runningSync) ||
+          (endpointOperativo.id === 'tenant-crear-dios-reglas' && runningSync) ||
           (esModalReglasGlobalesCrearOActualizar && crearReglasJerarquiaSyncing)
         }
         disponible={disponibleModal}
@@ -8888,7 +9246,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
             : undefined
         }
         extraToolbar={
-          puedeToolbarSincronizarDios(endpoint) && endpointSyncDios ? (
+          puedeToolbarSincronizarDios(endpointOperativo) && endpointSyncDios ? (
             <Button
               type="button"
               variant="secondary"
@@ -8901,8 +9259,8 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
             </Button>
           ) : null
         }
-        onExecute={() => runEndpoint(endpoint)}
-        onClearForm={() => clearEndpointModalForm(endpoint)}
+        onExecute={() => runEndpoint(endpointOperativo)}
+        onClearForm={() => clearEndpointModalForm(endpointOperativo)}
         clearFormReplacement={
           endpoint.id === 'perm-usuario-tenant-global' ? (
             <Button
@@ -8940,11 +9298,39 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
             </Button>
           ) : undefined
         }
-        resultSlot={renderFormResultSlot(endpoint)}
+        resultSlot={renderFormResultSlot(endpointOperativo)}
       >
-        {renderFormFieldsInner(endpoint)}
+        {renderFormFieldsInner(endpointOperativo)}
       </ParametrosGobernanzaModalFormLayout>
     );
+    if (esModuloInlineParametrizado && inlineModuloValidacion) {
+      return envolverFormularioInline({
+        validacion: inlineModuloValidacion,
+        endpoint: endpointOperativo,
+        embeddedApiForm: formLayout,
+        renderPermisosForm: (props) => (
+          <GobernanzaPermisosFormByEndpoint
+            endpoint={props.endpoint}
+            embeddedApiForm={props.embeddedApiForm}
+            formularioComponent={
+              inlineModuloMenu.activeAccionMenu?.formularioComponent
+              ?? inlineModuloMenu.config.formularioComponent
+            }
+          />
+        ),
+        renderReglasForm: (props) => (
+          <GobernanzaReglasFormByEndpoint
+            endpoint={props.endpoint}
+            embeddedApiForm={props.embeddedApiForm}
+            formularioComponent={
+              inlineModuloMenu.activeAccionMenu?.formularioComponent
+              ?? inlineModuloMenu.config.formularioComponent
+            }
+          />
+        ),
+      });
+    }
+    return formLayout;
   };
 
   const renderDesignPanel = (endpoint: EndpointSpec) => {
@@ -8978,8 +9364,36 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
     ...(isRulesMode ? [{ label: 'Reglas', value: availableEndpoints.length }] : []),
   ];
 
+  const moduloDinamicoInline = useModuloInlineFlow && inlineModuloResolved ? (
+    <GobernanzaModuloDinamico
+      variant="operational"
+      menuLayout="tabs"
+      menuState={inlineModuloMenu}
+      paginaComponent="ParametrosGobernanza"
+      renderForm={renderForm}
+      getCapabilities={(ep) => computeGobernanzaEndpointCapabilities(ep, gobernanzaCapabilityContext)}
+      hideTabsWhenSingleForm={!effectiveOperacionesHub && esFormularioHojaPublicado}
+      menuOnly={false}
+      hideSubmenuHeader={effectiveOperacionesHub}
+    />
+  ) : null;
+
   return (
-    <div className="min-h-screen bg-muted/50 p-4 md:p-6">
+    <div className={compactShell ? 'min-h-0' : 'min-h-screen bg-muted/50 p-4 md:p-6'}>
+      {compactShell && useModuloInlineFlow ? (
+        <GobernanzaModuloOperativoShell
+          title={inlineModuloMenu.panelTitle}
+          description={inlineModuloMenu.panelHint}
+          submenuTitle={effectiveOperacionesHub ? undefined : inlineModuloMenu.submenuTitle}
+          hideInfoBanner={effectiveOperacionesHub}
+          menuLoading={inlineModuloMenu.menuLoading}
+          onRefreshMenu={() => inlineModuloMenu.refreshMenu()}
+          onReloadData={hydrateData}
+          reloadingData={loadingData}
+        >
+          {moduloDinamicoInline}
+        </GobernanzaModuloOperativoShell>
+      ) : (
       <div className="mx-auto max-w-7xl space-y-6">
         <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
@@ -9009,19 +9423,21 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
                   </div>
                 ))}
               </div>
-              <Button
-                variant="outline"
-                onClick={hydrateData}
-                disabled={loadingData}
-                className="w-full justify-center sm:w-auto sm:self-end"
-              >
-                {loadingData ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <RefreshCw className="mr-2 h-4 w-4" />
-                )}
-                Recargar datos API
-              </Button>
+              <div className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
+                <Button
+                  variant="outline"
+                  onClick={hydrateData}
+                  disabled={loadingData}
+                  className="w-full justify-center sm:w-auto"
+                >
+                  {loadingData ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="mr-2 h-4 w-4" />
+                  )}
+                  Recargar datos API
+                </Button>
+              </div>
             </div>
           </div>
         </section>
@@ -9082,8 +9498,6 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
                   <p className="text-sm text-muted-foreground">
                     {isRulesMode
                       ? 'Flujo guiado solo para reglas de tenant'
-                      : lockedSection === 'permisos'
-                      ? 'Flujo guiado solo para gobernanza de permisos'
                       : useModuloInlineFlow
                       ? inlineModuloMenu.panelHint
                       : `${activeSectionMeta.description} ${endpointsBySection.length} endpoints visibles.`}
@@ -9111,16 +9525,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
                 }
               />
             ) : null}
-            {useModuloInlineFlow && inlineModuloResolved ? (
-              <GobernanzaModuloDinamico
-                variant="operational"
-                menuState={inlineModuloMenu}
-                renderForm={renderForm}
-                getCapabilities={(ep) =>
-                  computeGobernanzaEndpointCapabilities(ep, gobernanzaCapabilityContext)
-                }
-              />
-            ) : null}
+            {moduloDinamicoInline}
           </CardContent>
         </Card>
 
@@ -9250,6 +9655,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
           </div>
         )}
       </div>
+      )}
 
       <Dialog open={!!herenciaDetalle} onOpenChange={(open) => !open && setHerenciaDetalle(null)}>
         <DialogContent className="max-h-[92vh] overflow-hidden p-0 sm:max-w-5xl">

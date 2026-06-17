@@ -18,6 +18,20 @@ export const puedeConfirmarOrdenCompra = (
   return norm === 'VERIFICACION' || norm === 'ABIERTA';
 };
 
+/** Edición/eliminación de OC: solo VERIFICACION (SuperAdmin exento en UI/backend). */
+export const puedeEditarOrdenCompra = (
+  codigo: string,
+  estados: EstadoOrdenCompraConfig[] = [],
+  { esTenantSuperAdmin = false } = {},
+): boolean => {
+  if (esTenantSuperAdmin) return true;
+  const norm = String(codigo || '').trim().toUpperCase();
+  if (norm !== 'VERIFICACION') return false;
+  const cfg = estados.find((e) => e.codigo === norm);
+  if (cfg) return Boolean(cfg.permiteEditarOrden && cfg.activo);
+  return true;
+};
+
 export const codigosEstadoPermitenComprobanteEntrada = (
   estados: EstadoOrdenCompraConfig[] = [],
 ): Set<string> => {

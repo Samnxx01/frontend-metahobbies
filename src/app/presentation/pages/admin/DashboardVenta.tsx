@@ -36,6 +36,7 @@ import dashboardVentaService, {
 } from '@/app/services/dashboardVentaService';
 import type { BackendProducto } from '@/app/services/productosService';
 import GeneradorEnlaceVentas from './generadorenlaceVentas';
+import DashboardPipelineBComision from './DashboardPipelineBComision';
 
 type EditableLevel = {
     key: string;
@@ -297,9 +298,10 @@ export default function DashboardVenta(): React.ReactElement {
             </div>
 
             <Tabs defaultValue="configuracion" className="space-y-6">
-                <TabsList className="grid w-full grid-cols-1 gap-2 bg-transparent p-0 md:grid-cols-3">
+                <TabsList className="grid w-full grid-cols-1 gap-2 bg-transparent p-0 md:grid-cols-4">
                     <TabsTrigger value="configuracion" className="border bg-white shadow-sm">Configuración</TabsTrigger>
                     <TabsTrigger value="conexion" className="border bg-white shadow-sm">Conexión</TabsTrigger>
+                    <TabsTrigger value="comisiones" className="border bg-white shadow-sm">Comisiones</TabsTrigger>
                     <TabsTrigger value="catalogo" className="border bg-white shadow-sm">Catálogo</TabsTrigger>
                 </TabsList>
 
@@ -518,6 +520,10 @@ export default function DashboardVenta(): React.ReactElement {
                             )}
                         </CardContent>
                     </Card>
+                </TabsContent>
+
+                <TabsContent value="comisiones" className="space-y-6">
+                    <DashboardPipelineBComision />
                 </TabsContent>
 
                 <TabsContent value="catalogo" className="space-y-6">

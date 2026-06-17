@@ -1,7 +1,17 @@
-import { apiFetch, apiFetchPublic } from './api';
+import { apiFetch, apiFetchPublic, getHybridSpaFrontendPath, resolveSeguridadRutasFetchOptions } from './api';
 import { fetchAllSecurityRoutes } from './routeService';
+import { normalizeMongoId, normalizeMongoIdList, normalizeMongoIdOrNull } from '../utils/normalizeMongoId';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api';
+
+const fetchSeguridadRutas = (
+    endpoint: string,
+    options: Parameters<typeof apiFetch>[1] = {}
+) => apiFetch(endpoint, {
+    method: 'GET',
+    ...resolveSeguridadRutasFetchOptions(),
+    ...options,
+});
 
 export interface Route {
   iud: string;
@@ -211,11 +221,14 @@ export interface RoutesResponse {
   actorTipo?: string;
   sourceCollection?: string | null;
   toolbarPolicy?: {
-    mode?: 'all' | 'consulta' | 'parametrizacion' | 'crear' | string;
+    mode?: 'all' | 'consulta' | 'parametrizacion' | 'crear' | 'sin-acceso' | string;
     actionIds?: string[];
+    rowActionIds?: string[];
     canList?: boolean;
     canCreate?: boolean;
     canManage?: boolean;
+    canEdit?: boolean;
+    canDelete?: boolean;
   } | null;
   data: Route[];
 }
@@ -329,7 +342,8 @@ export interface TipoNodoResponse {
 }
 
 export interface AccessTypeOption {
-  _id: string;
+  _id?: string;
+  iud?: string;
   accessType: 'PUBLIC' | 'PRIVATE' | string;
   layout?: string;
   estadoAcces?: boolean;
@@ -354,6 +368,7 @@ export interface AccionOption {
   iud?: string;
   method: string;
   etiquetas?: string;
+  path?: string;
   estadoAccion?: boolean;
 }
 
@@ -381,6 +396,7 @@ const normalizeAccionesRows = (payload: any): AccionOption[] => {
         iud: id || undefined,
         method: String(row?.method || '').trim().toUpperCase(),
         etiquetas: String(row?.etiquetas || row?.label || '').trim(),
+        path: String(row?.path || '').trim() || undefined,
         estadoAccion: row?.estadoAccion !== false && row?.estado !== false,
       };
     })
@@ -391,7 +407,9 @@ const normalizeAccionesRows = (payload: any): AccionOption[] => {
  * Get all routes from the system
  */
 export const getAllRoutes = async (): Promise<RoutesResponse> => {
-  const response = await fetchAllSecurityRoutes(true);
+  const hasToken = Boolean(typeof localStorage !== 'undefined' && localStorage.getItem('token'));
+  const hybridSpa = Boolean(getHybridSpaFrontendPath());
+  const response = await fetchAllSecurityRoutes(hasToken || hybridSpa);
   if (response) return response as RoutesResponse;
   return {
     success: false,
@@ -451,7 +469,7 @@ export const deleteRouteMenuTag = async (id: string): Promise<{ success: boolean
 };
 
 export const previewRoute = async (id: string): Promise<PreviewRouteResponse> => {
-  const response = await apiFetch(`${API_BASE_URL}/seguridad/rutas/preview/${id}`, {
+  const response = await apiFetch(`${API_BASE_URL}/seguridad/rutas/preview/${encodeURIComponent(String(id || '').trim())}`, {
     method: 'GET',
   });
   return response;
@@ -459,7 +477,8 @@ export const previewRoute = async (id: string): Promise<PreviewRouteResponse> =>
 
 /** Detalle completo de una ruta (tipos de nodo, accessType y acciones poblados). */
 export const getRouteById = async (id: string): Promise<RouteResponse> => {
-  const response = await apiFetch(`${API_BASE_URL}/seguridad/rutas/listar/especifico/${id}`, {
+  const routeId = encodeURIComponent(String(id || '').trim());
+  const response = await apiFetch(`${API_BASE_URL}/seguridad/rutas/listar/especifico/${routeId}`, {
     method: 'GET',
   });
   return response;
@@ -468,16 +487,20 @@ export const getRouteById = async (id: string): Promise<RouteResponse> => {
  
 // Crear una nueva ruta
 export const createRoute = async (routeData: CreateRouteDto): Promise<RouteResponse> => {
-  const hasAccessType = Array.isArray(routeData.accessType)
-    ? routeData.accessType.length > 0
-    : Boolean(routeData.accessType);
+  const normalizedAccessType = normalizeMongoIdList(routeData.accessType);
+  const normalizedAcciones = normalizeMongoIdList(routeData.acciones);
+  const hasAccessType = normalizedAccessType.length > 0;
 
   const payload = {
     ...routeData,
+    tipoNodoId: normalizeMongoIdOrNull(routeData.tipoNodoId) ?? routeData.tipoNodoId,
+    padreId: routeData.padreId != null ? normalizeMongoIdOrNull(routeData.padreId) : routeData.padreId,
+    heredaDeRuta: routeData.heredaDeRuta != null ? normalizeMongoIdOrNull(routeData.heredaDeRuta) : routeData.heredaDeRuta,
+    allowedRoles: normalizeMongoIdList(routeData.allowedRoles),
     icon: routeData.icon || 'fa-solid fa-route',
-    allowedRoles: routeData.allowedRoles || [],
     isActive: routeData.isActive !== undefined ? routeData.isActive : true,
-    ...(hasAccessType ? { accessType: routeData.accessType } : {}),
+    ...(hasAccessType ? { accessType: normalizedAccessType.length === 1 ? normalizedAccessType[0] : normalizedAccessType } : {}),
+    ...(normalizedAcciones.length > 0 ? { acciones: normalizedAcciones } : {}),
   };
   
   const response = await apiFetch(`${API_BASE_URL}/seguridad/rutas/permisos`, {
@@ -489,10 +512,42 @@ export const createRoute = async (routeData: CreateRouteDto): Promise<RouteRespo
 
 // Actualizar una ruta
 export const updateRoute = async (id: string, routeData: UpdateRouteDto): Promise<RouteResponse> => {
-  const response = await apiFetch(`${API_BASE_URL}/seguridad/rutas/modificar/${id}`, {
+  const normalizedAccessType = normalizeMongoIdList(routeData.accessType);
+  const normalizedAcciones = normalizeMongoIdList(routeData.acciones);
+
+  const payload: UpdateRouteDto = {
+    ...routeData,
+    ...(routeData.tipoNodoId != null
+      ? { tipoNodoId: normalizeMongoIdOrNull(routeData.tipoNodoId) ?? routeData.tipoNodoId }
+      : {}),
+    ...(routeData.padreId !== undefined
+      ? { padreId: routeData.padreId != null ? normalizeMongoIdOrNull(routeData.padreId) : routeData.padreId }
+      : {}),
+    ...(routeData.heredaDeRuta !== undefined
+      ? { heredaDeRuta: routeData.heredaDeRuta != null ? normalizeMongoIdOrNull(routeData.heredaDeRuta) : routeData.heredaDeRuta }
+      : {}),
+    ...(routeData.allowedRoles !== undefined
+      ? { allowedRoles: normalizeMongoIdList(routeData.allowedRoles) }
+      : {}),
+    ...(routeData.accessType !== undefined
+      ? {
+          accessType: normalizedAccessType.length === 0
+            ? []
+            : normalizedAccessType.length === 1
+              ? normalizedAccessType[0]
+              : normalizedAccessType,
+        }
+      : {}),
+    ...(routeData.acciones !== undefined ? { acciones: normalizedAcciones } : {}),
+  };
+
+  const response = await apiFetch(
+    `${API_BASE_URL}/seguridad/rutas/modificar/${encodeURIComponent(String(id || '').trim())}`,
+    {
     method: 'PUT',
-    body: routeData,
-  });
+    body: payload,
+    }
+  );
   return response;
 };
 
@@ -504,18 +559,84 @@ export const getFormulariosOpciones = async (): Promise<FormulariosOpcionesRespo
 };
 
 export const getTiposNodoRuta = async (): Promise<TiposNodoResponse> => {
-  const response = await apiFetch(`${API_BASE_URL}/seguridad/rutas/tipos-nodo`, {
+  const response = await fetchSeguridadRutas(`${API_BASE_URL}/seguridad/rutas/tipos-nodo`);
+  return response;
+};
+
+export const getTiposNodoRutaOpciones = async (order: number): Promise<TiposNodoOpcionesResponse> => {
+  const response = await fetchSeguridadRutas(
+    `${API_BASE_URL}/seguridad/rutas/tipos-nodo/opciones?order=${order}`
+  );
+  return response;
+};
+
+export interface JerarquiaOpcionesCounterResponse {
+  success: boolean;
+  message?: string;
+  total: number;
+  nivelOrder: number;
+  padreRutaSeguridadId?: string | null;
+  sourceCollection?: string;
+  data: Route[];
+}
+
+/** Opciones jerárquicas desde countertiponodorutas (Suite/Modulo/Formulario/SubFormulario). */
+export const getJerarquiaOpcionesFromCounter = async (params: {
+  nivelOrder: number;
+  padreRutaSeguridadId?: string | null;
+  suiteRutaSeguridadId?: string | null;
+  moduloRutaSeguridadId?: string | null;
+}): Promise<JerarquiaOpcionesCounterResponse> => {
+  const search = new URLSearchParams();
+  search.set('nivelOrder', String(params.nivelOrder));
+  if (params.padreRutaSeguridadId) {
+    search.set('padreRutaSeguridadId', params.padreRutaSeguridadId);
+  }
+  if (params.suiteRutaSeguridadId) {
+    search.set('suiteRutaSeguridadId', params.suiteRutaSeguridadId);
+  }
+  if (params.moduloRutaSeguridadId) {
+    search.set('moduloRutaSeguridadId', params.moduloRutaSeguridadId);
+  }
+  const response = await apiFetch(`${API_BASE_URL}/seguridad/rutas/jerarquia/opciones?${search.toString()}`, {
     method: 'GET',
   });
   return response;
 };
 
-export const getTiposNodoRutaOpciones = async (order: number): Promise<TiposNodoOpcionesResponse> => {
-  const response = await apiFetch(`${API_BASE_URL}/seguridad/rutas/tipos-nodo/opciones?order=${order}`, {
-    method: 'GET',
+export interface SincronizarJerarquiaCounterResult {
+  scopeConfiguracion?: string;
+  totalRutas?: number;
+  procesadas?: number;
+  creadas?: number;
+  actualizadas?: number;
+  sinCambios?: number;
+  omitidas?: number;
+  sinTipo?: number;
+  relacionesActivas?: number;
+  errores?: number;
+  detalleErrores?: Array<{ rutaId: string; name: string; path: string; message: string }>;
+  mensaje?: string;
+}
+
+/** Sincroniza countertiponodorutas con rutaseguridads existentes (no borra ni recrea rutas). */
+export const sincronizarJerarquiaCounter = async (): Promise<{
+  success: boolean;
+  message?: string;
+  data?: SincronizarJerarquiaCounterResult;
+}> => {
+  const response = await apiFetch(`${API_BASE_URL}/seguridad/rutas/jerarquia/counter/sincronizar`, {
+    method: 'POST',
   });
   return response;
 };
+
+/** Alias retrocompatible de sincronizarJerarquiaCounter. */
+export const migrarJerarquiaCounter = async (): Promise<{
+  success: boolean;
+  message?: string;
+  data?: SincronizarJerarquiaCounterResult;
+}> => sincronizarJerarquiaCounter();
 
 export const applyTipoNodoCodigo = async (payload: { codigo: string; tenantCorporativoId?: string | null; perfilCorporativoId?: string | null }): Promise<AplicarCodigoTipoNodoResponse> => {
   const response = await apiFetch(`${API_BASE_URL}/seguridad/rutas/tipos-nodo/codigos/aplicar`, {
@@ -599,9 +720,7 @@ export const migrarTipoNodoRutas = async (): Promise<MigracionTipoNodoResult> =>
 };
 
 export const getAccessTypes = async (): Promise<AccessTypesResponse> => {
-  const response = await apiFetch(`${API_BASE_URL}/seguridad/rutas/listarTiposRutas/admin`, {
-    method: 'GET',
-  });
+  const response = await fetchSeguridadRutas(`${API_BASE_URL}/seguridad/rutas/listarTiposRutas/admin`);
   return response;
 };
 
@@ -620,10 +739,7 @@ export const getAccionesCatalogo = async (): Promise<AccionesResponse> => {
   }
 
   try {
-    const response = await apiFetch(`${API_BASE_URL}/seguridad/rutas/acciones`, {
-      method: 'GET',
-      useAuth: true,
-    });
+    const response = await fetchSeguridadRutas(`${API_BASE_URL}/seguridad/rutas/acciones`);
     const rows = normalizeAccionesRows(response);
     if (rows.length) sources.push(rows);
   } catch {
@@ -727,18 +843,24 @@ export const deleteRoute = async (
   id: string,
   payload?: { accion?: 'ELIMINAR' | 'DESACTIVAR' }
 ): Promise<{ success: boolean; message: string }> => {
-  const response = await apiFetch(`${API_BASE_URL}/seguridad/rutas/inactivo/sistema/${id}`, {
+  const response = await apiFetch(
+    `${API_BASE_URL}/seguridad/rutas/inactivo/sistema/${encodeURIComponent(String(id || '').trim())}`,
+    {
     method: 'DELETE',
     body: payload,
-  });
+    }
+  );
   return response;
 };
 
 // Cambiar estado de una ruta
 export const toggleRouteStatus = async (id: string, estado: boolean): Promise<RouteResponse> => {
-  const response = await apiFetch(`${API_BASE_URL}/seguridad/rutas/modificar/estados/${id}`, {
+  const response = await apiFetch(
+    `${API_BASE_URL}/seguridad/rutas/modificar/estados/${encodeURIComponent(String(id || '').trim())}`,
+    {
     method: 'PUT',
     body: { isActive: estado },
-  });
+    }
+  );
   return response;
 };

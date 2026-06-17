@@ -67,6 +67,8 @@ export interface Product {
 export interface CartItem extends Product {
   quantity: number;
   addedAt: string;
+  /** Colores elegidos al agregar (el backend consolida por producto). */
+  colors?: ProductColor[];
   /** _id del subdocumento en el carrito del backend (necesario para update/delete) */
   backendItemId?: string;
 }
@@ -101,6 +103,7 @@ export interface User {
     nombre?: string | null;
     apellido?: string | null;
     nombreCompleto?: string | null;
+    nombre_cliente?: string | null;
     cc?: string | null;
     telefono?: string | null;
     cargo?: string | null;
@@ -152,6 +155,7 @@ export interface ProfileImage {
 
 // Tipos para perfil de cliente
 export interface ClientProfile {
+  _id?: string;
   nombre_cliente: string;
   apellido: string;
   genero: string;

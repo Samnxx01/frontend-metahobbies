@@ -1,7 +1,8 @@
-import type { InventarioOrdenCompra } from '@/app/services/inventarioService';
+import type { InventarioOrdenCompra, EstadoOrdenCompraConfig } from '@/app/services/inventarioService';
 import { createActionCatalog } from '../createActionCatalog';
 import { MABS_ACTION_DEFINITIONS } from '../registry/actionDefinitions';
 import type { ActionId } from '../types';
+import { puedeEditarOrdenCompra } from '@/app/presentation/pages/admin/utils/estadoOrdenCompraUi';
 
 export const ORDEN_COMPRA_ROW_ACTION_IDS = {
   VER: MABS_ACTION_DEFINITIONS.VER.id,
@@ -11,6 +12,7 @@ export const ORDEN_COMPRA_ROW_ACTION_IDS = {
 
 export type OrdenCompraRowActionHelpers = {
   esTenantSuperAdmin: boolean;
+  estadosOrden?: EstadoOrdenCompraConfig[];
   parametrizedIds?: readonly ActionId[];
 };
 
@@ -22,13 +24,15 @@ export type OrdenCompraRowActionHandlers = {
 
 function fallbackOrdenCompraAllowedIds(
   orden: InventarioOrdenCompra,
-  helpers: Pick<OrdenCompraRowActionHelpers, 'esTenantSuperAdmin'>,
+  helpers: Pick<OrdenCompraRowActionHelpers, 'esTenantSuperAdmin' | 'estadosOrden'>,
 ): ActionId[] {
   const ids: ActionId[] = [ORDEN_COMPRA_ROW_ACTION_IDS.VER];
-  const editable = ['VERIFICACION', 'ABIERTA'].includes(orden.estado) || helpers.esTenantSuperAdmin;
-  const eliminable = orden.estado !== 'CERRADA';
+  const editable = puedeEditarOrdenCompra(orden.estado, helpers.estadosOrden ?? [], {
+    esTenantSuperAdmin: helpers.esTenantSuperAdmin,
+  });
+  const eliminable = editable || helpers.esTenantSuperAdmin;
   if (editable) ids.push(ORDEN_COMPRA_ROW_ACTION_IDS.EDITAR);
-  if (eliminable) ids.push(ORDEN_COMPRA_ROW_ACTION_IDS.ELIMINAR);
+  if (eliminable && orden.estado !== 'CERRADA') ids.push(ORDEN_COMPRA_ROW_ACTION_IDS.ELIMINAR);
   return ids;
 }
 
@@ -45,7 +49,7 @@ export function resolveOrdenCompraRowAllowedIds(
 
 export function buildOrdenCompraRowActionCatalog(
   handlers: OrdenCompraRowActionHandlers,
-  helpers: Pick<OrdenCompraRowActionHelpers, 'esTenantSuperAdmin'>,
+  helpers: Pick<OrdenCompraRowActionHelpers, 'esTenantSuperAdmin' | 'estadosOrden'>,
 ) {
   return createActionCatalog<InventarioOrdenCompra>([
     {
@@ -57,7 +61,7 @@ export function buildOrdenCompraRowActionCatalog(
       onClick: (orden) => handlers.onEditar(orden),
       overrides: {
         title: (orden) =>
-          helpers.esTenantSuperAdmin && !['VERIFICACION', 'ABIERTA'].includes(orden.estado)
+          helpers.esTenantSuperAdmin && String(orden.estado || '').toUpperCase() !== 'VERIFICACION'
             ? 'Editar (SuperAdmin)'
             : 'Editar',
       },

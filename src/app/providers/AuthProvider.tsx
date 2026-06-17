@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, ReactNode } from 'react
 import * as authService from '../services/authService';
 import { desconectadoUsu } from '../socket';
 import { clearSessionCaches } from '../services/routeService';
+import { clearHybridSpaPath } from '../services/api';
 import type { User } from '../../types/common';
 
 // Interfaces para los tipos de datos
@@ -39,9 +40,19 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const [token, setToken] = useState<string | null>(() => localStorage.getItem('token'));
     const [loading, setLoading] = useState<boolean>(true);
 
-    // Cargar usuario desde localStorage al iniciar
+    // Cargar usuario desde localStorage al iniciar (solo si hay token vigente)
     useEffect(() => {
+        const storedToken = String(localStorage.getItem('token') || '').trim();
         const userJson = localStorage.getItem('user');
+
+        if (!storedToken) {
+            if (userJson) localStorage.removeItem('user');
+            setToken(null);
+            setUser(null);
+            setLoading(false);
+            return;
+        }
+
         if (userJson) {
             try {
                 const parsedUser = JSON.parse(userJson) as User;
@@ -75,6 +86,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                 localStorage.setItem('user', JSON.stringify(userToSave));
                 setToken(response.token);
                 setUser(userToSave);
+                if (typeof window !== 'undefined') {
+                    window.dispatchEvent(new Event('mabs-auth-changed'));
+                }
 
                 // 5. Devolvemos la respuesta completa al componente Login
                 return response;
@@ -88,12 +102,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     const logout = (): void => {
         try {
+            clearHybridSpaPath();
             localStorage.removeItem("token");
             localStorage.removeItem("user");
             clearSessionCaches();
             desconectadoUsu();
             setToken(null);
             setUser(null);
+            if (typeof window !== 'undefined') {
+                window.dispatchEvent(new Event('mabs-auth-changed'));
+            }
         } catch (error) {
             console.error("Error durante logout:", error);
             throw error;

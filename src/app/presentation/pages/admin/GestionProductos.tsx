@@ -8,9 +8,25 @@ import productosService, {
   type BackendTipoProducto,
   type CategoriaPayload,
   type TipoProductoPayload,
+  getProductoVentaRelacionId,
 } from '@/app/services/productosService';
-import inventarioService, { type InventarioUnidadMedida, type StockActualItem } from '@/app/services/inventarioService';
+import inventarioService, { type InventarioUnidadMedida, type MonedaCopOption, type StockActualItem } from '@/app/services/inventarioService';
 import reglasContablesService, { type ReglaContable } from '@/app/services/reglasContablesService';
+import reglasVentasService, {
+  type ReglaVenta,
+  etiquetaCampoValorReglaVentaProducto,
+  normalizarValorReglaVentaProducto,
+  placeholderValorPorComportamiento,
+  reglaVentaPermiteValorEnProducto,
+  resolverComportamientoDesdeReglaVenta,
+  resumenValorReglaVenta,
+} from '@/app/services/reglasVentasService';
+import { useTiposReglaVenta } from '@/app/hooks/useTiposReglaVenta';
+import { useProductoCatalogoConfig } from '@/app/hooks/useProductoCatalogoConfig';
+import ReglasVentasModal from '@/app/presentation/pages/admin/components/ReglasVentasModal';
+import ConfigCatalogoProductosModal, {
+  ConfigCatalogoProductosTrigger,
+} from '@/app/presentation/pages/admin/components/ConfigCatalogoProductosModal';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -19,7 +35,8 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
-import { DollarSign, Eye, FolderTree, Pencil, Plus, RefreshCw, Search, Star, Trash2 } from 'lucide-react';
+import VentaWompiSecuenciaModal from '@/app/presentation/pages/admin/components/VentaWompiSecuenciaModal';
+import { DollarSign, Eye, FolderTree, Hash, Pencil, Plus, RefreshCw, Search, Settings2, Star, Trash2 } from 'lucide-react';
 
 type DialogType = 'add' | 'edit' | 'view' | 'delete';
 
@@ -31,12 +48,14 @@ interface ProductRow {
   categoria: string;
   tipo: string;
   moneda: string;
+  monedaId: string;
   precio: number;
   unidadMedida: string;
   stockMinimo: number;
   cantidadColoresRender: number;
   coloresPermitidos: Array<{ nombre: string; valor: string }>;
   reglasContables: Array<{ codigo: string; aplica?: boolean; reglaContableId?: string | null }>;
+  reglasVentas: Array<{ codigo: string; aplica?: boolean; reglaVentaId?: string | null; valor?: number }>;
   productoVentaRelacionId: string;
   productoOrigenId: string;
   manejaVentas: boolean;
@@ -105,6 +124,18 @@ const imagenPrincipal = (producto: BackendProducto, fallback?: BackendProducto |
   return PLACEHOLDER;
 };
 
+const monedaCopId = (moneda: MonedaCopOption): string => String(moneda._id || moneda.iud || '').trim();
+
+const resolverMonedaIdProducto = (producto: BackendProducto): string => {
+  const raw = producto.productoVentaRelacion?.monedaId ?? null;
+  if (!raw) return '';
+  if (typeof raw === 'object') {
+    const obj = raw as { _id?: string; iud?: string };
+    return String(obj._id || obj.iud || '').trim();
+  }
+  return String(raw).trim();
+};
+
 const mapProduct = (producto: BackendProducto): ProductRow => {
   const origen = productoOrigenRelacion(producto);
   return {
@@ -115,6 +146,7 @@ const mapProduct = (producto: BackendProducto): ProductRow => {
     categoria: categoriaLabel(producto.categoria || origen?.categoria),
     tipo: String(producto.tipo || origen?.tipo || 'PRODUCTO'),
     moneda: String(producto.moneda || origen?.moneda || 'COP'),
+    monedaId: resolverMonedaIdProducto(producto),
     precio: Number(producto.precio || origen?.precio || 0),
     unidadMedida: String(producto.unidadMedida || origen?.unidadMedida || 'UNIDAD'),
     stockMinimo: Number(producto.stockMinimo || origen?.stockMinimo || 0),
@@ -130,7 +162,15 @@ const mapProduct = (producto: BackendProducto): ProductRow => {
         aplica: regla.aplica !== false,
         reglaContableId: regla.reglaContableId || null,
       })),
-    productoVentaRelacionId: backendId(producto.productoVentaRelacion),
+    reglasVentas: (producto.productoVentaRelacion?.reglasVentas || [])
+      .filter((regla) => regla?.aplica !== false && regla?.codigo)
+      .map((regla) => ({
+        codigo: String(regla.codigo || '').toUpperCase(),
+        aplica: regla.aplica !== false,
+        reglaVentaId: regla.reglaVentaId || null,
+        valor: Number.isFinite(Number(regla.valor)) ? Number(regla.valor) : undefined,
+      })),
+    productoVentaRelacionId: getProductoVentaRelacionId(producto),
     productoOrigenId: productoRelacionId(producto.productoVentaRelacion),
     manejaVentas: producto.productoVentaRelacion?.manejaVentas !== false,
     descripcion: String(producto.descripcion || origen?.descripcion || ''),
@@ -150,6 +190,7 @@ const toPayload = (product: ProductRow): AdminProductoPayload => ({
   descripcionCorta: product.descripcionCorta || '',
   precio: Number(product.precio || 0),
   moneda: product.moneda || 'COP',
+  monedaId: product.monedaId || null,
   tipo: product.tipo,
   unidadMedida: product.unidadMedida || 'UNIDAD',
   stockMinimo: Math.max(0, Number(product.stockMinimo) || 0),
@@ -164,6 +205,17 @@ const toPayload = (product: ProductRow): AdminProductoPayload => ({
   reglasContables: product.reglasContables
     .filter((regla) => regla.aplica !== false && regla.codigo)
     .map((regla) => ({ codigo: regla.codigo, aplica: true, reglaContableId: regla.reglaContableId || null })),
+  reglasVentas: product.reglasVentas
+    .filter((regla) => regla.aplica !== false && regla.codigo)
+    .map((regla) => {
+      const valor = Number(regla.valor);
+      return {
+        codigo: regla.codigo,
+        aplica: true,
+        reglaVentaId: regla.reglaVentaId || null,
+        valor: Number.isFinite(valor) ? valor : 0,
+      };
+    }),
 });
 
 const EMPTY_PRODUCT: ProductRow = {
@@ -174,12 +226,14 @@ const EMPTY_PRODUCT: ProductRow = {
   categoria: '',
   tipo: '',
   moneda: 'COP',
+  monedaId: '',
   precio: 0,
   unidadMedida: 'UNIDAD',
   stockMinimo: 0,
   cantidadColoresRender: 0,
   coloresPermitidos: [],
   reglasContables: [],
+  reglasVentas: [],
   productoVentaRelacionId: '',
   productoOrigenId: '',
   manejaVentas: true,
@@ -215,10 +269,22 @@ export default function GestionProductos(): React.ReactElement {
   const [tiposProducto, setTiposProducto] = useState<BackendTipoProducto[]>([]);
   const [unidadesMedida, setUnidadesMedida] = useState<InventarioUnidadMedida[]>([]);
   const [reglasContables, setReglasContables] = useState<ReglaContable[]>([]);
+  const [reglasVentas, setReglasVentas] = useState<ReglaVenta[]>([]);
+  const [monedasCop, setMonedasCop] = useState<MonedaCopOption[]>([]);
+  const [openReglasVentasModal, setOpenReglasVentasModal] = useState(false);
+  const [openCatalogoConfigModal, setOpenCatalogoConfigModal] = useState(false);
+  const [openVentaWompiSecuenciaModal, setOpenVentaWompiSecuenciaModal] = useState(false);
+  const [tiposReglaVentaRefreshKey, setTiposReglaVentaRefreshKey] = useState(0);
+  const { config: limitesCatalogo, load: reloadLimitesCatalogo } = useProductoCatalogoConfig();
+  const { tipos: tiposReglaVenta } = useTiposReglaVenta({
+    enabled: openDialog || openReglasVentasModal,
+    refreshKey: tiposReglaVentaRefreshKey,
+  });
   const [stockKardex, setStockKardex] = useState<Record<string, number>>({});
   const [selected, setSelected] = useState<ProductRow | null>(null);
   const [form, setForm] = useState<ProductRow>(EMPTY_PRODUCT);
   const [mediaFile, setMediaFile] = useState<File | null>(null);
+  const [mediaPreviewUrl, setMediaPreviewUrl] = useState<string | null>(null);
   const [mediaDuration, setMediaDuration] = useState<number | undefined>(undefined);
   const [categorySaving, setCategorySaving] = useState(false);
   const [categoryMediaFile, setCategoryMediaFile] = useState<File | null>(null);
@@ -238,7 +304,7 @@ export default function GestionProductos(): React.ReactElement {
   const loadData = async (): Promise<boolean> => {
     try {
       setLoading(true);
-      const [productosResp, productosCatalogoResp, categoriasResp, tiposResp, unidadesResp, stockActualResp, reglasResp] = await Promise.all([
+      const [productosResp, productosCatalogoResp, categoriasResp, tiposResp, unidadesResp, stockActualResp, reglasResp, reglasVentasResult, monedasResp] = await Promise.all([
         productosService.listarProductosVentasAdmin(),
         productosService.listarProductosAdmin(),
         productosService.listarCategorias(),
@@ -246,6 +312,8 @@ export default function GestionProductos(): React.ReactElement {
         inventarioService.listarUnidadesMedida(),
         inventarioService.stockActual(),
         reglasContablesService.listarActivas(),
+        reglasVentasService.listarActivas().then((data) => ({ ok: true as const, data })).catch((error) => ({ ok: false as const, error })),
+        inventarioService.listarMonedasCop().catch(() => [] as MonedaCopOption[]),
       ]);
       setProductos(productosResp.map(mapProduct));
       setProductosCatalogo(productosCatalogoResp.map(mapProduct));
@@ -253,6 +321,13 @@ export default function GestionProductos(): React.ReactElement {
       setTiposProducto(tiposPersistidosUnicos(tiposResp));
       setUnidadesMedida(unidadesResp);
       setReglasContables(reglasResp);
+      setMonedasCop(monedasResp);
+      if (reglasVentasResult.ok) {
+        setReglasVentas(reglasVentasResult.data);
+      } else {
+        setReglasVentas([]);
+        console.warn('No se pudieron cargar reglas de venta:', reglasVentasResult.error);
+      }
       setStockKardex(stockKardexPorSku(stockActualResp));
       return true;
     } catch (error) {
@@ -268,6 +343,33 @@ export default function GestionProductos(): React.ReactElement {
     void loadData();
   }, []);
 
+  useEffect(() => () => {
+    if (mediaPreviewUrl && isBlobUrl(mediaPreviewUrl)) {
+      URL.revokeObjectURL(mediaPreviewUrl);
+    }
+  }, [mediaPreviewUrl]);
+
+  const clearMediaSelection = (): void => {
+    if (mediaPreviewUrl && isBlobUrl(mediaPreviewUrl)) {
+      URL.revokeObjectURL(mediaPreviewUrl);
+    }
+    setMediaPreviewUrl(null);
+    setMediaFile(null);
+    setMediaDuration(undefined);
+  };
+
+  const productImagePreview = (imagen: string): string => {
+    if (mediaPreviewUrl) return mediaPreviewUrl;
+    if (isBlobUrl(imagen)) return PLACEHOLDER;
+    return imagen || PLACEHOLDER;
+  };
+
+  const imagenUrlInputValue = (imagen: string): string => {
+    if (mediaFile) return '';
+    if (imagen === PLACEHOLDER || isBlobUrl(imagen)) return '';
+    return imagen;
+  };
+
   const filtered = useMemo(() => productos.filter((producto) => {
     const q = query.toLowerCase();
     return (
@@ -279,7 +381,10 @@ export default function GestionProductos(): React.ReactElement {
   }), [productos, query]);
 
   const obtenerStockKardexSku = (sku: string): number => stockKardex[String(sku || '').trim().toUpperCase()] || 0;
-  const reglaAplicaCategoria = (regla: ReglaContable, categoriaId: string): boolean => {
+  const reglaAplicaCategoria = (
+    regla: ReglaContable | ReglaVenta,
+    categoriaId: string,
+  ): boolean => {
     const categorias = (regla.categoriasAplicacion || []).map((categoria) => String(categoria));
     return categorias.length === 0 || (!!categoriaId && categorias.includes(categoriaId));
   };
@@ -289,12 +394,37 @@ export default function GestionProductos(): React.ReactElement {
       .filter((regla) => regla.aplicaEnCarrito === true && regla.estado !== false && reglaAplicaCategoria(regla, categoriaId))
       .map((regla) => ({ codigo: String(regla.codigo || '').toUpperCase(), aplica: true }));
 
+  /** Las reglas de venta se eligen y parametrizan por producto, no por asignacion masiva del catalogo. */
+
   const productosConSku = useMemo(
     () => productosCatalogo
       .filter((producto) => producto.sku.trim() && obtenerStockKardexSku(producto.sku) > 0)
       .sort((a, b) => a.nombre.localeCompare(b.nombre)),
     [productosCatalogo, stockKardex],
   );
+
+  const precioMinimoCatalogo = useMemo(() => {
+    if (!form.productoOrigenId) return 0;
+    const origen = productosCatalogo.find((producto) => producto.id === form.productoOrigenId);
+    return Number(origen?.precio ?? 0);
+  }, [form.productoOrigenId, productosCatalogo]);
+
+  const monedasCatalogoActivas = useMemo(
+    () => monedasCop.filter((moneda) => moneda.estadoMoneda !== false),
+    [monedasCop],
+  );
+
+  useEffect(() => {
+    if (!openDialog || dialogType === 'view') return;
+    if (form.monedaId) return;
+    const cop = monedasCatalogoActivas.find((moneda) => moneda.monedas === 'COP');
+    if (!cop) return;
+    setForm((prev) => ({
+      ...prev,
+      monedaId: monedaCopId(cop),
+      moneda: cop.monedas,
+    }));
+  }, [openDialog, dialogType, form.monedaId, monedasCatalogoActivas]);
 
   const detalleUnidadMedida = (codigo: string): string => {
     const unidad = unidadesMedida.find((item) => item.codigo === codigo || item.nombre === codigo);
@@ -334,8 +464,7 @@ export default function GestionProductos(): React.ReactElement {
     setOpenDialog(false);
     setSelected(null);
     setForm(EMPTY_PRODUCT);
-    setMediaFile(null);
-    setMediaDuration(undefined);
+    clearMediaSelection();
     setDialogType('view');
   };
 
@@ -402,12 +531,14 @@ export default function GestionProductos(): React.ReactElement {
       categoria: producto.categoria,
       tipo: producto.tipo,
       moneda: producto.moneda,
+      monedaId: producto.monedaId,
       precio: producto.precio,
       unidadMedida: producto.unidadMedida,
       stockMinimo: producto.stockMinimo,
       cantidadColoresRender: producto.cantidadColoresRender,
       coloresPermitidos: syncColoresPermitidos(producto.cantidadColoresRender, producto.coloresPermitidos),
       reglasContables: producto.reglasContables.length ? producto.reglasContables : reglasMasivasProducto(producto.categoriaId),
+      reglasVentas: producto.reglasVentas,
       descripcion: producto.descripcion,
       descripcionCorta: producto.descripcionCorta,
       imagen: producto.imagen,
@@ -455,9 +586,12 @@ export default function GestionProductos(): React.ReactElement {
       }
     } else {
       setMediaDuration(undefined);
-      setForm((prev) => ({ ...prev, imagen: URL.createObjectURL(file) }));
     }
 
+    if (mediaPreviewUrl && isBlobUrl(mediaPreviewUrl)) {
+      URL.revokeObjectURL(mediaPreviewUrl);
+    }
+    setMediaPreviewUrl(URL.createObjectURL(file));
     setMediaFile(file);
     toast.success(isVideo ? 'Video listo para subir al guardar.' : 'Imagen lista para subir al guardar.');
   };
@@ -484,9 +618,12 @@ export default function GestionProductos(): React.ReactElement {
   };
 
   const openAdd = (): void => {
-    setForm({ ...EMPTY_PRODUCT, reglasContables: reglasMasivasProducto() });
-    setMediaFile(null);
-    setMediaDuration(undefined);
+    setForm({
+      ...EMPTY_PRODUCT,
+      reglasContables: reglasMasivasProducto(),
+      reglasVentas: [],
+    });
+    clearMediaSelection();
     setDialogType('add');
     setOpenDialog(true);
   };
@@ -502,10 +639,97 @@ export default function GestionProductos(): React.ReactElement {
     });
   };
 
+  const onReglaVentaChange = (codigo: string, checked: boolean): void => {
+    setForm((prev) => {
+      const codigoNorm = codigo.trim().toUpperCase();
+      const sinRegla = prev.reglasVentas.filter((regla) => regla.codigo !== codigoNorm);
+      if (!checked) {
+        return { ...prev, reglasVentas: sinRegla };
+      }
+      const catalogo = reglasVentas.find((regla) => String(regla.codigo || '').toUpperCase() === codigoNorm);
+      const existente = prev.reglasVentas.find((regla) => regla.codigo === codigoNorm);
+      return {
+        ...prev,
+        reglasVentas: [
+          ...sinRegla,
+          {
+            codigo: codigoNorm,
+            aplica: true,
+            reglaVentaId: catalogo?.iud || catalogo?._id || null,
+            valor: Number.isFinite(Number(existente?.valor)) ? Number(existente?.valor) : undefined,
+          },
+        ],
+      };
+    });
+  };
+
+  const onReglaVentaValorChange = (codigo: string, raw: string): void => {
+    const codigoNorm = codigo.trim().toUpperCase();
+    const parsed = Number(raw);
+    if (raw.trim() !== '' && !Number.isFinite(parsed)) return;
+    setForm((prev) => ({
+      ...prev,
+      reglasVentas: prev.reglasVentas.map((regla) => (
+        regla.codigo === codigoNorm
+          ? { ...regla, valor: raw.trim() === '' ? undefined : parsed }
+          : regla
+      )),
+    }));
+  };
+
+  const buildProductoPayload = (): AdminProductoPayload => {
+    const reglasVentasNormalizadas = form.reglasVentas
+      .filter((regla) => regla.aplica !== false && regla.codigo)
+      .map((asignada) => {
+        const catalogo = reglasVentas.find(
+          (regla) => String(regla.codigo || '').toUpperCase() === asignada.codigo,
+        );
+        const comportamiento = catalogo
+          ? resolverComportamientoDesdeReglaVenta(catalogo, tiposReglaVenta)
+          : null;
+        const valor = Number(asignada.valor);
+        if (!Number.isFinite(valor)) {
+          throw new Error(`Falta valor para la regla ${asignada.codigo}`);
+        }
+        let valorNorm = valor;
+        if (reglaVentaPermiteValorEnProducto(comportamiento)) {
+          const validado = normalizarValorReglaVentaProducto(comportamiento, valorNorm);
+          if (validado !== null) valorNorm = validado;
+        }
+        return {
+          codigo: asignada.codigo,
+          aplica: true,
+          reglaVentaId: asignada.reglaVentaId || catalogo?.iud || catalogo?._id || null,
+          valor: valorNorm,
+        };
+      });
+    return toPayload({ ...form, reglasVentas: reglasVentasNormalizadas });
+  };
+
+  const validarReglasVentasProducto = (): string | null => {
+    for (const asignada of form.reglasVentas.filter((regla) => regla.aplica !== false && regla.codigo)) {
+      const catalogo = reglasVentas.find((regla) => String(regla.codigo || '').toUpperCase() === asignada.codigo);
+      if (!catalogo) continue;
+      const comportamiento = resolverComportamientoDesdeReglaVenta(catalogo, tiposReglaVenta);
+      if (!reglaVentaPermiteValorEnProducto(comportamiento)) continue;
+      const valorBase = Number(asignada.valor);
+      if (!Number.isFinite(valorBase)) {
+        return `Parametrice el valor de la regla "${catalogo.nombre || asignada.codigo}" en este producto.`;
+      }
+      const valorNorm = normalizarValorReglaVentaProducto(comportamiento, valorBase);
+      if (valorNorm === null) {
+        return `Indique un valor valido para la regla "${catalogo.nombre || asignada.codigo}".`;
+      }
+    }
+    return null;
+  };
+
   const openEdit = (producto: ProductRow): void => {
-    setForm(producto);
-    setMediaFile(null);
-    setMediaDuration(undefined);
+    setForm({
+      ...producto,
+      imagen: isBlobUrl(producto.imagen) ? PLACEHOLDER : producto.imagen,
+    });
+    clearMediaSelection();
     setDialogType('edit');
     setOpenDialog(true);
   };
@@ -567,29 +791,60 @@ export default function GestionProductos(): React.ReactElement {
       toast.error('Nombre y precio son obligatorios.');
       return;
     }
+    if (form.nombre.length > limitesCatalogo.nombreMax) {
+      toast.error(`El nombre supera ${limitesCatalogo.nombreMax} caracteres.`);
+      return;
+    }
+    if ((form.descripcion || '').length > limitesCatalogo.descripcionMax) {
+      toast.error(`La descripcion supera ${limitesCatalogo.descripcionMax} caracteres.`);
+      return;
+    }
+    if (precioMinimoCatalogo > 0 && form.precio < precioMinimoCatalogo) {
+      toast.error(
+        `El precio no puede ser inferior al precio del producto en catálogo (${precioMinimoCatalogo.toLocaleString('es-CO')} ${form.moneda || 'COP'}).`,
+      );
+      return;
+    }
     if (!form.tipo.trim()) {
       toast.error('Selecciona o crea un tipo de producto.');
+      return;
+    }
+    const errorReglasVenta = validarReglasVentasProducto();
+    if (errorReglasVenta) {
+      toast.error(errorReglasVenta);
       return;
     }
 
     try {
       setSaving(true);
       if (dialogType === 'add') {
-        const created = await productosService.crearProductoAdmin(toPayload(form));
+        const created = await productosService.crearProductoAdmin(buildProductoPayload());
         const createdRow = mapProduct(created);
-        if (mediaFile && createdRow.productoVentaRelacionId) {
-          await productosService.subirMediaProductoVenta(createdRow.productoVentaRelacionId, mediaFile, mediaDuration);
+        const relacionId = getProductoVentaRelacionId(created);
+        if (mediaFile && relacionId) {
+          await productosService.subirMediaProductoVenta(relacionId, mediaFile, mediaDuration);
         }
         setProductos((prev) => [createdRow, ...prev]);
         toast.success('Producto creado exitosamente');
       } else {
-        const updated = await productosService.actualizarProductoAdmin(form.id, toPayload(form));
+        const updated = await productosService.actualizarProductoAdmin(form.id, buildProductoPayload());
         const updatedRow = mapProduct(updated);
-        if (mediaFile && updatedRow.productoVentaRelacionId) {
-          await productosService.subirMediaProductoVenta(updatedRow.productoVentaRelacionId, mediaFile, mediaDuration);
+        const relacionId = getProductoVentaRelacionId(updated);
+        if (mediaFile && relacionId) {
+          await productosService.subirMediaProductoVenta(relacionId, mediaFile, mediaDuration);
         }
         setProductos((prev) => prev.map((item) => item.id === form.id ? updatedRow : item));
-        toast.success('Producto actualizado exitosamente');
+        if (updated.cambiosReglasVentas?.length) {
+          const resumen = updated.cambiosReglasVentas
+            .map((c) => `${c.codigo}: ${c.valorAnterior ?? '—'}% → ${c.valorNuevo}%`)
+            .join(' · ');
+          toast.success(`Porcentajes actualizados: ${resumen}`);
+          if (updated.sincronizarCarritoRecomendado) {
+            toast.info('Los carritos activos deben sincronizarse para aplicar el nuevo porcentaje.');
+          }
+        } else {
+          toast.success('Producto actualizado exitosamente');
+        }
       }
       await loadData();
       closeDialog();
@@ -602,6 +857,10 @@ export default function GestionProductos(): React.ReactElement {
   };
 
   const onDelete = (): void => {
+    if (!selected?.id) {
+      toast.error('No se pudo identificar el producto.');
+      return;
+    }
     if (!selected) return;
     Swal({
       title: '¿Estás seguro?',
@@ -625,6 +884,10 @@ export default function GestionProductos(): React.ReactElement {
   };
 
   const onEliminar = (): void => {
+    if (!selected?.id) {
+      toast.error('No se pudo identificar el producto.');
+      return;
+    }
     if (!selected) return;
     Swal({
       title: '¿Eliminar definitivamente?',
@@ -725,6 +988,23 @@ export default function GestionProductos(): React.ReactElement {
       <div className="mb-6 flex items-center justify-between border-b pb-4">
         <h1 className="text-2xl font-bold text-foreground md:text-3xl">Gestión de Productos</h1>
         <div className="flex items-center gap-2">
+          <ConfigCatalogoProductosTrigger onClick={() => setOpenCatalogoConfigModal(true)} />
+          <Button
+            variant="outline"
+            onClick={() => setOpenVentaWompiSecuenciaModal(true)}
+            className="flex items-center gap-2 rounded-lg"
+          >
+            <Hash className="h-4 w-4" />
+            Secuencia ventas
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => setOpenReglasVentasModal(true)}
+            className="flex items-center gap-2 rounded-lg"
+          >
+            <Settings2 className="h-4 w-4" />
+            Reglas Ventas
+          </Button>
           <Button
             variant="outline"
             onClick={() => { void onSyncCollection(); }}
@@ -853,7 +1133,18 @@ export default function GestionProductos(): React.ReactElement {
                 <section className="flex w-[min(280px,28%)] shrink-0 flex-col gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="nombre">Nombre</Label>
-                  <Input id="nombre" value={current.nombre} disabled={dialogType === 'view'} onChange={(e) => setForm((prev) => ({ ...prev, nombre: e.target.value }))} />
+                  <Input
+                    id="nombre"
+                    value={current.nombre}
+                    disabled={dialogType === 'view'}
+                    maxLength={limitesCatalogo.nombreMax}
+                    onChange={(e) => setForm((prev) => ({ ...prev, nombre: e.target.value }))}
+                  />
+                  {dialogType !== 'view' ? (
+                    <p className="text-xs text-muted-foreground">
+                      {current.nombre.length}/{limitesCatalogo.nombreMax} caracteres
+                    </p>
+                  ) : null}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="sku">Producto</Label>
@@ -963,8 +1254,57 @@ export default function GestionProductos(): React.ReactElement {
                   <Label htmlFor="precio">Precio</Label>
                   <div className="relative">
                     <DollarSign className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input id="precio" type="number" className="pl-10" value={current.precio} disabled={dialogType === 'view'} onChange={(e) => setForm((prev) => ({ ...prev, precio: Number(e.target.value || 0) }))} />
+                    <Input
+                      id="precio"
+                      type="number"
+                      className="pl-10"
+                      min={dialogType !== 'view' && precioMinimoCatalogo > 0 ? precioMinimoCatalogo : undefined}
+                      value={current.precio}
+                      disabled={dialogType === 'view'}
+                      onChange={(e) => setForm((prev) => ({ ...prev, precio: Number(e.target.value || 0) }))}
+                    />
                   </div>
+                  {dialogType !== 'view' && precioMinimoCatalogo > 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      Precio mínimo del producto en catálogo: ${precioMinimoCatalogo.toLocaleString('es-CO')} {form.moneda || 'COP'}
+                    </p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="moneda">Moneda catálogo / carrito</Label>
+                  {dialogType === 'view' ? (
+                    <Input id="moneda" value={current.moneda} disabled />
+                  ) : (
+                    <select
+                      id="moneda"
+                      value={form.monedaId || monedasCatalogoActivas.find((m) => m.monedas === form.moneda)?.iud || monedasCatalogoActivas.find((m) => m.monedas === form.moneda)?._id || ''}
+                      onChange={(e) => {
+                        const id = e.target.value;
+                        const moneda = monedasCatalogoActivas.find((row) => monedaCopId(row) === id);
+                        setForm((prev) => ({
+                          ...prev,
+                          monedaId: id,
+                          moneda: moneda?.monedas || prev.moneda,
+                        }));
+                      }}
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    >
+                      {monedasCatalogoActivas.length === 0 && (
+                        <option value="">Sin monedas activas</option>
+                      )}
+                      {monedasCatalogoActivas.map((moneda) => (
+                        <option key={monedaCopId(moneda)} value={monedaCopId(moneda)}>
+                          {moneda.monedas}
+                          {moneda.activoWompi ? ' · Wompi' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  {dialogType !== 'view' && (
+                    <p className="text-xs text-muted-foreground">
+                      Referencia a monedasCop (monedaId). Para checkout Wompi requiere activoWompi=true.
+                    </p>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="unidadMedida">Unidad medida</Label>
@@ -1068,25 +1408,103 @@ export default function GestionProductos(): React.ReactElement {
                     </div>
                   )}
                 </div>
+                <div className="space-y-3 rounded-md border border-border px-3 py-2">
+                  <div>
+                    <Label>Reglas de venta del producto</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Seleccione las reglas que aplican a este producto y asigne el valor (% , cantidad max. u otro).
+                      Si la regla esta marcada, el carrito exige ese valor.
+                    </p>
+                  </div>
+                  {reglasVentas.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No hay reglas de venta activas.</p>
+                  ) : (
+                    <div className="flex max-h-64 flex-col gap-2 overflow-y-auto pr-1">
+                      {reglasVentas.map((regla) => {
+                        const codigo = String(regla.codigo || '').toUpperCase();
+                        const asignada = current.reglasVentas.find((item) => item.codigo === codigo && item.aplica !== false);
+                        const checked = Boolean(asignada);
+                        const comportamiento = resolverComportamientoDesdeReglaVenta(regla, tiposReglaVenta);
+                        const permiteValor = reglaVentaPermiteValorEnProducto(comportamiento);
+                        const valorMostrar = Number.isFinite(Number(asignada?.valor))
+                          ? Number(asignada?.valor)
+                          : NaN;
+                        const reglaResumen = { ...regla, valor: valorMostrar };
+                        return (
+                          <div key={codigo} className="rounded-md border px-3 py-2 text-sm">
+                            <label className="flex cursor-pointer items-start gap-2">
+                              <input
+                                type="checkbox"
+                                className="mt-1"
+                                checked={checked}
+                                disabled={dialogType === 'view'}
+                                onChange={(e) => onReglaVentaChange(codigo, e.target.checked)}
+                              />
+                              <span className="min-w-0 flex-1">
+                                <span className="block truncate font-medium">{regla.nombre || codigo}</span>
+                                <span className="text-xs text-muted-foreground">{codigo}</span>
+                              </span>
+                            </label>
+                            {checked && permiteValor ? (
+                              <div className="mt-2 flex flex-wrap items-center gap-2 pl-6">
+                                <Label htmlFor={`regla-venta-valor-${codigo}`} className="shrink-0 text-xs text-muted-foreground">
+                                  {etiquetaCampoValorReglaVentaProducto(comportamiento)}
+                                </Label>
+                                <Input
+                                  id={`regla-venta-valor-${codigo}`}
+                                  type="number"
+                                  min={comportamiento === 'LIMITE_CANTIDAD' ? 1 : 0}
+                                  max={comportamiento === 'DESCUENTO_PORCENTAJE' ? 100 : undefined}
+                                  step={comportamiento === 'LIMITE_CANTIDAD' ? 1 : comportamiento === 'DESCUENTO_PORCENTAJE' ? 0.01 : 1}
+                                  className="h-8 w-28"
+                                  value={Number.isFinite(Number(asignada?.valor)) ? String(asignada?.valor) : ''}
+                                  placeholder={placeholderValorPorComportamiento(comportamiento)}
+                                  disabled={dialogType === 'view'}
+                                  onChange={(e) => onReglaVentaValorChange(codigo, e.target.value)}
+                                />
+                                <span className="text-xs text-muted-foreground">
+                                  {Number.isFinite(valorMostrar)
+                                    ? `En carrito: ${resumenValorReglaVenta(reglaResumen, tiposReglaVenta)}`
+                                    : 'Indique el valor para aplicar esta regla en el carrito'}
+                                </span>
+                              </div>
+                            ) : null}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
                 <div className="space-y-2">
                   <Label htmlFor="imagenProducto">Imagen o video corto del producto</Label>
                   <div className="flex flex-col gap-3">
-                    <img
-                      src={current.imagen || PLACEHOLDER}
-                      alt={current.nombre || 'Producto'}
-                      className="h-24 w-24 rounded-md border object-cover"
-                      onError={(e) => {
-                        const target = e.target as HTMLImageElement;
-                        target.onerror = null;
-                        target.src = PLACEHOLDER;
-                      }}
-                    />
+                    {mediaFile?.type.startsWith('video/') && mediaPreviewUrl ? (
+                      <video
+                        src={mediaPreviewUrl}
+                        controls
+                        className="max-h-32 w-full max-w-[12rem] rounded-md border object-cover"
+                      />
+                    ) : (
+                      <img
+                        src={productImagePreview(current.imagen)}
+                        alt={current.nombre || 'Producto'}
+                        className="h-24 w-24 rounded-md border object-cover"
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          target.onerror = null;
+                          target.src = PLACEHOLDER;
+                        }}
+                      />
+                    )}
                     <div className="space-y-2">
                       <Input
                         id="imagenProducto"
-                        value={current.imagen === PLACEHOLDER ? '' : current.imagen}
+                        value={imagenUrlInputValue(current.imagen)}
                         disabled={dialogType === 'view'}
-                        onChange={(e) => setForm((prev) => ({ ...prev, imagen: e.target.value || PLACEHOLDER }))}
+                        onChange={(e) => {
+                          clearMediaSelection();
+                          setForm((prev) => ({ ...prev, imagen: e.target.value || PLACEHOLDER }));
+                        }}
                         placeholder="URL de imagen del producto"
                       />
                       {dialogType !== 'view' && (
@@ -1150,9 +1568,15 @@ export default function GestionProductos(): React.ReactElement {
                     value={current.descripcion}
                     disabled={dialogType === 'view'}
                     rows={8}
+                    maxLength={limitesCatalogo.descripcionMax}
                     className="min-h-[140px] flex-1 resize-y"
                     onChange={(e) => setForm((prev) => ({ ...prev, descripcion: e.target.value }))}
                   />
+                  {dialogType !== 'view' ? (
+                    <p className="text-xs text-muted-foreground">
+                      {(current.descripcion || '').length}/{limitesCatalogo.descripcionMax} caracteres
+                    </p>
+                  ) : null}
                 </div>
                 </section>
               </div>
@@ -1366,6 +1790,26 @@ export default function GestionProductos(): React.ReactElement {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ReglasVentasModal
+        open={openReglasVentasModal}
+        onOpenChange={setOpenReglasVentasModal}
+        onChanged={() => {
+          setTiposReglaVentaRefreshKey((k) => k + 1);
+          void loadData();
+        }}
+      />
+
+      <ConfigCatalogoProductosModal
+        open={openCatalogoConfigModal}
+        onOpenChange={setOpenCatalogoConfigModal}
+        onSaved={() => { void reloadLimitesCatalogo(); }}
+      />
+
+      <VentaWompiSecuenciaModal
+        open={openVentaWompiSecuenciaModal}
+        onOpenChange={setOpenVentaWompiSecuenciaModal}
+      />
     </div>
   );
 }

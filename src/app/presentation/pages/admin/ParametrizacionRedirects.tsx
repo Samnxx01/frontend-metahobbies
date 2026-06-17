@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { adminEntityId } from '@/app/utils/adminEntityId';
 import { toast } from 'react-toastify';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -88,7 +88,7 @@ const parseAllowedPaths = (value: string): string[] => {
 const collectTenantGlobalOptions = (nodes: TenantGlobalNode[] = [], acc: ScopeOption[] = []): ScopeOption[] => {
   nodes.forEach((node) => {
     const tenant = node?.tenantGlobal;
-    const id = String(tenant?.iud || '').trim();
+    const id = adminEntityId(tenant);
     if (id) {
       acc.push({ value: id, label: tenant?.razon_social || tenant?.titulo || `Tenant ${id.slice(0, 8)}` });
     }
@@ -117,7 +117,9 @@ export default function ParametrizacionRedirects({
   const [selectedScopeValue, setSelectedScopeValue] = useState<string>(GLOBAL_SCOPE_VALUE);
 
   const getBrandingScopeParams = (): BrandingScopeParams => ({
-    tenantGlobalId: selectedScopeValue !== GLOBAL_SCOPE_VALUE ? selectedScopeValue : undefined,
+    tenantGlobalId: selectedScopeValue !== GLOBAL_SCOPE_VALUE
+      ? adminEntityId(selectedScopeValue)
+      : undefined,
   });
 
   // Hidrata el form desde la config guardada en backend — sin fallbacks hardcodeados

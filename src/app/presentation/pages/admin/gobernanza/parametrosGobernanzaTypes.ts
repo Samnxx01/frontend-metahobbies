@@ -3,7 +3,7 @@
 import type { GobernanzaModuloConfig } from './gobernanzaModuloConfig';
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE';
-export type EndpointSection = 'tenant' | 'permisos' | 'corporativo';
+export type EndpointSection = 'tenant' | 'permisos' | 'corporativo' | 'reglas';
 export type EndpointActor = 'tenantSuperAdmin' | 'tenantGlobal' | 'ambos';
 export type FieldType = 'text' | 'textarea' | 'json' | 'id' | 'permisos' | 'context';
 
@@ -53,6 +53,17 @@ export interface ParametrosGobernanzaProps {
   inlineModuloConfig?: GobernanzaModuloConfig | null;
   /** Resuelve módulo desde registro por slug de ruta (p. ej. `tenant`). */
   inlineModuloSlug?: string;
+  /** `compact`: cabecera del módulo + menú parametrizado sin panel global. */
+  shellVariant?: 'full' | 'compact';
+  /** Path SPA para resolver gobernanzaModuloConfigs (menuPath). */
+  menuPath?: string;
+  /** Acción del catálogo al abrir subruta (sin query en URL si hay menuPath). */
+  preferredActionId?: string | null;
+  /**
+   * Hub contenedor (PermisosGlobal): rejilla de operaciones publicadas en gobernanzaModuloConfigs.
+   * La selección navega al menuPath del formulario hijo.
+   */
+  operacionesHub?: boolean;
 }
 
 /** Dominio UI / catálogos (solo usados dentro de ParametrosGobernanza). */

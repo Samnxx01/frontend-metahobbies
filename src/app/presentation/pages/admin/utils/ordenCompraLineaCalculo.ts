@@ -33,6 +33,9 @@ type ItemTot = Pick<
 
 /** Total linea = (cantidad x precio) + impuesto sobre bruto - descuento sobre total. */
 export function totalLineaOrdenCompra(item: ItemTot): number {
+  const s = Number(item.subtotal);
+  if (!Number.isNaN(s) && s > 0) return round2(s);
+
   const q = Number(item.cantidadOrdenada) || 0;
   const p = Number(item.costoUnitario) || 0;
   const base = round2(q * p);
@@ -40,9 +43,29 @@ export function totalLineaOrdenCompra(item: ItemTot): number {
   const taxPct = Number(item.impuestoPorcentaje || 0);
   const taxAbs = Number(item.impuestos || 0);
   const impuesto = taxPct > 0 ? round2(base * (taxPct / 100)) : taxAbs;
-  const totalCalculado = Math.max(0, round2(base + impuesto - d));
-  if (base > 0 || d > 0 || impuesto > 0) return totalCalculado;
+  return Math.max(0, round2(base + impuesto - d));
+}
 
-  const s = Number(item.subtotal);
-  return !Number.isNaN(s) && s > 0 ? round2(s) : 0;
+/** Subtotal del comprobante de entrada alineado con la línea OC (proporcional si es recepción parcial). */
+export function subtotalLineaRecepcion(item: ItemTot, cantidadRecibida: number): number {
+  const qOrden = Number(item.cantidadOrdenada) || 0;
+  const qRec = Number(cantidadRecibida) || 0;
+  if (!qOrden || !qRec) return 0;
+
+  const totalLinea = totalLineaOrdenCompra(item);
+  if (qRec >= qOrden) return totalLinea;
+  return round2(totalLinea * (qRec / qOrden));
+}
+
+/** Subtotal de línea en comprobante cuando solo hay cantidad y costo unitario persistidos. */
+export function subtotalLineaComprobanteEntrada(
+  cantidadRecibida: number,
+  costoUnitario: number,
+  subtotal?: number,
+): number {
+  const stored = Number(subtotal);
+  if (!Number.isNaN(stored) && stored > 0) return round2(stored);
+  const qty = Number(cantidadRecibida) || 0;
+  const unit = Number(costoUnitario) || 0;
+  return Math.max(0, round2(qty * unit));
 }

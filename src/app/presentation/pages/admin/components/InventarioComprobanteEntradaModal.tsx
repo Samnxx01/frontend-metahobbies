@@ -1,13 +1,29 @@
 import React, { useMemo, useState } from 'react';
-import { FileText } from 'lucide-react';
+import { CheckCircle2, FileText, Loader2 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import inventarioService from '@/app/services/inventarioService';
 import type { InventarioOrdenCompra, RecepcionOrdenCompraResponse } from '@/app/services/inventarioService';
 import { mensajeErrorComprasInventario } from '../inventario/inventarioComprasMensajes';
+import {
+  estadoComprobanteEntradaBadgeClass,
+  labelEstadoComprobanteEntrada,
+} from '@/app/presentation/pages/admin/utils/estadoComprobanteEntradaUi';
+import { getRecepcionCompraId, textoUsuarioAuditoria } from '@/app/presentation/pages/admin/utils/ordenCompraIdUtils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+  escapePrintHtml,
+  openPrintDocument,
+  resolveCorporateNameFromSession,
+  type PrintDocumentFooterConfig,
+} from '@/lib/print/printDocument';
+import InventarioReporteKardexEntrada from './InventarioReporteKardexEntrada';
+import {
+  subtotalLineaComprobanteEntrada,
+  subtotalLineaRecepcion,
+} from '@/app/presentation/pages/admin/utils/ordenCompraLineaCalculo';
 
 const moneyCo = (n: number): string =>
   new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(n);
@@ -21,31 +37,9 @@ const formatDateTimeCo = (value?: string): string => {
 
 export type DocumentoSoporte = { tipo: string; numero: string };
 
-const escapeHtml = (value: unknown): string =>
-  String(value ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
+export type ComprobanteEntradaPrintFooterConfig = PrintDocumentFooterConfig;
 
-const resolveStoredCorporateName = (): string => {
-  try {
-    const raw = localStorage.getItem('user');
-    const user = raw ? JSON.parse(raw) : null;
-    return String(
-      user?.corporativo?.razon_social
-      || user?.tenantCorporativo?.razon_social
-      || user?.perfil?.corporativo?.razon_social
-      || user?.perfil?.razon_social
-      || user?.empresa
-      || user?.nombreEmpresa
-      || 'Mabs by Gabs'
-    ).trim();
-  } catch {
-    return 'Mabs by Gabs';
-  }
-};
+const resolveStoredCorporateName = resolveCorporateNameFromSession;
 
 export type InventarioComprobanteEntradaModalProps = {
   open: boolean;
@@ -55,10 +49,24 @@ export type InventarioComprobanteEntradaModalProps = {
   nombreCorporativo?: string;
   /** true = compras con recepción automática: al confirmar sí registra kardex. false = solo aprueba comprobante (subproceso manual). */
   recepcionAutomatica?: boolean;
+  /** Pie de página del PDF/imprimible. Si no se envía, se arma uno por defecto al imprimir. */
+  printFooter?: ComprobanteEntradaPrintFooterConfig | null;
   onConfirmed?: (data: RecepcionOrdenCompraResponse) => void;
 };
 
 const getOrdenFromData = (data: RecepcionOrdenCompraResponse | null): InventarioOrdenCompra | null => data?.orden ?? null;
+
+const subtotalRecepcionItem = (
+  it: { sku: string; cantidadRecibida: number; costoUnitario: number; subtotal?: number },
+  ordenItems: InventarioOrdenCompra['items'] | undefined,
+): number => {
+  if (it.subtotal != null && it.subtotal > 0) {
+    return subtotalLineaComprobanteEntrada(it.cantidadRecibida, it.costoUnitario, it.subtotal);
+  }
+  const ordenItem = (ordenItems || []).find((row) => String(row.sku || '').toUpperCase() === String(it.sku || '').toUpperCase());
+  if (ordenItem) return subtotalLineaRecepcion(ordenItem, it.cantidadRecibida);
+  return subtotalLineaComprobanteEntrada(it.cantidadRecibida, it.costoUnitario);
+};
 
 export default function InventarioComprobanteEntradaModal({
   open,
@@ -67,102 +75,199 @@ export default function InventarioComprobanteEntradaModal({
   documentoSoporte = null,
   nombreCorporativo,
   recepcionAutomatica = false,
+  printFooter,
   onConfirmed,
 }: InventarioComprobanteEntradaModalProps): React.ReactElement {
   const [confirmando, setConfirmando] = useState(false);
-  const orden = getOrdenFromData(data);
-  const pendienteConfirmacion = data?.recepcion?.estado === 'PENDIENTE_APROBACION';
+  const [dataLocal, setDataLocal] = useState<RecepcionOrdenCompraResponse | null>(null);
+
+  const dataUi = dataLocal ?? data;
+  const orden = getOrdenFromData(dataUi);
+  const comprobanteContable = dataUi?.comprobanteContable ?? dataUi?.recepcion?.comprobanteContable ?? null;
+  const estadoRecepcion = String(dataUi?.recepcion?.estado || '').trim().toUpperCase();
+  const pendienteConfirmacion = estadoRecepcion === 'PENDIENTE_APROBACION';
+  const recepcionId = getRecepcionCompraId(dataUi?.recepcion);
+  const mostrarConfirmar = pendienteConfirmacion && Boolean(recepcionId);
+
+  React.useEffect(() => {
+    if (open) setDataLocal(data);
+  }, [open, data]);
 
   const total = useMemo(() => {
-    const items = data?.recepcion?.items ?? [];
-    return items.reduce((acc, it) => acc + Math.max(0, Number(it.cantidadRecibida || 0) * Number(it.costoUnitario || 0)), 0);
-  }, [data]);
+    const items = dataUi?.recepcion?.items ?? [];
+    return items.reduce(
+      (acc, it) => acc + subtotalRecepcionItem(it, orden?.items),
+      0,
+    );
+  }, [dataUi, orden?.items]);
+
+  const reporteKardex = dataUi?.reporteKardex ?? [];
+  const kardexRegistrado = reporteKardex.length > 0
+    || dataUi?.aplicoKardex === true
+    || (dataUi?.recepcion?.items || []).some((it) => String(it.estadoKardex || '').toUpperCase() === 'CONFIRMADO');
+
+  const confirmarComprobante = async (): Promise<void> => {
+    if (!recepcionId || !mostrarConfirmar) {
+      if (!recepcionId) toast.error('No se pudo identificar el comprobante de entrada.');
+      return;
+    }
+    try {
+      setConfirmando(true);
+      const confirmed = await inventarioService.confirmarRecepcionOrdenCompra(recepcionId, {
+        estado: recepcionAutomatica,
+      });
+      setDataLocal(confirmed);
+      onConfirmed?.(confirmed);
+      toast.success(
+        confirmed?.msg
+        || (recepcionAutomatica
+          ? 'Comprobante confirmado. Comprobante contable y kardex registrados.'
+          : 'Comprobante contable registrado. Registre la entrada física en kardex desde Movimientos.'),
+      );
+    } catch (error) {
+      console.error('Error confirmando comprobante:', error);
+      toast.error(
+        mensajeErrorComprasInventario(error, 'No se pudo confirmar el comprobante de entrada.'),
+        { autoClose: 10000 },
+      );
+    } finally {
+      setConfirmando(false);
+    }
+  };
 
   const imprimirComprobante = (): void => {
-    if (!data || !orden) return;
+    if (!dataUi || !orden) return;
     const corporativo = String(nombreCorporativo || resolveStoredCorporateName() || 'Mabs by Gabs').trim();
-    const documentoTexto = `${documentoSoporte?.tipo?.trim() || ''}${documentoSoporte?.numero?.trim() ? ` - ${documentoSoporte.numero}` : ''}`.trim();
-    const rows = data.recepcion.items.map((it, idx) => {
-      const subtotal = Math.max(0, Number(it.cantidadRecibida || 0) * Number(it.costoUnitario || 0));
+    const documentoTexto = `${documentoSoporte?.tipo?.trim() || ''}${documentoSoporte?.numero?.trim() ? ` · ${documentoSoporte.numero}` : ''}`.trim();
+    const contableTexto = comprobanteContable?.numero
+      ? `${comprobanteContable.tipo || 'COMPROBANTE_ENTRADA'} · ${comprobanteContable.numero}`
+      : '';
+    const impresoEn = formatDateTimeCo(new Date().toISOString());
+    const estadoComprobante = labelEstadoComprobanteEntrada(dataUi.recepcion.estado || 'APROBADA');
+
+    const footer: PrintDocumentFooterConfig = printFooter ?? {
+      row: {
+        left: orden.proveedor?.nombre ? `Proveedor: ${orden.proveedor.nombre}` : '',
+        center: corporativo,
+        right: impresoEn,
+      },
+      lines: [
+        `Recepción ${dataUi.recepcion.numeroRecepcion} · OC ${orden.numeroOrden} · ${estadoComprobante}`,
+        documentoTexto || undefined,
+        contableTexto ? `Comprobante contable: ${contableTexto}` : undefined,
+        orden.proveedor?.nit ? `NIT proveedor ${orden.proveedor.nit}` : undefined,
+      ].filter(Boolean) as string[],
+    };
+
+    const rows = dataUi.recepcion.items.map((it) => {
+      const subtotal = subtotalRecepcionItem(it, orden?.items);
       return `
         <tr>
-          <td>${escapeHtml(it.sku)}</td>
-          <td>${escapeHtml(it.bodega)}</td>
-          <td class="num">${escapeHtml(Number(it.cantidadRecibida ?? 0))}</td>
-          <td class="num">${escapeHtml(moneyCo(Number(it.costoUnitario ?? 0)))}</td>
-          <td class="num strong">${escapeHtml(moneyCo(subtotal))}</td>
+          <td>${escapePrintHtml(it.sku)}</td>
+          <td>${escapePrintHtml(it.bodega)}</td>
+          <td class="num">${escapePrintHtml(Number(it.cantidadRecibida ?? 0))}</td>
+          <td class="num">${escapePrintHtml(moneyCo(Number(it.costoUnitario ?? 0)))}</td>
+          <td class="num strong">${escapePrintHtml(moneyCo(subtotal))}</td>
         </tr>
       `;
     }).join('');
 
-    const html = `<!doctype html>
-      <html>
-        <head>
-          <meta charset="utf-8" />
-          <title>${escapeHtml(corporativo)} - ${escapeHtml(data.recepcion.numeroRecepcion)}</title>
-          <style>
-            @page { size: letter; margin: 18mm 16mm 22mm; }
-            * { box-sizing: border-box; }
-            body { margin: 0; color: #111827; font-family: Arial, sans-serif; font-size: 12px; }
-            h1 { margin: 0 0 14px; font-size: 18px; }
-            .card { border: 1px solid #d1d5db; border-radius: 8px; padding: 16px; }
-            .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 24px; margin-bottom: 14px; }
-            .label { color: #6b7280; font-size: 11px; margin-bottom: 3px; }
-            .value { font-weight: 700; }
-            .mono { font-family: Consolas, monospace; }
-            table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-            th, td { border-bottom: 1px solid #e5e7eb; padding: 8px 6px; text-align: left; }
-            th { font-size: 11px; color: #374151; }
-            .num { text-align: right; font-variant-numeric: tabular-nums; }
-            .strong { font-weight: 700; }
-            .total { text-align: right; margin: 12px 0 0; font-size: 13px; font-weight: 700; }
-            .footer { position: fixed; left: 0; right: 0; bottom: -12mm; text-align: center; font-size: 10px; color: #374151; }
-          </style>
-        </head>
-        <body>
-          <main class="card">
-            <h1>Comprobante de entrada</h1>
-            <section class="grid">
-              <div><div class="label">Recepcion</div><div class="value mono">${escapeHtml(data.recepcion.numeroRecepcion)}</div></div>
-              <div><div class="label">Orden compra</div><div class="value mono">${escapeHtml(orden.numeroOrden)}</div></div>
-              <div><div class="label">Estado OC</div><div class="value">${escapeHtml(orden.estado)}</div></div>
-              <div><div class="label">Estado comprobante</div><div class="value">${escapeHtml(data.recepcion.estado || 'APROBADA')}</div></div>
-              <div><div class="label">Documento soporte</div><div>${escapeHtml(documentoTexto || 'Sin documento')}</div></div>
-              <div><div class="label">Creado</div><div>${escapeHtml(formatDateTimeCo(data.recepcion.createdAt))}</div></div>
-              <div><div class="label">Proveedor</div><div>${escapeHtml(orden.proveedor?.nombre)}</div><div class="label">NIT ${escapeHtml(orden.proveedor?.nit)}</div></div>
-            </section>
-            <div class="total">Total: ${escapeHtml(moneyCo(total))}</div>
-            <table>
-              <thead><tr><th>SKU</th><th>Bodega</th><th class="num">Cant. recibida</th><th class="num">Costo unit.</th><th class="num">Subtotal</th></tr></thead>
-              <tbody>${rows}</tbody>
-            </table>
-          </main>
-          <footer class="footer">${escapeHtml(corporativo)}</footer>
-          <script>window.addEventListener('load', () => { window.print(); });</script>
-        </body>
-      </html>`;
+    const kardexRows = reporteKardex.map((linea) => {
+      const ant = Number(linea.movimiento?.saldoBodega?.cantidadAnterior ?? 0);
+      const post = Number(linea.movimiento?.saldoBodega?.cantidadPosterior ?? linea.saldo?.cantidadDisponible ?? 0);
+      const doc = linea.movimiento?.documentoRelacionado;
+      return `
+        <tr>
+          <td>${escapePrintHtml(linea.sku)}</td>
+          <td>${escapePrintHtml(linea.bodega)}</td>
+          <td class="num">${escapePrintHtml(Number(linea.movimiento?.cantidad ?? 0))}</td>
+          <td class="num">${escapePrintHtml(ant)}</td>
+          <td class="num strong">${escapePrintHtml(post)}</td>
+          <td class="num strong">${escapePrintHtml(Number(linea.saldo?.cantidadDisponible ?? 0))}</td>
+          <td class="num">${escapePrintHtml(moneyCo(Number(linea.saldo?.costoPromedioUnitario ?? linea.movimiento?.costoUnitario ?? 0)))}</td>
+          <td class="mono">${escapePrintHtml(doc?.tipo && doc?.numero ? `${doc.tipo} · ${doc.numero}` : '—')}</td>
+        </tr>
+      `;
+    }).join('');
 
-    const printWindow = window.open('', '_blank', 'width=900,height=700');
-    if (!printWindow) {
-      toast.error('El navegador bloqueo la ventana de impresion.');
-      return;
-    }
-    printWindow.document.open();
-    printWindow.document.write(html);
-    printWindow.document.close();
+    const kardexSection = reporteKardex.length
+      ? `
+        <h2 style="margin:18px 0 8px;font-size:14px;">Registro en kardex (inventarioMovimiento / inventarioSaldo)</h2>
+        <table>
+          <thead><tr><th>SKU</th><th>Bodega</th><th class="num">Cant. entrada</th><th class="num">Stock ant.</th><th class="num">Stock post.</th><th class="num">Saldo actual</th><th class="num">Costo prom.</th><th>Documento</th></tr></thead>
+          <tbody>${kardexRows}</tbody>
+        </table>
+      `
+      : '';
+
+    const bodyHtml = `
+      <main class="card">
+        <h1>Comprobante de entrada</h1>
+        <section class="grid">
+          <div><div class="label">Recepción</div><div class="value mono">${escapePrintHtml(dataUi.recepcion.numeroRecepcion)}</div></div>
+          <div><div class="label">Orden compra</div><div class="value mono">${escapePrintHtml(orden.numeroOrden)}</div></div>
+          <div><div class="label">Estado OC</div><div class="value">${escapePrintHtml(orden.estado)}</div></div>
+          <div><div class="label">Estado comprobante</div><div class="value">${escapePrintHtml(estadoComprobante)}</div></div>
+          <div><div class="label">Documento soporte</div><div>${escapePrintHtml(documentoTexto || 'Sin documento')}</div></div>
+          <div><div class="label">Comprobante contable</div><div class="mono">${escapePrintHtml(contableTexto || 'Pendiente al confirmar')}</div></div>
+          <div><div class="label">Creado</div><div>${escapePrintHtml(formatDateTimeCo(dataUi.recepcion.createdAt))}</div></div>
+          <div><div class="label">Proveedor</div><div>${escapePrintHtml(orden.proveedor?.nombre)}</div><div class="label">NIT ${escapePrintHtml(orden.proveedor?.nit)}</div></div>
+        </section>
+        <div class="total">Total: ${escapePrintHtml(moneyCo(total))}</div>
+        <table>
+          <thead><tr><th>SKU</th><th>Bodega</th><th class="num">Cant. recibida</th><th class="num">Costo unit.</th><th class="num">Subtotal</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+        ${kardexSection}
+      </main>
+    `;
+
+    const ok = openPrintDocument({
+      title: `${corporativo} - ${dataUi.recepcion.numeroRecepcion}`,
+      bodyHtml,
+      footer,
+      extraStyles: `
+        h1 { margin: 0 0 14px; font-size: 18px; }
+        .card { border: 1px solid #d1d5db; border-radius: 8px; padding: 16px; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 24px; margin-bottom: 14px; }
+        .label { color: #6b7280; font-size: 11px; margin-bottom: 3px; }
+        .value { font-weight: 700; }
+        .mono { font-family: Consolas, monospace; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { border-bottom: 1px solid #e5e7eb; padding: 8px 6px; text-align: left; }
+        th { font-size: 11px; color: #374151; }
+        .num { text-align: right; font-variant-numeric: tabular-nums; }
+        .strong { font-weight: 700; }
+        .total { text-align: right; margin: 12px 0 0; font-size: 13px; font-weight: 700; }
+      `,
+      onBlocked: () => toast.error('El navegador bloqueó la ventana de impresión.'),
+    });
+
+    if (!ok) toast.error('El navegador bloqueó la ventana de impresión.');
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[min(980px,calc(100vw-2rem))] max-w-none border-border bg-background text-foreground">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <FileText className="h-5 w-5 text-primary" />
-            Comprobante de entrada
-          </DialogTitle>
+        <DialogHeader className="space-y-1">
+          <div className="flex flex-wrap items-start justify-between gap-3 pr-8">
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5 text-primary" />
+              {kardexRegistrado ? 'Comprobante de entrada · Kardex registrado' : 'Comprobante de entrada'}
+            </DialogTitle>
+            {mostrarConfirmar ? (
+              <Button type="button" size="sm" onClick={() => void confirmarComprobante()} disabled={confirmando}>
+                {confirmando ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
+                {recepcionAutomatica ? 'Confirmar y kardex' : 'Confirmar comprobante'}
+              </Button>
+            ) : null}
+          </div>
+          <DialogDescription className="sr-only">
+            Detalle del comprobante de entrada físico vinculado a la orden de compra.
+          </DialogDescription>
         </DialogHeader>
 
-        {!data || !orden ? (
+        {!dataUi || !orden ? (
           <div className="rounded-md border border-border bg-muted/40 p-4 text-sm text-muted-foreground">
             No hay información de comprobante.
           </div>
@@ -171,7 +276,7 @@ export default function InventarioComprobanteEntradaModal({
             <div className="grid gap-3 rounded-md border border-border bg-muted/40 p-3 sm:grid-cols-2 lg:grid-cols-4">
               <div>
                 <p className="text-xs text-muted-foreground">Recepción</p>
-                <p className="font-mono text-sm font-semibold text-foreground">{data.recepcion.numeroRecepcion}</p>
+                <p className="font-mono text-sm font-semibold text-foreground">{dataUi.recepcion.numeroRecepcion}</p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Orden compra</p>
@@ -185,21 +290,42 @@ export default function InventarioComprobanteEntradaModal({
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Estado comprobante</p>
-                <Badge variant={pendienteConfirmacion ? 'secondary' : 'outline'} className="mt-1">
-                  {data.recepcion.estado || 'APROBADA'}
+                <Badge
+                  variant="outline"
+                  className={`mt-1 ${estadoComprobanteEntradaBadgeClass(dataUi.recepcion.estado || 'APROBADA')}`}
+                >
+                  {labelEstadoComprobanteEntrada(dataUi.recepcion.estado || 'APROBADA')}
                 </Badge>
               </div>
               <div className="sm:col-span-2">
-                <p className="text-xs text-muted-foreground">Documento soporte</p>
+                <p className="text-xs text-muted-foreground">Comprobante de entrada (documento soporte)</p>
                 <p className="text-sm text-foreground">
                   {documentoSoporte?.tipo?.trim() ? documentoSoporte.tipo : '—'} {documentoSoporte?.numero?.trim() ? `· ${documentoSoporte.numero}` : ''}
                 </p>
-                <p className="mt-1 text-xs text-muted-foreground">Creado: {formatDateTimeCo(data.recepcion.createdAt)}</p>
+                <p className="mt-1 text-xs text-muted-foreground">Creado: {formatDateTimeCo(dataUi.recepcion.createdAt)}</p>
+              </div>
+              <div className="sm:col-span-2">
+                <p className="text-xs text-muted-foreground">Comprobante contable (secuencia propia)</p>
+                <p className="font-mono text-sm font-semibold text-foreground">
+                  {comprobanteContable?.numero
+                    ? `${comprobanteContable.tipo || 'COMPROBANTE_ENTRADA'} · ${comprobanteContable.numero}`
+                    : pendienteConfirmacion ? 'Se asigna al confirmar' : '—'}
+                </p>
+                {comprobanteContable?.confirmadoEn ? (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Confirmado: {formatDateTimeCo(comprobanteContable.confirmadoEn)}
+                  </p>
+                ) : null}
+                {comprobanteContable?.usuario ? (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Ejecutado por: {textoUsuarioAuditoria({ usuario: comprobanteContable.usuario })}
+                  </p>
+                ) : null}
                 {pendienteConfirmacion ? (
                   <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
                     {recepcionAutomatica
-                      ? 'Al confirmar se aprueba el comprobante, se genera el comprobante contable y se registra la entrada en kardex.'
-                      : 'Al confirmar se aprueba el comprobante, la secuencia y el comprobante contable. El kardex físico se registra después en Movimientos (subproceso manual).'}
+                      ? 'Al confirmar se aprueba el comprobante de entrada, se genera el comprobante contable (COMPROBANTE_ENTRADA) y se registra el kardex.'
+                      : 'Al confirmar se aprueba el comprobante de entrada y se genera el comprobante contable (COMPROBANTE_ENTRADA). El kardex físico se registra después en Movimientos.'}
                   </p>
                 ) : null}
               </div>
@@ -213,7 +339,7 @@ export default function InventarioComprobanteEntradaModal({
 
             <div className="space-y-2">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-sm font-medium text-foreground">Detalle recibido</p>
+                <p className="text-sm font-medium text-foreground">Detalle recibido (comprobante físico)</p>
                 <p className="text-sm font-semibold text-foreground">
                   Total: <span className="tabular-nums">{moneyCo(total)}</span>
                 </p>
@@ -230,8 +356,8 @@ export default function InventarioComprobanteEntradaModal({
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {data.recepcion.items.map((it, idx) => {
-                      const subtotal = Math.max(0, Number(it.cantidadRecibida || 0) * Number(it.costoUnitario || 0));
+                    {dataUi.recepcion.items.map((it, idx) => {
+                      const subtotal = subtotalRecepcionItem(it, orden?.items);
                       return (
                         <TableRow key={`${it.sku}-${it.bodega}-${idx}`}>
                           <TableCell className="font-mono text-xs">{it.sku}</TableCell>
@@ -246,6 +372,14 @@ export default function InventarioComprobanteEntradaModal({
                 </Table>
               </div>
             </div>
+
+            {reporteKardex.length > 0 ? (
+              <InventarioReporteKardexEntrada lineas={reporteKardex} />
+            ) : kardexRegistrado && !pendienteConfirmacion ? (
+              <div className="rounded-md border border-dashed border-border bg-muted/30 p-4 text-sm text-muted-foreground">
+                Kardex confirmado. Recargue el comprobante para ver el detalle de inventarioMovimiento e inventarioSaldo.
+              </div>
+            ) : null}
           </div>
         )}
 
@@ -253,46 +387,11 @@ export default function InventarioComprobanteEntradaModal({
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={confirmando}>
             Cerrar
           </Button>
-          {pendienteConfirmacion && data?.recepcion?._id ? (
-            <Button
-              type="button"
-              disabled={confirmando}
-              onClick={async () => {
-                try {
-                  setConfirmando(true);
-                  const confirmed = await inventarioService.confirmarRecepcionOrdenCompra(data.recepcion._id, {
-                    estado: recepcionAutomatica,
-                  });
-                  onConfirmed?.(confirmed);
-                  toast.success(
-                    confirmed?.msg
-                    || (recepcionAutomatica
-                      ? 'Comprobante confirmado. Comprobante contable y kardex registrados.'
-                      : 'Comprobante contable registrado. Registre la entrada física en kardex desde Movimientos.'),
-                  );
-                } catch (error) {
-                  console.error('Error confirmando comprobante:', error);
-                  toast.error(
-                    mensajeErrorComprasInventario(error, 'No se pudo confirmar el comprobante de entrada.'),
-                    { autoClose: 10000 },
-                  );
-                } finally {
-                  setConfirmando(false);
-                }
-              }}
-            >
-              {confirmando
-                ? 'Confirmando...'
-                : recepcionAutomatica
-                  ? 'Confirmar y registrar en kardex'
-                  : 'Confirmar comprobante (sin kardex)'}
-            </Button>
-          ) : null}
           <Button
             type="button"
             variant="outline"
             onClick={imprimirComprobante}
-            disabled={!data || confirmando}
+            disabled={!dataUi || confirmando}
           >
             Imprimir / PDF
           </Button>

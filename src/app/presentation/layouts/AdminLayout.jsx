@@ -5,7 +5,7 @@ import AdminNavbar from '@/app/presentation/components/admin/AdminNavbar'
 import AdminSidebar from '@/app/presentation/components/admin/AdminSidebar'
 import { shouldShowAdminHerenciaSinPermisoAlert } from '@/app/services/routeService'
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert'
-import { AlertTriangle } from 'lucide-react'
+import { AlertTriangle, Loader2 } from 'lucide-react'
 
 export default function AdminLayout() {
     const { user } = useAuth()
@@ -53,7 +53,19 @@ export default function AdminLayout() {
                     </Alert>
                 )}
 
-                <Outlet />
+                {sinPermisoPorHerencia === null ? (
+                    <div className="flex min-h-[40vh] items-center justify-center text-muted-foreground">
+                        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                        Verificando permisos de la vista…
+                    </div>
+                ) : sinPermisoPorHerencia === true ? (
+                    <div className="rounded-lg border border-dashed border-border bg-muted/20 px-6 py-12 text-center text-sm text-muted-foreground">
+                        No puedes usar acciones de esta pantalla (editar colores, usuarios, parametrización, etc.)
+                        hasta que tu herencia incluya esta vista y las acciones correspondientes.
+                    </div>
+                ) : (
+                    <Outlet />
+                )}
 
             </main>
         </div>

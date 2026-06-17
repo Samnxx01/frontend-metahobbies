@@ -1,5 +1,7 @@
 /** Textos de ayuda por acción (reutilizable en cualquier módulo). */
 
+import { ENDPOINTS_BY_ID } from './gobernanzaEndpointCatalog';
+
 export type GobernanzaModuloFlowMeta = {
   title: string;
   summary: string;
@@ -67,7 +69,18 @@ const META: Record<string, GobernanzaModuloFlowMeta> = {
 };
 
 export function getGobernanzaModuloFlowMeta(endpointId: string): GobernanzaModuloFlowMeta | null {
-  return META[endpointId] ?? null;
+  const hardcoded = META[endpointId];
+  if (hardcoded) return hardcoded;
+
+  const spec = ENDPOINTS_BY_ID[endpointId];
+  if (!spec) return null;
+
+  return {
+    title: spec.title,
+    summary: spec.description || spec.title,
+    helpTitle: spec.title,
+    helpParagraphs: spec.description ? [spec.description] : [],
+  };
 }
 
 export function registerGobernanzaModuloFlowMeta(endpointId: string, meta: GobernanzaModuloFlowMeta): void {

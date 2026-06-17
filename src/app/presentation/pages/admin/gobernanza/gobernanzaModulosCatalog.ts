@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
-import { Building2, KeyRound, Shield } from 'lucide-react';
+import { Building2, KeyRound, Scale, Shield } from 'lucide-react';
 import type { EndpointSection } from './parametrosGobernanzaTypes';
 
 export const GOBERNANZA_ADMIN_BASE = '/admin/parametros-gobernanza';
@@ -36,6 +36,15 @@ export const GOBERNANZA_MODULOS_CATALOGO: GobernanzaModuloCatalogo[] = [
     frontPathSegment: 'permisos',
     icon: KeyRound,
     orden: 20,
+  },
+  {
+    slug: 'reglas',
+    section: 'reglas',
+    label: 'Gobernanza Reglas',
+    description: 'Reglas de jerarquía por tenant global.',
+    frontPathSegment: 'reglas',
+    icon: Scale,
+    orden: 25,
   },
   {
     slug: 'corporativo',

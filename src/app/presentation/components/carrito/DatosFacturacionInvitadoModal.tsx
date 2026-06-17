@@ -139,12 +139,15 @@ interface DatosFacturacionInvitadoModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onContinue: (datosFacturacion: DatosFacturacionInvitado) => Promise<void> | void;
+  /** Si false (default), no lee ni guarda tercero en sessionStorage. */
+  persistDraft?: boolean;
 }
 
 export default function DatosFacturacionInvitadoModal({
   open,
   onOpenChange,
   onContinue,
+  persistDraft = false,
 }: DatosFacturacionInvitadoModalProps): React.ReactElement {
   const [draft, setDraft] = useState<FacturacionDraft>(INITIAL_DRAFT);
   const [submitting, setSubmitting] = useState(false);
@@ -154,11 +157,18 @@ export default function DatosFacturacionInvitadoModal({
   const [formError, setFormError] = useState('');
   const [buscandoTercero, setBuscandoTercero] = useState(false);
   const [terceroEncontrado, setTerceroEncontrado] = useState(false);
+  const [bloqueadoPorPerfilCliente, setBloqueadoPorPerfilCliente] = useState(false);
 
   useEffect(() => {
     if (!open) return;
-    const saved = readDatosFacturacionInvitado();
-    if (saved) setDraft((current) => ({ ...current, ...saved }));
+    if (persistDraft) {
+      const saved = readDatosFacturacionInvitado();
+      if (saved) setDraft((current) => ({ ...current, ...saved }));
+    } else {
+      setDraft(INITIAL_DRAFT);
+      setTerceroEncontrado(false);
+      setBloqueadoPorPerfilCliente(false);
+    }
     setLoadingCatalogos(true);
     setCatalogosError('');
     apiFetchPublic('/api/carrito/catalogos/facturacion', { method: 'GET' })
@@ -174,7 +184,7 @@ export default function DatosFacturacionInvitadoModal({
       })
       .catch(() => setCatalogosError('No se pudieron cargar los catalogos parametrizados.'))
       .finally(() => setLoadingCatalogos(false));
-  }, [open]);
+  }, [open, persistDraft]);
 
   const tiposDocumentoDisponibles = useMemo(() => {
     const filtrados = catalogos.tiposDocumento.filter((tipo) =>
@@ -204,13 +214,15 @@ export default function DatosFacturacionInvitadoModal({
     const formatoValido = validacionDocumento.soloNumeros ? /^\d+$/.test(numero) : /^[a-zA-Z0-9]+$/.test(numero);
     if (!longitudValida || !formatoValido) {
       setTerceroEncontrado(false);
+      setBloqueadoPorPerfilCliente(false);
       return;
     }
 
     const timeoutId = window.setTimeout(() => {
       setBuscandoTercero(true);
       terceroService.buscarPorDocumento(numero)
-        .then((tercero) => {
+        .then(({ data: tercero, edicionIdentidadBloqueada }) => {
+          setBloqueadoPorPerfilCliente(edicionIdentidadBloqueada);
           if (!tercero) {
             setTerceroEncontrado(false);
             setDraft((current) => ({ ...current, terceroId: '' }));
@@ -220,11 +232,15 @@ export default function DatosFacturacionInvitadoModal({
           setDraft((current) => ({
             ...current,
             ...tercero,
-            terceroId: tercero.iud,
+            terceroId: tercero.terceroId || tercero.iud || '',
             numeroDocumento: numero,
+            tipoPersona: edicionIdentidadBloqueada ? 'NATURAL' : current.tipoPersona,
           }));
         })
-        .catch(() => setTerceroEncontrado(false))
+        .catch(() => {
+          setTerceroEncontrado(false);
+          setBloqueadoPorPerfilCliente(false);
+        })
         .finally(() => setBuscandoTercero(false));
     }, 450);
 
@@ -276,7 +292,9 @@ export default function DatosFacturacionInvitadoModal({
       ? { ...common, tipoPersona: 'NATURAL', nombreCompleto: draft.nombreCompleto.trim() }
       : { ...common, tipoPersona: 'JURIDICA', dv: draft.dv.trim(), razonSocial: draft.razonSocial.trim() };
 
-    sessionStorage.setItem(DATOS_FACTURACION_INVITADO_KEY, JSON.stringify(payload));
+    if (persistDraft) {
+      sessionStorage.setItem(DATOS_FACTURACION_INVITADO_KEY, JSON.stringify(payload));
+    }
     setSubmitting(true);
     try {
       await onContinue(payload);
@@ -300,6 +318,7 @@ export default function DatosFacturacionInvitadoModal({
             <Button
               type="button"
               variant={draft.tipoPersona === 'NATURAL' ? 'default' : 'outline'}
+              disabled={bloqueadoPorPerfilCliente}
               onClick={() => handleTipoPersona('NATURAL')}
             >
               <UserRound className="mr-2 h-4 w-4" />
@@ -308,6 +327,7 @@ export default function DatosFacturacionInvitadoModal({
             <Button
               type="button"
               variant={draft.tipoPersona === 'JURIDICA' ? 'default' : 'outline'}
+              disabled={bloqueadoPorPerfilCliente}
               onClick={() => handleTipoPersona('JURIDICA')}
             >
               <Building2 className="mr-2 h-4 w-4" />
@@ -318,7 +338,11 @@ export default function DatosFacturacionInvitadoModal({
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="factura-tipo-documento">Tipo de documento</Label>
-              <Select value={draft.tipoDocumento} onValueChange={(value) => setField('tipoDocumento', value)} disabled={loadingCatalogos}>
+              <Select
+                value={draft.tipoDocumento}
+                onValueChange={(value) => setField('tipoDocumento', value)}
+                disabled={loadingCatalogos || bloqueadoPorPerfilCliente}
+              >
                 <SelectTrigger id="factura-tipo-documento">
                   <SelectValue placeholder="Selecciona tipo" />
                 </SelectTrigger>
@@ -339,6 +363,7 @@ export default function DatosFacturacionInvitadoModal({
                 maxLength={validacionDocumento?.maxLength}
                 pattern={validacionDocumento?.soloNumeros ? '[0-9]+' : '[a-zA-Z0-9]+'}
                 value={draft.numeroDocumento}
+                readOnly={bloqueadoPorPerfilCliente}
                 onChange={(e) => {
                   const limpio = validacionDocumento?.soloNumeros
                     ? e.target.value.replace(/\D/g, '')
@@ -348,12 +373,26 @@ export default function DatosFacturacionInvitadoModal({
               />
               {validacionDocumento ? <p className="text-xs text-muted-foreground">{validacionDocumento.descripcion}</p> : null}
               {buscandoTercero ? <p className="text-xs text-muted-foreground">Consultando tercero...</p> : null}
-              {terceroEncontrado ? <p className="text-xs text-green-700">Tercero encontrado. Datos autocompletados.</p> : null}
+              {terceroEncontrado && !bloqueadoPorPerfilCliente ? (
+                <p className="text-xs text-emerald-800">Tercero encontrado. Datos autocompletados.</p>
+              ) : null}
+              {bloqueadoPorPerfilCliente ? (
+                <p className="text-xs font-medium text-primary">
+                  Este documento tiene perfil de cliente. Nombre, correo y teléfono se toman del perfil;
+                  aquí solo puedes actualizar dirección y ciudad para el pedido.
+                </p>
+              ) : null}
             </div>
             {draft.tipoPersona === 'NATURAL' ? (
               <div className="space-y-2 sm:col-span-2">
                 <Label htmlFor="factura-nombre-completo">Nombre completo</Label>
-                <Input id="factura-nombre-completo" required value={draft.nombreCompleto} onChange={(e) => setField('nombreCompleto', e.target.value)} />
+                <Input
+                  id="factura-nombre-completo"
+                  required
+                  readOnly={bloqueadoPorPerfilCliente}
+                  value={draft.nombreCompleto}
+                  onChange={(e) => setField('nombreCompleto', e.target.value)}
+                />
               </div>
             ) : (
               <>
@@ -369,11 +408,25 @@ export default function DatosFacturacionInvitadoModal({
             )}
             <div className="space-y-2">
               <Label htmlFor="factura-email">Correo electronico</Label>
-              <Input id="factura-email" required type="email" value={draft.email} onChange={(e) => setField('email', e.target.value)} />
+              <Input
+                id="factura-email"
+                required
+                type="email"
+                readOnly={bloqueadoPorPerfilCliente}
+                value={draft.email}
+                onChange={(e) => setField('email', e.target.value)}
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="factura-telefono">Telefono</Label>
-              <Input id="factura-telefono" required type="tel" value={draft.telefono} onChange={(e) => setField('telefono', e.target.value)} />
+              <Input
+                id="factura-telefono"
+                required
+                type="tel"
+                readOnly={bloqueadoPorPerfilCliente}
+                value={draft.telefono}
+                onChange={(e) => setField('telefono', e.target.value)}
+              />
             </div>
             <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="factura-direccion">Direccion</Label>

@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Check, Download, Loader2, ShoppingCart } from 'lucide-react';
 import { descargarComprobantePedidoPdfAlmacenado } from '@/app/utils/checkoutComprobantePdf';
+import CartItemColores from '@/app/presentation/components/carrito/CartItemColores';
 import type { CheckoutConfirmacionPedido } from '@/app/types/checkoutConfirmacion';
 
 interface Props {
@@ -102,16 +103,8 @@ export default function CheckoutConfirmacionDetalle({
             </dd>
           </div>
           <div className="flex flex-col sm:flex-row sm:justify-between gap-1">
-            <dt className="text-muted-foreground font-sans">Referencia de pago</dt>
-            <dd className="break-all">{pedido.referenciaPago || '—'}</dd>
-          </div>
-          <div className="flex flex-col sm:flex-row sm:justify-between gap-1">
-            <dt className="text-muted-foreground font-sans">ID factura</dt>
+            <dt className="text-muted-foreground font-sans">Consecutivo factura</dt>
             <dd className="font-semibold">{pedido.facturaId || '—'}</dd>
-          </div>
-          <div className="flex flex-col sm:flex-row sm:justify-between gap-1">
-            <dt className="text-muted-foreground font-sans">Referencia de venta</dt>
-            <dd>{pedido.ventaReferencia || '—'}</dd>
           </div>
           <div className="flex flex-col sm:flex-row sm:justify-between gap-1">
             <dt className="text-muted-foreground font-sans">Método</dt>
@@ -143,14 +136,30 @@ export default function CheckoutConfirmacionDetalle({
               key={`${item.id}-${item.color?.pantone || ''}`}
               className="flex gap-3 text-sm"
             >
-              <img
-                src={item.image}
-                alt={item.name}
-                className="w-12 h-12 rounded object-cover shrink-0"
-              />
+              {item.image ? (
+                <img
+                  src={item.image}
+                  alt={item.name}
+                  className="w-12 h-12 rounded object-cover shrink-0"
+                />
+              ) : (
+                <div
+                  className="w-12 h-12 rounded bg-muted shrink-0 flex items-center justify-center text-[10px] text-muted-foreground text-center px-0.5"
+                  aria-hidden
+                >
+                  Sin foto
+                </div>
+              )}
               <div className="flex-1 min-w-0">
                 <p className="font-medium truncate">{item.name}</p>
-                <p className="text-muted-foreground">Cantidad: {item.quantity}</p>
+                {item.color?.name ? (
+                  <p className="text-muted-foreground">
+                    Color: {item.color.name} · Cantidad: {item.quantity}
+                  </p>
+                ) : (
+                  <p className="text-muted-foreground">Cantidad: {item.quantity}</p>
+                )}
+                <CartItemColores item={item} className="mt-1" compact />
               </div>
               <p className="font-semibold shrink-0">
                 ${(item.price * item.quantity).toLocaleString('es-CO')}

@@ -25,6 +25,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 // Lucide icons
 import { Loader2, AlertTriangle } from 'lucide-react';
 import { apiFetch } from '@/app/services/api';
+import { fetchSplashLogo, resolveSplashLogoUrl } from '@/app/services/splashLogoService';
 import { obtenerBrandingPublico } from '@/app/services/brandingWidget';
 import { getAdminHomeRoute } from '@/app/services/routeService';
 import { getGovernedPostLoginPath, getGovernedRegisterPath, getGovernedForgotPasswordPath, isGovernedPathConfigured } from '@/app/services/governedNavigation';
@@ -85,18 +86,9 @@ export default function Login(): React.ReactElement {
     useEffect(() => {
         const fetchPublicLogo = async (): Promise<void> => {
             try {
-                const logoRes = await apiFetch('/api/config/parametrizacion/listar/logos/coporativo', {
-                    method: 'GET',
-                    useAuth: false,
-                    logoutOn401: false
-                });
-
-                if (logoRes?.ok && logoRes?.logo) {
-                    const { base64, mimetype } = logoRes.logo;
-                    if (base64 && mimetype) {
-                        setLogoUrl(`data:${mimetype};base64,${base64}`);
-                    }
-                }
+                const logoRes = await fetchSplashLogo(false);
+                const nextLogoUrl = resolveSplashLogoUrl(logoRes?.logo);
+                if (nextLogoUrl) setLogoUrl(nextLogoUrl);
             } catch (error) {
                 console.warn('No se pudo cargar el logo publico para login:', error);
                 setLogoUrl(null);

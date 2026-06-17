@@ -9,6 +9,7 @@ import { apiFetch } from '../../../services/api';
 import { getGovernedLoginPath } from '@/app/services/governedNavigation';
 import type { User, ClientProfile } from '../../../../types/common';
 import PerfilClienteForm from '../../components/perfil/PerfilClienteForm';
+import { mapPerfilClienteFromApi } from '@/app/utils/mapPerfilClienteFromApi';
 import CuentaBancariaForm from '../../components/perfil/CuentaBancariaForm';
 import BancosCatalogoAdmin from '../../components/perfil/BancosCatalogoAdmin';
 
@@ -85,7 +86,8 @@ export default function Perfil(): React.ReactElement {
     const [localUser, setLocalUser] = useState<User>(user || DEFAULT_USER_DATA);
     const [isEditingAddress, setIsEditingAddress] = useState<boolean>(false);
     const [activeNavItem, setActiveNavItem] = useState<string>('personal');
-    const [clientProfile, setClientProfile] = useState<ClientProfile | null>(null);
+    const [clientProfile, setClientProfile] = useState<ClientProfile | null | undefined>(undefined);
+    const [profileLoading, setProfileLoading] = useState(true);
 
     // Refs para inputs no controlados (solo dirección)
     const direccionRef = useRef<HTMLInputElement>(null);
@@ -190,27 +192,24 @@ export default function Perfil(): React.ReactElement {
 
     // --- CARGAR DATOS DEL PERFIL DEL CLIENTE ---
     const loadClientProfile = async () => {
+        setProfileLoading(true);
         try {
             const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api';
             const data = await apiFetch(`${API_BASE_URL}/perfil/seguridad/visualizando/usuario`, {
-                method: 'GET'
+                method: 'GET',
             });
 
-            if (data.ok && data.perfil) {
-                // Mapear los datos del backend al formato esperado por ClientProfile
-                const mappedProfile = {
-                    ...data.perfil,
-                    // Extraer IDs de los objetos anidados para los selects
-                    fecha_nacimiento: data.perfil.fecha_nacimiento,
-                    tipoDeIntendidad: data.perfil.tipoDeIntendidad?._id || data.perfil.tipoDeIntendidad,
-                    genero: data.perfil.genero?._id || data.perfil.genero,
-                    nacionalidad: data.perfil.nacionalidad?._id || data.perfil.nacionalidad,
-                    prefijo: data.perfil.prefijo?._id || data.perfil.prefijo,
-                };
-                setClientProfile(mappedProfile);
+            if (data?.ok && data.perfil) {
+                const mapped = mapPerfilClienteFromApi(data.perfil);
+                setClientProfile(mapped);
+            } else {
+                setClientProfile(null);
             }
         } catch (error) {
             console.error('Error al cargar perfil del cliente:', error);
+            setClientProfile(null);
+        } finally {
+            setProfileLoading(false);
         }
     };
 
@@ -386,9 +385,9 @@ export default function Perfil(): React.ReactElement {
                             </Button>
                         </div>
                         <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-1">{localUser.nombre}</h1>
-                        <p className="text-xs md:text-sm text-muted-foreground">
+                        <div className="text-xs md:text-sm text-muted-foreground">
                             Miembro desde {localUser.fechaCreacion ? new Date(localUser.fechaCreacion).toLocaleDateString('es-ES', { month: 'long', year: 'numeric' }) : 'N/A'} • Rol: <Badge variant="secondary" className="ml-1">{localUser.rol}</Badge>
-                        </p>
+                        </div>
                     </CardContent>
                 </Card>
 
@@ -482,7 +481,8 @@ export default function Perfil(): React.ReactElement {
                         {/* --- Tarjeta de Información Personal --- */}
                         {activeNavItem === 'personal' && (
                             <PerfilClienteForm
-                                profile={clientProfile}
+                                profile={clientProfile ?? null}
+                                profileLoading={profileLoading}
                                 onProfileUpdate={async (updatedProfile) => {
                                     setClientProfile(updatedProfile);
                                     // Recargar el perfil desde el servidor para obtener datos actualizados

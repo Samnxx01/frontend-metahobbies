@@ -30,6 +30,7 @@ import {
     fusionarColoresApp,
 } from '@/app/services/coloresAppService';
 import type { ColoresApp } from '@/app/services/coloresAppService';
+import { adminEntityId, adminEntityIdForPath, matchesAdminEntityRef, sameAdminEntityId } from '@/app/utils/adminEntityId';
 
 type PaletaColores = ColoresApp;
 
@@ -151,6 +152,19 @@ const DEFAULT_DASHBOARD_TEXT_CONFIG: DashboardTextConfig = {
     descripcion: 'Centraliza la gestion de usuarios y la parametrizacion multinivel del tenant activo.',
 };
 
+const normalizeTenantGlobalInfo = (tg: TenantGlobalInfo): TenantGlobalInfo => ({
+    ...tg,
+    iud: adminEntityId(tg),
+});
+
+const findTenantGlobalById = (
+    lista: TenantGlobalInfo[],
+    id: string | null | undefined,
+): TenantGlobalInfo | undefined => {
+    if (!id) return undefined;
+    return lista.find((tg) => matchesAdminEntityRef(tg, id));
+};
+
 const loadDashboardTextConfig = (): DashboardTextConfig => {
     if (typeof window === 'undefined') return DEFAULT_DASHBOARD_TEXT_CONFIG;
     try {
@@ -198,21 +212,23 @@ export default function Dashboard(): React.ReactElement {
     // ── Roles y scope ─────────────────────────────────────────────────────────
     const tenantScope = user?.auth?.tenantScope || {};
     const actorScope = {
-        tenantSuperAdminId: String(user?.tenantSuperAdminId || tenantScope?.tenantSuperAdminId || '').trim() || null,
-        tenantGlobalId: String(user?.tenantGlobalId || tenantScope?.tenantGlobalId || '').trim() || null,
+        tenantSuperAdminId: adminEntityId(user?.tenantSuperAdminId || tenantScope?.tenantSuperAdminId) || null,
+        tenantGlobalId: adminEntityId(user?.tenantGlobalId || tenantScope?.tenantGlobalId) || null,
     };
     const userRol = String(user?.rol || '').toUpperCase();
     const esRolGlobal = ['DIOS', 'DESAROLLADOR'].includes(userRol);
     const esSuperAdmin = (!!(actorScope.tenantSuperAdminId && !actorScope.tenantGlobalId)) || esRolGlobal;
     const mostrarSeccionMultinivel = !!(actorScope.tenantSuperAdminId || actorScope.tenantGlobalId) || esRolGlobal;
-    const activeTenantGlobalId = actorScope.tenantGlobalId ?? selectedTenantGlobalId;
-    const activeTenantLabel = actorScope.tenantGlobalId
-        ? (tenantsGlobales.find((t) => t.iud === actorScope.tenantGlobalId)?.razon_social
-            ?? tenantsGlobales.find((t) => t.iud === actorScope.tenantGlobalId)?.titulo
-            ?? 'Mi TenantGlobal')
-        : (tenantsGlobales.find((t) => t.iud === selectedTenantGlobalId)?.razon_social
-            ?? tenantsGlobales.find((t) => t.iud === selectedTenantGlobalId)?.titulo
-            ?? null);
+    const resolvedActorTenantGlobalId = useMemo(() => {
+        if (!actorScope.tenantGlobalId) return null;
+        const match = findTenantGlobalById(tenantsGlobales, actorScope.tenantGlobalId);
+        return match ? adminEntityId(match) : actorScope.tenantGlobalId;
+    }, [actorScope.tenantGlobalId, tenantsGlobales]);
+    const activeTenantGlobalId = resolvedActorTenantGlobalId ?? selectedTenantGlobalId;
+    const activeTenant = findTenantGlobalById(tenantsGlobales, activeTenantGlobalId);
+    const activeTenantLabel = resolvedActorTenantGlobalId
+        ? (activeTenant?.razon_social ?? activeTenant?.titulo ?? 'Mi TenantGlobal')
+        : (activeTenant?.razon_social ?? activeTenant?.titulo ?? null);
 
     const getUsuarioNombre = (u: DashboardUser): string => {
         const perfil = u?.perfil;
@@ -275,7 +291,8 @@ export default function Dashboard(): React.ReactElement {
                 const nodos: TenantGlobalNode[] = res?.tenantsGlobales ?? [];
                 const lista: TenantGlobalInfo[] = nodos
                     .map((tg) => tg.tenantGlobal)
-                    .filter((tg): tg is TenantGlobalInfo => tg !== null);
+                    .filter((tg): tg is TenantGlobalInfo => tg !== null)
+                    .map(normalizeTenantGlobalInfo);
                 setTenantsGlobales(lista);
             })
             .catch(() => undefined)
@@ -285,7 +302,7 @@ export default function Dashboard(): React.ReactElement {
     useEffect(() => {
         if (!activeTenantGlobalId) { setModoReferir('TODOS'); return; }
         setLoadingParametrizacion(true);
-        apiFetch(`/api/governance/parametrizacion/global/${activeTenantGlobalId}`, { method: 'GET' })
+        apiFetch(`/api/governance/parametrizacion/global/${adminEntityIdForPath(activeTenantGlobalId)}`, { method: 'GET' })
             .then((res) => setModoReferir(res?.parametrizacion?.modoReferir ?? 'TODOS'))
             .catch(() => setModoReferir('TODOS'))
             .finally(() => setLoadingParametrizacion(false));
@@ -297,7 +314,11 @@ export default function Dashboard(): React.ReactElement {
         try {
             const res = await apiFetch('/api/registro/listarRegistro', { method: 'GET' });
             const list = (res as any)?.data ?? (res as any)?.usuarios ?? (Array.isArray(res) ? res : []);
-            setUsuarios(Array.isArray(list) ? list : []);
+            const normalizados = (Array.isArray(list) ? list : []).map((u: DashboardUser) => {
+                const id = adminEntityId(u);
+                return id ? { ...u, iud: id } : u;
+            });
+            setUsuarios(normalizados);
         } catch { toast.error('Error cargando usuarios'); }
         finally { setUsuariosLoading(false); }
     };
@@ -321,7 +342,7 @@ export default function Dashboard(): React.ReactElement {
 
     const handleSaveUser = async (): Promise<void> => {
         if (!editingUser) return;
-        const id = String(editingUser?._id || editingUser?.iud || editingUser?.id || '');
+        const id = adminEntityId(editingUser);
         if (!id) { toast.error('Sin ID de usuario'); return; }
         const body: Record<string, string> = {};
         if (userEditForm.correo) body.correo = userEditForm.correo;
@@ -329,11 +350,10 @@ export default function Dashboard(): React.ReactElement {
         if (userEditForm.rol) body.rol = userEditForm.rol;
         setUserEditSaving(true);
         try {
-            await apiFetch(`/api/seguridad/pruebas/actualizar/registro/${id}`, { method: 'PUT', body: JSON.stringify(body) });
-            setUsuarios((prev) => prev.map((u) => {
-                const uid = String(u?._id || u?.iud || u?.id || '');
-                return uid === id ? { ...u, ...body } : u;
-            }));
+            await apiFetch(`/api/seguridad/pruebas/actualizar/registro/${adminEntityIdForPath(id)}`, { method: 'PUT', body: JSON.stringify(body) });
+            setUsuarios((prev) => prev.map((u) => (
+                sameAdminEntityId(u, id) ? { ...u, ...body, iud: adminEntityId(u) || id } : u
+            )));
             toast.success('Usuario actualizado');
             closeEditUser();
         } catch (error: any) { toast.error(String(error?.message || 'Error al actualizar')); }
@@ -345,7 +365,7 @@ export default function Dashboard(): React.ReactElement {
         if (!activeTenantGlobalId) return;
         setSavingModoReferir(true);
         try {
-            const res = await apiFetch(`/api/governance/parametrizacion/global/${activeTenantGlobalId}`, {
+            const res = await apiFetch(`/api/governance/parametrizacion/global/${adminEntityIdForPath(activeTenantGlobalId)}`, {
                 method: 'PUT',
                 body: { canCreateCorporativos: true, modoReferir: modo },
             });
@@ -492,7 +512,7 @@ export default function Dashboard(): React.ReactElement {
                             </TableHeader>
                             <TableBody>
                                 {filteredUsuarios.map((u, i) => {
-                                    const uid = String(u?._id || u?.iud || u?.id || i);
+                                    const uid = adminEntityId(u) || `usuario-${i}`;
                                     return (
                                         <TableRow key={uid}>
                                             <TableCell>
@@ -557,11 +577,14 @@ export default function Dashboard(): React.ReactElement {
                                             }
                                         </SelectTrigger>
                                         <SelectContent>
-                                            {tenantsGlobales.map((tg) => (
-                                                <SelectItem key={tg.iud} value={tg.iud}>
-                                                    {tg.razon_social ?? tg.titulo ?? tg.iud}
-                                                </SelectItem>
-                                            ))}
+                                            {tenantsGlobales.map((tg) => {
+                                                const tenantId = adminEntityId(tg);
+                                                return (
+                                                    <SelectItem key={tenantId} value={tenantId}>
+                                                        {tg.razon_social ?? tg.titulo ?? tenantId}
+                                                    </SelectItem>
+                                                );
+                                            })}
                                         </SelectContent>
                                     </Select>
                                 </div>

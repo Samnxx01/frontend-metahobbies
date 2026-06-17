@@ -9,6 +9,7 @@ import productosService, {
   getCategoriaId,
   getCategoryImage,
 } from '../../../services/productosService';
+import { esErrorProductoRequiereColor } from '@/app/utils/productColorUtils';
 
 import HeroBanner from '../../components/hero/HeroBanner';
 import CategoryCard from '../../components/common/CategoryCard';
@@ -100,8 +101,14 @@ export default function Home(): React.ReactElement {
     try {
       await addToCart(cartProduct, 1);
       toast.success(`${product.name} agregado al carrito`, { autoClose: 1500 });
-    } catch (err: any) {
-      toast.error(err.message || 'Error agregando al carrito');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Error agregando al carrito';
+      if (esErrorProductoRequiereColor(message)) {
+        toast.info(message, { autoClose: 3000 });
+        navigate(`/producto/${product.id}`);
+        return;
+      }
+      toast.error(message);
     }
   };
 

@@ -19,6 +19,7 @@ import {
 import { Loader2, UserPlus, RefreshCw } from 'lucide-react';
 import type { CreateUsuarioCorporativoData, TenantCorporativoInfo } from '@/app/services/tenantUsuariosService';
 import { RH_OPTIONS, TIPO_CONTRATO_OPTIONS, NIVELES_ESTUDIO } from './catalogos';
+import { normalizePublicIdForApi, resolveEntityPublicId } from '@/app/utils/entityPublicId';
 
 interface UsuarioCorporativoModalProps {
     open: boolean;
@@ -115,7 +116,7 @@ export const UsuarioCorporativoModal = ({
 
         // Pasar el tenantCorporativoId solo cuando no es CORPORATIVO (para el scope CORPORATIVO se resuelve por JWT)
         if (scope !== 'CORPORATIVO' && tenantCorporativo) {
-            payload.tenantCorporativoId = tenantCorporativo.iud;
+            payload.tenantCorporativoId = normalizePublicIdForApi(resolveEntityPublicId(tenantCorporativo));
         }
 
         try {

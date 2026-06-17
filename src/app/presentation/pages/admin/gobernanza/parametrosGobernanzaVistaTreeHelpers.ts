@@ -48,7 +48,7 @@ export const collectAllNodes = (nodes: any[] = []): any[] => {
 };
 
 export const getEntityId = (value: any): string =>
-  String(value?._id || value?.iud || value?.id || value || '').trim();
+  String(value?.iud || value?._id || value?.id || value || '').trim();
 
 export const getEntityLabel = (value: any): string =>
   String(

@@ -16,7 +16,7 @@ export type ToolbarActionDefinition = {
 export const TOOLBAR_ACTION_DEFINITIONS = {
   REFRESCAR: {
     id: 'REFRESCAR',
-    label: 'Refrescar',
+    label: 'Sincronizar counter',
     icon: RefreshCw,
     variant: 'outline',
     size: 'icon',

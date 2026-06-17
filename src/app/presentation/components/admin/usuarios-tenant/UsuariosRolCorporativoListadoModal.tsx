@@ -29,6 +29,7 @@ import type {
     ListadoUsuariosRolCorporativoResponse,
     UsuarioRolCorporativoItem,
 } from '@/app/presentation/components/admin/usuarios-tenant/usuariosRolCorporativoTypes';
+import { normalizePublicIdForApi, resolveEntityPublicId } from '@/app/utils/entityPublicId';
 
 interface UsuariosRolCorporativoListadoModalProps {
     open: boolean;
@@ -93,18 +94,18 @@ export const UsuariosRolCorporativoListadoModal = ({
     );
 
     const usuarioSeleccionado = useMemo(
-        () => filtrados.find((u) => String(u.iud) === usuarioSeleccionadoId) ?? null,
+        () => filtrados.find((u) => resolveEntityPublicId(u) === usuarioSeleccionadoId) ?? null,
         [filtrados, usuarioSeleccionadoId]
     );
 
     useEffect(() => {
         if (!open || filtrados.length !== 1) return;
-        const unico = String(filtrados[0].iud);
+        const unico = resolveEntityPublicId(filtrados[0]);
         setUsuarioSeleccionadoId((prev) => prev ?? unico);
     }, [open, filtrados]);
 
     const eliminarSeleccionado = async () => {
-        const id = usuarioSeleccionadoId;
+        const id = normalizePublicIdForApi(usuarioSeleccionadoId);
         if (!id) return;
         setEliminando(true);
         try {
@@ -121,9 +122,10 @@ export const UsuariosRolCorporativoListadoModal = ({
     };
 
     const sincronizarUsuario = async (usuarioId: string) => {
-        setSyncingUsuarioId(usuarioId);
+        const normId = normalizePublicIdForApi(usuarioId);
+        setSyncingUsuarioId(normId);
         try {
-            const res = await sincronizarUsuarioAfiliadoAdmin(usuarioId);
+            const res = await sincronizarUsuarioAfiliadoAdmin(normId);
             const hc = res?.herenciaCliente;
             toast.success(
                 res?.msg ||
@@ -132,7 +134,7 @@ export const UsuariosRolCorporativoListadoModal = ({
                         : 'Permisos aplicados al usuario')
             );
             await cargar();
-            if (hc) setUsuarioDetalleId(usuarioId);
+            if (hc) setUsuarioDetalleId(normId);
         } catch (err: unknown) {
             toast.error(err instanceof Error ? err.message : 'No se pudo sincronizar el usuario');
         } finally {
@@ -238,7 +240,7 @@ export const UsuariosRolCorporativoListadoModal = ({
                     ) : (
                         <div className="divide-y divide-border overflow-hidden rounded-lg border border-border">
                             {filtrados.map((u) => {
-                                const uid = String(u.iud);
+                                const uid = resolveEntityPublicId(u);
                                 const syncing = syncingUsuarioId === uid;
                                 const expandido = usuarioDetalleId === uid;
                                 const seleccionado = usuarioSeleccionadoId === uid;

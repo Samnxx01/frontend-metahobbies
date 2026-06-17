@@ -1,10 +1,12 @@
-import React from 'react';
-import { ClipboardList, Package, Search } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { ClipboardList, History, Package, Search } from 'lucide-react';
 import type {
   InventarioMovimiento,
   InventarioSaldo,
   StockActualItem,
 } from '@/app/services/inventarioService';
+import { buildHistoricoValor } from '@/app/presentation/pages/admin/inventario/inventarioHistoricoValorUtils';
+import InventarioHistoricoValorModal from '@/app/presentation/pages/admin/components/InventarioHistoricoValorModal';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -24,7 +26,8 @@ type InventarioStockTabProps = {
   renderSkuStockSelect: () => React.ReactElement;
   consultarStock: () => Promise<void>;
   etiquetaVista?: string;
-  formatDate: (value?: string) => string;
+  formatDate: (value?: string | Date | null) => string;
+  fechaMovimiento?: (mov: InventarioMovimiento) => string | Date | undefined;
   getTipoMovimientoLabel: (mov: InventarioMovimiento) => string;
 };
 
@@ -37,9 +40,23 @@ export default function InventarioStockTab({
   renderSkuStockSelect,
   consultarStock,
   formatDate,
+  fechaMovimiento,
   getTipoMovimientoLabel,
   etiquetaVista = 'Todas las bodegas',
 }: InventarioStockTabProps): React.ReactElement {
+  const [historicoModalOpen, setHistoricoModalOpen] = useState(false);
+  const skuConsultado = stockFiltro.sku.trim().toUpperCase();
+
+  const historicoValor = useMemo(
+    () => buildHistoricoValor(stockActual, kardex, skuConsultado),
+    [stockActual, kardex, skuConsultado],
+  );
+
+  const abrirHistoricoValor = (): void => {
+    if (!skuConsultado) return;
+    setHistoricoModalOpen(true);
+  };
+
   return (
     <div className="space-y-4">
       <div className="grid gap-4 lg:grid-cols-[360px_1fr]">
@@ -59,6 +76,16 @@ export default function InventarioStockTab({
               <Search className="mr-2 h-4 w-4" />
               Consultar
             </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full"
+              disabled={!skuConsultado}
+              onClick={abrirHistoricoValor}
+            >
+              <History className="mr-2 h-4 w-4" />
+              Historico de valor
+            </Button>
             {stockConsulta ? (
               <div className="rounded-lg border p-4">
                 <p className="text-sm text-muted-foreground">Disponible</p>
@@ -71,11 +98,24 @@ export default function InventarioStockTab({
         </Card>
 
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2"><Package className="h-5 w-5" /> Stock actual</CardTitle>
-            <CardDescription>
-              Saldos en <span className="font-medium text-foreground">{etiquetaVista}</span>.
-            </CardDescription>
+          <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
+            <div>
+              <CardTitle className="flex items-center gap-2"><Package className="h-5 w-5" /> Stock actual</CardTitle>
+              <CardDescription>
+                Saldos en <span className="font-medium text-foreground">{etiquetaVista}</span>.
+                Valor inicial = primer registro kardex; valor actual = saldo vigente.
+              </CardDescription>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!skuConsultado}
+              onClick={abrirHistoricoValor}
+            >
+              <History className="mr-2 h-4 w-4" />
+              Historico
+            </Button>
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
@@ -86,7 +126,8 @@ export default function InventarioStockTab({
                     <TableHead>Bodega</TableHead>
                     <TableHead className="text-right">Disponible</TableHead>
                     <TableHead className="text-right">Costo prom.</TableHead>
-                    <TableHead className="text-right">Valor</TableHead>
+                    <TableHead className="text-right">Valor inicial</TableHead>
+                    <TableHead className="text-right">Valor actual</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -97,13 +138,24 @@ export default function InventarioStockTab({
                       <TableCell className="text-right">{Number(item.cantidadDisponible || 0).toLocaleString('es-CO')}</TableCell>
                       <TableCell className="text-right">{money.format(Number(item.costoPromedioUnitario || 0))}</TableCell>
                       <TableCell className="text-right">
-                        {money.format(Number(item.valorTotal ?? Number(item.cantidadDisponible || 0) * Number(item.costoPromedioUnitario || 0)))}
+                        {money.format(
+                          item.valorInicial != null
+                            ? Number(item.valorInicial)
+                            : Number(item.valorTotal ?? Number(item.cantidadDisponible || 0) * Number(item.costoPromedioUnitario || 0)),
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {money.format(
+                          item.valorActual != null
+                            ? Number(item.valorActual)
+                            : Number(item.valorTotal ?? Number(item.cantidadDisponible || 0) * Number(item.costoPromedioUnitario || 0)),
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}
                   {stockActual.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">No hay saldos disponibles.</TableCell>
+                      <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">No hay saldos disponibles.</TableCell>
                     </TableRow>
                   ) : null}
                 </TableBody>
@@ -114,12 +166,24 @@ export default function InventarioStockTab({
       </div>
 
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2"><ClipboardList className="h-5 w-5" /> Kardex consultado</CardTitle>
-          <CardDescription>
-            Movimientos en <span className="font-medium text-foreground">{etiquetaVista}</span>
-            {stockFiltro.sku.trim() ? ` · SKU ${stockFiltro.sku.trim()}` : ''}.
-          </CardDescription>
+        <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
+          <div>
+            <CardTitle className="flex items-center gap-2"><ClipboardList className="h-5 w-5" /> Kardex consultado</CardTitle>
+            <CardDescription>
+              Movimientos en <span className="font-medium text-foreground">{etiquetaVista}</span>
+              {stockFiltro.sku.trim() ? ` · SKU ${stockFiltro.sku.trim()}` : ''}.
+            </CardDescription>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={!skuConsultado}
+            onClick={abrirHistoricoValor}
+          >
+            <History className="mr-2 h-4 w-4" />
+            Historico de valor
+          </Button>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
@@ -132,24 +196,40 @@ export default function InventarioStockTab({
                   <TableHead>Documento</TableHead>
                   <TableHead className="text-right">Cantidad</TableHead>
                   <TableHead className="text-right">Costo</TableHead>
+                  <TableHead className="text-right">Valor inicial</TableHead>
+                  <TableHead className="text-right">Valor actual</TableHead>
                   <TableHead>Hash</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {kardex.map((mov) => (
                   <TableRow key={mov._id}>
-                    <TableCell>{formatDate(mov.createdAt)}</TableCell>
-                    <TableCell><Badge variant={mov.tipoMovimiento === 'SALIDA' ? 'secondary' : 'default'}>{getTipoMovimientoLabel(mov)}</Badge></TableCell>
+                    <TableCell>{formatDate(fechaMovimiento ? fechaMovimiento(mov) : mov.createdAt)}</TableCell>
+                    <TableCell>
+                      <Badge variant={mov.tipoMovimiento === 'SALIDA' ? 'salida' : 'entrada'}>
+                        {getTipoMovimientoLabel(mov)}
+                      </Badge>
+                    </TableCell>
                     <TableCell>{mov.sku}</TableCell>
                     <TableCell>{mov.documentoRelacionado?.tipo} {mov.documentoRelacionado?.numero}</TableCell>
                     <TableCell className="text-right">{Number(mov.cantidad || 0).toLocaleString('es-CO')}</TableCell>
                     <TableCell className="text-right">{money.format(Number(mov.costoTotal || 0))}</TableCell>
+                    <TableCell className="text-right">
+                      {mov.saldoBodega?.valorInicial != null
+                        ? money.format(Number(mov.saldoBodega.valorInicial))
+                        : '—'}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {mov.saldoBodega?.valorActual != null
+                        ? money.format(Number(mov.saldoBodega.valorActual))
+                        : '—'}
+                    </TableCell>
                     <TableCell className="max-w-[140px] truncate font-mono text-xs">{mov.hashIntegridad}</TableCell>
                   </TableRow>
                 ))}
                 {kardex.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">Pulsa Consultar para ver movimientos del kardex.</TableCell>
+                    <TableCell colSpan={9} className="py-8 text-center text-muted-foreground">Pulsa Consultar para ver movimientos del kardex.</TableCell>
                   </TableRow>
                 ) : null}
               </TableBody>
@@ -157,6 +237,15 @@ export default function InventarioStockTab({
           </div>
         </CardContent>
       </Card>
+
+      <InventarioHistoricoValorModal
+        open={historicoModalOpen}
+        sku={skuConsultado}
+        rows={historicoValor}
+        money={money}
+        formatDate={formatDate}
+        onOpenChange={setHistoricoModalOpen}
+      />
     </div>
   );
 }

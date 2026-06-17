@@ -1,9 +1,9 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Facebook, Instagram, Twitter, Mail, Phone, Clock, Loader2 } from 'lucide-react';
 import { apiFetch } from '@/app/services/api';
 import { useAuth } from '@/app/providers/AuthProvider';
-import { getPublicNavigationRoutes } from '@/app/services/routeService';
+import { getNavbarNavigationRoutes } from '@/app/services/routeService';
 import { appendPublicAttributionToInternalPath } from '@/app/services/publicAttributionParams';
 import type { FooterProps } from '@/types/components';
 
@@ -44,7 +44,7 @@ export default function Footer({ variant = 'default' }: FooterProps = {}): React
                         method: 'GET',
                         useAuth: false,
                     }),
-                    getPublicNavigationRoutes(false)
+                    getNavbarNavigationRoutes(false)
                 ]);
 
                 if (!active) return;
@@ -89,7 +89,7 @@ export default function Footer({ variant = 'default' }: FooterProps = {}): React
                         useAuth: true,
                         logoutOn401: false,
                     }),
-                    getPublicNavigationRoutes(false)
+                    getNavbarNavigationRoutes(true)
                 ]);
 
                 if (!active) return;

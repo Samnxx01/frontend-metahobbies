@@ -13,9 +13,11 @@ import { Badge } from '@/components/ui/badge';
 import { Loader2, Globe, Plus, RefreshCw, Trash2, AlertTriangle } from 'lucide-react';
 import { apiFetch } from '@/app/services/api';
 import { toast } from 'react-toastify';
+import { encodePublicIdForPath, resolveEntityPublicId } from '@/app/utils/entityPublicId';
 
 interface RolGlobal {
-    iud: string;
+    iud?: string;
+    _id?: string;
     nombreRol: string;
     estado: boolean;
 }
@@ -163,7 +165,7 @@ export const RolesGlobalesModal = ({
         if (!rolParaEliminar) return;
         setProcesando(true);
         try {
-            await apiFetch(`/api/seguridad/roles/admin/${rolParaEliminar.iud}`, { method: 'DELETE' });
+            await apiFetch(`/api/seguridad/roles/admin/${encodePublicIdForPath(rolParaEliminar)}`, { method: 'DELETE' });
             toast.success(`Rol "${rolParaEliminar.nombreRol}" desactivado`);
             setRolParaEliminar(null);
             await cargarRoles();
@@ -178,7 +180,7 @@ export const RolesGlobalesModal = ({
         if (!rolParaEliminar) return;
         setProcesando(true);
         try {
-            await apiFetch(`/api/seguridad/roles/admin/eliminar/${rolParaEliminar.iud}`, { method: 'DELETE' });
+            await apiFetch(`/api/seguridad/roles/admin/eliminar/${encodePublicIdForPath(rolParaEliminar)}`, { method: 'DELETE' });
             toast.success(`Rol "${rolParaEliminar.nombreRol}" eliminado definitivamente`);
             setRolParaEliminar(null);
             await cargarRoles();
@@ -249,7 +251,7 @@ export const RolesGlobalesModal = ({
                                         .filter(r => scope !== 'TENANT_GLOBAL' || r.nombreRol !== 'DIOS')
                                         .map(r => (
                                         <div
-                                            key={r.iud}
+                                            key={resolveEntityPublicId(r)}
                                             className="flex items-center justify-between rounded-md border px-3 py-2 text-sm"
                                         >
                                             <span className="font-mono font-medium">{r.nombreRol}</span>

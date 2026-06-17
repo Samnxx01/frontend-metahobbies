@@ -11,6 +11,7 @@ import type {
   SincronizarMarcoResponse,
 } from '../types/marco.types';
 import { mapRolCorporativoAMarco } from '../utils/marcoRolKeys';
+import { encodePublicIdForPath, normalizePublicIdForApi } from '@/app/utils/entityPublicId';
 
 const CORPORATIVO_ROLES_PATH = `${AFILIADO_PERMISOS_PATHS.configBase}/permisos/corporativo/listar/roles/tenant/corporativo`;
 
@@ -65,7 +66,7 @@ export const getMarcoAfiliadoActivo = async (
   rolCorporativoId?: string | null,
   bootstrap = true
 ): Promise<MarcoActivoResponse> =>
-  apiFetch(AFILIADO_PERMISOS_PATHS.marcoActivo(bootstrap, rolCorporativoId), {
+  apiFetch(AFILIADO_PERMISOS_PATHS.marcoActivo(bootstrap, normalizePublicIdForApi(rolCorporativoId) || null), {
     method: 'GET',
     useAuth: true,
   });
@@ -91,12 +92,21 @@ export const getCatalogoMarcoAfiliado = async (): Promise<CatalogoMarcoAfiliadoR
 
 export const guardarMarcoAfiliado = async (
   payload: GuardarMarcoPayload
-): Promise<GuardarMarcoResponse> =>
-  apiFetch(AFILIADO_PERMISOS_PATHS.marcoGuardar, {
+): Promise<GuardarMarcoResponse> => {
+  const body: GuardarMarcoPayload = {
+    ...payload,
+    vistas: (payload.vistas ?? []).map((id) => normalizePublicIdForApi(id)),
+    acciones: (payload.acciones ?? []).map((id) => normalizePublicIdForApi(id)),
+  };
+  if (payload.rolCorporativoId) {
+    body.rolCorporativoId = normalizePublicIdForApi(payload.rolCorporativoId);
+  }
+  return apiFetch(AFILIADO_PERMISOS_PATHS.marcoGuardar, {
     method: 'POST',
-    body: payload,
+    body,
     useAuth: true,
   });
+};
 
 export const sincronizarPermisosAfiliado = async (): Promise<SincronizarMarcoResponse> =>
   apiFetch(AFILIADO_PERMISOS_PATHS.sync, {
@@ -107,20 +117,22 @@ export const sincronizarPermisosAfiliado = async (): Promise<SincronizarMarcoRes
 export const sincronizarLoteAfiliadosAdmin = async (
   limit = 100,
   rolCorporativoId?: string | null
-): Promise<SincronizarMarcoResponse> =>
-  apiFetch(AFILIADO_PERMISOS_PATHS.syncLote, {
+): Promise<SincronizarMarcoResponse> => {
+  const rolId = normalizePublicIdForApi(rolCorporativoId);
+  return apiFetch(AFILIADO_PERMISOS_PATHS.syncLote, {
     method: 'POST',
     body: {
       limit,
-      ...(rolCorporativoId ? { rolCorporativoId } : {}),
+      ...(rolId ? { rolCorporativoId: rolId } : {}),
     },
     useAuth: true,
   });
+};
 
 export const sincronizarUsuarioAfiliadoAdmin = async (
   usuarioId: string
 ): Promise<SincronizarMarcoResponse & { ok?: boolean; motivo?: string; herenciaCliente?: HerenciaClienteRelacion }> =>
-  apiFetch(AFILIADO_PERMISOS_PATHS.syncUsuario(usuarioId), {
+  apiFetch(AFILIADO_PERMISOS_PATHS.syncUsuario(encodePublicIdForPath(usuarioId)), {
     method: 'POST',
     useAuth: true,
   });
@@ -128,7 +140,7 @@ export const sincronizarUsuarioAfiliadoAdmin = async (
 export const getHerenciaCliente = async (
   usuarioId: string
 ): Promise<{ herenciaCliente: HerenciaClienteRelacion }> =>
-  apiFetch(AFILIADO_PERMISOS_PATHS.herenciaCliente(usuarioId), {
+  apiFetch(AFILIADO_PERMISOS_PATHS.herenciaCliente(encodePublicIdForPath(usuarioId)), {
     method: 'GET',
     useAuth: true,
   });

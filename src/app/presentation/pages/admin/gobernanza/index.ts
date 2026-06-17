@@ -1,3 +1,5 @@
+export { GobernanzaModuloParametrizarButton } from './GobernanzaModuloParametrizarButton';
+export type { GobernanzaModuloParametrizarButtonProps } from './GobernanzaModuloParametrizarButton';
 export { GobernanzaModuloDinamico } from './GobernanzaModuloDinamico';
 export type { GobernanzaModuloDinamicoProps, GobernanzaModuloDinamicoVariant } from './GobernanzaModuloDinamico';
 export { GobernanzaModuloConfigView } from './GobernanzaModuloConfigView';
@@ -9,9 +11,12 @@ export {
   registerGobernanzaModulo,
   listGobernanzaModulos,
   GOBERNANZA_MODULO_TENANT,
+  GOBERNANZA_MODULO_PERMISOS,
   GOBERNANZA_MODULO_ACTION_QUERY_DEFAULT,
   moduloEndpointIdSet,
+  gobernanzaModuloOperativoStub,
 } from './gobernanzaModuloConfig';
+export { GobernanzaFormularioPorRuta } from './GobernanzaFormularioPorRuta';
 export type { GobernanzaModuloConfig } from './gobernanzaModuloConfig';
 export { GobernanzaModuloActionsSubmenu } from './GobernanzaModuloActionsSubmenu';
 export { GobernanzaModuloMenuTabs } from './GobernanzaModuloMenuTabs';
@@ -40,11 +45,16 @@ export {
   TenantEliminarGlobalDesignForm,
 } from './card-design-forms';
 export type { GobernanzaEndpointDesignFormProps } from './card-design-forms';
+export { GobernanzaPermisosFormByEndpoint } from './permisos-forms';
+export type { GobernanzaPermisosFormProps } from './permisos-forms';
+export { gobernanzaEntityId, gobernanzaEntityIdForPath } from './gobernanzaEntityId';
 export { ParametrosGobernanzaEndpointDesignMenu } from './ParametrosGobernanzaEndpointDesignMenu';
 export type { ParametrosGobernanzaEndpointDesignMenuProps } from './ParametrosGobernanzaEndpointDesignMenu';
 export type { GobernanzaCardDesign } from './gobernanzaCardDesignTypes';
 export {
   fetchGobernanzaTenantMenu,
+  fetchGobernanzaModuloOperativo,
+  fetchGobernanzaModuloConfigs,
   fetchGobernanzaModuloMenu,
   fetchGobernanzaModulosCatalogo,
   fetchGobernanzaModuloRutasOpciones,
@@ -89,7 +99,14 @@ export {
   gobernanzaModulosParaGridConfig,
   getGobernanzaModuloCatalogoLocal,
 } from './gobernanzaModulosCatalog';
-export { ENDPOINTS_BY_ID, accionApiToEndpointSpec } from './gobernanzaEndpointCatalog';
+export {
+  ENDPOINTS_BY_ID,
+  accionApiToEndpointSpec,
+  accionesPayloadDesdeEndpointIds,
+  catalogoAccionesPorModuloSlug,
+  endpointsPorSection,
+  esAccionIdCatalogoValido,
+} from './gobernanzaEndpointCatalog';
 export { default as ConfigGobernanza } from '../components/ConfigGobernanza';
 export {
   computeGobernanzaEndpointCapabilities,
@@ -104,4 +121,14 @@ export {
   expandTenantGlobalDescendants,
   filtrarTenantGlobalesPorJerarquiaSuperAdmin,
 } from './tenantGlobalJerarquiaHelpers';
+export {
+  filtrarIndiceSaSubarbol,
+  filtrarSaJerarquiaMetaPorSubarbol,
+} from './saJerarquiaCounterFilter';
+export {
+  formatSaJerarquiaOptionLabel,
+  SaJerarquiaUsuariosPanel,
+} from './SaJerarquiaUsuariosPanel';
+export type { SaJerarquiaMetaPanel, SaJerarquiaUsuarioRegistrado } from './SaJerarquiaUsuariosPanel';
+export type { SaJerarquiaCounterIndice } from './saJerarquiaCounterFilter';
 export type { TenantGlobalJerarquiaRow } from './tenantGlobalJerarquiaHelpers';

@@ -1,63 +1,58 @@
 import React from 'react';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Loader2 } from 'lucide-react';
+import { TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
-import type { EndpointSpec } from './parametrosGobernanzaTypes';
-import type { GobernanzaEndpointCapabilities } from './gobernanzaEndpointCapabilities';
+import type { GobernanzaMenuTabItem } from './gobernanzaModuloMenuUi';
 
 export type GobernanzaModuloMenuTabsProps = {
-  endpoints: EndpointSpec[];
+  tabs: GobernanzaMenuTabItem[];
   activeActionId: string;
   onActionChange: (actionId: string) => void;
-  getCapabilities?: (endpoint: EndpointSpec) => GobernanzaEndpointCapabilities;
-  actionShortLabels?: Record<string, string>;
-  menuDisponibleById?: Record<string, boolean>;
   loading?: boolean;
+  className?: string;
 };
 
 /**
- * Menú de acciones estilo Inventario (TabsList), sin rutas API ni tarjetas HTTP.
+ * Barra de pestañas — misma API y estilos que InventarioMenuTabs.
  */
 export function GobernanzaModuloMenuTabs({
-  endpoints,
+  tabs,
   activeActionId,
   onActionChange,
-  getCapabilities,
-  actionShortLabels,
-  menuDisponibleById,
   loading,
+  className,
 }: GobernanzaModuloMenuTabsProps): React.ReactElement | null {
   if (loading) {
     return (
-      <p className="text-sm text-muted-foreground">Cargando módulos disponibles…</p>
+      <div
+        className={cn(
+          'flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-6 text-sm text-muted-foreground',
+          className
+        )}
+        role="status"
+      >
+        <Loader2 className="h-4 w-4 animate-spin" />
+        Cargando menú parametrizado…
+      </div>
     );
   }
 
-  if (endpoints.length === 0) return null;
+  if (!tabs.length) return null;
 
   return (
-    <Tabs value={activeActionId} onValueChange={onActionChange} className="w-full">
-      <TabsList className="h-auto w-full flex-wrap justify-start gap-1 bg-muted/40 p-1">
-        {endpoints.map((endpoint) => {
-          const caps = getCapabilities?.(endpoint);
-          const menuOk = menuDisponibleById?.[endpoint.id] ?? true;
-          const scopeOk = (caps ? caps.scopeDisponible : true) && menuOk;
-          const label = actionShortLabels?.[endpoint.id] ?? endpoint.title;
-
-          return (
-            <TabsTrigger
-              key={endpoint.id}
-              value={endpoint.id}
-              disabled={!scopeOk}
-              className={cn(
-                'text-xs sm:text-sm',
-                !scopeOk && 'opacity-50'
-              )}
-            >
-              {label}
-            </TabsTrigger>
-          );
-        })}
-      </TabsList>
-    </Tabs>
+    <TabsList className={cn('justify-start', className)}>
+      {tabs.map((tab) => (
+        <TabsTrigger
+          key={tab.value}
+          value={tab.value}
+          disabled={tab.disabled}
+          aria-current={activeActionId === tab.value ? 'page' : undefined}
+          title={tab.disabled ? 'No disponible con tu sesión actual' : tab.label}
+          onClick={() => onActionChange(tab.value)}
+        >
+          {tab.label}
+        </TabsTrigger>
+      ))}
+    </TabsList>
   );
 }

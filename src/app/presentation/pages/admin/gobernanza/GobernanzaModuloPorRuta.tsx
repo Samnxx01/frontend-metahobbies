@@ -46,6 +46,8 @@ export function GobernanzaModuloPorRuta({
       initialSection={section}
       lockedSection={section}
       inlineModuloSlug={slug}
+      shellVariant="compact"
+      enableCardDesignEditor={false}
     />
   );
 }
