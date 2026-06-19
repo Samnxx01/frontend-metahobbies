@@ -1,6 +1,7 @@
 import { apiFetch, apiFetchPublic, getHybridSpaFrontendPath, resolveSeguridadRutasFetchOptions } from './api';
 import { fetchAllSecurityRoutes } from './routeService';
 import { normalizeMongoId, normalizeMongoIdList, normalizeMongoIdOrNull } from '../utils/normalizeMongoId';
+import { resolveEntityPublicId } from '../utils/entityPublicId';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api';
 
@@ -390,7 +391,7 @@ const normalizeAccionesRows = (payload: any): AccionOption[] => {
 
   return source
     .map((row: any) => {
-      const id = String(row?._id || row?.iud || row?.id || '').trim();
+      const id = resolveEntityPublicId(row) || String(row?._id || row?.iud || row?.id || '').trim();
       return {
         _id: id,
         iud: id || undefined,
@@ -477,7 +478,8 @@ export const previewRoute = async (id: string): Promise<PreviewRouteResponse> =>
 
 /** Detalle completo de una ruta (tipos de nodo, accessType y acciones poblados). */
 export const getRouteById = async (id: string): Promise<RouteResponse> => {
-  const routeId = encodeURIComponent(String(id || '').trim());
+  const normalizedId = normalizeMongoIdOrNull(id) ?? String(id || '').trim();
+  const routeId = encodeURIComponent(normalizedId);
   const response = await apiFetch(`${API_BASE_URL}/seguridad/rutas/listar/especifico/${routeId}`, {
     method: 'GET',
   });

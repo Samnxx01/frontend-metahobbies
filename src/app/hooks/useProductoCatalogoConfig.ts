@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import productosService, { type ProductoCatalogoLimites } from '@/app/services/productosService';
+import { cacheMiniCartConfig, mapLimitesToMiniCartConfig } from '@/app/config/miniCartConfig';
 
 export const DEFAULT_PRODUCTO_CATALOGO_LIMITES: ProductoCatalogoLimites = {
   nombreMax: 120,
@@ -40,6 +41,7 @@ export function useProductoCatalogoConfig(options: { autoLoad?: boolean } = {}) 
       const saved = await productosService.actualizarLimitesCatalogo(body);
       const merged = { ...DEFAULT_PRODUCTO_CATALOGO_LIMITES, ...saved };
       setConfig(merged);
+      cacheMiniCartConfig(mapLimitesToMiniCartConfig(merged));
       return merged;
     } finally {
       setSaving(false);

@@ -205,7 +205,7 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
     const renderProfileDropdown = (
         <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
             <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="icon" className="h-9 w-9 p-0 rounded-full hover:border-primary/40 transition-colors">
+                <Button variant="outline" size="icon" className="h-9 w-9 p-0 rounded-full hover:border-button/40 transition-colors">
                     <Avatar className="h-full w-full">
                         <AvatarFallback className="bg-primary text-primary-foreground text-sm font-semibold">
                             {getUserInitials()}

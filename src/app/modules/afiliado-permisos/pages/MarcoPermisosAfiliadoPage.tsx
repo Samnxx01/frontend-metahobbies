@@ -9,7 +9,7 @@ import { MarcoPermisosCatalogCard } from '../components/MarcoPermisosCatalogCard
 export default function MarcoPermisosAfiliadoPage(): React.ReactElement {
   const vm = useMarcoPermisosParametrizacion();
 
-  if (vm.loading) {
+  if (vm.initialLoading) {
     return (
       <div className="flex min-h-[320px] items-center justify-center p-8">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -22,6 +22,7 @@ export default function MarcoPermisosAfiliadoPage(): React.ReactElement {
       <MarcoPermisosPageHeader
         saving={vm.saving}
         syncing={vm.syncing}
+        marcoLoading={vm.marcoLoading}
         hasMarco={Boolean(vm.marcoActivo)}
         marcoActivo={vm.marcoActivo}
         roles={vm.roles}
@@ -53,6 +54,7 @@ export default function MarcoPermisosAfiliadoPage(): React.ReactElement {
       />
 
       <MarcoPermisosCatalogCard
+        loading={vm.marcoLoading}
         tab={vm.tab}
         onTabChange={vm.setTab}
         filtroVistas={vm.filtroVistas}

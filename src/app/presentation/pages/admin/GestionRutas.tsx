@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { invalidateSidebarCache } from '@/app/services/routeService';
 import {
@@ -79,6 +80,8 @@ import {
 import { ChevronDown, ChevronRight, Edit, Loader2, RefreshCw, Trash2 } from 'lucide-react';
 import { apiFetch, persistHybridSpaPath } from '@/app/services/api';
 import { getJerarquiaUsuarios, type JerarquiaResponse } from '@/app/services/tenantUsuariosService';
+import { PoliticaBypassPanel } from '@/app/presentation/pages/admin/PoliticaBypassPanel';
+import { GOBERNANZA_ADMIN_BASE } from '@/app/presentation/pages/admin/gobernanza/gobernanzaModulosCatalog';
 import { GestionRutasUsuariosOrganigrama } from '@/app/presentation/pages/admin/components/GestionRutasUsuariosOrganigrama';
 import { OrganigramaLegendaInfoButton } from '@/app/presentation/components/admin/usuarios-tenant/JerarquiaOrganigrama';
 import {
@@ -113,6 +116,19 @@ interface RouteTableRow {
   depth: number;
   hasChildren: boolean;
 }
+
+/** Jerarquía materializada en countertiponodorutas (tiponodorutas ↔ rutaseguridads). */
+interface CounterRouteIndex {
+  parentByRouteId: Record<string, string | null>;
+  nivelOrderByRouteId: Record<string, number>;
+  tipoNodoIdByRouteId: Record<string, string>;
+}
+
+const EMPTY_COUNTER_ROUTE_INDEX: CounterRouteIndex = {
+  parentByRouteId: {},
+  nivelOrderByRouteId: {},
+  tipoNodoIdByRouteId: {},
+};
 
 interface NodeTypeFormState {
   codigoCatalogoId: string;
@@ -164,6 +180,7 @@ export default function GestionRutas(): React.ReactElement {
   const [loading, setLoading] = useState<boolean>(true);
   const [toolbarPolicy, setToolbarPolicy] = useState<GestionRutasToolbarPolicy | null>(null);
   const [toolbarDraft, setToolbarDraft] = useState<GestionRutasToolbarDraft | null>(null);
+  const [showBypassPanel, setShowBypassPanel] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [isTreeModalOpen, setIsTreeModalOpen] = useState<boolean>(false);
   const [isNodeTypeModalOpen, setIsNodeTypeModalOpen] = useState<boolean>(false);
@@ -188,9 +205,12 @@ export default function GestionRutas(): React.ReactElement {
   const [routesActorTipo, setRoutesActorTipo] = useState<string>('UNKNOWN');
   const [routesSourceCollection, setRoutesSourceCollection] = useState<string>('');
   const [formularioPadreId, setFormularioPadreId] = useState<string>('');
+  const [editHierarchyTouched, setEditHierarchyTouched] = useState<boolean>(false);
+  const initialEditHierarchyRef = useRef<{ suiteId: string; padreId: string }>({ suiteId: '', padreId: '' });
   const [counterJerarquiaSuites, setCounterJerarquiaSuites] = useState<Route[]>([]);
   const [counterJerarquiaModulos, setCounterJerarquiaModulos] = useState<Route[]>([]);
   const [counterJerarquiaFormularios, setCounterJerarquiaFormularios] = useState<Route[]>([]);
+  const [counterRouteIndex, setCounterRouteIndex] = useState<CounterRouteIndex>(EMPTY_COUNTER_ROUTE_INDEX);
   const [syncingCounterJerarquia, setSyncingCounterJerarquia] = useState<boolean>(false);
   const [isSubFormModalOpen, setIsSubFormModalOpen] = useState<boolean>(false);
   const [subFormSubmitting, setSubFormSubmitting] = useState<boolean>(false);
@@ -345,6 +365,31 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
     }
     return null;
   };
+
+  /** Padre directo alineado a countertiponodorutas; fallback padreId/ancestors/root. */
+  const resolveTableParentId = (route: Route): string | null => {
+    const routeId = resolveRouteId(route);
+    if (routeId && routeId in counterRouteIndex.parentByRouteId) {
+      return counterRouteIndex.parentByRouteId[routeId];
+    }
+
+    const direct = resolveParentId(route);
+    if (direct) return direct;
+
+    const ancestors = (route as any)?.ancestors;
+    if (Array.isArray(ancestors) && ancestors.length > 0) {
+      const parentId = normalizeMongoId(ancestors[ancestors.length - 1]);
+      if (parentId) return parentId;
+    }
+
+    const rootId = normalizeMongoId((route as any)?.root);
+    if (rootId && (!Array.isArray(ancestors) || ancestors.length === 0)) {
+      return rootId;
+    }
+
+    return resolveRouteParentIdFromDoc(route);
+  };
+
   const getRouteIdentitySet = (route?: Route | null): Set<string> => {
     const values = [
       String(route?._id || '').trim(),
@@ -580,13 +625,17 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
     return fallbackPath ? normalizePath(fallbackPath) : '';
   };
 
-  /** Alineado a resolverTipoNodoPorRutaDoc (backend): recorre padreId hasta la raíz. */
+  /** Alineado a resolverTipoNodoPorRutaDoc (backend): recorre padre hasta la raíz. */
   const inferRouteTypeOrderFromDepth = (route: Route): number => {
+    const routeId = resolveRouteId(route);
+    const nivelCounter = routeId ? counterRouteIndex.nivelOrderByRouteId[routeId] : 0;
+    if (nivelCounter > 0) return nivelCounter;
+
     let depth = 1;
     let current: Route | undefined = route;
     const visited = new Set<string>();
     while (current && depth < 20) {
-      const parentId = resolveParentId(current);
+      const parentId = resolveTableParentId(current);
       if (!parentId || visited.has(parentId)) break;
       visited.add(parentId);
       depth += 1;
@@ -715,23 +764,37 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
   };
 
   const routeMatchesTypeFilter = (route: Route, filterValue: string): boolean => {
-    const normalizedFilter = String(filterValue || '').trim().toUpperCase();
-    if (!normalizedFilter || normalizedFilter === 'ALL') return true;
+    const normalizedFilter = String(filterValue || '').trim();
+    if (!normalizedFilter || normalizedFilter.toUpperCase() === 'ALL') return true;
 
-    const filterTypeDoc = nodeTypes.find((type) => {
-      const label = String(type.nombre || type.codigo || '').trim().toUpperCase();
-      return label === normalizedFilter;
-    });
+    const filterTypeDoc = nodeTypes.find((type) => resolveNodeTypeId(type) === normalizedFilter)
+      || nodeTypes.find((type) => {
+        const label = String(type.nombre || type.codigo || '').trim().toUpperCase();
+        return label === normalizedFilter.toUpperCase();
+      });
 
-    if (filterTypeDoc) {
-      return routeMatchesNodeType(
-        route,
-        filterTypeDoc,
-        String(filterTypeDoc.nombre || filterTypeDoc.codigo || '')
-      );
+    if (!filterTypeDoc) return false;
+
+    const routeId = resolveRouteId(route);
+    const filterTypeId = resolveNodeTypeId(filterTypeDoc);
+    const expectedOrder = Number(filterTypeDoc.order ?? 0);
+
+    const counterTipoId = routeId ? counterRouteIndex.tipoNodoIdByRouteId[routeId] : '';
+    if (counterTipoId && filterTypeId && counterTipoId === filterTypeId) return true;
+
+    const counterNivel = routeId ? counterRouteIndex.nivelOrderByRouteId[routeId] : 0;
+    if (counterNivel > 0 && counterNivel === expectedOrder && counterTipoId && filterTypeId) {
+      return counterTipoId === filterTypeId;
     }
 
-    return String(getRouteType(route) || '').trim().toUpperCase() === normalizedFilter;
+    const routeTypeId = resolveTypeIdForRoute(route);
+    if (routeTypeId && filterTypeId && routeTypeId === filterTypeId) return true;
+
+    return routeMatchesNodeType(
+      route,
+      filterTypeDoc,
+      String(filterTypeDoc.nombre || filterTypeDoc.codigo || '')
+    );
   };
 
   const resolveRouteNodeTypeCodigo = (route: Route): string => {
@@ -830,7 +893,14 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
 
   const routeBelongsToSelectedSuite = (route: Route, suite: Route): boolean => {
     const suiteIds = getRouteIdentitySet(suite);
-    const parentId = resolveParentId(route);
+
+    const counterSuiteId = normalizeMongoId((route as any)?.suiteRutaSeguridadId);
+    if (counterSuiteId && suiteIds.has(counterSuiteId)) return true;
+
+    const counterPadreId = normalizeMongoId((route as any)?.padreRutaSeguridadId);
+    if (counterPadreId && suiteIds.has(counterPadreId)) return true;
+
+    const parentId = normalizeMongoId(resolveTableParentId(route) || resolveParentId(route));
     if (parentId && suiteIds.has(parentId)) return true;
 
     const rootId = normalizeMongoId((route as any)?.root);
@@ -1018,6 +1088,26 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
   const isHybridAccessRoute = (route: Route): boolean =>
     isPublicAccessRoute(route) && isPrivateAccessRoute(route);
 
+  const resolveAccessTypeIdByCode = (code: string): string => {
+    const expected = String(code || '').trim().toUpperCase();
+    const found = accessTypes.find((item) =>
+      String(item?.accessType || '').trim().toUpperCase() === expected
+      && item?.estadoAcces !== false
+    );
+    return found ? normalizeMongoId(found) : '';
+  };
+
+  const resolveHybridAccessTypeIdsForRoute = (route: Route, requiredCode: 'PUBLIC' | 'PRIVATE'): string[] => {
+    const currentIds = resolveAccessTypeIds(route).filter(Boolean);
+    const currentCodes = getAccessTypeCodesByIds(currentIds);
+    const nextIds = [...currentIds];
+    if (!currentCodes.includes(requiredCode)) {
+      const requiredId = resolveAccessTypeIdByCode(requiredCode);
+      if (requiredId) nextIds.push(requiredId);
+    }
+    return [...new Set(nextIds)];
+  };
+
   const isSubFormularioTypeRoute = (route: Route): boolean =>
     routeMatchesNodeType(route, subFormularioType, 'SUBFORMULARIO');
 
@@ -1095,7 +1185,15 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
     if (!resolveCanEditRoute(route)) return false;
     if (!isVisibilityConfigurableRoute(route)) return false;
     if (route.mostrarEnNavbarPublico === true) return true;
-    if (!isPublicAccessRoute(route)) return false;
+    if (!isPublicAccessRoute(route) && !resolveAccessTypeIdByCode('PUBLIC')) return false;
+    return true;
+  };
+
+  const resolveCanTogglePrivateStatus = (route: Route): boolean => {
+    if (!resolveCanEditRoute(route)) return false;
+    if (!isVisibilityConfigurableRoute(route)) return false;
+    if (route.mostrarEnSidebar === true) return true;
+    if (!isPrivateAccessRoute(route) && !resolveAccessTypeIdByCode('PRIVATE')) return false;
     return true;
   };
 
@@ -1188,7 +1286,26 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
     [counterJerarquiaSuites]
   );
 
-  const suiteOptionsForFormulario = suiteOptionsFromCounter;
+  const suiteOptionsForFormulario = useMemo(() => {
+    const base = [...suiteOptionsFromCounter];
+    if (!editingRoute || !(isFormularioType || isSubFormularioType)) return base;
+    const suiteId = isFormularioType ? selectedSuiteIdForForm : selectedSuiteIdForSubForm;
+    if (!suiteId) return base;
+    const suite = findRouteByAnyId(suiteId);
+    if (!suite) return base;
+    const suiteKey = resolveRouteId(suite);
+    if (base.some((row) => resolveRouteId(row) === suiteKey)) return base;
+    return [suite, ...base];
+  }, [
+    suiteOptionsFromCounter,
+    editingRoute,
+    isFormularioType,
+    isSubFormularioType,
+    selectedSuiteIdForForm,
+    selectedSuiteIdForSubForm,
+    routes,
+    counterJerarquiaSuites,
+  ]);
 
   const filteredSuiteOptions = useMemo(
     () => suiteOptionsFromCounter.filter((route) =>
@@ -1207,13 +1324,29 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
   const moduloOptionsBySuite = useMemo(
     () => {
       if (!selectedSuiteIdForForm) return [];
+      const suite = findRouteByAnyId(selectedSuiteIdForForm);
+      if (!suite) return [];
+
       const editingId = editingRoute ? resolveRouteId(editingRoute) : '';
-      return counterJerarquiaModulos.filter((route) => {
+      let options = counterJerarquiaModulos.filter((route) => {
         if (editingId && resolveRouteId(route) === editingId) return false;
-        return true;
+        return routeBelongsToSelectedSuite(route, suite);
       });
+      if (editingRoute && isFormularioType) {
+        const padreId = String(formularioPadreId || formData.padreId || '').trim();
+        if (padreId) {
+          const modulo = findRouteByAnyId(padreId);
+          if (modulo && routeBelongsToSelectedSuite(modulo, suite)) {
+            const moduloKey = resolveRouteId(modulo);
+            if (!options.some((row) => resolveRouteId(row) === moduloKey)) {
+              options = [modulo, ...options];
+            }
+          }
+        }
+      }
+      return options;
     },
-    [selectedSuiteIdForForm, counterJerarquiaModulos, editingRoute]
+    [selectedSuiteIdForForm, counterJerarquiaModulos, editingRoute, isFormularioType, formularioPadreId, formData.padreId, routes, counterRouteIndex]
   );
 
   const moduloOptionsForSubForm = useMemo(
@@ -1253,7 +1386,9 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
     }
     else options = getParentOptions(String(formData.tipoNodoId || ''));
 
-    const padreId = String(formData.padreId || '').trim();
+    const padreId = String(
+      (isFormularioType && formularioPadreId) ? formularioPadreId : (formData.padreId || '')
+    ).trim();
     if (editingRoute && padreId) {
       const currentParent = findRouteByAnyId(padreId);
       if (currentParent) {
@@ -1292,6 +1427,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
     nodeTypes,
     editingRoute,
     selectedSuiteIdForForm,
+    formularioPadreId,
   ]);
 
   const tipoNodoSelectValue = useMemo(() => {
@@ -1355,7 +1491,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
     });
 
     map.forEach((node) => {
-      const parentId = resolveParentId(node as Route);
+      const parentId = resolveTableParentId(node as Route);
       if (parentId && map.has(parentId)) {
         map.get(parentId)?.children.push(node);
       } else {
@@ -1369,7 +1505,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
     };
     sortNodes(roots);
     return roots;
-  }, [routes]);
+  }, [routes, counterRouteIndex]);
 
   const tableTreeNodes = useMemo(() => {
     const map = new Map<string, RouteTreeNode>();
@@ -1381,7 +1517,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
     });
 
     map.forEach((node) => {
-      const parentId = resolveParentId(node as Route);
+      const parentId = resolveTableParentId(node as Route);
       if (parentId && map.has(parentId)) {
         map.get(parentId)?.children.push(node);
       } else {
@@ -1395,46 +1531,48 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
     };
     sortNodes(roots);
     return roots;
-  }, [routes]);
+  }, [routes, counterRouteIndex]);
 
   useEffect(() => {
-    const nextExpanded: Record<string, boolean> = {};
-    const walk = (nodes: RouteTreeNode[]): void => {
-      nodes.forEach((node) => {
-        if (node.children.length > 0) {
-          nextExpanded[node.id] = expandedTableNodes[node.id] ?? true;
+    setExpandedTableNodes((prev) => {
+      const next = { ...prev };
+      const walk = (nodes: RouteTreeNode[]): void => {
+        nodes.forEach((node) => {
+          if (node.children.length > 0 && next[node.id] === undefined) {
+            next[node.id] = true;
+          }
           walk(node.children);
-        }
-      });
-    };
-    walk(tableTreeNodes);
-    setExpandedTableNodes(nextExpanded);
+        });
+      };
+      walk(tableTreeNodes);
+      return next;
+    });
   }, [tableTreeNodes]);
 
   const tableRows = useMemo(() => {
     const rows: RouteTableRow[] = [];
     const normalizedFilter = String(nameFilter || '').trim().toLowerCase();
     const isNameFiltering = normalizedFilter.length > 0;
-    const normalizedTypeFilter = String(nodeTypeFilter || 'ALL').toUpperCase();
+    const normalizedTypeFilter = String(nodeTypeFilter || 'ALL');
     const isTypeFiltering = normalizedTypeFilter !== 'ALL';
     const isFiltering = isNameFiltering || isTypeFiltering;
 
+    const walkVisible = (nodes: RouteTreeNode[], depth = 0): void => {
+      nodes.forEach((node) => {
+        const hasChildren = node.children.length > 0;
+        rows.push({ node, depth, hasChildren });
+        if (hasChildren && expandedTableNodes[node.id] !== false) {
+          walkVisible(node.children, depth + 1);
+        }
+      });
+    };
+
     if (!isFiltering) {
-      const walk = (nodes: RouteTreeNode[], depth = 0): void => {
-        nodes.forEach((node) => {
-          const hasChildren = node.children.length > 0;
-          rows.push({ node, depth, hasChildren });
-          if (hasChildren && expandedTableNodes[node.id] !== false) {
-            walk(node.children, depth + 1);
-          }
-        });
-      };
-      walk(tableTreeNodes);
+      walkVisible(tableTreeNodes);
       return rows;
     }
 
-    // Cuando hay filtro: marcar todos los nodos que hacen match O tienen un descendiente que hace match
-    // Así se muestra la jerarquía completa (ancestros incluidos)
+    // Con filtro: ancestros + coincidencias; respeta colapsar igual que sin filtro
     const includedIds = new Set<string>();
     const markIncluded = (nodes: RouteTreeNode[]): boolean => {
       let anyIncluded = false;
@@ -1452,23 +1590,69 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
     };
     markIncluded(tableTreeNodes);
 
-    const walk = (nodes: RouteTreeNode[], depth = 0): void => {
+    const walkFiltered = (nodes: RouteTreeNode[], depth = 0): void => {
       for (const node of nodes) {
         if (!includedIds.has(node.id)) continue;
         const hasChildren = node.children.length > 0;
         rows.push({ node, depth, hasChildren });
-        if (hasChildren) {
-          walk(node.children, depth + 1);
+        if (hasChildren && expandedTableNodes[node.id] !== false) {
+          walkFiltered(node.children, depth + 1);
         }
       }
     };
-    walk(tableTreeNodes);
+    walkFiltered(tableTreeNodes);
     return rows;
-  }, [tableTreeNodes, expandedTableNodes, nameFilter, nodeTypeFilter, nodeTypes]);
+  }, [tableTreeNodes, expandedTableNodes, nameFilter, nodeTypeFilter, nodeTypes, counterRouteIndex]);
 
   const toggleTableNode = (id: string): void => {
-    setExpandedTableNodes((prev) => ({ ...prev, [id]: !prev[id] }));
+    setExpandedTableNodes((prev) => ({ ...prev, [id]: !(prev[id] ?? true) }));
   };
+
+  useEffect(() => {
+    const normalizedFilter = String(nameFilter || '').trim().toLowerCase();
+    const isNameFiltering = normalizedFilter.length > 0;
+    const normalizedTypeFilter = String(nodeTypeFilter || 'ALL');
+    const isTypeFiltering = normalizedTypeFilter !== 'ALL';
+    if (!isNameFiltering && !isTypeFiltering) return;
+
+    const includedIds = new Set<string>();
+    const markIncluded = (nodes: RouteTreeNode[]): boolean => {
+      let anyIncluded = false;
+      for (const node of nodes) {
+        const matchesName = !isNameFiltering || String(node.name || '').toLowerCase().includes(normalizedFilter);
+        const matchesType = !isTypeFiltering || routeMatchesTypeFilter(node as Route, normalizedTypeFilter);
+        const selfMatches = matchesName && matchesType;
+        const childrenIncluded = node.children.length > 0 && markIncluded(node.children);
+        if (selfMatches || childrenIncluded) {
+          includedIds.add(node.id);
+          anyIncluded = true;
+        }
+      }
+      return anyIncluded;
+    };
+    markIncluded(tableTreeNodes);
+
+    const parentByChild = new Map<string, string>();
+    const indexParents = (nodes: RouteTreeNode[], parentId: string | null = null): void => {
+      nodes.forEach((node) => {
+        if (parentId) parentByChild.set(node.id, parentId);
+        indexParents(node.children, node.id);
+      });
+    };
+    indexParents(tableTreeNodes);
+
+    setExpandedTableNodes((prev) => {
+      const next = { ...prev };
+      includedIds.forEach((id) => {
+        let current: string | undefined = id;
+        while (current) {
+          next[current] = true;
+          current = parentByChild.get(current);
+        }
+      });
+      return next;
+    });
+  }, [nameFilter, nodeTypeFilter, tableTreeNodes, nodeTypes, counterRouteIndex]);
 
   const cargarUsuariosJerarquia = async (force = false): Promise<void> => {
     if (!force && jerarquiaUsuariosRaw) return;
@@ -1568,6 +1752,61 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
     }
   };
 
+  const hasCounterRouteIndexData = (index: CounterRouteIndex): boolean =>
+    Object.keys(index.parentByRouteId).length > 0 ||
+    Object.keys(index.nivelOrderByRouteId).length > 0 ||
+    Object.keys(index.tipoNodoIdByRouteId).length > 0;
+
+  const loadCounterRouteIndex = async (): Promise<CounterRouteIndex> => {
+    const parentByRouteId: Record<string, string | null> = {};
+    const nivelOrderByRouteId: Record<string, number> = {};
+    const tipoNodoIdByRouteId: Record<string, string> = {};
+
+    const ingestCounterRoute = (route: Route, fallbackNivel: number): void => {
+      const id = resolveRouteId(route);
+      if (!id) return;
+      const raw = route as any;
+      parentByRouteId[id] = raw.padreRutaSeguridadId
+        ? String(raw.padreRutaSeguridadId)
+        : null;
+      nivelOrderByRouteId[id] = Number(raw.nivelOrder ?? fallbackNivel);
+      const tipoId = normalizeMongoId(raw.tipoNodoId) || resolveTypeIdForRoute(route);
+      if (tipoId) tipoNodoIdByRouteId[id] = tipoId;
+    };
+
+    try {
+      const suitesRes = await getJerarquiaOpcionesFromCounter({ nivelOrder: 1 });
+      const suites = Array.isArray(suitesRes?.data) ? suitesRes.data : [];
+      suites.forEach((suite) => ingestCounterRoute(suite, 1));
+
+      const modulosRes = await getJerarquiaOpcionesFromCounter({ nivelOrder: 2 });
+      const modulos: Route[] = [];
+      (Array.isArray(modulosRes?.data) ? modulosRes.data : []).forEach((modulo) => {
+        ingestCounterRoute(modulo, 2);
+        modulos.push(modulo);
+      });
+
+      const formsRes = await getJerarquiaOpcionesFromCounter({ nivelOrder: 3 });
+      const formularios: Route[] = [];
+      (Array.isArray(formsRes?.data) ? formsRes.data : []).forEach((form) => {
+        ingestCounterRoute(form, 3);
+        formularios.push(form);
+      });
+
+      const subFormsRes = await getJerarquiaOpcionesFromCounter({ nivelOrder: 4 });
+      (Array.isArray(subFormsRes?.data) ? subFormsRes.data : []).forEach((subForm) =>
+        ingestCounterRoute(subForm, 4)
+      );
+
+      const nextIndex = { parentByRouteId, nivelOrderByRouteId, tipoNodoIdByRouteId };
+      setCounterRouteIndex(nextIndex);
+      return nextIndex;
+    } catch {
+      setCounterRouteIndex(EMPTY_COUNTER_ROUTE_INDEX);
+      return EMPTY_COUNTER_ROUTE_INDEX;
+    }
+  };
+
   const loadRoutes = async (): Promise<void> => {
     try {
       setLoading(true);
@@ -1578,6 +1817,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
         setRoutesSourceCollection(String(response.sourceCollection || ''));
         setToolbarPolicy(response.toolbarPolicy ?? null);
         setToolbarDraft(null);
+        await loadCounterRouteIndex();
       } else {
         toast.error('Error loading routes');
       }
@@ -1674,7 +1914,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
   const applyRouteToForm = (route: Route): void => {
     const routeTypeId = resolveTypeIdForRoute(route);
     const routeTypeOrder = resolveTypeOrderForRoute(route, routeTypeId);
-    const routeParentId = resolveRouteParentIdFromDoc(route);
+    const routeParentId = resolveTableParentId(route);
     const parentRoute = routeParentId ? findRouteByAnyId(routeParentId) : undefined;
     const moduloOrder = Number(moduloType?.order ?? 2);
     const formularioOrderValue = Number(formularioType?.order ?? 3);
@@ -1689,17 +1929,19 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
       suiteForForm = padreForForm;
     } else if (routeTypeOrder === formularioOrderValue) {
       padreForForm = routeParentId || '';
-      suiteForForm = parentRoute ? (resolveRouteParentIdFromDoc(parentRoute) || resolveParentId(parentRoute) || '') : '';
+      suiteForForm = parentRoute
+        ? (resolveTableParentId(parentRoute) || resolveParentId(parentRoute) || '')
+        : '';
       if (!suiteForForm) suiteForForm = inferSuiteIdFromPath(route.path || '');
     } else if (routeTypeOrder === subFormOrder) {
       padreForForm = routeParentId || '';
       const formulario = parentRoute;
       const modulo = formulario
-        ? findRouteByAnyId(resolveRouteParentIdFromDoc(formulario) || resolveParentId(formulario) || '')
+        ? findRouteByAnyId(resolveTableParentId(formulario) || resolveParentId(formulario) || '')
         : undefined;
       moduloForSubForm = modulo ? resolveRouteId(modulo) : '';
       suiteForForm = modulo
-        ? (resolveRouteParentIdFromDoc(modulo) || resolveParentId(modulo) || '')
+        ? (resolveTableParentId(modulo) || resolveParentId(modulo) || '')
         : '';
       if (!suiteForForm) suiteForForm = inferSuiteIdFromPath(route.path || '');
     }
@@ -1731,6 +1973,15 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
       setFormularioPadreId('');
     }
 
+    if (!editHierarchyTouched) {
+      initialEditHierarchyRef.current = {
+        suiteId: routeTypeOrder === formularioOrderValue || routeTypeOrder === subFormOrder
+          ? suiteForForm
+          : '',
+        padreId: routeTypeOrder === formularioOrderValue ? padreForForm : '',
+      };
+    }
+
     const typeDoc = getTypeById(routeTypeId);
     const existingPath = String(route.path || '').trim();
     const routeAccessIds = resolveAccessTypeIds(route);
@@ -1758,11 +2009,13 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
   const openRouteModal = async (route?: Route, forceTypeId?: string): Promise<void> => {
     setParentSelectSearch('');
     setSuiteSelectSearch('');
+    setEditHierarchyTouched(false);
+    initialEditHierarchyRef.current = { suiteId: '', padreId: '' };
     if (route) {
       setIsModalOpen(true);
       setEditingRoute(route);
       applyRouteToForm(route);
-      const routeId = resolveRouteId(route);
+      const routeId = normalizeMongoId(route._id) || normalizeMongoId(route.iud) || resolveRouteId(route);
       if (routeId) {
         try {
           const detail = await getRouteById(routeId);
@@ -1770,9 +2023,12 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
             const merged = { ...route, ...detail.data } as Route;
             setEditingRoute(merged);
             applyRouteToForm(merged);
+          } else if (detail && detail.success === false) {
+            toast.error(detail.message || 'No se pudo cargar el detalle de la ruta');
           }
         } catch (error) {
           console.error('Error loading route detail:', error);
+          toast.error('No se pudo cargar el detalle completo de la ruta');
         }
       }
       return;
@@ -1788,9 +2044,11 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
   };
 
   useEffect(() => {
-    if (!isModalOpen || !editingRoute) return;
+    if (!isModalOpen || !editingRoute || editHierarchyTouched) return;
     const needsTipo = !String(formData.tipoNodoId || '').trim();
     const needsPadre = !String(formData.padreId || '').trim()
+      && !String(formularioPadreId || '').trim()
+      && !String(selectedSuiteIdForForm || selectedSuiteIdForSubForm || '').trim()
       && resolveTypeOrderForRoute(editingRoute) > Number(suiteType?.order ?? 1);
     const needsAccess = !Array.isArray(formData.accessType) || formData.accessType.length === 0;
     const catalogsReady = nodeTypes.length > 0 && routes.length > 0;
@@ -1800,11 +2058,25 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
     ) {
       applyRouteToForm(editingRoute);
     }
-  }, [isModalOpen, editingRoute, nodeTypes.length, accessTypes.length, routes.length, counterJerarquiaSuites.length]);
+  }, [
+    isModalOpen,
+    editingRoute,
+    editHierarchyTouched,
+    nodeTypes.length,
+    accessTypes.length,
+    routes.length,
+    counterJerarquiaSuites.length,
+    counterJerarquiaModulos.length,
+    formularioPadreId,
+    selectedSuiteIdForForm,
+    selectedSuiteIdForSubForm,
+  ]);
 
   const closeRouteModal = (): void => {
     setIsModalOpen(false);
     setEditingRoute(null);
+    setEditHierarchyTouched(false);
+    initialEditHierarchyRef.current = { suiteId: '', padreId: '' };
     setSelectedSuiteIdForForm('');
     setSelectedSuiteIdForSubForm('');
     setSelectedModuloIdForSubForm('');
@@ -1881,7 +2153,16 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
         toast.error('Selecciona un módulo padre válido (tipo MODULO)');
         return;
       }
-      if (!routeBelongsToSelectedSuite(moduloParent, suiteForForm)) {
+      const suiteChangedOnEdit = Boolean(editingRoute)
+        && String(selectedSuiteIdForForm || '').trim() !== String(initialEditHierarchyRef.current.suiteId || '').trim();
+      if (suiteChangedOnEdit && moduloPadreId === String(initialEditHierarchyRef.current.padreId || '').trim()) {
+        toast.error('Al cambiar la suite debes seleccionar un módulo de la nueva suite');
+        return;
+      }
+      const moduloInSuiteOptions = moduloOptionsBySuite.some(
+        (row) => getRouteIdentitySet(row).has(moduloPadreId) || resolveRouteId(row) === moduloPadreId
+      );
+      if (!moduloInSuiteOptions && !routeBelongsToSelectedSuite(moduloParent, suiteForForm)) {
         toast.error('El módulo seleccionado no pertenece a la suite elegida');
         return;
       }
@@ -2067,23 +2348,51 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
 
   const handleTogglePublicStatus = async (route: Route): Promise<void> => {
     const next = route?.mostrarEnNavbarPublico !== true;
-    if (next && !isPublicAccessRoute(route)) {
-      toast.error('Para activar navbar publico la ruta debe tener access PUBLIC.');
-      return;
-    }
-    if (next && route.mostrarEnSidebar === true && !isHybridAccessRoute(route)) {
-      toast.error('Solo las rutas HYBRID pueden quedar activas a la vez en navbar publico y sidebar.');
+    const accessType = next
+      ? resolveHybridAccessTypeIdsForRoute(route, 'PUBLIC')
+      : resolveAccessTypeIds(route);
+    if (next && !getAccessTypeCodesByIds(accessType).includes('PUBLIC')) {
+      toast.error('No hay access PUBLIC activo para dejar la ruta híbrida.');
       return;
     }
 
     try {
-      await updateRoute(resolveRouteId(route), { mostrarEnNavbarPublico: next } as CreateRouteDto);
+      await updateRoute(resolveRouteId(route), {
+        accessType,
+        mostrarEnNavbarPublico: next,
+        mostrarEnSidebar: route.mostrarEnSidebar === true,
+      } as CreateRouteDto);
       toast.success(next ? 'Navbar publico activado' : 'Navbar publico desactivado');
       notifyRoutesUpdated();
       await loadRoutes();
     } catch (error: any) {
       console.error('Error toggling public route status:', error);
       toast.error(error?.message || 'Error al cambiar estado publico');
+    }
+  };
+
+  const handleTogglePrivateStatus = async (route: Route): Promise<void> => {
+    const next = route?.mostrarEnSidebar !== true;
+    const accessType = next
+      ? resolveHybridAccessTypeIdsForRoute(route, 'PRIVATE')
+      : resolveAccessTypeIds(route);
+    if (next && !getAccessTypeCodesByIds(accessType).includes('PRIVATE')) {
+      toast.error('No hay access PRIVATE activo para dejar la ruta híbrida.');
+      return;
+    }
+
+    try {
+      await updateRoute(resolveRouteId(route), {
+        accessType,
+        mostrarEnSidebar: next,
+        mostrarEnNavbarPublico: route.mostrarEnNavbarPublico === true,
+      } as CreateRouteDto);
+      toast.success(next ? 'Sidebar privado activado' : 'Sidebar privado desactivado');
+      notifyRoutesUpdated();
+      await loadRoutes();
+    } catch (error: any) {
+      console.error('Error toggling private route status:', error);
+      toast.error(error?.message || 'Error al cambiar estado privado');
     }
   };
 
@@ -2278,9 +2587,56 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
     }
   };
 
+  const refreshCounterJerarquiaOptions = async (): Promise<void> => {
+    try {
+      const suitesRes = await getJerarquiaOpcionesFromCounter({ nivelOrder: 1 });
+      if (suitesRes.success && Array.isArray(suitesRes.data)) {
+        setCounterJerarquiaSuites(suitesRes.data);
+      }
+      if (String(selectedSuiteIdForForm || '').trim()) {
+        const modulosRes = await getJerarquiaOpcionesFromCounter({
+          nivelOrder: 2,
+          padreRutaSeguridadId: selectedSuiteIdForForm,
+        });
+        if (modulosRes.success && Array.isArray(modulosRes.data)) {
+          setCounterJerarquiaModulos(modulosRes.data);
+        }
+      }
+      if (String(selectedSuiteIdForSubForm || '').trim()) {
+        const modulosSubRes = await getJerarquiaOpcionesFromCounter({
+          nivelOrder: 2,
+          padreRutaSeguridadId: selectedSuiteIdForSubForm,
+        });
+        if (modulosSubRes.success && Array.isArray(modulosSubRes.data)) {
+          setCounterJerarquiaModulos(modulosSubRes.data);
+        }
+        if (String(selectedModuloIdForSubForm || '').trim()) {
+          const formsRes = await getJerarquiaOpcionesFromCounter({
+            nivelOrder: 3,
+            padreRutaSeguridadId: selectedModuloIdForSubForm,
+            suiteRutaSeguridadId: selectedSuiteIdForSubForm,
+          });
+          if (formsRes.success && Array.isArray(formsRes.data)) {
+            setCounterJerarquiaFormularios(formsRes.data);
+          }
+        }
+      }
+    } catch {
+      /* opciones counter opcionales tras sync/refresh */
+    }
+  };
+
   const handleSincronizarCounterJerarquia = async (): Promise<void> => {
     setSyncingCounterJerarquia(true);
     try {
+      const currentIndex = await loadCounterRouteIndex();
+      if (hasCounterRouteIndexData(currentIndex)) {
+        await loadRoutes();
+        await refreshCounterJerarquiaOptions();
+        toast.info('La jerarquía ya existe. Se refrescó la data creada.');
+        return;
+      }
+
       const counterRes = await sincronizarJerarquiaCounter();
       const data = counterRes?.data as SincronizarJerarquiaCounterResult | undefined;
       if (!counterRes?.success) {
@@ -2296,42 +2652,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
         `Counter sincronizado: ${relacionesActivas} relaciones activas (${creadas} creadas, ${actualizadas} actualizadas, ${sinCambios} sin cambios${errores ? `, ${errores} con error` : ''}).`
       );
       await loadRoutes();
-      try {
-        const suitesRes = await getJerarquiaOpcionesFromCounter({ nivelOrder: 1 });
-        if (suitesRes.success && Array.isArray(suitesRes.data)) {
-          setCounterJerarquiaSuites(suitesRes.data);
-        }
-        if (String(selectedSuiteIdForForm || '').trim()) {
-          const modulosRes = await getJerarquiaOpcionesFromCounter({
-            nivelOrder: 2,
-            padreRutaSeguridadId: selectedSuiteIdForForm,
-          });
-          if (modulosRes.success && Array.isArray(modulosRes.data)) {
-            setCounterJerarquiaModulos(modulosRes.data);
-          }
-        }
-        if (String(selectedSuiteIdForSubForm || '').trim()) {
-          const modulosSubRes = await getJerarquiaOpcionesFromCounter({
-            nivelOrder: 2,
-            padreRutaSeguridadId: selectedSuiteIdForSubForm,
-          });
-          if (modulosSubRes.success && Array.isArray(modulosSubRes.data)) {
-            setCounterJerarquiaModulos(modulosSubRes.data);
-          }
-          if (String(selectedModuloIdForSubForm || '').trim()) {
-            const formsRes = await getJerarquiaOpcionesFromCounter({
-              nivelOrder: 3,
-              padreRutaSeguridadId: selectedModuloIdForSubForm,
-              suiteRutaSeguridadId: selectedSuiteIdForSubForm,
-            });
-            if (formsRes.success && Array.isArray(formsRes.data)) {
-              setCounterJerarquiaFormularios(formsRes.data);
-            }
-          }
-        }
-      } catch {
-        /* opciones counter opcionales tras sync */
-      }
+      await refreshCounterJerarquiaOptions();
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Error al sincronizar counter';
       toast.error(message);
@@ -2668,6 +2989,22 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
           </div>
         </CardHeader>
         <CardContent>
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setShowBypassPanel((v) => !v)}
+            >
+              {showBypassPanel ? 'Ocultar' : 'Ver'} políticas de bypass (tu sesión)
+            </Button>
+            <Button type="button" variant="ghost" size="sm" asChild>
+              <Link to={`${GOBERNANZA_ADMIN_BASE}/politica-bypass`}>Panel completo en gobernanza</Link>
+            </Button>
+          </div>
+          {showBypassPanel ? (
+            <PoliticaBypassPanel compact className="mb-4 rounded-lg border border-border bg-muted/30 p-4" />
+          ) : null}
           <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center">
             <Input
               value={nameFilter}
@@ -2685,10 +3022,10 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
                   .filter((type) => type.estado !== false)
                   .map((type) => {
                     const typeLabel = String(type.nombre || type.codigo || '').trim();
-                    const typeValue = String(typeLabel || '').toUpperCase();
+                    const typeValue = resolveNodeTypeId(type);
                     if (!typeValue) return null;
                     return (
-                      <SelectItem key={resolveNodeTypeId(type)} value={typeValue}>
+                      <SelectItem key={typeValue} value={typeValue}>
                         {typeLabel}
                       </SelectItem>
                     );
@@ -2728,6 +3065,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
                     <TableHead>Componente Efectivo</TableHead>
                     <TableHead>Layout</TableHead>
                     <TableHead>Publico</TableHead>
+                    <TableHead>Privado</TableHead>
                     <TableHead>Estado</TableHead>
                     <TableHead className="text-right">Acciones</TableHead>
                   </TableRow>
@@ -2735,7 +3073,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
                 <TableBody>
                   {tableRows.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={11} className="text-center text-muted-foreground">
+                      <TableCell colSpan={12} className="text-center text-muted-foreground">
                         No hay rutas que coincidan con los filtros aplicados.
                       </TableCell>
                     </TableRow>
@@ -2796,7 +3134,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
                             )}
                           </div>
                         </TableCell>
-                        <TableCell>{getRouteNameById(resolveParentId(route))}</TableCell>
+                        <TableCell>{getRouteNameById(resolveTableParentId(route))}</TableCell>
                         <TableCell>
                           <code className="px-2 py-1 bg-muted rounded text-xs">{route.path}</code>
                         </TableCell>
@@ -2816,6 +3154,24 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
                                 <span className="text-[10px] text-muted-foreground">Navbar activo</span>
                               ) : !isPublicAccessRoute(route) ? (
                                 <span className="text-[10px] text-muted-foreground">Sin PUBLIC</span>
+                              ) : null}
+                            </div>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {isVisibilityConfigurableRoute(route) ? (
+                            <div className="flex flex-col items-start gap-1">
+                              <Switch
+                                checked={route.mostrarEnSidebar === true}
+                                disabled={!resolveCanTogglePrivateStatus(route)}
+                                onCheckedChange={() => void handleTogglePrivateStatus(route)}
+                              />
+                              {route.mostrarEnSidebar === true ? (
+                                <span className="text-[10px] text-muted-foreground">Sidebar activo</span>
+                              ) : !isPrivateAccessRoute(route) ? (
+                                <span className="text-[10px] text-muted-foreground">Sin PRIVATE</span>
                               ) : null}
                             </div>
                           ) : (
@@ -2926,6 +3282,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
                       setSuiteSelectSearch('');
                       setParentSelectSearch('');
                       if (isFormularioType) {
+                        setEditHierarchyTouched(true);
                         setSelectedSuiteIdForForm(value);
                         setFormularioPadreId('');
                         setFormData((prev) => ({
@@ -2934,6 +3291,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
                           path: resolveHierarchyPathForDraft(prev.name, null, selectedTypeOrder, ''),
                         }));
                       } else {
+                        setEditHierarchyTouched(true);
                         setSelectedSuiteIdForSubForm(value);
                         setSelectedModuloIdForSubForm('');
                         setFormData((prev) => ({
@@ -3037,7 +3395,10 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
                     value={padreSelectValue}
                     onValueChange={(value) => {
                       setParentSelectSearch('');
-                      if (isFormularioType) setFormularioPadreId(value);
+                      if (isFormularioType) {
+                        setEditHierarchyTouched(true);
+                        setFormularioPadreId(value);
+                      }
                       setFormData((prev) => ({
                         ...prev,
                         padreId: value,

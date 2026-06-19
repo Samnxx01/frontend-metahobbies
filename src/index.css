@@ -16,6 +16,8 @@
     --popover-foreground: 222 84% 5%;
     --primary: 335 57% 49%;               /* COLOR_PRIMARY #C43670 */
     --primary-foreground: 0 0% 100%;
+    --button: 35 79% 77%;                 /* COLOR_SUNSET #F3CC97 — botones de acción */
+    --button-foreground: 335 57% 49%;
     --secondary: 35 79% 77%;              /* COLOR_SUNSET #F3CC97 */
     --secondary-foreground: 335 57% 49%;
     --muted: 343 79% 92%;                  /* COLOR_LIGHT #FBDCE5 */
@@ -46,6 +48,8 @@
     --popover-foreground: 345 100% 95%;
     --primary: 328 78% 54%; /* Tickle Me Pink mantiene su vibración */
     --primary-foreground: 0 0% 100%;
+    --button: 30 60% 45%; /* COLOR_SUNSET oscuro */
+    --button-foreground: 345 100% 95%;
     --secondary: 30 60% 45%; /* Sunset oscuro #F4CC98 */
     --secondary-foreground: 345 100% 95%;
     --muted: 328 25% 20%;
@@ -107,16 +111,16 @@
 }
 
 .light-swal-confirm {
-  background-color: hsl(var(--primary)) !important;
-  color: hsl(var(--primary-foreground)) !important;
+  background-color: hsl(var(--button)) !important;
+  color: hsl(var(--button-foreground)) !important;
   border: none !important;
-  box-shadow: 0 2px 8px hsl(var(--primary) / 0.35) !important;
+  box-shadow: 0 2px 8px hsl(var(--button) / 0.35) !important;
   font-weight: 500 !important;
 }
 
 .light-swal-confirm:hover {
-  background-color: hsl(var(--primary) / 0.9) !important;
-  box-shadow: 0 4px 12px hsl(var(--primary) / 0.45) !important;
+  background-color: hsl(var(--button) / 0.9) !important;
+  box-shadow: 0 4px 12px hsl(var(--button) / 0.45) !important;
 }
 
 .light-swal-cancel {
@@ -148,16 +152,16 @@
 }
 
 .dark .dark-swal-confirm {
-  background-color: hsl(var(--primary)) !important;
-  color: hsl(var(--primary-foreground)) !important;
+  background-color: hsl(var(--button)) !important;
+  color: hsl(var(--button-foreground)) !important;
   border: none !important;
-  box-shadow: 0 2px 8px hsl(var(--primary) / 0.35) !important;
+  box-shadow: 0 2px 8px hsl(var(--button) / 0.35) !important;
   font-weight: 500 !important;
 }
 
 .dark .dark-swal-confirm:hover {
-  background-color: hsl(var(--primary) / 0.9) !important;
-  box-shadow: 0 4px 12px hsl(var(--primary) / 0.45) !important;
+  background-color: hsl(var(--button) / 0.9) !important;
+  box-shadow: 0 4px 12px hsl(var(--button) / 0.45) !important;
 }
 
 .dark .dark-swal-cancel {

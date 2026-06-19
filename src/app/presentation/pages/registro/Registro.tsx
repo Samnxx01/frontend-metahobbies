@@ -23,6 +23,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import { apiFetch } from '@/app/services/api';
 import { fetchSplashLogo, resolveSplashLogoUrl } from '@/app/services/splashLogoService';
 import { obtenerBrandingPublico } from '@/app/services/brandingWidget';
+import { normalizeImageRenderUrl } from '@/app/utils/normalizeImageRenderUrl';
 import { getGovernedLoginPath } from '@/app/services/governedNavigation';
 
 // Lucide icons
@@ -119,7 +120,7 @@ export default function Registro(): React.ReactElement {
             try {
                 const branding = await obtenerBrandingPublico();
                 const loginBackground = branding?.widgets?.loginBackground;
-                const nextBackgroundUrl = String(loginBackground?.imageUrl || '').trim();
+                const nextBackgroundUrl = normalizeImageRenderUrl(loginBackground?.imageUrl);
 
                 if (loginBackground?.enabled !== false && nextBackgroundUrl) {
                     setBackgroundUrl(nextBackgroundUrl);
@@ -329,7 +330,7 @@ export default function Registro(): React.ReactElement {
                             {/* Botón de Enviar */}
                             <Button
                                 type="submit"
-                                className="w-full h-12 text-base font-semibold mt-6 bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+                                className="w-full h-12 text-base font-semibold mt-6 transition-colors"
                                 disabled={isSubmitting}
                             >
                                 {isSubmitting ? (

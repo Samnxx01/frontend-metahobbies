@@ -1,5 +1,10 @@
 import { apiFetch, apiFetchPublic } from '@/app/services/api';
 
+import {
+  buildPublicidadImagenUrl,
+  resolvePublicidadImageId,
+} from '@/app/utils/normalizeImageRenderUrl';
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api';
 
 export type PublicidadModal = {
@@ -29,15 +34,12 @@ export type PublicidadModal = {
   } | string | null;
 };
 
-const getPublicidadImageId = (publicidad: PublicidadModal): string => {
-  if (!publicidad.img) return '';
-  if (typeof publicidad.img === 'string') return publicidad.img;
-  return publicidad.img._id || publicidad.img.id || '';
-};
+const getPublicidadImageId = (publicidad: PublicidadModal): string =>
+  resolvePublicidadImageId(publicidad.img);
 
 export const getPublicidadImageUrl = (publicidad: PublicidadModal): string => {
   const imageId = getPublicidadImageId(publicidad);
-  return imageId ? `${API_BASE_URL}/configuration/publicidad/modal/imagen/${imageId}` : '';
+  return imageId ? buildPublicidadImagenUrl(imageId) : '';
 };
 
 export const obtenerPublicidadModalActiva = async (params?: { path?: string }): Promise<PublicidadModal | null> => {

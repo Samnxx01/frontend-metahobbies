@@ -22,11 +22,9 @@ import {
 import { upsertGobernanzaModuloTipo } from './gobernanzaModuloService';
 import type { GobernanzaModuloTipoApi } from './gobernanzaModuloApiTypes';
 import {
-  componentesPorSection,
   defaultsTipoDesdeComponente,
   esSectionSlugValido,
   GOBERNANZA_MODULO_SECTION_NUEVA,
-  mergeSectionsOpciones,
   normalizarSectionInput,
   resolverSectionParaUpsert,
 } from './gobernanzaModuloTipoDefaults';
@@ -72,20 +70,7 @@ export function GobernanzaModuloTipoCrearDialog({
   const [sectionModo, setSectionModo] = useState<'existente' | 'nueva'>('existente');
   const [sectionExistente, setSectionExistente] = useState(sectionInicial);
   const [sectionNueva, setSectionNueva] = useState('');
-  const [formularioComponent, setFormularioComponent] = useState('');
   const [guardando, setGuardando] = useState(false);
-
-  const sectionActiva = resolverSectionParaUpsert(
-    sectionModo === 'nueva' ? 'custom' : 'catalog',
-    sectionExistente,
-    sectionNueva,
-    sectionInicial
-  );
-
-  const componentesOpciones = useMemo(
-    () => componentesPorSection(sectionActiva),
-    [sectionActiva]
-  );
 
   const aplicarDefaults = () => {
     setNombre('');
@@ -93,15 +78,12 @@ export function GobernanzaModuloTipoCrearDialog({
     setSectionModo('existente');
     setSectionExistente(sectionInicial);
     setSectionNueva('');
-    setFormularioComponent(
-      hints.formularioComponent || String(formularioComponentHint || '').trim()
-    );
   };
 
   useEffect(() => {
     if (!open) return;
     aplicarDefaults();
-  }, [open, sectionInicial, hints.codigo, hints.formularioComponent, formularioComponentHint]);
+  }, [open, sectionInicial, hints.codigo]);
 
   useEffect(() => {
     if (!open || sectionModo === 'nueva') return;
@@ -128,7 +110,7 @@ export function GobernanzaModuloTipoCrearDialog({
       return;
     }
 
-    const component = String(formularioComponent || hints.formularioComponent || '').trim();
+    const component = String(hints.formularioComponent || '').trim();
 
     setGuardando(true);
     try {
@@ -175,9 +157,6 @@ export function GobernanzaModuloTipoCrearDialog({
                 }
                 setSectionModo('existente');
                 setSectionExistente(value);
-                if (!formularioComponent && componentesPorSection(value).length === 1) {
-                  setFormularioComponent(componentesPorSection(value)[0]);
-                }
               }}
               disabled={sectionsLoading}
             >
@@ -241,27 +220,6 @@ export function GobernanzaModuloTipoCrearDialog({
               className="font-mono text-sm"
             />
           </div>
-
-          {componentesOpciones.length > 0 ? (
-            <div className="space-y-1.5">
-              <Label htmlFor="tipo-component">Componente React</Label>
-              <Select
-                value={formularioComponent || undefined}
-                onValueChange={setFormularioComponent}
-              >
-                <SelectTrigger id="tipo-component" className="h-10 font-mono text-xs">
-                  <SelectValue placeholder="Selecciona componente" />
-                </SelectTrigger>
-                <SelectContent>
-                  {componentesOpciones.map((c) => (
-                    <SelectItem key={c} value={c} className="font-mono text-xs">
-                      {c}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          ) : null}
         </div>
 
         <DialogFooter>

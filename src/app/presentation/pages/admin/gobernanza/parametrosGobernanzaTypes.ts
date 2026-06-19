@@ -5,7 +5,7 @@ import type { GobernanzaModuloConfig } from './gobernanzaModuloConfig';
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE';
 export type EndpointSection = 'tenant' | 'permisos' | 'corporativo' | 'reglas';
 export type EndpointActor = 'tenantSuperAdmin' | 'tenantGlobal' | 'ambos';
-export type FieldType = 'text' | 'textarea' | 'json' | 'id' | 'permisos' | 'context';
+export type FieldType = 'text' | 'textarea' | 'json' | 'id' | 'permisos' | 'context' | 'politicasRuntime' | 'dominioDinamico';
 
 export type FieldSpec = {
   name: string;
@@ -64,6 +64,8 @@ export interface ParametrosGobernanzaProps {
    * La selección navega al menuPath del formulario hijo.
    */
   operacionesHub?: boolean;
+  /** Filtra menú por gobernanzaModuloTipos.section (TenantSuperAdmin → gobernanza). */
+  tipoSection?: string | null;
 }
 
 /** Dominio UI / catálogos (solo usados dentro de ParametrosGobernanza). */

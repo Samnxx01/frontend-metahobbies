@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ChevronDown, ChevronRight, Users, Edit, Globe, Shield } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { BTN_GHOST_ACCENT } from '@/app/utils/buttonStyles';
 import { Button } from '@/components/ui/button';
 import { NodoCorpCard } from './NodoCorpCard';
 import type { TenantGlobalNode, TenantUsuario, CorpNode } from '@/app/services/tenantUsuariosService';
@@ -18,7 +19,7 @@ const UsuarioRow = ({ usuario, onEdit }: { usuario: TenantUsuario; onEdit?: () =
         <div className="flex items-center gap-2 flex-shrink-0 ml-2">
             {usuario.rol && <Badge variant="outline" className="text-xs">{usuario.rol}</Badge>}
             {onEdit && (
-                <Button variant="ghost" size="icon" className="h-7 w-7 text-foreground/70 hover:bg-primary/10 hover:text-primary" onClick={onEdit}>
+                <Button variant="ghost" size="icon" className={`h-7 w-7 ${BTN_GHOST_ACCENT}`} onClick={onEdit}>
                     <Edit className="h-3.5 w-3.5" />
                 </Button>
             )}
@@ -132,7 +133,7 @@ export const NodoTenantGlobalCard = ({
                             <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-7 w-7 ml-1 text-foreground/70 hover:bg-primary/10 hover:text-primary"
+                                className={`h-7 w-7 ml-1 ${BTN_GHOST_ACCENT}`}
                                 onClick={e => { e.stopPropagation(); onEditTG(tenantGlobal); }}
                             >
                                 <Edit className="h-3.5 w-3.5" />

@@ -1,6 +1,7 @@
-import { DIOS_REGLAS_ENDPOINT_IDS } from './parametrosGobernanzaConstants';
 import type { EndpointSpec } from './parametrosGobernanzaTypes';
 import type { ParametrosGobernanzaProps } from './parametrosGobernanzaTypes';
+import type { GobernanzaParametrizacionUiSets } from './gobernanzaParametrizacionUi';
+import { GOBERNANZA_PARAMETRIZACION_UI_SETS_VACIO } from './gobernanzaParametrizacionUi';
 
 /**
  * Contexto mínimo para evaluar permisos de endpoint (alineado a ParametrosGobernanza).
@@ -12,6 +13,10 @@ export type GobernanzaCapabilityContext = {
   tenantCorporativoId?: string | null;
   /** `tenant-actualizar-dios-reglas` / reglas DIOS: corporativo en counters → solo lectura en UI. */
   saJerarquiaConCorporativo: boolean;
+  /** Valor crudo del actor JWT (`undefined` = aún no cargado). */
+  saJerarquiaTieneCorporativoEnCounters?: boolean;
+  /** Desde gobernanzaModuloConfigs (GET parametrizacion-ui). */
+  parametrizacionUi?: GobernanzaParametrizacionUiSets;
 };
 
 export type GobernanzaEndpointActionId = 'configure' | 'execute' | 'design';
@@ -59,17 +64,30 @@ function esJwtSoloTenantSuperAdmin(ctx: GobernanzaCapabilityContext): boolean {
   return Boolean(tsa && !tg && !tc);
 }
 
+/** JWT SA puro y counters confirman ausencia de corporativo (no habilitar mientras `undefined`). */
+export function scopeJwtSaSinCorporativoEnCounters(ctx: GobernanzaCapabilityContext): boolean {
+  return (
+    esJwtSoloTenantSuperAdmin(ctx) &&
+    ctx.saJerarquiaTieneCorporativoEnCounters === false
+  );
+}
+
+function diosReglasEndpointIds(ctx: GobernanzaCapabilityContext): Set<string> {
+  return ctx.parametrizacionUi?.endpointIdsModoReglasDios
+    ?? GOBERNANZA_PARAMETRIZACION_UI_SETS_VACIO.endpointIdsModoReglasDios;
+}
+
 function diosReglasDisponibleModal(endpoint: EndpointSpec, ctx: GobernanzaCapabilityContext): boolean {
   const base = endpointDisponibleParaScope(endpoint, ctx);
-  if (!DIOS_REGLAS_ENDPOINT_IDS.has(endpoint.id)) return base;
+  if (!diosReglasEndpointIds(ctx).has(endpoint.id)) return base;
   return base && esJwtSoloTenantSuperAdmin(ctx);
 }
 
 function modoSoloLecturaReglasDios(endpoint: EndpointSpec, ctx: GobernanzaCapabilityContext): boolean {
   return (
-    DIOS_REGLAS_ENDPOINT_IDS.has(endpoint.id) &&
+    diosReglasEndpointIds(ctx).has(endpoint.id) &&
     esJwtSoloTenantSuperAdmin(ctx) &&
-    ctx.saJerarquiaConCorporativo === true
+    !scopeJwtSaSinCorporativoEnCounters(ctx)
   );
 }
 

@@ -20,6 +20,8 @@ import {
     FormMessage
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 // Lucide icons
@@ -27,8 +29,14 @@ import { Loader2, AlertTriangle } from 'lucide-react';
 import { apiFetch } from '@/app/services/api';
 import { fetchSplashLogo, resolveSplashLogoUrl } from '@/app/services/splashLogoService';
 import { obtenerBrandingPublico } from '@/app/services/brandingWidget';
+import { normalizeImageRenderUrl } from '@/app/utils/normalizeImageRenderUrl';
 import { getAdminHomeRoute } from '@/app/services/routeService';
 import { getGovernedPostLoginPath, getGovernedRegisterPath, getGovernedForgotPasswordPath, isGovernedPathConfigured } from '@/app/services/governedNavigation';
+import {
+    clearSavedLoginCredentials,
+    persistSavedLoginCredentials,
+    readSavedLoginCredentials,
+} from '@/app/services/savedLoginCredentialsService';
 
 // --- Interfaces ---
 interface LoginFormData {
@@ -73,6 +81,7 @@ export default function Login(): React.ReactElement {
     const [dialogMessage, setDialogMessage] = useState<string>('');
     const [logoUrl, setLogoUrl] = useState<string | null>(null);
     const [backgroundUrl, setBackgroundUrl] = useState<string | null>(null);
+    const [rememberCredentials, setRememberCredentials] = useState<boolean>(false);
 
     // 1. Inicializar useForm
     const form = useForm<LoginFormData>({
@@ -82,6 +91,17 @@ export default function Login(): React.ReactElement {
             password: '',
         }
     });
+
+    useEffect(() => {
+        const savedCredentials = readSavedLoginCredentials();
+        if (!savedCredentials) return;
+
+        form.reset({
+            correo: savedCredentials.correo,
+            password: savedCredentials.password,
+        });
+        setRememberCredentials(true);
+    }, [form]);
 
     useEffect(() => {
         const fetchPublicLogo = async (): Promise<void> => {
@@ -103,7 +123,7 @@ export default function Login(): React.ReactElement {
             try {
                 const branding = await obtenerBrandingPublico();
                 const loginBackground = branding?.widgets?.loginBackground;
-                const nextBackgroundUrl = String(loginBackground?.imageUrl || '').trim();
+                const nextBackgroundUrl = normalizeImageRenderUrl(loginBackground?.imageUrl);
 
                 if (loginBackground?.enabled !== false && nextBackgroundUrl) {
                     setBackgroundUrl(nextBackgroundUrl);
@@ -138,6 +158,12 @@ export default function Login(): React.ReactElement {
             // Map correo to email for the login service
             const response = await login({ correo: data.correo.trim().toLowerCase(), password: data.password }) as LoginResponse;
             if (response?.token && response?.usuario) {
+                if (rememberCredentials) {
+                    persistSavedLoginCredentials(data.correo, data.password);
+                } else {
+                    clearSavedLoginCredentials();
+                }
+
                 // Verificar si requiere actualización de contraseña
                 if (response.requiereActualizacion === true) {
                     toast.info('Debes actualizar tu contraseña provisional');
@@ -274,11 +300,12 @@ export default function Login(): React.ReactElement {
                                     <FormItem>
                                         <FormLabel className="text-foreground">Correo electrónico</FormLabel>
                                         <FormControl>
-                                            <Input 
-                                                type="email" 
-                                                placeholder="tu.correo@ejemplo.com" 
-                                                className="bg-background border-input focus:border-primary focus:ring-primary" 
-                                                {...field} 
+                                            <Input
+                                                type="email"
+                                                autoComplete="username"
+                                                placeholder="tu.correo@ejemplo.com"
+                                                className="bg-background border-input focus:border-primary focus:ring-primary"
+                                                {...field}
                                             />
                                         </FormControl>
                                         <FormMessage />
@@ -294,11 +321,12 @@ export default function Login(): React.ReactElement {
                                     <FormItem>
                                         <FormLabel className="text-foreground">Contraseña</FormLabel>
                                         <FormControl>
-                                            <Input 
-                                                type="password" 
-                                                placeholder="Tu contraseña secreta" 
-                                                className="bg-background border-input focus:border-primary focus:ring-primary" 
-                                                {...field} 
+                                            <Input
+                                                type="password"
+                                                autoComplete="current-password"
+                                                placeholder="Tu contraseña secreta"
+                                                className="bg-background border-input focus:border-primary focus:ring-primary"
+                                                {...field}
                                             />
                                         </FormControl>
                                         <FormMessage />
@@ -306,11 +334,24 @@ export default function Login(): React.ReactElement {
                                 )}
                             />
 
-                            {/* Enlace Olvidé mi contraseña */}
-                            <div className="flex justify-end pt-1 pb-3">
+                            {/* Guardar credenciales y recuperación de contraseña */}
+                            <div className="flex items-center justify-between gap-3 pt-1 pb-3">
+                                <div className="flex items-center gap-2">
+                                    <Checkbox
+                                        id="remember-credentials"
+                                        checked={rememberCredentials}
+                                        onCheckedChange={(checked) => setRememberCredentials(checked === true)}
+                                    />
+                                    <Label
+                                        htmlFor="remember-credentials"
+                                        className="cursor-pointer text-sm font-normal text-muted-foreground"
+                                    >
+                                        Guardar credenciales
+                                    </Label>
+                                </div>
                                 <Link
                                     to={getGovernedForgotPasswordPath()}
-                                    className="text-sm text-primary hover:underline font-medium transition-colors"
+                                    className="text-sm text-primary hover:underline font-medium transition-colors shrink-0"
                                 >
                                     ¿Olvidaste tu contraseña?
                                 </Link>
@@ -319,7 +360,7 @@ export default function Login(): React.ReactElement {
                             {/* Botón de Acceder */}
                             <Button
                                 type="submit"
-                                className="w-full h-12 text-base font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+                                className="w-full h-12 text-base font-semibold transition-colors"
                                 disabled={isSubmitting}
                             >
                                 {isSubmitting ? (

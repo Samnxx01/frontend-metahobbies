@@ -1,4 +1,5 @@
 import { apiFetch } from '@/app/services/api';
+import { normalizeImageRenderUrl } from '@/app/utils/normalizeImageRenderUrl';
 
 export interface SplashLogoPayload {
   id?: string;
@@ -28,9 +29,11 @@ const resolveMode = (useAuth: boolean): 'auth' | 'anon' => (useAuth ? 'auth' : '
 export const resolveSplashLogoUrl = (logo?: SplashLogoPayload | null): string | null => {
   if (!logo) return null;
   if (typeof logo.dataUrl === 'string' && logo.dataUrl.trim()) return logo.dataUrl.trim();
-  if (typeof logo.url === 'string' && logo.url.trim()) return logo.url.trim();
-  if (typeof logo.imageUrl === 'string' && logo.imageUrl.trim()) return logo.imageUrl.trim();
-  if (typeof logo.logoUrl === 'string' && logo.logoUrl.trim()) return logo.logoUrl.trim();
+  if (typeof logo.url === 'string' && logo.url.trim()) return normalizeImageRenderUrl(logo.url);
+  if (typeof logo.imageUrl === 'string' && logo.imageUrl.trim())
+    return normalizeImageRenderUrl(logo.imageUrl);
+  if (typeof logo.logoUrl === 'string' && logo.logoUrl.trim())
+    return normalizeImageRenderUrl(logo.logoUrl);
   if (
     typeof logo.base64 === 'string'
     && logo.base64.trim()

@@ -159,6 +159,7 @@ export function clearCachesTrasCompraAprobada(): void {
   clearDatosFacturacionInvitado();
   clearCarritoIdPagoPersistido();
   clearWompiRetornoContext();
+  clearCheckoutDeclinadoActivo();
   clearCartLocalCaches();
 }
 

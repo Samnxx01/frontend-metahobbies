@@ -76,6 +76,30 @@ export const GOBERNANZA_MODULO_REGLAS: GobernanzaModuloConfig = {
   submenuHint: 'Selecciona una acción; el formulario se muestra debajo.',
 };
 
+/** Panel de políticas de bypass (sin formularios API en gobernanzaModuloConfigs). */
+export const GOBERNANZA_MODULO_POLITICA_BYPASS: GobernanzaModuloConfig = {
+  slug: 'politica-bypass',
+  section: 'permisos',
+  label: 'Políticas de bypass',
+  description: 'Semilla de roles y visibilidad por dominio (rutas, referidos, comisiones).',
+  endpointIds: [],
+  defaultActionId: '',
+  actionQueryParam: GOBERNANZA_MODULO_ACTION_QUERY_DEFAULT,
+  formularioComponent: 'PoliticaBypassPanel',
+};
+
+/** Motor unificado de políticas runtime (bypass + roles corporativos). */
+export const GOBERNANZA_MODULO_POLITICAS_RUNTIME: GobernanzaModuloConfig = {
+  slug: 'politicas-runtime',
+  section: 'permisos',
+  label: 'Políticas runtime',
+  description: 'Motor dinámico para bypass, roles corporativos y decisiones runtime sin tocar código.',
+  endpointIds: [],
+  defaultActionId: '',
+  actionQueryParam: GOBERNANZA_MODULO_ACTION_QUERY_DEFAULT,
+  formularioComponent: 'PoliticasRuntimePanel',
+};
+
 const REGISTRY: Record<string, GobernanzaModuloConfig> = {
   [GOBERNANZA_MODULO_TENANT.slug]: GOBERNANZA_MODULO_TENANT,
   tenant: GOBERNANZA_MODULO_TENANT,
@@ -84,6 +108,10 @@ const REGISTRY: Record<string, GobernanzaModuloConfig> = {
   permisos: GOBERNANZA_MODULO_PERMISOS,
   [GOBERNANZA_MODULO_REGLAS.slug]: GOBERNANZA_MODULO_REGLAS,
   reglas: GOBERNANZA_MODULO_REGLAS,
+  [GOBERNANZA_MODULO_POLITICA_BYPASS.slug]: GOBERNANZA_MODULO_POLITICA_BYPASS,
+  'politica-bypass': GOBERNANZA_MODULO_POLITICA_BYPASS,
+  [GOBERNANZA_MODULO_POLITICAS_RUNTIME.slug]: GOBERNANZA_MODULO_POLITICAS_RUNTIME,
+  'politicas-runtime': GOBERNANZA_MODULO_POLITICAS_RUNTIME,
 };
 
 export function getGobernanzaModuloBySlug(slug: string | null | undefined): GobernanzaModuloConfig | null {

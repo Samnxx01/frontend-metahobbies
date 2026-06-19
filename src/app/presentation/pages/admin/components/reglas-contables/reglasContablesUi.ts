@@ -1,3 +1,5 @@
+import { BTN_ACTION } from '@/app/utils/buttonStyles';
+
 /** Estilos compartidos para parametrización de reglas contables (paleta primary). */
 export const reglasContablesUi = {
   dialogContent: 'max-w-5xl max-h-[90vh] overflow-y-auto border-primary/25',
@@ -9,6 +11,6 @@ export const reglasContablesUi = {
   tableHead: 'text-primary font-semibold bg-primary/5',
   tableRowHover: 'hover:bg-primary/5',
   linkAction: 'text-xs font-medium text-primary underline-offset-2 hover:underline',
-  btnPrimary: 'bg-primary text-primary-foreground hover:bg-primary/90',
+  btnPrimary: BTN_ACTION,
   badgeSistema: 'border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-200',
 } as const;

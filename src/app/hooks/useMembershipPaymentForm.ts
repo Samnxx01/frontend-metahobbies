@@ -47,6 +47,8 @@ interface UseMembershipPaymentFormParams {
   purchaseMembership: PurchaseMembershipFunction;
   navigate: NavigateFunction;
   token: string;
+  membresiaPlanId?: string | null;
+  resolveGuestSessionId?: () => string;
   /** Callback que recibe el resultado del pago para mostrar el modal */
   onPagoTerminado?: (resultado: ResultadoPago) => void;
 }
@@ -80,6 +82,8 @@ export function useMembershipPaymentForm({
   purchaseMembership: _purchaseMembership,
   navigate,
   token,
+  membresiaPlanId = null,
+  resolveGuestSessionId,
   onPagoTerminado,
 }: UseMembershipPaymentFormParams): UseMembershipPaymentFormReturn {
   const [activeStep, setActiveStep] = useState<number>(0);
@@ -167,6 +171,11 @@ export function useMembershipPaymentForm({
       toast.error('No se encontró el token de referido. Verifica el enlace de invitación.');
       return;
     }
+    const planId = String(membresiaPlanId || '').trim();
+    if (!planId) {
+      toast.error('No hay un plan de membresía disponible. Recarga la página o contacta soporte.');
+      return;
+    }
 
     setLoading(true);
     try {
@@ -246,12 +255,14 @@ export function useMembershipPaymentForm({
 
       // Llamada al backend
       const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api';
-      const guestSessionId =
-        sessionStorage.getItem('mabs_guest_session_id')?.trim() || '';
+      const guestSessionId = resolveGuestSessionId?.()?.trim()
+        || sessionStorage.getItem('mabs_guest_session_id')?.trim()
+        || '';
 
       const paymentHeaders: Record<string, string> = {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
+        referidos: token,
+        Authorization: `Bearer ${token}`,
       };
       if (guestSessionId) {
         paymentHeaders['x-guest-session-id'] = guestSessionId;
@@ -264,6 +275,7 @@ export function useMembershipPaymentForm({
           headers: paymentHeaders,
           body: JSON.stringify({
             ...paymentData,
+            membresiaId: planId,
             ...(guestSessionId ? { guestSessionId } : {}),
           }),
         }
@@ -342,6 +354,10 @@ export function useMembershipPaymentForm({
   const handleNext = (): void => {
     if (!validateStep(activeStep)) {
       toast.error(getValidationErrorMessage(activeStep));
+      return;
+    }
+    if (activeStep >= 1 && !token?.trim()) {
+      toast.error('Necesitas un enlace de referido válido para continuar con el pago.');
       return;
     }
     if (activeStep < steps.length - 1) {

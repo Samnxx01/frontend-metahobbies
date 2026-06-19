@@ -17,6 +17,8 @@ export type UseParametrosGobernanzaModuloMenuOptions = {
   enabled?: boolean;
   preferredActionId?: string | null;
   operacionesHub?: boolean;
+  /** Filtra menú por gobernanzaModuloTipos.section (p. ej. gobernanza). */
+  tipoSection?: string | null;
 };
 
 /**
@@ -30,6 +32,7 @@ export function useParametrosGobernanzaModuloMenu({
   enabled = true,
   preferredActionId = null,
   operacionesHub = false,
+  tipoSection = null,
 }: UseParametrosGobernanzaModuloMenuOptions) {
   const slug = moduloSlug ? normalizeGobernanzaModuloSlug(String(moduloSlug)) : '';
 
@@ -48,6 +51,7 @@ export function useParametrosGobernanzaModuloMenu({
     syncDefaultAction: operacionesHub ? false : (syncDefaultAction ?? parametrizacionBase?.syncDefaultAction ?? true),
     inlineFormularios: operacionesHub || !menuPathNorm,
     operacionesHub,
+    tipoSection,
     enabled: enabled && Boolean(slug || menuPathNorm || parametrizacionBase?.section),
     preferredActionId,
   });

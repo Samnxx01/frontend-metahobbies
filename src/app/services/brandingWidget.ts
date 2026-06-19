@@ -1,5 +1,11 @@
 import { apiFetch } from '@/app/services/api';
 import { normalizePublicIdForApi } from '@/app/utils/entityPublicId';
+import {
+  buildImgFondoVerUrl,
+  normalizeBrandingWidgetImages,
+  normalizeImageRenderUrl,
+  normalizeImagenFondoAsset,
+} from '@/app/utils/normalizeImageRenderUrl';
 import { persistBrandingCache } from '@/app/services/brandingCache';
 
 export interface BrandingPalette {
@@ -74,8 +80,9 @@ export const obtenerBrandingPublico = async (): Promise<BrandingConfig | null> =
     return null;
   }
 
-  persistBrandingCache(response.branding);
-  return response.branding;
+  const branding = normalizeBrandingWidgetImages(response.branding);
+  persistBrandingCache(branding);
+  return branding;
 };
 
 const buildBrandingScopeQuery = (params?: BrandingScopeParams): string => {
@@ -99,26 +106,29 @@ export const obtenerBrandingPrivado = async (params?: BrandingScopeParams): Prom
     return null;
   }
 
-  persistBrandingCache(response.branding);
-  return response.branding;
+  const branding = normalizeBrandingWidgetImages(response.branding);
+  persistBrandingCache(branding);
+  return branding;
 };
 
 export const guardarBrandingPrivado = async (
   branding: BrandingConfig,
   params?: BrandingScopeParams
 ): Promise<BrandingConfig | null> => {
+  const payload = normalizeBrandingWidgetImages(branding);
   const response = (await apiFetch(`/api/config/parametrizacion/widget/branding${buildBrandingScopeQuery(params)}`, {
     method: 'PUT',
     useAuth: true,
-    body: branding
+    body: payload
   })) as BrandingResponse | null;
 
   if (!response?.ok || !response.branding) {
     return null;
   }
 
-  persistBrandingCache(response.branding);
-  return response.branding;
+  const saved = normalizeBrandingWidgetImages(response.branding);
+  persistBrandingCache(saved);
+  return saved;
 };
 
 export const subirImagenFondoLogin = async (file: File): Promise<{ id: string; url: string } | null> => {
@@ -135,9 +145,10 @@ export const subirImagenFondoLogin = async (file: File): Promise<{ id: string; u
     return null;
   }
 
+  const id = normalizePublicIdForApi(response.id);
   return {
-    id: response.id,
-    url: response.url || `/api/front/imgFondo/ver/${response.id}`
+    id,
+    url: normalizeImageRenderUrl(response.url) || buildImgFondoVerUrl(id),
   };
 };
 
@@ -157,25 +168,29 @@ export const listarImagenesFondo = async (): Promise<ImagenFondo[]> => {
     useAuth: true
   }) as { imagenes?: ImagenFondo[] } | null;
 
-  return Array.isArray(response?.imagenes) ? response.imagenes : [];
+  return (response?.imagenes ?? []).map((img) => normalizeImagenFondoAsset(img));
 };
 
 export const reemplazarImagenFondo = async (id: string, file: File): Promise<{ id: string; url: string } | null> => {
   const formData = new FormData();
   formData.append('img', file);
 
-  const response = await apiFetch(`/api/front/imgFondo/${id}`, {
+  const response = await apiFetch(`/api/front/imgFondo/${normalizePublicIdForApi(id)}`, {
     method: 'PUT',
     useAuth: true,
     body: formData
   }) as { id?: string; url?: string } | null;
 
   if (!response?.id) return null;
-  return { id: response.id, url: response.url || `/api/front/imgFondo/ver/${response.id}` };
+  const normalizedId = normalizePublicIdForApi(response.id);
+  return {
+    id: normalizedId,
+    url: normalizeImageRenderUrl(response.url) || buildImgFondoVerUrl(normalizedId),
+  };
 };
 
 export const eliminarImagenFondo = async (id: string): Promise<void> => {
-  await apiFetch(`/api/front/imgFondo/${id}`, {
+  await apiFetch(`/api/front/imgFondo/${normalizePublicIdForApi(id)}`, {
     method: 'DELETE',
     useAuth: true
   });

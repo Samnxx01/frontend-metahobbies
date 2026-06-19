@@ -553,6 +553,8 @@ export interface PedidoAprobado {
     departamento: string;
     direccion: string;
   };
+  kardexSalidasRegistradas?: number;
+  puedeReaplicarKardex?: boolean;
   items: PedidoAprobadoLinea[];
 }
 

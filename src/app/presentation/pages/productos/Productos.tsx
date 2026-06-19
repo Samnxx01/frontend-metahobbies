@@ -190,7 +190,7 @@ export default function Productos(): React.ReactElement {
             variant={!categoriaActivaId ? 'default' : 'outline'}
             className={`cursor-pointer px-4 py-1.5 text-sm font-medium transition-colors ${
               !categoriaActivaId
-                ? 'bg-primary text-primary-foreground hover:bg-primary/90'
+                ? ''
                 : 'border-input hover:bg-muted/50 text-foreground'
             }`}
           >
@@ -206,7 +206,7 @@ export default function Productos(): React.ReactElement {
                 variant={selected ? 'default' : 'outline'}
                 className={`cursor-pointer px-4 py-1.5 text-sm font-medium transition-colors capitalize ${
                   selected
-                    ? 'bg-primary text-primary-foreground hover:bg-primary/90'
+                    ? ''
                     : 'border-input hover:bg-muted/50 text-foreground'
                 }`}
               >

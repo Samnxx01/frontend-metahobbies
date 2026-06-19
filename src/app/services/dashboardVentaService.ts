@@ -4,6 +4,8 @@ import productosService, { type BackendProducto } from './productosService';
 export type PipelineBLevel = {
   gen: number;
   percent: number;
+  levelId?: string;
+  _id?: string;
 };
 
 export type PipelineBOriginConfig = {
@@ -45,6 +47,14 @@ const dashboardVentaService = {
       method: 'GET',
     });
     return (response?.data ?? null) as PipelineBOriginConfig | null;
+  },
+
+  async guardarNivelesOrigen(payload: PipelineBOriginPayload): Promise<PipelineBOriginConfig> {
+    const response = await apiFetch('/api/comisiones-origen/niveles', {
+      method: 'PUT',
+      body: payload,
+    });
+    return response?.data as PipelineBOriginConfig;
   },
 
   async crearConfiguracion(payload: PipelineBOriginPayload): Promise<PipelineBOriginConfig> {

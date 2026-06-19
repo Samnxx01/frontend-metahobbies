@@ -27,3 +27,34 @@ export function encodePublicIdForPath(id: unknown): string {
   const norm = normalizePublicIdForApi(id);
   return norm ? encodeURIComponent(norm) : '';
 }
+
+const OBJECT_ID_HEX = /^[0-9a-fA-F]{24}$/;
+const PUBLIC_UUID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** ObjectId legacy o UUID público (`iud`) — no es un correo ni nombre legible. */
+export function isOpaqueDocumentId(value: unknown): boolean {
+  const v = String(value ?? '').trim();
+  return OBJECT_ID_HEX.test(v) || PUBLIC_UUID.test(v);
+}
+
+/** Etiqueta corta para mostrar en UI sin exponer el identificador completo. */
+export function formatOpaqueIdShort(value: unknown, suffixLen = 8): string {
+  const v = String(value ?? '').trim();
+  if (!v) return '—';
+  if (v.length <= suffixLen + 3) return v;
+  return `···${v.slice(-suffixLen)}`;
+}
+
+export function formatUserDisplayLabel(input: {
+  nombre?: string | null;
+  apellido?: string | null;
+  correo?: string | null;
+  fallback?: string;
+}): string {
+  const nombre = [input.nombre, input.apellido].map((v) => String(v ?? '').trim()).filter(Boolean).join(' ').trim();
+  const correo = String(input.correo ?? '').trim();
+  if (nombre) return nombre;
+  if (correo && !isOpaqueDocumentId(correo)) return correo;
+  return String(input.fallback ?? '').trim() || 'Usuario no identificado';
+}

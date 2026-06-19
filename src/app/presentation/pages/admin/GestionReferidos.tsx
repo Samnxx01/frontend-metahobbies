@@ -1,11 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '@/app/services/api';
+import {
+    formatOpaqueIdShort,
+    formatUserDisplayLabel,
+    isOpaqueDocumentId,
+    resolveEntityPublicId,
+} from '@/app/utils/entityPublicId';
 import { toast } from 'react-toastify';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Separator } from '@/components/ui/separator';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 // Lucide icons
@@ -18,6 +24,8 @@ interface Voucher {
     _id: string;
     referidoId: string;
     referidoCorreo?: string | null;
+    referidoNombre?: string | null;
+    referidoApellido?: string | null;
     montoGanado: number;
     ciclo: number;
     fecha: string;
@@ -32,6 +40,7 @@ interface UsuarioReferido {
     nombre?: string;
     saldoInicial: number;
     saldoActual: number;
+    totalGenerado?: number;
     totalPagado: number;
     totalPendiente: number;
     vouchers: Voucher[];
@@ -62,6 +71,35 @@ interface ReferralChainNode {
     isDestino: boolean;
     isCurrent: boolean;
 }
+
+const voucherMonto = (voucher: Voucher): number => Number(voucher.montoGanado) || 0;
+
+const totalesDesdeVouchers = (vouchers: Voucher[]) => {
+    const totalGenerado = vouchers.reduce((acc, v) => acc + voucherMonto(v), 0);
+    const totalPendiente = vouchers
+        .filter((v) => v.status === 'pendiente')
+        .reduce((acc, v) => acc + voucherMonto(v), 0);
+    const totalPagado = vouchers
+        .filter((v) => v.status === 'pagado')
+        .reduce((acc, v) => acc + voucherMonto(v), 0);
+    const saldoInicial = vouchers.length ? voucherMonto(vouchers[0]) : 0;
+    return { totalGenerado, totalPendiente, totalPagado, saldoInicial };
+};
+
+const resolverTotalesUsuario = (usuario: UsuarioReferido) => {
+    const desdeVouchers = totalesDesdeVouchers(usuario.vouchers);
+    const totalPendiente = Number(usuario.totalPendiente ?? usuario.saldoActual ?? desdeVouchers.totalPendiente) || 0;
+    const totalPagado = Number(usuario.totalPagado ?? desdeVouchers.totalPagado) || 0;
+    const totalGenerado = Number(usuario.totalGenerado ?? desdeVouchers.totalGenerado) || (totalPendiente + totalPagado);
+    const saldoInicial = Number(usuario.saldoInicial ?? desdeVouchers.saldoInicial) || 0;
+    return {
+        saldoInicial,
+        saldoActual: totalPendiente,
+        totalGenerado,
+        totalPagado,
+        totalPendiente,
+    };
+};
 
 const DetailBox = ({ icon, label, value, mono = false }: {
     icon: React.ReactNode;
@@ -128,12 +166,15 @@ const ReferralChain = ({ chain }: { chain: ReferralChainNode[] }) => {
                             >
                                 <div className="min-w-0 flex-1 mr-2">
                                     <p className="text-sm font-medium text-foreground truncate leading-snug">
-                                        {node.nombre ||
-                                            (looksLikeObjectId(node.correo) ? 'Usuario sin nombre' : node.correo)}
+                                        {formatUserDisplayLabel({
+                                            nombre: node.nombre,
+                                            correo: isOpaqueDocumentId(node.correo) ? null : node.correo,
+                                            fallback: 'Usuario no identificado',
+                                        })}
                                     </p>
-                                    {node.nombre && !looksLikeObjectId(node.correo) && (
+                                    {node.nombre && node.correo && !isOpaqueDocumentId(node.correo) ? (
                                         <p className="text-[11px] text-muted-foreground truncate">{node.correo}</p>
-                                    )}
+                                    ) : null}
                                 </div>
 
                                 <span
@@ -158,25 +199,67 @@ const ReferralChain = ({ chain }: { chain: ReferralChainNode[] }) => {
     );
 };
 
-const looksLikeObjectId = (value: string): boolean => /^[a-f0-9]{24}$/i.test(String(value || '').trim());
+const cacheUserDetail = (
+    cache: Map<string, UserDetail>,
+    user: { _id?: string; iud?: string; id?: string; correo?: string; nombre?: string; apellido?: string }
+): void => {
+    const detail: UserDetail = {
+        _id: resolveEntityPublicId(user),
+        correo: user.correo,
+        nombre: user.nombre,
+        apellido: user.apellido,
+    };
+    const keys = new Set(
+        [user.iud, user._id, user.id, detail._id].map((v) => String(v || '').trim()).filter(Boolean)
+    );
+    keys.forEach((key) => cache.set(key, detail));
+};
 
 const resolveNodeCorreo = (
     usuarioId: string,
     usuario: UsuarioReferido | undefined,
-    hints: { referidoId: string; referidoCorreo?: string | null; propietarioId: string; propietarioCorreo?: string }
+    hints: {
+        referidoId: string;
+        referidoCorreo?: string | null;
+        referidoNombre?: string | null;
+        propietarioId: string;
+        propietarioCorreo?: string;
+        propietarioNombre?: string | null;
+    }
 ): string => {
     if (usuario?.correo) return usuario.correo;
     if (usuarioId === hints.referidoId && hints.referidoCorreo) return hints.referidoCorreo;
     if (usuarioId === hints.propietarioId && hints.propietarioCorreo) return hints.propietarioCorreo;
-    if (looksLikeObjectId(usuarioId)) return 'Correo no disponible';
+    if (isOpaqueDocumentId(usuarioId)) return 'Correo no disponible';
     return usuarioId;
+};
+
+const resolveNodeNombre = (
+    usuarioId: string,
+    usuario: UsuarioReferido | undefined,
+    hints: {
+        referidoId: string;
+        referidoNombre?: string | null;
+        propietarioId: string;
+        propietarioNombre?: string | null;
+    }
+): string | undefined => {
+    if (usuario?.nombre) return usuario.nombre;
+    if (usuarioId === hints.referidoId && hints.referidoNombre) return hints.referidoNombre;
+    if (usuarioId === hints.propietarioId && hints.propietarioNombre) return hints.propietarioNombre;
+    return undefined;
 };
 
 const buildReferralChain = (
     voucherReferidoId: string,
     propietarioId: string,
     allUsuarios: UsuarioReferido[],
-    hints: { referidoCorreo?: string | null; propietarioCorreo?: string } = {}
+    hints: {
+        referidoCorreo?: string | null;
+        referidoNombre?: string | null;
+        propietarioCorreo?: string;
+        propietarioNombre?: string | null;
+    } = {}
 ): ReferralChainNode[] => {
     const userMap = new Map<string, UsuarioReferido>();
     allUsuarios.forEach((u) => userMap.set(u.usuarioId, u));
@@ -184,8 +267,10 @@ const buildReferralChain = (
     const correoHints = {
         referidoId: voucherReferidoId,
         referidoCorreo: hints.referidoCorreo,
+        referidoNombre: hints.referidoNombre,
         propietarioId,
         propietarioCorreo: hints.propietarioCorreo,
+        propietarioNombre: hints.propietarioNombre,
     };
 
     const findUpstream = (targetId: string): string | null => {
@@ -213,10 +298,11 @@ const buildReferralChain = (
     return chainIds.map((id, index) => {
         const u = userMap.get(id);
         const correo = resolveNodeCorreo(id, u, correoHints);
+        const nombre = resolveNodeNombre(id, u, correoHints);
         return {
             usuarioId: id,
             correo,
-            nombre: u?.nombre,
+            nombre,
             isOrigen: index === 0,
             isDestino: index === chainIds.length - 1,
             isCurrent: id === voucherReferidoId,
@@ -246,7 +332,6 @@ function GestionReferidos(): React.ReactElement {
             const response = await apiFetch(`${API_BASE_URL}/referido/listarSaldoRefere`, {
                 method: 'GET'
             });
-            console.log('Respuesta de referidos: ', response)
             setData(response);
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : 'Error al cargar datos de referidos';
@@ -286,13 +371,8 @@ function GestionReferidos(): React.ReactElement {
             });
             if (response?.usuarios) {
                 const newCache = new Map(usersCache);
-                response.usuarios.forEach((user: any) => {
-                    newCache.set(user._id, {
-                        _id: user._id,
-                        correo: user.correo,
-                        nombre: user.nombre,
-                        apellido: user.apellido
-                    });
+                response.usuarios.forEach((user: UserDetail & { iud?: string; id?: string }) => {
+                    cacheUserDetail(newCache, user);
                 });
                 setUsersCache(newCache);
                 return { user: newCache.get(userId) || null, fullCache: newCache };
@@ -324,8 +404,16 @@ function GestionReferidos(): React.ReactElement {
 
             const voucherDetail: VoucherDetail = {
                 ...voucher,
-                usuarioPropietario: propietario || { _id: usuarioPropietarioId, correo: usuarioPropietarioEmail },
-                usuarioReferido: referido || { _id: voucher.referidoId, correo: voucher.referidoCorreo || 'No disponible' }
+                usuarioPropietario: propietario || {
+                    _id: usuarioPropietarioId,
+                    correo: isOpaqueDocumentId(usuarioPropietarioEmail) ? 'No disponible' : usuarioPropietarioEmail,
+                },
+                usuarioReferido: referido || {
+                    _id: voucher.referidoId,
+                    correo: voucher.referidoCorreo || 'No disponible',
+                    nombre: voucher.referidoNombre || undefined,
+                    apellido: voucher.referidoApellido || undefined,
+                },
             };
 
             setSelectedVoucher(voucherDetail);
@@ -337,7 +425,9 @@ function GestionReferidos(): React.ReactElement {
                     data.usuarios,
                     {
                         referidoCorreo: voucher.referidoCorreo,
+                        referidoNombre: voucher.referidoNombre,
                         propietarioCorreo: usuarioPropietarioEmail,
+                        propietarioNombre: propietario?.nombre,
                     }
                 );
 
@@ -362,14 +452,14 @@ function GestionReferidos(): React.ReactElement {
 
                 // Para nodos intermedios aún sin correo, buscar en cache
                 const unresolvedIds = preEnrichedChain
-                    .filter((node) => looksLikeObjectId(node.correo) || node.correo === 'Correo no disponible')
+                    .filter((node) => isOpaqueDocumentId(node.correo) || node.correo === 'Correo no disponible')
                     .map((node) => node.usuarioId);
 
                 if (unresolvedIds.length > 0) {
                     const { fullCache } = await fetchUserDetails(unresolvedIds[0]);
 
                     const enrichedChain = preEnrichedChain.map((node) => {
-                        if (!looksLikeObjectId(node.correo) && node.correo !== 'Correo no disponible') {
+                        if (!isOpaqueDocumentId(node.correo) && node.correo !== 'Correo no disponible') {
                             return node;
                         }
                         const detail = fullCache.get(node.usuarioId) || latestCache.get(node.usuarioId);
@@ -415,9 +505,20 @@ function GestionReferidos(): React.ReactElement {
     }
 
     const totalUsuarios = data?.usuarios.length || 0;
-    const totalComisionesGlobales = data?.usuarios.reduce((acc, user) => acc + user.saldoActual, 0) || 0;
-    const totalPagadoGlobal = data?.usuarios.reduce((acc, user) => acc + user.totalPagado, 0) || 0;
-    const totalPendienteGlobal = data?.usuarios.reduce((acc, user) => acc + user.totalPendiente, 0) || 0;
+    const totalesGlobales = (data?.usuarios ?? []).reduce(
+        (acc, usuario) => {
+            const t = resolverTotalesUsuario(usuario);
+            return {
+                generado: acc.generado + t.totalGenerado,
+                pagado: acc.pagado + t.totalPagado,
+                pendiente: acc.pendiente + t.totalPendiente,
+            };
+        },
+        { generado: 0, pagado: 0, pendiente: 0 }
+    );
+    const totalComisionesGlobales = totalesGlobales.generado;
+    const totalPagadoGlobal = totalesGlobales.pagado;
+    const totalPendienteGlobal = totalesGlobales.pendiente;
 
     return (
         <div className="p-4 md:p-6 lg:p-8 bg-background min-h-screen">
@@ -515,7 +616,9 @@ function GestionReferidos(): React.ReactElement {
 
                 {/* Lista de Usuarios */}
                 <div className="space-y-3">
-                    {data?.usuarios.map((usuario) => (
+                    {data?.usuarios.map((usuario) => {
+                        const totales = resolverTotalesUsuario(usuario);
+                        return (
                         <Card key={usuario.usuarioId} className="border-0 shadow-sm hover:shadow-md transition-all">
                             <CardContent className="p-4 md:p-6">
                                 <div className="flex items-start justify-between mb-4">
@@ -524,10 +627,15 @@ function GestionReferidos(): React.ReactElement {
                                             <Mail className="h-5 w-5 text-primary" />
                                         </div>
                                         <div className="min-w-0 flex-1">
-                                            <p className="font-semibold text-foreground truncate">{usuario.correo}</p>
-                                            <p className="text-xs text-muted-foreground font-mono truncate">
-                                                {usuario.usuarioId}
+                                            <p className="font-semibold text-foreground truncate">
+                                                {formatUserDisplayLabel({
+                                                    nombre: usuario.nombre,
+                                                    correo: usuario.correo,
+                                                })}
                                             </p>
+                                            {usuario.nombre ? (
+                                                <p className="text-xs text-muted-foreground truncate">{usuario.correo}</p>
+                                            ) : null}
                                         </div>
                                     </div>
                                     <Badge variant="outline" className="ml-2 flex-shrink-0">
@@ -538,19 +646,19 @@ function GestionReferidos(): React.ReactElement {
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
                                     <div className="p-3 rounded-lg bg-muted/30">
                                         <p className="text-xs text-muted-foreground mb-1">Saldo Inicial</p>
-                                        <p className="text-sm font-semibold">{formatCurrency(usuario.saldoInicial)}</p>
+                                        <p className="text-sm font-semibold">{formatCurrency(totales.saldoInicial)}</p>
                                     </div>
                                     <div className="p-3 rounded-lg bg-primary/5 border border-primary/20">
                                         <p className="text-xs text-muted-foreground mb-1">Saldo Actual</p>
-                                        <p className="text-sm font-bold text-primary">{formatCurrency(usuario.saldoActual)}</p>
+                                        <p className="text-sm font-bold text-primary">{formatCurrency(totales.saldoActual)}</p>
                                     </div>
                                     <div className="p-3 rounded-lg bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-900">
                                         <p className="text-xs text-muted-foreground mb-1">Pagado</p>
-                                        <p className="text-sm font-semibold text-green-600">{formatCurrency(usuario.totalPagado)}</p>
+                                        <p className="text-sm font-semibold text-green-600">{formatCurrency(totales.totalPagado)}</p>
                                     </div>
                                     <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900">
                                         <p className="text-xs text-muted-foreground mb-1">Pendiente</p>
-                                        <p className="text-sm font-semibold text-amber-600">{formatCurrency(usuario.totalPendiente)}</p>
+                                        <p className="text-sm font-semibold text-amber-600">{formatCurrency(totales.totalPendiente)}</p>
                                     </div>
                                 </div>
 
@@ -604,10 +712,15 @@ function GestionReferidos(): React.ReactElement {
                                                                             <Calendar className="h-3 w-3" />
                                                                             {formatDate(voucher.fecha)}
                                                                         </div>
-                                                                        {voucher.referidoCorreo && (
+                                                                        {voucher.referidoCorreo && !isOpaqueDocumentId(voucher.referidoCorreo) && (
                                                                             <div className="flex items-center gap-1">
                                                                                 <Mail className="h-3 w-3" />
-                                                                                <span className="font-mono truncate max-w-[160px]">{voucher.referidoCorreo}</span>
+                                                                                <span className="truncate max-w-[160px]">
+                                                                                    {formatUserDisplayLabel({
+                                                                                        nombre: voucher.referidoNombre,
+                                                                                        correo: voucher.referidoCorreo,
+                                                                                    })}
+                                                                                </span>
                                                                             </div>
                                                                         )}
                                                                     </div>
@@ -628,7 +741,8 @@ function GestionReferidos(): React.ReactElement {
                                 )}
                             </CardContent>
                         </Card>
-                    ))}
+                        );
+                    })}
                 </div>
 
                 {/* Estado Vacío */}
@@ -654,6 +768,14 @@ function GestionReferidos(): React.ReactElement {
             {/* Modal - Detalle Voucher con Red de Referidos */}
             <Dialog open={modalOpen} onOpenChange={setModalOpen}>
                 <DialogContent className="max-w-md p-0 overflow-hidden border-none shadow-2xl">
+                    <DialogTitle className="sr-only">
+                        {selectedVoucher
+                            ? `Comisión generada: ${formatCurrency(selectedVoucher.montoGanado)}`
+                            : 'Detalle de comisión por referido'}
+                    </DialogTitle>
+                    <DialogDescription className="sr-only">
+                        Recibo con monto, estado, beneficiario, referido y cadena de la red de referidos.
+                    </DialogDescription>
                     {loadingVoucherDetail ? (
                         <div className="h-64 flex flex-col items-center justify-center gap-3">
                             <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -708,7 +830,7 @@ function GestionReferidos(): React.ReactElement {
                                             <DetailBox
                                                 icon={<Hash className="w-4 h-4" />}
                                                 label="ID Transacción"
-                                                value={selectedVoucher._id}
+                                                value={formatOpaqueIdShort(selectedVoucher._id)}
                                                 mono
                                             />
                                         </div>
@@ -727,12 +849,17 @@ function GestionReferidos(): React.ReactElement {
                                                     Generado por (Referido)
                                                 </p>
                                                 <p className="text-sm font-medium mt-0.5">
-                                                    {selectedVoucher.usuarioReferido?.nombre
-                                                        ? `${selectedVoucher.usuarioReferido.nombre} ${selectedVoucher.usuarioReferido.apellido || ''}`
-                                                        : 'Usuario Referido'}
+                                                    {formatUserDisplayLabel({
+                                                        nombre: selectedVoucher.usuarioReferido?.nombre,
+                                                        apellido: selectedVoucher.usuarioReferido?.apellido,
+                                                        correo: selectedVoucher.usuarioReferido?.correo,
+                                                        fallback: 'Usuario Referido',
+                                                    })}
                                                 </p>
                                                 <p className="text-xs text-muted-foreground">
-                                                    {selectedVoucher.usuarioReferido?.correo}
+                                                    {isOpaqueDocumentId(selectedVoucher.usuarioReferido?.correo || '')
+                                                        ? 'Correo no disponible'
+                                                        : selectedVoucher.usuarioReferido?.correo}
                                                 </p>
                                             </div>
                                         </div>
@@ -748,12 +875,17 @@ function GestionReferidos(): React.ReactElement {
                                                     Recibido por (Beneficiario)
                                                 </p>
                                                 <p className="text-sm font-medium mt-0.5">
-                                                    {selectedVoucher.usuarioPropietario?.nombre
-                                                        ? `${selectedVoucher.usuarioPropietario.nombre} ${selectedVoucher.usuarioPropietario.apellido || ''}`
-                                                        : 'Usuario Beneficiario'}
+                                                    {formatUserDisplayLabel({
+                                                        nombre: selectedVoucher.usuarioPropietario?.nombre,
+                                                        apellido: selectedVoucher.usuarioPropietario?.apellido,
+                                                        correo: selectedVoucher.usuarioPropietario?.correo,
+                                                        fallback: 'Usuario Beneficiario',
+                                                    })}
                                                 </p>
                                                 <p className="text-xs text-muted-foreground">
-                                                    {selectedVoucher.usuarioPropietario?.correo}
+                                                    {isOpaqueDocumentId(selectedVoucher.usuarioPropietario?.correo || '')
+                                                        ? 'Correo no disponible'
+                                                        : selectedVoucher.usuarioPropietario?.correo}
                                                 </p>
                                             </div>
                                         </div>

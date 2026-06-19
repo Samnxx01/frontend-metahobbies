@@ -17,6 +17,14 @@ type Props = {
   className?: string;
 };
 
+function resolveRolSelectValue(
+  rolSeleccionadoId: string | null,
+  roles: RolMarcoParametrizable[]
+): string | undefined {
+  if (!rolSeleccionadoId) return undefined;
+  return roles.find((r) => r._id === rolSeleccionadoId)?._id ?? undefined;
+}
+
 export function MarcoRolSelector({
   roles,
   rolSeleccionadoId,
@@ -24,7 +32,7 @@ export function MarcoRolSelector({
   disabled = false,
   className,
 }: Props): React.ReactElement {
-  const rolActual = roles.find((r) => r._id === rolSeleccionadoId);
+  const selectValue = resolveRolSelectValue(rolSeleccionadoId, roles);
 
   return (
     <div className={className}>
@@ -32,16 +40,12 @@ export function MarcoRolSelector({
         Rol corporativo
       </Label>
       <Select
-        value={rolSeleccionadoId ?? undefined}
+        value={selectValue}
         onValueChange={onRolChange}
         disabled={disabled || roles.length === 0}
       >
         <SelectTrigger id="marco-rol-corporativo" className="mt-1 w-full max-w-md">
-          <SelectValue placeholder="Seleccione un rol corporativo…">
-            {rolActual
-              ? `${rolActual.rol}${rolActual.tenantCorporativo ? ' (tenant)' : ''} — ${rolActual.codigo}`
-              : 'Seleccione un rol corporativo…'}
-          </SelectValue>
+          <SelectValue placeholder="Seleccione un rol corporativo…" />
         </SelectTrigger>
         <SelectContent>
           {roles.map((r) => (

@@ -16,6 +16,8 @@ export interface ResolvedAttributionLink {
     ref: string | null;
     originType: string;
     originId: string | null;
+    /** referidos = membresía pipeline_a | venta = pipeline_b productos */
+    pipeline?: 'referidos' | 'venta';
     flow: string;
     redirectTo: AttributionLinkDestination | null;
     linkCode: string;
@@ -75,7 +77,10 @@ export async function validarTokenReferidoMembresia(
     const token = String(jwtReferido || '').trim();
     if (!token) return false;
 
-    const headers: Record<string, string> = { referidos: token };
+    const headers: Record<string, string> = {
+        referidos: token,
+        Authorization: `Bearer ${token}`,
+    };
     if (guestSessionId) {
         headers['x-guest-session-id'] = guestSessionId;
     }
@@ -111,6 +116,68 @@ const SHORT_LINK_PATHS: Record<AttributionLinkDestination, string> = {
     productos: '/productos',
     referidos: '/membresia/pago',
 };
+
+/** Pipeline A — compra de membresía por referido (pipeline_a / source referidos). */
+export function isPipelineReferidosAttribution(
+    resolved: ResolvedAttributionLink | null | undefined,
+): boolean {
+    if (!resolved) return false;
+    if (resolved.pipeline === 'referidos') return true;
+    if (resolved.pipeline === 'venta') return false;
+    if (resolved.pipelineB) return false;
+    if (resolved.originType === 'producto') return false;
+
+    const redirect = String(resolved.redirectTo || '').trim().toLowerCase();
+    if (resolved.flow === 'referidos' || redirect === 'referidos') return true;
+    if (resolved.originType === 'membresia') return true;
+
+    return false;
+}
+
+/** Pipeline B — venta de producto / generador enlace ventas. */
+export function isPipelineBVentaAttribution(
+    resolved: ResolvedAttributionLink | null | undefined,
+): boolean {
+    if (!resolved) return false;
+    if (resolved.pipeline === 'venta') return true;
+    if (resolved.pipeline === 'referidos') return false;
+    if (isPipelineReferidosAttribution(resolved)) return false;
+
+    const redirect = String(resolved.redirectTo || '').trim().toLowerCase();
+    if (resolved.pipelineB || resolved.originType === 'producto') return true;
+    if (resolved.flow === 'venta' && resolved.pipelineB !== false) return true;
+    if (redirect === 'home' || redirect === 'productos') return true;
+
+    return Boolean(resolved.allowGuestProductCheckout);
+}
+
+/** En ruta de membresía referidos siempre priorizar pipeline referidos salvo venta explícita. */
+export function resolveAttributionPipelineForPath(
+    resolved: ResolvedAttributionLink,
+    pathname = '',
+): 'referidos' | 'venta' | 'unknown' {
+    if (isMembresiaReferidosPath(pathname)) {
+        if (isPipelineBVentaAttribution(resolved) && !isPipelineReferidosAttribution(resolved)) {
+            return 'venta';
+        }
+        return 'referidos';
+    }
+    if (isPipelineReferidosAttribution(resolved)) return 'referidos';
+    if (isPipelineBVentaAttribution(resolved)) return 'venta';
+    return 'unknown';
+}
+
+export function resolvePipelineBDestination(
+    resolved: ResolvedAttributionLink,
+): string {
+    const redirect = String(resolved.redirectTo || 'home').trim().toLowerCase() as AttributionLinkDestination;
+    return SHORT_LINK_PATHS[redirect] || SHORT_LINK_PATHS.home;
+}
+
+export function isMembresiaReferidosPath(pathname = ''): boolean {
+    return /\/membresia\/pago\/?$/i.test(String(pathname || '').replace(/\/$/, ''))
+        || /\/membresia\/pago\//i.test(pathname);
+}
 
 /** Enlace corto: solo `?at=MABS-XXXXXX`. El sistema resuelve guestSessionId, ref y origen al abrirlo. */
 export function buildShortAttributionUrl(

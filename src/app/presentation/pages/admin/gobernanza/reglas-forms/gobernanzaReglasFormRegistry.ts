@@ -1,15 +1,14 @@
-import type React from 'react';
-
-import { GobernanzaFormularioPorRuta } from '../GobernanzaFormularioPorRuta';
-
-export type GobernanzaReglasFormProps = {
-  embeddedApiForm?: React.ReactNode;
-  endpoint?: { id?: string };
-  formularioComponent?: string | null;
-};
-
 /** Catálogo de componentes React para formularios de reglas (gobernanzaModuloTipos). */
 export const GOBERNANZA_REGLAS_FORM_COMPONENTS = [
+  'ReglasListarTenantForm',
+  'ReglasCrearGlobalForm',
+  'ReglasActualizarGlobalForm',
+  'ReglasDesactivarGlobalForm',
+  'ReglasEliminarGlobalForm',
+  'ReglasCrearDiosForm',
+  'ReglasActualizarDiosForm',
+  'ReglasListarDiosForm',
+  'ReglasEliminarDiosForm',
   'GobernanzaReglasFormByEndpoint',
   'GobernanzaFormularioPorRuta',
   'ReglasTenant',
@@ -18,7 +17,17 @@ export const GOBERNANZA_REGLAS_FORM_COMPONENTS = [
 export type GobernanzaReglasFormComponentName =
   (typeof GOBERNANZA_REGLAS_FORM_COMPONENTS)[number];
 
+/** Fallback endpointId cuando el tipo en BD no trae endpointId parametrizado. */
 export const ENDPOINT_ID_BY_REGLAS_COMPONENT: Record<string, string> = {
+  ReglasListarTenantForm: 'tenant-listar-reglas',
+  ReglasCrearGlobalForm: 'tenant-crear-global-reglas',
+  ReglasActualizarGlobalForm: 'tenant-actualizar-global-reglas',
+  ReglasDesactivarGlobalForm: 'tenant-desactivar-global-reglas',
+  ReglasEliminarGlobalForm: 'tenant-eliminar-global-reglas',
+  ReglasCrearDiosForm: 'tenant-crear-dios-reglas',
+  ReglasActualizarDiosForm: 'tenant-actualizar-dios-reglas',
+  ReglasListarDiosForm: 'tenant-listar-dios-reglas',
+  ReglasEliminarDiosForm: 'tenant-eliminar-dios-reglas',
   GobernanzaReglasFormByEndpoint: 'tenant-listar-reglas',
   ReglasTenant: 'tenant-listar-reglas',
   GobernanzaFormularioPorRuta: 'tenant-listar-reglas',
@@ -29,13 +38,10 @@ export function endpointIdDesdeComponenteReglas(formularioComponent?: string | n
   return key ? ENDPOINT_ID_BY_REGLAS_COMPONENT[key] || '' : '';
 }
 
-export function resolverReglasFormComponent(
-  formularioComponent?: string | null
-): React.ComponentType<GobernanzaReglasFormProps> | null {
-  const key = String(formularioComponent || '').trim();
-  if (!key || key === 'GobernanzaReglasFormByEndpoint') return null;
-  if (key === 'GobernanzaFormularioPorRuta') return GobernanzaFormularioPorRuta as React.ComponentType<GobernanzaReglasFormProps>;
-  return null;
+export function esComponenteReglasSubformulario(component: string | null | undefined): boolean {
+  const name = String(component || '').trim();
+  if (!name) return false;
+  return /^Reglas[A-Za-z0-9]+Form$/.test(name);
 }
 
 export function endpointIdsDesdeTipoFormulariosReglas(

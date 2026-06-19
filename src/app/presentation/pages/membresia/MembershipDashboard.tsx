@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { useReferralLink } from '@/app/hooks/useReferralLink';
 import { apiFetch } from '@/app/services/api';
+import { normalizePublicIdForApi } from '@/app/utils/entityPublicId';
 
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -35,6 +36,7 @@ interface UsuarioReferido {
     correo: string;
     saldoInicial: number;
     saldoActual: number;
+    totalGenerado?: number;
     totalPagado: number;
     totalPendiente: number;
     vouchers: Voucher[];
@@ -52,6 +54,7 @@ interface ReferidoRelacion {
     nivel?: number | null;
     nivelNombre?: string | null;
     porcentaje?: number | null;
+    vouchers?: Voucher[];
 }
 
 interface ReferidosResponse {
@@ -200,6 +203,35 @@ function BannerTransaccion() {
     );
 }
 
+const voucherMonto = (voucher: Voucher): number => Number(voucher.montoGanado) || 0;
+
+const totalesDesdeVouchers = (vouchers: Voucher[]) => {
+    const totalGenerado = vouchers.reduce((acc, v) => acc + voucherMonto(v), 0);
+    const totalPendiente = vouchers
+        .filter((v) => v.status === 'pendiente')
+        .reduce((acc, v) => acc + voucherMonto(v), 0);
+    const totalPagado = vouchers
+        .filter((v) => v.status === 'pagado')
+        .reduce((acc, v) => acc + voucherMonto(v), 0);
+    const saldoInicial = vouchers.length ? voucherMonto(vouchers[0]) : 0;
+    return { totalGenerado, totalPendiente, totalPagado, saldoInicial };
+};
+
+const resolverTotalesUsuario = (usuario: UsuarioReferido) => {
+    const desdeVouchers = totalesDesdeVouchers(usuario.vouchers);
+    const totalPendiente =
+        Number(usuario.totalPendiente ?? usuario.saldoActual ?? desdeVouchers.totalPendiente) || 0;
+    const totalPagado = Number(usuario.totalPagado ?? desdeVouchers.totalPagado) || 0;
+    const totalGenerado =
+        Number(usuario.totalGenerado ?? desdeVouchers.totalGenerado) || totalPendiente + totalPagado;
+    return {
+        saldoActual: totalPendiente,
+        totalGenerado,
+        totalPagado,
+        totalPendiente,
+    };
+};
+
 export default function MembershipDashboard(): React.ReactElement {
     const { referralData, loading, refetch } = useReferralLink();
     const [referidosData, setReferidosData] = useState<ReferidosResponse | null>(null);
@@ -240,13 +272,14 @@ export default function MembershipDashboard(): React.ReactElement {
         });
 
     const misDatos = referidosData?.usuarios?.[0];
+    const totales = misDatos ? resolverTotalesUsuario(misDatos) : null;
     const totalReferrals = misDatos?.referidos?.length || 0;
-    const totalEarnings = misDatos?.saldoActual || 0;
-    const totalPagado = misDatos?.totalPagado || 0;
-    const totalPendiente = misDatos?.totalPendiente || 0;
+    const totalEarnings = totales?.saldoActual ?? 0;
+    const totalPagado = totales?.totalPagado ?? 0;
+    const totalPendiente = totales?.totalPendiente ?? 0;
     const visibleVouchers = misDatos?.vouchers ?? [];
     const visibleReferidos = misDatos?.referidos ?? [];
-    const totalMontoVouchers = visibleVouchers.reduce(
+    const totalMontoVouchers = totales?.totalGenerado ?? visibleVouchers.reduce(
         (sum, v) => sum + (Number(v.montoGanado) || 0),
         0,
     );
@@ -266,14 +299,18 @@ export default function MembershipDashboard(): React.ReactElement {
     const idsReferidosConUsuario = useMemo(
         () =>
             new Set(
-                visibleReferidos.filter((r) => r.usuarioId).map((r) => String(r.usuarioId)),
+                visibleReferidos
+                    .map((r) => normalizePublicIdForApi(r.usuarioId))
+                    .filter(Boolean),
             ),
         [visibleReferidos],
     );
 
     const vouchersSinReferidoEnLista = useMemo(
         () =>
-            visibleVouchers.filter((v) => !idsReferidosConUsuario.has(String(v.referidoId))),
+            visibleVouchers.filter(
+                (v) => !idsReferidosConUsuario.has(normalizePublicIdForApi(v.referidoId)),
+            ),
         [visibleVouchers, idsReferidosConUsuario],
     );
 
@@ -281,9 +318,12 @@ export default function MembershipDashboard(): React.ReactElement {
         lista.reduce((s, v) => s + (Number(v.montoGanado) || 0), 0);
 
     const vouchersDeReferido = (ref: ReferidoRelacion): Voucher[] => {
-        if (!ref.usuarioId) return [];
-        const uid = String(ref.usuarioId);
-        return visibleVouchers.filter((v) => String(v.referidoId) === uid);
+        if (ref.vouchers?.length) return ref.vouchers;
+        const uid = normalizePublicIdForApi(ref.usuarioId);
+        if (!uid) return [];
+        return visibleVouchers.filter(
+            (v) => normalizePublicIdForApi(v.referidoId) === uid,
+        );
     };
 
     const handleCopy = (text: string, type: string): void => {
@@ -452,9 +492,15 @@ export default function MembershipDashboard(): React.ReactElement {
                                 <div className="space-y-4">
                                     <div className="flex justify-between items-center py-3 border-b border-border/40">
                                         <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                                            <Users className="w-4 h-4" /> Total de Vouchers
+                                            <Users className="w-4 h-4" /> Referidos en red
                                         </div>
                                         <span className="text-lg font-semibold text-foreground">{totalReferrals}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center py-3 border-b border-border/40">
+                                        <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                                            <FileText className="w-4 h-4" /> Total de vouchers
+                                        </div>
+                                        <span className="text-lg font-semibold text-foreground">{visibleVouchers.length}</span>
                                     </div>
                                     <div className="flex justify-between items-center py-3 border-b border-border/40">
                                         <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">

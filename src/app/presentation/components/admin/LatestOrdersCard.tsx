@@ -29,8 +29,8 @@ export default function LatestOrdersCard({ orders, title = "Últimos Pedidos", o
                 <h3 className="text-lg font-bold text-primary">{title}</h3>
                 <Button 
                     onClick={handleViewAll}
-                    className="bg-primary/10 text-primary hover:bg-primary/20 font-bold rounded-lg text-sm shadow-none"
-                    variant="ghost"
+                    variant="default"
+                    className="font-bold rounded-lg text-sm shadow-none"
                 >
                     Ir a Pedidos
                 </Button>

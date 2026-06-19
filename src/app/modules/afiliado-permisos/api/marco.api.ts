@@ -10,7 +10,8 @@ import type {
   RolMarcoParametrizable,
   SincronizarMarcoResponse,
 } from '../types/marco.types';
-import { mapRolCorporativoAMarco } from '../utils/marcoRolKeys';
+import { mapRolCorporativoAMarco, normalizeRolMarcoParametrizable } from '../utils/marcoRolKeys';
+import { normalizeMarcoPermisosAfiliado } from '../utils/normalizeMarcoEntities';
 import { encodePublicIdForPath, normalizePublicIdForApi } from '@/app/utils/entityPublicId';
 
 const CORPORATIVO_ROLES_PATH = `${AFILIADO_PERMISOS_PATHS.configBase}/permisos/corporativo/listar/roles/tenant/corporativo`;
@@ -25,12 +26,22 @@ async function listarRolesDesdeCorporativo(): Promise<RolMarcoParametrizable[]> 
     .filter((r) => r._id);
 }
 
+function normalizeRolesMarco(
+  roles: RolMarcoParametrizable[] | undefined
+): RolMarcoParametrizable[] {
+  return (roles ?? [])
+    .map((r) => normalizeRolMarcoParametrizable(r))
+    .filter((r) => r._id);
+}
+
 export const getRolesMarcoParametrizables = async (): Promise<RolesMarcoResponse> => {
   try {
-    return await apiFetch<RolesMarcoResponse>(AFILIADO_PERMISOS_PATHS.marcoRoles, {
+    const res = await apiFetch<RolesMarcoResponse>(AFILIADO_PERMISOS_PATHS.marcoRoles, {
       method: 'GET',
       useAuth: true,
     });
+    const roles = normalizeRolesMarco(res?.roles);
+    return { ...res, roles, total: roles.length };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     if (!msg.includes('[404]')) throw err;
@@ -41,9 +52,10 @@ export const getRolesMarcoParametrizables = async (): Promise<RolesMarcoResponse
         { method: 'GET', useAuth: true }
       );
       if (activo?.roles?.length) {
+        const roles = normalizeRolesMarco(activo.roles);
         return {
-          roles: activo.roles,
-          total: activo.roles.length,
+          roles,
+          total: roles.length,
           msg: 'Roles desde marco activo (incluirRoles)',
         };
       }
@@ -65,11 +77,22 @@ export const getRolesMarcoParametrizables = async (): Promise<RolesMarcoResponse
 export const getMarcoAfiliadoActivo = async (
   rolCorporativoId?: string | null,
   bootstrap = true
-): Promise<MarcoActivoResponse> =>
-  apiFetch(AFILIADO_PERMISOS_PATHS.marcoActivo(bootstrap, normalizePublicIdForApi(rolCorporativoId) || null), {
-    method: 'GET',
-    useAuth: true,
-  });
+): Promise<MarcoActivoResponse> => {
+  const res = await apiFetch<MarcoActivoResponse>(
+    AFILIADO_PERMISOS_PATHS.marcoActivo(bootstrap, normalizePublicIdForApi(rolCorporativoId) || null),
+    {
+      method: 'GET',
+      useAuth: true,
+    }
+  );
+  return {
+    ...res,
+    marco: normalizeMarcoPermisosAfiliado(res?.marco ?? null),
+    rolCorporativoId: res?.rolCorporativoId
+      ? normalizePublicIdForApi(res.rolCorporativoId)
+      : res?.rolCorporativoId,
+  };
+};
 
 export interface CatalogoMarcoAfiliadoResponse {
   success?: boolean;

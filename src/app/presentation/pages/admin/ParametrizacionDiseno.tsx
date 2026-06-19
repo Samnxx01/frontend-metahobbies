@@ -16,6 +16,7 @@ import {
   obtenerBrandingPrivado,
   subirImagenFondoLogin
 } from '@/app/services/brandingWidget';
+import { normalizeImageRenderUrl } from '@/app/utils/normalizeImageRenderUrl';
 
 interface ParametrizacionDisenoProps {
   initialRoute?: string;
@@ -219,7 +220,7 @@ export default function ParametrizacionDiseno({
       forgotPasswordEnabled: navigation.forgotPassword?.enabled !== false,
       publicHomePath: String(navigation.publicHome?.path || DEFAULT_FORM.publicHomePath),
       publicHomeEnabled: navigation.publicHome?.enabled !== false,
-      loginBackgroundUrl: String(loginBackground.imageUrl || DEFAULT_FORM.loginBackgroundUrl),
+      loginBackgroundUrl: normalizeImageRenderUrl(loginBackground.imageUrl),
       loginBackgroundEnabled: loginBackground.enabled !== false,
       allowedPathsJson: JSON.stringify(
         allowedPaths.length > 0 ? allowedPaths : JSON.parse(DEFAULT_FORM.allowedPathsJson),
@@ -249,7 +250,7 @@ export default function ParametrizacionDiseno({
 
       setForm((prev) => ({
         ...prev,
-        loginBackgroundUrl: uploaded.url,
+        loginBackgroundUrl: normalizeImageRenderUrl(uploaded.url),
         loginBackgroundEnabled: true
       }));
       toast.success('Imagen de fondo subida. Guarda el diseno para publicarla en login.');
@@ -323,7 +324,7 @@ export default function ParametrizacionDiseno({
           ...(branding.widgets || {}),
           routes: routeConfigs,
           loginBackground: {
-            imageUrl: form.loginBackgroundUrl.trim(),
+            imageUrl: normalizeImageRenderUrl(form.loginBackgroundUrl.trim()),
             enabled: form.loginBackgroundEnabled
           },
           navigation: {
@@ -508,7 +509,9 @@ export default function ParametrizacionDiseno({
                 <div
                   className="flex h-40 items-center justify-center overflow-hidden rounded-md border bg-muted"
                   style={{
-                    backgroundImage: form.loginBackgroundUrl ? `url("${form.loginBackgroundUrl}")` : undefined,
+                    backgroundImage: form.loginBackgroundUrl
+                      ? `url("${normalizeImageRenderUrl(form.loginBackgroundUrl)}")`
+                      : undefined,
                     backgroundSize: 'cover',
                     backgroundPosition: 'center'
                   }}
@@ -689,8 +692,8 @@ export default function ParametrizacionDiseno({
             <button
               type="button"
               style={{
-                backgroundColor: form.lightPrimary ? `hsl(${form.lightPrimary})` : 'hsl(var(--primary))',
-                color: 'hsl(var(--primary-foreground))',
+                backgroundColor: form.lightPrimary ? `hsl(${form.lightPrimary})` : 'hsl(var(--button))',
+                color: 'hsl(var(--button-foreground))',
                 borderRadius: form.buttonRadius || 'var(--radius)',
                 fontWeight: Number(form.buttonWeight || '600'),
                 height: form.buttonHeight || '40px',

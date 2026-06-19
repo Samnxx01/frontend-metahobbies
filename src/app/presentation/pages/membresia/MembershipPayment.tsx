@@ -1,9 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { useMembership } from '../../../providers/MembershipProvider';
 import { apiFetch } from '@/app/services/api';
-import { resolvePublicAttributionContext } from '@/app/services/publicAttributionParams';
+import { resolvePublicAttributionContext, getAttributionLinkCodeFromSearch, capturePublicAttributionFromSearch } from '@/app/services/publicAttributionParams';
+import { isReferidoTokenComplete, resolveReferidoToken } from '@/app/utils/referidoTokenUtils';
+import {
+  type MembresiaPlanUi,
+  normalizeMembresiaPlanFromApi,
+  normalizeMembershipPriceFromApi,
+  pickPlanesCheckout,
+  resolveMembershipGuestSessionId,
+  type MembresiaPlanApi,
+} from '@/app/utils/membershipPlanUtils';
 import MembershipStepContent from '@/components/membership/MembershipStepContent';
 import { useMembershipPaymentForm } from '@/app/hooks/useMembershipPaymentForm';
 import { Button } from '@/components/ui/button';
@@ -39,20 +48,7 @@ export interface ResultadoPago {
     carritoId?: string;
 }
 
-interface MembresiaPlan {
-    _id: string;
-    nombreMembresia: string;
-    precioMembresia: number;
-    tipoPagos: string;
-    esPrecioDefault: boolean;
-    monedasId?: { monedas: string };
-}
-
-const normalizeMembershipPriceFromApi = (value: number | string | null | undefined): number => {
-    const numericValue = Number(value);
-    if (!Number.isFinite(numericValue) || numericValue <= 0) return 0;
-    return numericValue / 100;
-};
+const normalizeMembershipPriceFromApiLegacy = normalizeMembershipPriceFromApi;
 
 interface ModalResultadoProps {
     resultado: ResultadoPago;
@@ -193,6 +189,7 @@ const steps = [
 
 export default function MembershipPayment(): React.ReactElement {
     const navigate = useNavigate();
+    const location = useLocation();
     const { token: tokenFromPath } = useParams<{ token?: string }>();
     const [searchParams] = useSearchParams();
     const { purchaseMembership: originalPurchaseMembership } = useMembership();
@@ -200,23 +197,82 @@ export default function MembershipPayment(): React.ReactElement {
     const attributionCtx = resolvePublicAttributionContext(
         searchParams.toString() ? `?${searchParams.toString()}` : '',
     );
-    const token = tokenFromPath || attributionCtx.ref || '';
-    const isResolvingShortLink = Boolean(searchParams.get('at')?.trim()) && !token;
+    const token = resolveReferidoToken(attributionCtx.ref, tokenFromPath);
+    const linkCodeInUrl = getAttributionLinkCodeFromSearch(location.search);
+    const [shortLinkState, setShortLinkState] = useState<'idle' | 'waiting' | 'error'>(
+        linkCodeInUrl && !token ? 'waiting' : 'idle',
+    );
+
+    const flowReferidos = searchParams.get('flow') === 'referidos'
+        || searchParams.get('redirectTo') === 'referidos'
+        || sessionStorage.getItem('mabs_referidos_flow') === '1';
+
+    useEffect(() => {
+        if (!linkCodeInUrl) {
+            setShortLinkState('idle');
+            return;
+        }
+
+        const currentToken = resolveReferidoToken(
+            resolvePublicAttributionContext(location.search).ref,
+            tokenFromPath,
+        );
+        if (currentToken && isReferidoTokenComplete(currentToken)) {
+            setShortLinkState('idle');
+            return;
+        }
+
+        setShortLinkState('waiting');
+        const timeout = window.setTimeout(() => setShortLinkState('error'), 15000);
+        const poll = window.setInterval(() => {
+            const stillHasCode = getAttributionLinkCodeFromSearch(window.location.search);
+            const nextToken = resolveReferidoToken(
+                resolvePublicAttributionContext(window.location.search).ref,
+                tokenFromPath,
+            );
+            if (nextToken && isReferidoTokenComplete(nextToken)) {
+                setShortLinkState('idle');
+                window.clearInterval(poll);
+                window.clearTimeout(timeout);
+                return;
+            }
+            if (!stillHasCode) {
+                window.clearInterval(poll);
+                window.clearTimeout(timeout);
+                if (nextToken && isReferidoTokenComplete(nextToken)) {
+                    setShortLinkState('idle');
+                } else {
+                    setShortLinkState('error');
+                }
+            }
+        }, 200);
+
+        return () => {
+            window.clearInterval(poll);
+            window.clearTimeout(timeout);
+        };
+    }, [linkCodeInUrl, location.search, tokenFromPath, token]);
+
+    useEffect(() => {
+        if (token && isReferidoTokenComplete(token) && shortLinkState !== 'idle') {
+            setShortLinkState('idle');
+        }
+    }, [token, shortLinkState]);
 
     const guestSessionIdFromUrl = searchParams.get('guestSessionId')?.trim() || '';
-    const flowReferidos = searchParams.get('flow') === 'referidos'
-        || searchParams.get('redirectTo') === 'referidos';
+    const emailReintento = searchParams.get('email')?.trim() || '';
+    const isResolvingShortLink = shortLinkState === 'waiting';
 
     const resolveGuestSessionId = (): string => {
         if (guestSessionIdFromUrl) return guestSessionIdFromUrl;
         const ctx = resolvePublicAttributionContext(searchParams.toString() ? `?${searchParams.toString()}` : '');
         if (ctx.guestSessionId) return ctx.guestSessionId;
-        return sessionStorage.getItem('mabs_guest_session_id')?.trim() || '';
+        return resolveMembershipGuestSessionId();
     };
 
     // Lista de planes con esPrecioDefault: true y plan actualmente seleccionado
-    const [planes, setPlanes] = useState<MembresiaPlan[]>([]);
-    const [planSeleccionado, setPlanSeleccionado] = useState<MembresiaPlan | null>(null);
+    const [planes, setPlanes] = useState<MembresiaPlanUi[]>([]);
+    const [planSeleccionado, setPlanSeleccionado] = useState<MembresiaPlanUi | null>(null);
     const [loadingPrice, setLoadingPrice] = useState<boolean>(true);
 
     // Modal de resultado post-pago
@@ -276,7 +332,7 @@ export default function MembershipPayment(): React.ReactElement {
                     console.log('Estado actual del pago:', data);
 
                     const nuevoEstado = wompiStatusToEstado(data.status || data.estado || 'PENDING');
-                    const montoNormalizado = normalizeMembershipPriceFromApi(data.monto);
+                    const montoNormalizado = normalizeMembershipPriceFromApiLegacy(data.monto) ?? 0;
 
                     if (nuevoEstado !== 'pendiente') {
                         // Estado cambió, actualizar el modal
@@ -321,6 +377,7 @@ export default function MembershipPayment(): React.ReactElement {
     };
 
     useEffect(() => {
+        capturePublicAttributionFromSearch(location.search);
         const guestSessionId = resolveGuestSessionId();
         if (guestSessionId) {
             sessionStorage.setItem('mabs_guest_session_id', guestSessionId);
@@ -328,20 +385,27 @@ export default function MembershipPayment(): React.ReactElement {
         if (flowReferidos) {
             sessionStorage.setItem('mabs_referidos_flow', '1');
         }
-    }, [guestSessionIdFromUrl, flowReferidos, searchParams]);
+    }, [guestSessionIdFromUrl, flowReferidos, searchParams, location.search]);
 
-    // Carga membresías con esPrecioDefault: true
+    // Precios activos: requiere token de referido (checkout) o sesión (admin)
     useEffect(() => {
+        if (!token?.trim() || isResolvingShortLink) return;
+
+        let cancelled = false;
+
         async function loadPlanes() {
             try {
                 setLoadingPrice(true);
                 const guestSessionHeader = resolveGuestSessionId();
-                const headers: Record<string, string> = { referidos: token ?? '' };
+                const headers: Record<string, string> = {
+                    referidos: token,
+                    Authorization: `Bearer ${token}`,
+                };
                 if (guestSessionHeader) {
                     headers['x-guest-session-id'] = guestSessionHeader;
                 }
                 const json = await apiFetch(
-                    '/api/membresia/seguridad/crear/parametrizacion/membresia',
+                    `/api/membresia/seguridad/crear/parametrizacion/membresia?ref=${encodeURIComponent(token)}`,
                     {
                         method: 'GET',
                         useAuth: false,
@@ -350,28 +414,31 @@ export default function MembershipPayment(): React.ReactElement {
                     }
                 );
 
-                // Filtrar solo las que tienen esPrecioDefault: true
-                const lista: MembresiaPlan[] = Array.isArray(json?.data)
-                    ? json.data
-                        .filter((m: MembresiaPlan) => m.esPrecioDefault === true)
-                        .map((m: MembresiaPlan) => ({
-                            ...m,
-                            precioMembresia: normalizeMembershipPriceFromApi(m.precioMembresia),
-                        }))
-                    : [];
+                const rawList: MembresiaPlanApi[] = Array.isArray(json?.data) ? json.data : [];
+                const normalizados = rawList
+                    .map((row) => normalizeMembresiaPlanFromApi(row))
+                    .filter((row): row is MembresiaPlanUi => Boolean(row));
+                const lista = pickPlanesCheckout(normalizados);
 
+                if (cancelled) return;
                 setPlanes(lista);
-                // Pre-seleccionar el primero automáticamente
-                if (lista.length > 0) setPlanSeleccionado(lista[0]);
-
+                setPlanSeleccionado(lista[0] ?? null);
             } catch (err) {
-                console.error('Error al cargar planes de membresía:', err);
+                if (!cancelled) {
+                    console.error('Error al cargar planes de membresía:', err);
+                    setPlanes([]);
+                    setPlanSeleccionado(null);
+                }
             } finally {
-                setLoadingPrice(false);
+                if (!cancelled) setLoadingPrice(false);
             }
         }
-        loadPlanes();
-    }, []);
+        void loadPlanes();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [token, isResolvingShortLink, guestSessionIdFromUrl, searchParams]);
 
     const purchaseMembershipWrapper = async (
         userToken: string, email: string, authToken: string
@@ -392,7 +459,7 @@ export default function MembershipPayment(): React.ReactElement {
             if (response.ok) {
                 const data = await response.json();
                 const nuevoEstado = wompiStatusToEstado(data.status || data.estado || 'PENDING');
-                const montoNormalizado = normalizeMembershipPriceFromApi(data.monto);
+                const montoNormalizado = normalizeMembershipPriceFromApiLegacy(data.monto) ?? 0;
                 if (nuevoEstado !== 'pendiente') {
                     setResultado(prev => prev ? {
                         ...prev,
@@ -434,7 +501,7 @@ export default function MembershipPayment(): React.ReactElement {
         handleFormChange, handleNext, handleBack, handlePayment,
     } = useMembershipPaymentForm({
         initialFormData: {
-            personalInfo: { email: '' },
+            personalInfo: { email: emailReintento },
             paymentInfo: {
                 paymentMethod: '',
                 cardType: undefined,
@@ -456,14 +523,24 @@ export default function MembershipPayment(): React.ReactElement {
         purchaseMembership: purchaseMembershipWrapper,
         navigate,
         token: token || '',
+        membresiaPlanId: planSeleccionado?.id ?? null,
+        resolveGuestSessionId,
         onPagoTerminado: handlePagoTerminado,
     });
+
+    useEffect(() => {
+        const email = searchParams.get('email')?.trim();
+        if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return;
+        if (formData.personalInfo.email !== email) {
+            handleFormChange('personalInfo', 'email', email);
+        }
+    }, [searchParams, formData.personalInfo.email, handleFormChange]);
 
     const isLastStep = activeStep === steps.length - 1;
 
     // Helper para el select de membresías
     const handleSelectPlan = (id: string) => {
-        const plan = planes.find(p => p._id === id) ?? null;
+        const plan = planes.find((p) => p.id === id) ?? null;
         setPlanSeleccionado(plan);
     };
 
@@ -492,7 +569,7 @@ export default function MembershipPayment(): React.ReactElement {
                     <div className="space-y-2">
                         <Label className="text-sm font-medium">Selecciona tu plan</Label>
                         <Select
-                            value={planSeleccionado?._id ?? ''}
+                            value={planSeleccionado?.id ?? ''}
                             onValueChange={handleSelectPlan}
                         >
                             <SelectTrigger className="w-full">
@@ -500,9 +577,9 @@ export default function MembershipPayment(): React.ReactElement {
                             </SelectTrigger>
                             <SelectContent>
                                 {planes.map(plan => (
-                                    <SelectItem key={plan._id} value={plan._id}>
+                                    <SelectItem key={plan.id} value={plan.id}>
                                         {plan.nombreMembresia} — {new Intl.NumberFormat('es-CO', {
-                                            style: 'currency', currency: plan.monedasId?.monedas ?? 'COP',
+                                            style: 'currency', currency: plan.moneda ?? 'COP',
                                             minimumFractionDigits: 0,
                                         }).format(plan.precioMembresia)}
                                     </SelectItem>
@@ -530,6 +607,23 @@ export default function MembershipPayment(): React.ReactElement {
             <div className="min-h-screen flex flex-col items-center justify-center gap-3 bg-background">
                 <Loader2 className="w-8 h-8 animate-spin text-primary" />
                 <p className="text-sm text-muted-foreground">Cargando enlace de atribución…</p>
+            </div>
+        );
+    }
+
+    if (shortLinkState === 'error' && !token?.trim()) {
+        return (
+            <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-background px-4 text-center">
+                <p className="text-base font-medium text-foreground">
+                    No pudimos validar tu enlace de referido
+                </p>
+                <p className="text-sm text-muted-foreground max-w-md">
+                    El código puede estar vencido o no corresponde al flujo de membresía.
+                    Solicita un enlace nuevo desde el panel de referidos.
+                </p>
+                <Button onClick={() => navigate('/public/render/home')}>
+                    Ir al inicio
+                </Button>
             </div>
         );
     }
@@ -573,9 +667,9 @@ export default function MembershipPayment(): React.ReactElement {
                                             w-12 h-12 rounded-full flex items-center justify-center text-xl
                                             transition-all duration-300 border-2
                                             ${index === activeStep
-                                                ? 'bg-primary border-primary text-primary-foreground scale-110 shadow-lg'
+                                                ? 'bg-button border-button text-button-foreground scale-110 shadow-lg'
                                                 : index < activeStep
-                                                    ? 'bg-primary/20 border-primary text-primary'
+                                                    ? 'bg-button/20 border-button text-button-foreground'
                                                     : 'bg-muted border-muted-foreground/20 text-muted-foreground'
                                             }
                                         `}>
@@ -589,7 +683,7 @@ export default function MembershipPayment(): React.ReactElement {
                                     {index < steps.length - 1 && (
                                         <div className={`
                                             flex-1 h-0.5 mx-2 transition-colors duration-300
-                                            ${index < activeStep ? 'bg-primary' : 'bg-muted-foreground/20'}
+                                            ${index < activeStep ? 'bg-button' : 'bg-muted-foreground/20'}
                                         `} />
                                     )}
                                 </React.Fragment>
@@ -650,7 +744,11 @@ export default function MembershipPayment(): React.ReactElement {
 
                                 <Button
                                     onClick={isLastStep ? handlePayment : handleNext}
-                                    disabled={loading || (activeStep === 1 && loadingPrice)}
+                                    disabled={
+                                        loading
+                                        || (activeStep === 1 && loadingPrice)
+                                        || (activeStep >= 1 && !token?.trim())
+                                    }
                                     size="lg"
                                     className={`gap-2 min-w-[160px] font-semibold ${isLastStep ? 'bg-gradient-to-r from-primary to-primary/80 shadow-lg' : ''
                                         }`}

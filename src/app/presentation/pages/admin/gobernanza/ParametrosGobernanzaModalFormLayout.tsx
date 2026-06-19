@@ -1,6 +1,7 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import { Loader2 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 export type ParametrosGobernanzaModalFormLayoutProps = {
   /** Metadatos mínimos para path + aviso de scope */
@@ -15,6 +16,8 @@ export type ParametrosGobernanzaModalFormLayoutProps = {
   /** Deshabilita solo el botón Ejecutar (p. ej. modo solo lectura por jerarquía corporativa). */
   executeDisabled?: boolean;
   executeDisabledReason?: string;
+  /** Clases Tailwind para el botón principal (p. ej. verde cuando el scope JWT valida). */
+  executeButtonClassName?: string;
   /** Acciones extra sobre la barra de botones (p. ej. sincronizar regla DIOS). */
   extraToolbar?: React.ReactNode;
   onExecute: () => void;
@@ -43,6 +46,7 @@ export function ParametrosGobernanzaModalFormLayout({
   executeLabel = 'Ejecutar',
   executeDisabled = false,
   executeDisabledReason,
+  executeButtonClassName,
   extraToolbar,
   onExecute,
   onClearForm,
@@ -59,7 +63,13 @@ export function ParametrosGobernanzaModalFormLayout({
         <p className="text-xs font-medium text-amber-700">{executeDisabledReason}</p>
       ) : null}
       <div className="flex flex-wrap items-center gap-2 border-t border-border/60 pt-4">
-        <Button type="button" onClick={onExecute} disabled={running || ejecutarBloqueado}>
+        <Button
+          type="button"
+          variant={executeButtonClassName ? 'outline' : 'default'}
+          onClick={onExecute}
+          disabled={running || ejecutarBloqueado}
+          className={cn(executeButtonClassName)}
+        >
           {running ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
           {executeLabel}
         </Button>

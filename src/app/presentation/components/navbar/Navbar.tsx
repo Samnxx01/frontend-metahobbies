@@ -17,8 +17,7 @@ import { Menu, ShoppingCart, User, X, ShieldCheck, LogOut, LogIn, ChevronRight, 
 // Theme Toggle
 import ThemeToggle from "@/app/presentation/components/common/ThemeToggle";
 import MiniCartContent from "@/app/presentation/components/carrito/MiniCartContent";
-import { resolveMiniCartConfig, type MiniCartConfig } from "@/app/config/miniCartConfig";
-import productosService from "@/app/services/productosService";
+import { useMiniCartConfig } from "@/app/hooks/useMiniCartConfig";
 import { groupCartItemsByProduct } from "@/app/presentation/components/carrito/cartColorQtyCache";
 import type { CartItem as CartItemType } from "@/types/common";
 
@@ -46,22 +45,9 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
     const { user, logout } = useAuth();
     const { cartItems, removeFromCart, updateVariantQuantity } = useCart();
     const cartGroups = groupCartItemsByProduct(cartItems as CartItemType[]);
-    const [miniCartConfig, setMiniCartConfig] = useState<MiniCartConfig>(() => resolveMiniCartConfig());
+    const { config: miniCartConfig } = useMiniCartConfig();
     const useSidePanel = cartGroups.length > miniCartConfig.sidePanelThreshold;
     const [cartPanelOpen, setCartPanelOpen] = useState(false);
-
-    useEffect(() => {
-        productosService.obtenerMiniCartConfigPublico()
-            .then((data) => {
-                setMiniCartConfig({
-                    sidePanelThreshold: data.sidePanelThreshold,
-                    maxVisibleProducts: data.maxVisibleProducts,
-                });
-            })
-            .catch(() => {
-                setMiniCartConfig(resolveMiniCartConfig());
-            });
-    }, []);
     const totalItems = cartItems.reduce((sum, item) => sum + item.quantity, 0);
     const cartTotal = cartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
     const [isScrolled, setIsScrolled] = useState<boolean>(false);
@@ -324,7 +310,7 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
     const renderProfileDropdown = (
         <DropdownMenu>
             <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="icon" className="h-9 w-9 p-0 rounded-full hover:border-primary/40 transition-colors">
+                <Button variant="outline" size="icon" className="h-9 w-9 p-0 rounded-full hover:border-button/40 transition-colors">
                     <Avatar className="h-full w-full">
                         <AvatarFallback className="bg-primary text-primary-foreground text-sm font-semibold">
                             {getUserInitials()}

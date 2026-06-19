@@ -78,7 +78,8 @@ export default function PedidosAprobadosCarrito(): React.ReactElement {
         }
         await cargar();
       } else {
-        toast.error(result.msg || 'No se pudo reaplicar el kardex.');
+        const detalle = (result as { kardexDetalleError?: { causa?: string } })?.kardexDetalleError?.causa;
+        toast.error(detalle || result.msg || 'No se pudo reaplicar el kardex.');
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Error reaplicando kardex');
@@ -348,21 +349,30 @@ export default function PedidosAprobadosCarrito(): React.ReactElement {
                               <p className="text-xs text-muted-foreground">
                                 Dirección: {pedido.facturacion.direccion || '—'} · Tel:{' '}
                                 {pedido.facturacion.telefono || '—'}
+                                {(pedido.kardexSalidasRegistradas ?? 0) > 0 ? (
+                                  <> · Kardex: {pedido.kardexSalidasRegistradas} salida(s) registrada(s)</>
+                                ) : null}
                               </p>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                disabled={reaplicandoId === pedido.id}
-                                onClick={() => void reaplicarKardex(pedido.id)}
-                              >
-                                {reaplicandoId === pedido.id ? (
-                                  <Loader2 className="h-4 w-4 animate-spin mr-1" />
-                                ) : (
-                                  <Warehouse className="h-4 w-4 mr-1" />
-                                )}
-                                Reaplicar kardex
-                              </Button>
+                              {pedido.puedeReaplicarKardex ? (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  disabled={reaplicandoId === pedido.id}
+                                  onClick={() => void reaplicarKardex(pedido.id)}
+                                >
+                                  {reaplicandoId === pedido.id ? (
+                                    <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                                  ) : (
+                                    <Warehouse className="h-4 w-4 mr-1" />
+                                  )}
+                                  Reaplicar kardex
+                                </Button>
+                              ) : (
+                                <Badge variant="outline" className="text-xs">
+                                  Kardex ya aplicado
+                                </Badge>
+                              )}
                             </div>
                           </div>
                         </TableCell>

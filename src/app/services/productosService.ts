@@ -390,15 +390,28 @@ const productosService = {
     return resp?.data as { sidePanelThreshold: number; maxVisibleProducts: number };
   },
 
-  async subirMediaProductoVenta(relacionId: string, file: File, duracionSegundos?: number): Promise<ProductoVentaMedia> {
+  async subirMediaProductoVenta(
+    relacionId: string,
+    file: File,
+    options: { duracionSegundos?: number; principal?: boolean } = {},
+  ): Promise<ProductoVentaMedia> {
     const formData = new FormData();
     formData.append('media', file);
-    if (typeof duracionSegundos === 'number') formData.append('duracionSegundos', String(duracionSegundos));
+    if (typeof options.duracionSegundos === 'number') {
+      formData.append('duracionSegundos', String(options.duracionSegundos));
+    }
+    if (options.principal === false) {
+      formData.append('principal', 'false');
+    }
     const resp = await apiFetch(`/api/productos/admin/ventas/${relacionId}/media`, {
       method: 'POST',
       body: formData,
     });
     return resp?.data as ProductoVentaMedia;
+  },
+
+  async eliminarMediaProductoVenta(mediaId: string): Promise<void> {
+    await apiFetch(`/api/productos/admin/ventas/media/${mediaId}`, { method: 'DELETE' });
   },
 
   async desactivarProductoAdmin(id: string): Promise<void> {

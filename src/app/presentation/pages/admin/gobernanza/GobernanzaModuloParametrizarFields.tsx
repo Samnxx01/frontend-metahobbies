@@ -143,6 +143,12 @@ export function GobernanzaModuloParametrizarFields({
                 <code className="rounded bg-muted px-1 py-0.5 font-mono">{rutaSeleccionada.component}</code>
               </p>
             ) : null}
+            {rutaId ? (
+              <p className="text-[11px] text-muted-foreground">
+                Se guardará la relación con rutaseguridads (id):{' '}
+                <code className="rounded bg-muted px-1 py-0.5 font-mono">{rutaId}</code>
+              </p>
+            ) : null}
             {formularioError ? <p className="text-xs text-destructive">{formularioError}</p> : null}
             {!rutasLoading && rutas.length === 0 ? (
               <p className="rounded-md border border-amber-200/80 bg-amber-50 px-3 py-2 text-xs text-amber-950">
@@ -172,8 +178,8 @@ export function GobernanzaModuloParametrizarFields({
               </SelectContent>
             </Select>
             <p className="text-[11px] text-muted-foreground">
-              Sections desde <code className="rounded bg-muted px-1">gobernanzaModuloTipos</code>
-              {sectionsBd.length ? ` (${sectionsBd.join(', ')})` : ''}. Solo se listan tipos de la elegida.
+              Section canónica en <code className="rounded bg-muted px-1">gobernanzaModuloTipos</code>
+              {sectionsBd.length ? ` (${sectionsBd.join(', ')})` : ''}. Para reglas SA usa <code className="rounded bg-muted px-1">reglas</code> (reglas-sa en la URL se normaliza sola).
             </p>
           </div>
 

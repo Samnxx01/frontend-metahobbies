@@ -14,3 +14,9 @@ export const GOBERNANZA_INVENTARIO_PATH_BAR =
 
 export const GOBERNANZA_INVENTARIO_CARD_FOOTER =
   'mt-3 flex flex-wrap gap-2 border-t border-border/60 pt-3';
+
+/** Botones del header ConfigGobernanza (misma línea que ConfigInventario). */
+export const GOBERNANZA_INVENTARIO_BTN_HEADER = 'shrink-0 gap-2';
+
+/** Botones de acción en el pie de cada tarjeta. */
+export const GOBERNANZA_INVENTARIO_BTN_CARD = 'h-8 gap-1.5 text-xs';

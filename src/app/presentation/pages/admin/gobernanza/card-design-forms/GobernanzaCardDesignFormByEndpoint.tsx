@@ -8,12 +8,26 @@ import { TenantDesactivarGlobalDesignForm } from './TenantDesactivarGlobalDesign
 import { TenantEliminarGlobalDesignForm } from './TenantEliminarGlobalDesignForm';
 import { TenantListarLibresTenantglobalDesignForm } from './TenantListarLibresTenantglobalDesignForm';
 
+import { TenantSuperAdminInsertDesignForm } from './TenantSuperAdminInsertDesignForm';
+
+const INSERT_DESIGN_REGISTRY: Record<string, React.ComponentType<GobernanzaEndpointDesignFormProps>> =
+  Object.fromEntries(
+    [
+      'tenant-superadmin-insert-dios',
+      'tenant-superadmin-insert-usuario',
+      'tenant-superadmin-insert-rol-tenant',
+      'tenant-superadmin-insert-rol-admin',
+      'tenant-superadmin-insert-documento',
+    ].map((id) => [id, TenantSuperAdminInsertDesignForm]),
+  );
+
 const REGISTRY: Record<string, React.ComponentType<GobernanzaEndpointDesignFormProps>> = {
   'tenant-crear-global-usuario': TenantCrearGlobalUsuarioDesignForm,
   'tenant-listar-libres-tenantglobal': TenantListarLibresTenantglobalDesignForm,
   'tenant-actualizar-global': TenantActualizarGlobalDesignForm,
   'tenant-desactivar-global': TenantDesactivarGlobalDesignForm,
   'tenant-eliminar-global': TenantEliminarGlobalDesignForm,
+  ...INSERT_DESIGN_REGISTRY,
 };
 
 /**

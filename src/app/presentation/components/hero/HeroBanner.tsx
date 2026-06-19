@@ -105,7 +105,7 @@ export default function HeroBanner({
                                     </div>
                                     <Button
                                         onClick={handleCtaClick}
-                                        className="rounded-full px-8 py-3 text-base font-semibold bg-primary text-primary-foreground shadow-lg hover:bg-primary/90 transition-all duration-300 ease-in-out hover:-translate-y-1"
+                                        className="rounded-full px-8 py-3 text-base font-semibold shadow-lg transition-all duration-300 ease-in-out hover:-translate-y-1"
                                     >
                                         {slide.cta}
                                     </Button>

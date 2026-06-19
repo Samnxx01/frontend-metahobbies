@@ -111,10 +111,10 @@ export default function CategoryCard({ category }: CategoryCardProps): React.Rea
                 h-7 w-7 p-0 rounded-full
                 border border-input
                 transition-all duration-300
-                hover:scale-[1.1] hover:bg-primary/90
+                hover:scale-[1.1]
               "
             >
-              <ArrowRight className="h-4 w-4 text-primary-foreground" />
+              <ArrowRight className="h-4 w-4" />
             </Button>
           </div>
         </div>

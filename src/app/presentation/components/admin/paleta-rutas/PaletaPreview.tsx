@@ -1,5 +1,6 @@
 import React from 'react';
 import type { PaletaRutaColores, ImgFondoConfig, BotonesConfig } from '@/app/services/paletaRutaService';
+import { normalizeImageRenderUrl } from '@/app/utils/normalizeImageRenderUrl';
 
 interface Props {
   colores: PaletaRutaColores;
@@ -94,12 +95,14 @@ export default function PaletaPreview({
     border: `1px solid ${colores.colorBorde}`,
   };
 
+  const fondoUrl = normalizeImageRenderUrl(imgFondo.url);
+
   const bgImageStyle: React.CSSProperties =
-    imgFondo.url
+    fondoUrl
       ? {
           position: 'absolute',
           inset: 0,
-          backgroundImage: `url(${imgFondo.url})`,
+          backgroundImage: `url(${fondoUrl})`,
           backgroundSize: imgFondo.tamaño,
           backgroundPosition: imgFondo.posicion,
           backgroundRepeat: imgFondo.repetir,
@@ -115,7 +118,7 @@ export default function PaletaPreview({
 
       <div style={wrapperStyle}>
         {/* Capa de imagen de fondo */}
-        {imgFondo.url && <div style={bgImageStyle} aria-hidden="true" />}
+        {fondoUrl && <div style={bgImageStyle} aria-hidden="true" />}
 
         {/* Contenido sobre la imagen */}
         <div style={{ position: 'relative', zIndex: 1 }}>

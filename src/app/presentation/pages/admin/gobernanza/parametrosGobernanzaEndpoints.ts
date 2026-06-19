@@ -1,4 +1,5 @@
-﻿import type { EndpointSpec } from './parametrosGobernanzaTypes';
+import type { EndpointSpec } from './parametrosGobernanzaTypes';
+import { TENANT_SUPERADMIN_INSERT_ENDPOINTS } from './tenantSuperAdminInsertEndpoints';
 
 export const ENDPOINTS: EndpointSpec[] = [
   { id: 'tenant-listar-libres', section: 'tenant', actor: 'ambos', method: 'GET', path: '/api/config/global/creacion/usu/tenant/libres', title: 'Listar tenantSuperAdmin visibles', description: 'Solo registros tenantSuperAdmin (sin tenantGlobal). Alcance según JWT.', fields: [] },
@@ -58,6 +59,7 @@ export const ENDPOINTS: EndpointSpec[] = [
       { name: 'rolesMabs', label: 'Rol mabs', type: 'id', required: true },
     ],
   },
+  ...TENANT_SUPERADMIN_INSERT_ENDPOINTS,
   {
     id: 'tenant-actualizar-global',
     section: 'tenant',
@@ -156,9 +158,11 @@ export const ENDPOINTS: EndpointSpec[] = [
     path: '/api/config/tenant/tipo/crear/dios/reglas/jerarquia/roles',
     title: 'Crear regla DIOS',
     description:
-      'Crea la regla de plataforma para el rol DIOS. Elige recursos (vistas/rutas) y acciones en los catálogos (selección múltiple; por defecto todos). tenantSuperAdmin y securityPlatform los fija el servidor desde JWT/body (securityPlatform por defecto false). Contexto opcional.',
+      'Crea la regla de plataforma para el rol DIOS. Multi-tenant, usuarios por rama, recursos y acciones. Políticas runtime validadas por tenant (no parametrizadas en la regla).',
     fields: [
-      { name: 'tenantSuperAdmin', label: 'Tenant SuperAdmin', type: 'id', required: true },
+      { name: 'tenantSuperAdmin', label: 'Tenant SuperAdmin', type: 'id', required: false },
+      { name: 'dominioTenatGlobales', label: 'Dominio', type: 'dominioDinamico', required: false },
+      { name: 'securityPlatform', label: 'Security platform', type: 'text', required: false },
       { name: 'contexto', label: 'Contexto', type: 'text', required: false },
     ],
   },
@@ -170,9 +174,11 @@ export const ENDPOINTS: EndpointSpec[] = [
     path: '/api/config/tenant/tipo/actualizar/dios/reglas/jerarquia/roles',
     title: 'Actualizar regla DIOS',
     description:
-      'Sincroniza la regla plataforma (colección reglas) del Tenant SuperAdmin elegido con todas las vistas y acciones activas. El body envía tenantSuperAdmin; sin combo, el servidor usa el del rol DIOS.',
+      'Sincroniza regla plataforma por alcance (tenant SA + usuarios opcionales). Políticas runtime validadas por tenant (no parametrizadas en la regla).',
     fields: [
       { name: 'tenantSuperAdmin', label: 'Tenant SuperAdmin', type: 'id', required: false },
+      { name: 'dominioTenatGlobales', label: 'Dominio', type: 'dominioDinamico', required: false },
+      { name: 'securityPlatform', label: 'Security platform', type: 'text', required: false },
       { name: 'contexto', label: 'Contexto', type: 'text', required: false },
     ],
   },

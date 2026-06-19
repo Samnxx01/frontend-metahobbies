@@ -242,34 +242,109 @@ export interface SincronizarCanReferirData {
 
 // ─── Selectores / etiquetas jerárquicos ───────────────────────────────────────
 
-/** Texto para listas de TenantSuperAdmin: nombre del corporativo (sin correo ni nombre de usuario). */
-export function describeTenantSuperAdminOption(sa: TenantSuperAdminOption): {
+/** Texto para listas de TenantSuperAdmin: código jerárquico + corporativo / contacto principal. */
+export function describeTenantSuperAdminOption(
+    sa: TenantSuperAdminOption,
+    options?: {
+        ocultarRamaJerarquia?: boolean;
+        ocultarUsuarioPrincipal?: boolean;
+    },
+): {
     primary: string;
     principalLine: string;
 } {
+    const codigo = String(sa.codigoJerarquia ?? '').trim();
+    const padre = String(sa.codigoPadre ?? '').trim();
     const corpNombre = String(sa.coporativo?.razon_social ?? sa.coporativo?.titulo ?? '').trim();
-    const corpFallback = corpNombre || String(sa.codigoJerarquia ?? '').trim() || String(sa.iud);
+
+    const jerarquiaLabel = codigo
+        ? (options?.ocultarRamaJerarquia
+            ? codigo
+            : (padre ? `${codigo} (rama de ${padre})` : `${codigo} (raíz)`))
+        : '';
 
     const p = sa.usuarioTenantPrincipal;
     if (p) {
         const rolUp = (p.rol ?? '').toUpperCase();
-        const rolEt =
-            rolUp === 'DIOS'
-                ? 'DIOS — corporativo asociado'
-                : (p.rol ?? 'Usuario');
-        const primary = `${rolEt}: ${corpNombre || corpFallback}`;
-        return { primary, principalLine: '' };
+        const rolEt = rolUp === 'DIOS' ? 'DIOS' : (p.rol ?? 'Usuario');
+        const nombre = [p.nombre, p.apellido].filter(Boolean).join(' ').trim();
+        const primary = jerarquiaLabel
+            ? `${jerarquiaLabel}${corpNombre ? ` · ${corpNombre}` : ''}`
+            : `${rolEt}: ${corpNombre || codigo || String(sa.iud)}`;
+        const principalLine = options?.ocultarUsuarioPrincipal
+            ? ''
+            : (nombre
+                ? `${rolEt}: ${nombre}${p.correo ? ` (${p.correo})` : ''}`
+                : (p.correo ?? ''));
+        return { primary, principalLine };
     }
 
-    const corpLabel = sa.coporativo?.razon_social ?? sa.coporativo?.titulo ?? '';
-    const codigo = sa.codigoJerarquia ?? '';
-    const primary = codigo
-        ? `${codigo} · ${corpLabel || String(sa.iud)}`
-        : (corpLabel || String(sa.iud));
+    const primary = jerarquiaLabel
+        ? (corpNombre ? `${jerarquiaLabel} · ${corpNombre}` : jerarquiaLabel)
+        : (corpNombre || codigo || String(sa.iud));
     return {
         primary,
-        principalLine: 'Sin contacto DIOS; corporativo asociado según jerarquía',
+        principalLine: corpNombre ? '' : 'Sin corporativo asociado en perfil del tenant',
     };
+}
+
+export function sortTenantsSuperAdminOptions(
+    tenants: TenantSuperAdminOption[],
+): TenantSuperAdminOption[] {
+    return [...tenants].sort((a, b) => {
+        const sa = a.secuenciaJerarquia ?? 0;
+        const sb = b.secuenciaJerarquia ?? 0;
+        if (sa !== sb) return Number(sa) - Number(sb);
+        return String(a.codigoJerarquia ?? '').localeCompare(String(b.codigoJerarquia ?? ''));
+    });
+}
+
+/** Solo `auth.tenantScope.tenantSuperAdminId` del JWT (no fallback a rol.tenantSuperAdmin). */
+export function resolverTenantSuperAdminIdDesdeJwtScope(
+    token: string | null | undefined,
+    user?: { auth?: { tenantScope?: { tenantSuperAdminId?: string } } } | null,
+): string {
+    const fromUser = String(user?.auth?.tenantScope?.tenantSuperAdminId || '').trim();
+    if (fromUser) return fromUser;
+    if (!token) return '';
+
+    try {
+        const [, payloadBase64] = token.split('.');
+        if (!payloadBase64) return '';
+        const normalized = payloadBase64.replace(/-/g, '+').replace(/_/g, '/');
+        const padded = normalized.padEnd(normalized.length + (4 - normalized.length % 4) % 4, '=');
+        const payload = JSON.parse(globalThis.atob(padded));
+        return String(
+            payload?.auth?.tenantScope?.tenantSuperAdminId
+            || payload?.tenantScope?.tenantSuperAdminId
+            || '',
+        ).trim();
+    } catch {
+        return '';
+    }
+}
+
+/**
+ * Opciones visibles al crear SuperAdmin: ancla JWT estricta o ramas hijas (oculta SA raíz p. ej. SA-0001).
+ */
+export function filtrarTenantsSuperAdminDestinoRegistro(
+    tenants: TenantSuperAdminOption[],
+    opts: { token?: string | null; tenantScopeSaId?: string | null } = {},
+): TenantSuperAdminOption[] {
+    if (!tenants.length) return tenants;
+
+    const scopeId = normalizePublicIdForApi(opts.tenantScopeSaId);
+    if (scopeId) {
+        const scoped = tenants.filter((t) => resolveEntityPublicId(t) === scopeId);
+        if (scoped.length > 0) return scoped;
+    }
+
+    const ramas = tenants.filter((t) => Boolean(String(t.codigoPadre ?? '').trim()));
+    if (ramas.length > 0 && tenants.length > ramas.length) {
+        return ramas;
+    }
+
+    return tenants;
 }
 
 // ─── Service functions ────────────────────────────────────────────────────────
@@ -304,7 +379,9 @@ export const getTenantsSuperAdmin = async (
     const q = ancla
         ? `?bajoTenantSuperAdminId=${encodeURIComponent(ancla)}`
         : '';
-    return fetcher(`/api/registro/tenants/superadmin${q}`, { method: 'GET' });
+    const res = await fetcher(`/api/registro/tenants/superadmin${q}`, { method: 'GET' });
+    const tenants = Array.isArray(res?.tenants) ? res.tenants : [];
+    return { tenants: sortTenantsSuperAdminOptions(tenants) };
 };
 
 /** Lista TenantGlobal para formularios de registro (alcance jerárquico). Sin JWT exige tenantSuperAdminId en query. */
@@ -320,8 +397,11 @@ export const getTenantsGlobalRegistro = async (
     return fetcher(`/api/registro/tenants/global/registro${q}`, { method: 'GET' });
 };
 
-export const getJerarquiaUsuarios = async (): Promise<JerarquiaResponse> => {
-    const res = await apiFetch('/api/registro/jerarquia/usuarios', { method: 'GET' });
+export const getJerarquiaUsuarios = async (
+    opts?: { useAuth?: boolean },
+): Promise<JerarquiaResponse> => {
+    const fetcher = opts?.useAuth === false ? apiFetchPublic : apiFetch;
+    const res = await fetcher('/api/registro/jerarquia/usuarios', { method: 'GET' });
     return normalizeJerarquiaResponse(res as JerarquiaResponse);
 };
 

@@ -87,7 +87,7 @@ export const getGovernedPath = (
 
   if (entry?.enabled === false) return normalizedFallback;
 
-  const candidate = String(entry.path || '').trim();
+  const candidate = String(entry?.path || '').trim();
   if (!isSafeInternalPath(candidate)) return normalizedFallback;
 
   const normalizedCandidate = normalizeRoutePath(candidate);
@@ -111,7 +111,7 @@ export const isGovernedPathConfigured = (action: GovernedNavigationAction): bool
   const config = getNavigationConfig(branding);
   const entry = config[action];
   if (!entry || entry.enabled === false) return false;
-  const candidate = String(entry.path || '').trim();
+  const candidate = String(entry?.path || '').trim();
   if (!isSafeInternalPath(candidate)) return false;
   return !isDisallowedRootForAction(action, normalizeRoutePath(candidate));
 };
