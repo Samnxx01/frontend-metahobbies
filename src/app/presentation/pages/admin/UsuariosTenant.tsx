@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { RefreshCw, Shield, Building2, Globe, Plus, Loader2, Trash2, Edit, Settings2, Users } from 'lucide-react';
+import { RefreshCw, Shield, Building2, Globe, Plus, Loader2, Trash2, Edit, Settings2, Users, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { BTN_GHOST_ACCENT } from '@/app/utils/buttonStyles';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -39,6 +40,23 @@ import {
     normalizePublicIdForApi,
     resolveEntityPublicId,
 } from '@/app/utils/entityPublicId';
+
+const BYPASS_DOMINIOS_OPCIONES = ['RUTAS', 'DOMINIOS', 'REFERIDOS', 'COMISIONES', 'ROLES_CORPORATIVOS'] as const;
+
+function bypassDominiosExplicitos(doc: { bypassDominios?: string[] }) {
+    return (doc.bypassDominios ?? [])
+        .map((d) => String(d || '').trim().toUpperCase())
+        .filter((d) => (BYPASS_DOMINIOS_OPCIONES as readonly string[]).includes(d));
+}
+
+function inferirBypassDominiosDominio(doc: { bypassDominios?: string[]; etiquetas?: string }) {
+    const explicitos = bypassDominiosExplicitos(doc);
+    if (explicitos.length) return explicitos;
+    const etiqueta = String(doc.etiquetas || '').trim().toUpperCase();
+    const matched = BYPASS_DOMINIOS_OPCIONES.filter((d) => etiqueta.includes(d));
+    if (matched.length) return [...matched];
+    return [...BYPASS_DOMINIOS_OPCIONES];
+}
 
 function countTenantSuperSaTree(nodes: TenantSuperTenantSinCorporativoItem[]): number {
     let c = 0;
@@ -334,6 +352,14 @@ export default function UsuariosTenant(): React.ReactElement {
     const [dominiosList, setDominiosList] = useState<any[]>([]);
     const [cargandoDominios, setCargandoDominios] = useState(false);
     const [mostrarDesactivados, setMostrarDesactivados] = useState(false);
+    const [dominioEditOpen, setDominioEditOpen] = useState(false);
+    const [dominioEditId, setDominioEditId] = useState('');
+    const [dominioEditForm, setDominioEditForm] = useState({
+        etiquetas: '',
+        proovedor: '',
+        bypassDominios: [] as string[],
+    });
+    const [guardandoDominioEdit, setGuardandoDominioEdit] = useState(false);
 
     const listarDominios = async (incluirDesactivados = false) => {
         setCargandoDominios(true);
@@ -403,6 +429,66 @@ export default function UsuariosTenant(): React.ReactElement {
             toast.error(String(err?.message || err?.msg || 'Error al crear dominio'));
         } finally {
             setCreandoDominio(false);
+        }
+    };
+
+    const abrirEditarDominio = (d: any) => {
+        const id = resolveEntityPublicId(d) || '';
+        if (!id) return;
+        const explicitos = bypassDominiosExplicitos(d);
+        setDominioEditId(id);
+        setDominioEditForm({
+            etiquetas: String(d?.etiquetas || ''),
+            proovedor: String(d?.proovedor || ''),
+            bypassDominios: explicitos.length ? explicitos : inferirBypassDominiosDominio(d),
+        });
+        setDominioEditOpen(true);
+    };
+
+    const toggleBypassDominioEdit = (valor: string) => {
+        const normalizado = valor.trim().toUpperCase();
+        setDominioEditForm((prev) => {
+            const tiene = prev.bypassDominios.includes(normalizado);
+            return {
+                ...prev,
+                bypassDominios: tiene
+                    ? prev.bypassDominios.filter((d) => d !== normalizado)
+                    : [...prev.bypassDominios, normalizado],
+            };
+        });
+    };
+
+    const seleccionarTodosBypassEdit = () => {
+        setDominioEditForm((prev) => ({ ...prev, bypassDominios: [...BYPASS_DOMINIOS_OPCIONES] }));
+    };
+
+    const limpiarBypassEdit = () => {
+        setDominioEditForm((prev) => ({ ...prev, bypassDominios: [] }));
+    };
+
+    const handleGuardarDominioEdit = async () => {
+        const etiquetas = dominioEditForm.etiquetas.trim();
+        const proovedor = dominioEditForm.proovedor.trim();
+        if (!etiquetas) { toast.error('La etiqueta es obligatoria'); return; }
+        if (!proovedor) { toast.error('El proveedor es obligatorio'); return; }
+        if (!dominioEditId) return;
+        setGuardandoDominioEdit(true);
+        try {
+            await apiFetch(`/api/seguridad/dominio/${encodePublicIdForPath(dominioEditId)}`, {
+                method: 'PATCH',
+                body: {
+                    etiquetas,
+                    proovedor,
+                    bypassDominios: dominioEditForm.bypassDominios,
+                },
+            });
+            toast.success('Dominio actualizado');
+            setDominioEditOpen(false);
+            await listarDominios(mostrarDesactivados);
+        } catch (err: any) {
+            toast.error(String(err?.message || err?.msg || 'Error al actualizar dominio'));
+        } finally {
+            setGuardandoDominioEdit(false);
         }
     };
 
@@ -492,6 +578,7 @@ export default function UsuariosTenant(): React.ReactElement {
                     isSubmitting={isCreatingSuperAdmin}
                     submitError={errorCrearSuperAdmin}
                     scope={'SUPER_ADMIN'}
+                    diosUserExists={Boolean(publicChecks?.diosUserExists)}
                     onSincronizarGlobalCanReferir={token ? sincronizarGlobalCanReferirUsuarios : undefined}
                     isSincronizandoGlobal={isSincronizandoGlobalCanReferir}
                     sincronizarGlobalError={errorSincronizarGlobalCanReferir}
@@ -656,7 +743,7 @@ export default function UsuariosTenant(): React.ReactElement {
                                                             <Button
                                                                 variant="ghost"
                                                                 size="icon"
-                                                                className="h-7 w-7 text-foreground/70 hover:bg-primary/10 hover:text-primary"
+                                                                className={`h-7 w-7 ${BTN_GHOST_ACCENT}`}
                                                                 onClick={() => void openEditUser(sa)}
                                                             >
                                                                 <Edit className="h-3.5 w-3.5" />
@@ -750,7 +837,7 @@ export default function UsuariosTenant(): React.ReactElement {
                                                     <Button
                                                         variant="ghost"
                                                         size="icon"
-                                                        className="h-7 w-7 text-foreground/70 hover:bg-primary/10 hover:text-primary"
+                                                        className={`h-7 w-7 ${BTN_GHOST_ACCENT}`}
                                                         onClick={() => void openEditUser(u)}
                                                     >
                                                         <Edit className="h-3.5 w-3.5" />
@@ -811,9 +898,6 @@ export default function UsuariosTenant(): React.ReactElement {
                 submitError={errorCrearGlobal}
                 tenantsGlobales={tenantsGlobalesInfo}
                 scope={scope as 'SUPER_ADMIN' | 'TENANT_GLOBAL' | 'CORPORATIVO'}
-                onSincronizarCanReferir={scope === 'TENANT_GLOBAL' ? sincronizarGlobal : undefined}
-                isSincronizando={isSincronizandoCanReferir}
-                sincronizarError={errorSincronizarCanReferir}
             />
 
             {/* Modal Dominios */}
@@ -894,14 +978,42 @@ export default function UsuariosTenant(): React.ReactElement {
                                     {dominiosList.map((d: any, i: number) => {
                                         const id = resolveEntityPublicId(d) || String(i);
                                         const activo = d?.estadoDominio !== false;
+                                        const explicitos = bypassDominiosExplicitos(d);
+                                        const bypassVisibles = explicitos.length ? explicitos : inferirBypassDominiosDominio(d);
+                                        const bypassInferidos = explicitos.length === 0;
                                         return (
-                                            <div key={id} className="rounded-lg border border-border bg-background/70 p-3 space-y-1 shadow-sm">
-                                                <div className="flex items-center justify-between gap-2">
-                                                    <p className="text-sm font-medium">{String(d?.etiquetas || '-')}</p>
-                                                    <div className="flex items-center gap-1.5 shrink-0">
+                                            <div key={id} className="rounded-lg border border-border bg-background/70 p-3 space-y-1.5 shadow-sm">
+                                                <div className="flex items-start justify-between gap-2">
+                                                    <div className="min-w-0 flex-1 space-y-1">
+                                                        <p className="text-sm font-medium">{String(d?.etiquetas || '-')}</p>
+                                                        <div className="flex flex-wrap gap-1">
+                                                            {bypassVisibles.map((dominioBypass) => (
+                                                                <Badge
+                                                                    key={dominioBypass}
+                                                                    variant={bypassInferidos ? 'outline' : 'secondary'}
+                                                                    className="text-[10px] font-normal"
+                                                                    title={bypassInferidos ? 'Dominios inferidos (sin bypassDominios en BD)' : 'Dominios bypass parametrizados'}
+                                                                >
+                                                                    {dominioBypass}
+                                                                </Badge>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex items-center gap-1 shrink-0">
                                                         <Badge variant={activo ? 'outline' : 'destructive'} className="text-xs">
                                                             {activo ? 'Activo' : 'Inactivo'}
                                                         </Badge>
+                                                        {activo && (
+                                                        <Button
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            className="h-6 px-2 text-xs"
+                                                            onClick={() => abrirEditarDominio(d)}
+                                                            aria-label="Editar dominio"
+                                                        >
+                                                            <Edit className="h-3 w-3" />
+                                                        </Button>
+                                                        )}
                                                         {activo && (
                                                         <Button
                                                             size="sm"
@@ -930,12 +1042,101 @@ export default function UsuariosTenant(): React.ReactElement {
                                                 </div>
                                                 <p className="text-xs font-mono text-muted-foreground break-all">{String(d?.dominio || '-')}</p>
                                                 <p className="text-xs text-muted-foreground">Proveedor: {String(d?.proovedor || '-')}</p>
+                                                {bypassInferidos ? (
+                                                    <p className="text-[10px] text-muted-foreground">
+                                                        Sin bypassDominios guardados — se infieren todos. Usa Editar para acotar.
+                                                    </p>
+                                                ) : null}
                                             </div>
                                         );
                                     })}
                                 </div>
                             )}
                         </div>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog open={dominioEditOpen} onOpenChange={setDominioEditOpen}>
+                <DialogContent className="max-h-[90vh] overflow-auto sm:max-w-md bg-card text-card-foreground">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <Edit className="h-5 w-5 text-primary" /> Editar dominio
+                        </DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                        <div className="space-y-1">
+                            <Label htmlFor="edit-dom-etiquetas">Etiqueta</Label>
+                            <Input
+                                id="edit-dom-etiquetas"
+                                value={dominioEditForm.etiquetas}
+                                onChange={(e) => setDominioEditForm((f) => ({ ...f, etiquetas: e.target.value }))}
+                            />
+                        </div>
+                        <div className="space-y-1">
+                            <Label htmlFor="edit-dom-proovedor">Proveedor</Label>
+                            <Input
+                                id="edit-dom-proovedor"
+                                value={dominioEditForm.proovedor}
+                                onChange={(e) => setDominioEditForm((f) => ({ ...f, proovedor: e.target.value }))}
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <div className="flex items-center justify-between gap-2">
+                                <Label>Dominios bypass (políticas runtime)</Label>
+                                <div className="flex gap-1">
+                                    <Button type="button" size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={seleccionarTodosBypassEdit}>
+                                        Todos
+                                    </Button>
+                                    <Button type="button" size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={limpiarBypassEdit}>
+                                        Ninguno
+                                    </Button>
+                                </div>
+                            </div>
+                            <div className="flex flex-wrap gap-1.5">
+                                {BYPASS_DOMINIOS_OPCIONES.map((opcion) => {
+                                    const activa = dominioEditForm.bypassDominios.includes(opcion);
+                                    return (
+                                        <Button
+                                            key={opcion}
+                                            type="button"
+                                            size="sm"
+                                            variant={activa ? 'default' : 'outline'}
+                                            className="h-7 text-xs"
+                                            onClick={() => toggleBypassDominioEdit(opcion)}
+                                        >
+                                            {opcion}
+                                        </Button>
+                                    );
+                                })}
+                            </div>
+                            {dominioEditForm.bypassDominios.length > 0 ? (
+                                <div className="flex flex-wrap gap-1">
+                                    {dominioEditForm.bypassDominios.map((dominioBypass) => (
+                                        <Badge key={dominioBypass} variant="secondary" className="gap-1 pr-1 text-xs">
+                                            {dominioBypass}
+                                            <button
+                                                type="button"
+                                                className="rounded-full p-0.5 hover:bg-muted"
+                                                aria-label={`Quitar ${dominioBypass}`}
+                                                onClick={() => toggleBypassDominioEdit(dominioBypass)}
+                                            >
+                                                <X className="h-3 w-3" />
+                                            </button>
+                                        </Badge>
+                                    ))}
+                                </div>
+                            ) : (
+                                <p className="text-[11px] text-muted-foreground">
+                                    Vacío = el motor infiere todos los dominios al evaluar políticas.
+                                </p>
+                            )}
+                        </div>
+                        <Button className="w-full" disabled={guardandoDominioEdit} onClick={() => void handleGuardarDominioEdit()}>
+                            {guardandoDominioEdit
+                                ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Guardando...</>
+                                : 'Guardar cambios'}
+                        </Button>
                     </div>
                 </DialogContent>
             </Dialog>

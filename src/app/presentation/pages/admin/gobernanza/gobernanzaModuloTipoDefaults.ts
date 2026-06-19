@@ -1,4 +1,5 @@
 import { GOBERNANZA_MODULOS_CATALOGO } from './gobernanzaModulosCatalog';
+import { GOBERNANZA_TIPO_SECTION_TENANT_SUPER_ADMIN, GOBERNANZA_TIPO_SECTION_TENANT_GLOBAL } from './gobernanzaTipoSectionConstants';
 import { GOBERNANZA_PERMISOS_FORM_COMPONENTS } from './permisos-forms/gobernanzaPermisosFormRegistry';
 import { GOBERNANZA_REGLAS_FORM_COMPONENTS } from './reglas-forms/gobernanzaReglasFormRegistry';
 import type { EndpointSection } from './parametrosGobernanzaTypes';
@@ -12,29 +13,49 @@ export const GOBERNANZA_SECTIONS_CATALOGO_FALLBACK = GOBERNANZA_MODULOS_CATALOGO
   (m) => m.section
 );
 
-/** Hub / contenedor → section para filtro operativo y tipos. */
-export const HUB_COMPONENT_SECTION: Record<string, EndpointSection> = {
+/** Alias de section en rutas/BD → section canónica en gobernanzaModuloTipos. */
+export const GOBERNANZA_TIPO_SECTION_ALIASES: Record<string, string> = {
+  'reglas-sa': 'reglas',
+  'reglas-tenant': 'reglas',
+  'regla-tenant-sa': 'reglas',
+  'tenantglobal': 'tenant-global',
+};
+
+/** Normaliza section de tipos (reglas-sa en URL → reglas en catálogo/semilla). */
+export function canonicalGobernanzaTipoSection(section?: string | null): string {
+  const raw = normalizarSectionInput(String(section || ''));
+  if (!raw) return '';
+  return GOBERNANZA_TIPO_SECTION_ALIASES[raw] || raw;
+}
+
+/** Hub / contenedor → section en gobernanzaModuloTipos (no confundir con section de gobernanzaModuloConfigs). */
+export const HUB_COMPONENT_SECTION: Record<string, EndpointSection | 'gobernanza'> = {
   PermisosGlobal: 'permisos',
   ReglasTenant: 'reglas',
-  ParametrosGobernanza: 'tenant',
-  TenantSuperAdmin: 'tenant',
+  ParametrosGobernanza: GOBERNANZA_TIPO_SECTION_TENANT_SUPER_ADMIN,
+  TenantSuperAdmin: GOBERNANZA_TIPO_SECTION_TENANT_SUPER_ADMIN,
+  TenantGlobal: GOBERNANZA_TIPO_SECTION_TENANT_GLOBAL,
 };
 
 /** Código sugerido al crear tipo desde un hub conocido. */
 export const HUB_COMPONENT_TIPO_CODIGO: Record<string, string> = {
   ReglasTenant: 'reglas-tenant-sa',
   PermisosGlobal: 'permisos-global-sa',
+  TenantGlobal: 'tenant-global',
 };
 
 /** Componente React sugerido para el tipo según hub. */
 export const HUB_COMPONENT_FORMULARIO: Record<string, string> = {
   ReglasTenant: 'GobernanzaReglasFormByEndpoint',
   PermisosGlobal: 'GobernanzaPermisosFormByEndpoint',
+  TenantGlobal: 'GobernanzaTenantFormByEndpoint',
 };
 
-export function sectionDesdeComponente(component?: string | null): EndpointSection | '' {
+export function sectionDesdeComponente(component?: string | null): EndpointSection | 'gobernanza' | '' {
   const key = String(component || '').trim();
-  return HUB_COMPONENT_SECTION[key] || '';
+  if (HUB_COMPONENT_SECTION[key]) return HUB_COMPONENT_SECTION[key];
+  if ((GOBERNANZA_REGLAS_FORM_COMPONENTS as readonly string[]).includes(key)) return 'reglas';
+  return '';
 }
 
 export function defaultsTipoDesdeComponente(component?: string | null): {
@@ -74,7 +95,7 @@ export function mergeSectionsOpciones(
   const seen = new Set<string>();
   const out: string[] = [];
   const push = (raw: string) => {
-    const s = normalizarSectionInput(raw);
+    const s = canonicalGobernanzaTipoSection(raw);
     if (!s || seen.has(s)) return;
     seen.add(s);
     out.push(s);
@@ -105,10 +126,11 @@ export function resolverTipoSectionFiltroInicial(
   const fromComponent = sectionDesdeComponente(component);
   if (fromComponent) return fromComponent;
 
-  const cat = normalizarSectionInput(String(catalogSection || ''));
+  const cat = canonicalGobernanzaTipoSection(catalogSection);
+  if (cat === 'tenant') return GOBERNANZA_TIPO_SECTION_TENANT_SUPER_ADMIN;
   if (esSectionSlugValido(cat)) return cat;
 
-  const slug = normalizarSectionInput(String(moduloSlug || ''));
+  const slug = canonicalGobernanzaTipoSection(moduloSlug);
   if (esSectionSlugValido(slug)) return slug;
 
   if (sectionsBd.includes('permisos')) return 'permisos';

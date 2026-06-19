@@ -92,7 +92,7 @@ const CustomStepper = ({ activeStep }: StepperProps): React.ReactElement => (
         <div key={label} className="flex flex-col items-center w-full z-10">
           <div
             className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm ring-4 ring-background transition-colors
-            ${isCompleted || isActive ? 'bg-primary text-primary-foreground' : 'bg-card text-muted-foreground border border-input'}`}
+            ${isCompleted || isActive ? 'bg-button text-button-foreground' : 'bg-card text-muted-foreground border border-input'}`}
           >
             {isCompleted ? <Check className="w-4 h-4" /> : index + 1}
           </div>

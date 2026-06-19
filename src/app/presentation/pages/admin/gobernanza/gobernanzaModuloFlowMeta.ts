@@ -66,6 +66,31 @@ const META: Record<string, GobernanzaModuloFlowMeta> = {
     ],
     tips: ['Si solo quieres suspender el acceso, usa Bloquear en su lugar.'],
   },
+  'tenant-crear-dios-reglas': {
+    title: 'Crear regla DIOS (acceso plataforma)',
+    summary:
+      'Parametriza la regla de plataforma para ramas tenant SuperAdmin: recursos (vistas), acciones HTTP y políticas runtime.',
+    helpTitle: '¿Qué es acceso full al sistema?',
+    helpParagraphs: [
+      'Acceso full: el tenant SuperAdmin no tiene corporativo materializado en tenantJerarquiaCounter. Puedes crear la regla DIOS y sincronizar todas las vistas y acciones activas.',
+      'Alcance acotado: si la rama tiene corporativo en counters, solo puedes consultar la regla ya parametrizada (sin sync total).',
+      'Marca uno o varios tenant SuperAdmin en el formulario; si hay varios usuarios en una rama, elige cuáles parametrizar.',
+    ],
+    tips: [
+      'El listado siguiente se arma con tu JWT y los tenant SuperAdmin visibles en selects.',
+      'Sin corporativo en counters: botones Guardar y Sincronizar regla DIOS en verde.',
+    ],
+  },
+  'tenant-actualizar-dios-reglas': {
+    title: 'Actualizar / sincronizar regla DIOS',
+    summary: 'Sincroniza recursos y acciones activas de la regla plataforma del tenant SuperAdmin elegido.',
+    helpTitle: 'Sincronización y acceso full',
+    helpParagraphs: [
+      'Misma regla de acceso full: solo ramas SA sin corporativo en tenantJerarquiaCounter pueden sincronizar el catálogo completo.',
+      'Con corporativo en counters el formulario queda en modo referencia.',
+    ],
+    tips: ['Usa el listado de tenant SuperAdmin abajo para ver qué ramas califican.'],
+  },
 };
 
 export function getGobernanzaModuloFlowMeta(endpointId: string): GobernanzaModuloFlowMeta | null {

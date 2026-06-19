@@ -110,6 +110,7 @@ export {
 export { default as ConfigGobernanza } from '../components/ConfigGobernanza';
 export {
   computeGobernanzaEndpointCapabilities,
+  scopeJwtSaSinCorporativoEnCounters,
 } from './gobernanzaEndpointCapabilities';
 export type {
   GobernanzaCapabilityContext,
@@ -124,11 +125,27 @@ export {
 export {
   filtrarIndiceSaSubarbol,
   filtrarSaJerarquiaMetaPorSubarbol,
+  filtrarSaJerarquiaMetaRamaDescendiente,
 } from './saJerarquiaCounterFilter';
 export {
   formatSaJerarquiaOptionLabel,
+  formatSaTenantJerarquiaSelectLabel,
+  formatSaUsuarioParametrizarLabel,
   SaJerarquiaUsuariosPanel,
 } from './SaJerarquiaUsuariosPanel';
+export {
+  DiosReglaAlcanceTenantsPanel,
+} from './DiosReglaAlcanceTenantsPanel';
+export {
+  DIOS_REGLA_BTN_ACTIVO,
+  DIOS_REGLA_BTN_PENDIENTE,
+  diosReglaExecuteButtonClassName,
+} from './diosReglaButtonStyles';
+export { buildDiosReglaSaAccesoHelpRows, saTieneCorporativoEnJerarquiaCounter, resolverSaJerarquiaTieneCorporativoEnCounters } from './diosReglaAyudaHelpers';
+export type { DiosReglaSaAccesoHelpRow } from './diosReglaAyudaHelpers';
+export { GobernanzaFlowHelpProvider, useGobernanzaFlowHelpExtra } from './gobernanzaFlowHelpContext';
+export type { GobernanzaFlowHelpContextValue } from './gobernanzaFlowHelpContext';
+export type { DiosReglaAlcancePayload, DiosReglaSaMeta } from './diosReglaAlcanceHelpers';
 export type { SaJerarquiaMetaPanel, SaJerarquiaUsuarioRegistrado } from './SaJerarquiaUsuariosPanel';
 export type { SaJerarquiaCounterIndice } from './saJerarquiaCounterFilter';
 export type { TenantGlobalJerarquiaRow } from './tenantGlobalJerarquiaHelpers';

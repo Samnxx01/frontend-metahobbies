@@ -9,6 +9,7 @@ import {
   SlidersHorizontal,
   Warehouse,
 } from 'lucide-react';
+import { isOpaqueDocumentId, normalizePublicIdForApi } from '@/app/utils/entityPublicId';
 
 /** Valores de pestaña del módulo Inventario (única fuente de verdad). */
 export type InventarioTabValue =
@@ -163,17 +164,57 @@ export const inventarioTenantSuperAdminIdDesdeUsuario = (
   user: InventarioJwtScopeUserLike | null | undefined,
 ): string | undefined => {
   const ts = user?.auth?.tenantScope || {};
-  const sa = String(user?.tenantSuperAdminId || ts.tenantSuperAdminId || '').trim();
-  return /^[0-9a-fA-F]{24}$/.test(sa) ? sa : undefined;
+  const sa = normalizePublicIdForApi(user?.tenantSuperAdminId || ts.tenantSuperAdminId);
+  return isOpaqueDocumentId(sa) ? sa : undefined;
 };
 
 const TAB_VALUES = new Set<InventarioTabValue>([
   'stock', 'movimientos', 'orden-compras', 'ajustes', 'bodegas', 'conciliacion', 'config', 'trm',
 ]);
 
-const tabValueDesdeTarjeta = (tab: string | null | undefined): InventarioTabValue => {
+const tabValueDesdeTarjeta = (tab: string | null | undefined): InventarioTabValue | null => {
   const t = String(tab || '').trim() as InventarioTabValue;
-  return TAB_VALUES.has(t) ? t : 'stock';
+  return TAB_VALUES.has(t) ? t : null;
+};
+
+const tarjetaTieneRutaParametrizada = (tarjeta: {
+  rutaId?: string | null;
+  path?: string | null;
+  moduloPath?: string | null;
+}): boolean => {
+  const rutaId = normalizePublicIdForApi(tarjeta.rutaId);
+  const path = String(tarjeta.path || tarjeta.moduloPath || '').trim();
+  return isOpaqueDocumentId(rutaId) && Boolean(path);
+};
+
+/** Si la tarjeta no trae `tab`, infiere desde moduloPath, path o título del catálogo. */
+const inferirTabDesdeTarjeta = (tarjeta: {
+  tab?: string | null;
+  titulo?: string | null;
+  path?: string | null;
+  moduloPath?: string | null;
+}): InventarioTabValue | null => {
+  const direct = tabValueDesdeTarjeta(tarjeta.tab);
+  if (direct && direct !== 'config') return direct;
+
+  const moduloPath = String(tarjeta.moduloPath || '').trim().toLowerCase();
+  const path = String(tarjeta.path || '').trim().toLowerCase();
+  const titulo = String(tarjeta.titulo || '').trim().toLowerCase();
+
+  for (const m of inventarioModulosOrdenados()) {
+    if (m.tab === 'config') continue;
+    const catalogPath = pathAbs(m.pathSegment).toLowerCase();
+    if (
+      moduloPath === catalogPath
+      || moduloPath.endsWith(`/${m.pathSegment}`)
+      || path.includes(`/${m.pathSegment}`)
+      || titulo === m.label.toLowerCase()
+    ) {
+      return m.tab;
+    }
+  }
+
+  return direct;
 };
 
 /**
@@ -181,17 +222,18 @@ const tabValueDesdeTarjeta = (tab: string | null | undefined): InventarioTabValu
  * (misma fuente que ConfigInventario). Sin duplicar `tab`.
  */
 export const inventarioTabsDesdeTarjetasDinamicas = (
-  tarjetas: Array<{ tab?: string | null; titulo: string; orden?: number }>,
+  tarjetas: Array<{ tab?: string | null; titulo: string; orden?: number; rutaId?: string | null; path?: string | null; moduloPath?: string | null }>,
   user: InventarioJwtScopeUserLike | null | undefined,
 ): Array<{ value: InventarioTabValue; label: string }> => {
   const sorted = [...tarjetas]
-    .filter((t) => String(t.titulo || '').trim())
+    .filter((t) => String(t.titulo || '').trim() && tarjetaTieneRutaParametrizada(t))
     .sort((a, b) => Number(a.orden || 0) - Number(b.orden || 0) || a.titulo.localeCompare(b.titulo));
 
   const seen = new Set<InventarioTabValue>();
   const tabs: Array<{ value: InventarioTabValue; label: string }> = [];
   for (const tarjeta of sorted) {
-    const value = tabValueDesdeTarjeta(tarjeta.tab);
+    const value = inferirTabDesdeTarjeta(tarjeta);
+    if (!value || value === 'config') continue;
     if (!inventarioTabVisibleSegunJwt(value, user) || seen.has(value)) continue;
     seen.add(value);
     tabs.push({ value, label: String(tarjeta.titulo).trim() });

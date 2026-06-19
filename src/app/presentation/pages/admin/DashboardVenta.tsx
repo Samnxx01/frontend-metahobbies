@@ -182,21 +182,17 @@ export default function DashboardVenta(): React.ReactElement {
 
         setSaving(true);
         try {
-            if (editingConfigId) {
-                await dashboardVentaService.actualizarConfiguracion(editingConfigId, {
-                    levels: normalizedLevels,
-                    estado: true,
-                });
-                toast.success('Configuración del Pipeline B actualizada.');
-            } else {
-                await dashboardVentaService.crearConfiguracion({
-                    originType: 'producto',
-                    originId: selectedProductoId,
-                    levels: normalizedLevels,
-                    estado: true,
-                });
-                toast.success('Configuración del Pipeline B creada.');
-            }
+            await dashboardVentaService.guardarNivelesOrigen({
+                originType: 'producto',
+                originId: selectedProductoId,
+                levels: normalizedLevels,
+                estado: true,
+            });
+            toast.success(
+                editingConfigId
+                    ? 'Configuración del Pipeline B actualizada.'
+                    : 'Configuración del Pipeline B creada.',
+            );
 
             await loadData();
         } catch (error: any) {

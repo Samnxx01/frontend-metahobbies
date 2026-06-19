@@ -1,5 +1,5 @@
 import React from 'react';
-import { Eye, FileSpreadsheet, PackageSearch, Plus, RefreshCw, Save, Settings2, SlidersHorizontal } from 'lucide-react';
+import { Eye, FileSpreadsheet, CircleHelp, PackageSearch, Plus, RefreshCw, Save, Settings2, ShieldCheck, SlidersHorizontal } from 'lucide-react';
 import type {
   ComprobanteEntradaAjuste,
   InventarioMotivoMovimiento,
@@ -59,6 +59,9 @@ type InventarioMovimientosTabProps = {
   renderBodegaSelect?: (value: string, onChange: (value: string) => void) => React.ReactElement;
   abrirModalTiposMovimiento?: () => void;
   abrirModalCausalesMotivo?: () => void;
+  abrirModalKardexControlDuplicado?: () => void;
+  abrirAyudaKardexControlDuplicado?: () => void;
+  kardexOmitirControlDuplicado?: boolean;
   abrirModalSkuCatalogo?: () => void;
   abrirModalSku?: () => void;
   registrarMovimiento?: () => Promise<void>;
@@ -127,6 +130,9 @@ export default function InventarioMovimientosTab({
   renderBodegaSelect,
   abrirModalTiposMovimiento,
   abrirModalCausalesMotivo,
+  abrirModalKardexControlDuplicado,
+  abrirAyudaKardexControlDuplicado,
+  kardexOmitirControlDuplicado = false,
   abrirModalSkuCatalogo,
   abrirModalSku,
   registrarMovimiento,
@@ -302,6 +308,24 @@ export default function InventarioMovimientosTab({
               <CardTitle className="flex items-center gap-2"><Plus className="h-5 w-5" /> Registrar movimiento</CardTitle>
             </div>
             <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant={kardexOmitirControlDuplicado ? 'destructive' : 'outline'}
+                onClick={abrirModalKardexControlDuplicado ?? noop}
+              >
+                <ShieldCheck className="mr-2 h-4 w-4" />
+                Control duplicados
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                title="Ayuda: control de duplicados en kardex"
+                aria-label="Ayuda control de duplicados"
+                onClick={abrirAyudaKardexControlDuplicado ?? noop}
+              >
+                <CircleHelp className="h-4 w-4" />
+              </Button>
               <Button type="button" variant="outline" onClick={abrirModalSkuCatalogo ?? noop}>
                 <PackageSearch className="mr-2 h-4 w-4" />
                 Ver SKU

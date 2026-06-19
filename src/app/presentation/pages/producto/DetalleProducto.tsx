@@ -240,7 +240,7 @@ export default function DetalleProducto(): React.ReactElement {
                 onClick={() => { void handleAddToCart(); }}
                 size="lg"
                 className={`flex-1 py-2 text-base font-semibold transition-all duration-300 ${
-                  isAdded ? 'bg-green-600 hover:bg-green-700' : 'bg-primary hover:bg-primary/90'
+                  isAdded ? 'bg-green-600 hover:bg-green-700 text-white' : ''
                 }`}
                 disabled={isAdded || isAdding}
               >
@@ -248,7 +248,7 @@ export default function DetalleProducto(): React.ReactElement {
                 {isAdding ? 'Agregando...' : isAdded ? 'Agregado' : 'Agregar al Carrito'}
               </Button>
 
-              <Button variant="outline" size="icon" className="h-10 w-10 rounded-lg hover:border-primary hover:text-primary transition-colors">
+              <Button variant="outline" size="icon" className="h-10 w-10 rounded-lg hover:border-button hover:text-button-foreground transition-colors">
                 <Heart className="w-5 h-5" />
               </Button>
             </div>

@@ -70,6 +70,9 @@ import {
 } from './inventario/inventarioTipoMovimientoKardex';
 import InventarioStockTab from './components/InventarioStockTab';
 import InventarioTipoMovimientoModal, { type TipoMovimientoDraft } from './components/InventarioTipoMovimientoModal';
+import InventarioKardexControlDuplicadoModal, {
+  InventarioKardexControlDuplicadoAyudaDialog,
+} from './components/InventarioKardexControlDuplicadoModal';
 import InventarioUnidadMedidaModal, { type UnidadMedidaDraft } from './components/InventarioUnidadMedidaModal';
 import {
   AlertDialog,
@@ -289,6 +292,9 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
   const [skuEditandoId, setSkuEditandoId] = useState<string | null>(null);
   const [skuForm, setSkuForm] = useState<SkuForm>(skuFormInicial);
   const [tipoModalOpen, setTipoModalOpen] = useState(false);
+  const [kardexControlModalOpen, setKardexControlModalOpen] = useState(false);
+  const [kardexControlAyudaOpen, setKardexControlAyudaOpen] = useState(false);
+  const [kardexOmitirControlDuplicadoDraft, setKardexOmitirControlDuplicadoDraft] = useState(false);
   const [tipoMovimientoDraft, setTipoMovimientoDraft] = useState<TipoMovimientoDraft>(tipoMovimientoDraftInicial);
   const [unidadModalOpen, setUnidadModalOpen] = useState(false);
   const [unidadMedidaDraft, setUnidadMedidaDraft] = useState<UnidadMedidaDraft>(unidadMedidaDraftInicial);
@@ -1373,6 +1379,36 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
     setCausalMotivoModalOpen(true);
   };
 
+  const abrirModalKardexControlDuplicado = (): void => {
+    setKardexOmitirControlDuplicadoDraft(config?.kardex?.omitirControlDuplicado === true);
+    setKardexControlModalOpen(true);
+  };
+
+  const abrirAyudaKardexControlDuplicado = (): void => {
+    setKardexControlAyudaOpen(true);
+  };
+
+  const guardarConfigKardexControlDuplicado = async (): Promise<void> => {
+    setSaving(true);
+    try {
+      const data = await inventarioService.actualizarConfigKardex({
+        omitirControlDuplicado: kardexOmitirControlDuplicadoDraft,
+      });
+      setConfig(data);
+      setKardexControlModalOpen(false);
+      toast.success(
+        kardexOmitirControlDuplicadoDraft
+          ? 'Control de duplicados desactivado (omitir = true).'
+          : 'Control de duplicados activo (omitir = false).',
+      );
+    } catch (error) {
+      console.error('Error guardando config kardex:', error);
+      toast.error(error instanceof Error ? error.message.replace(/^\[\d+\]\s*/, '') : 'No se pudo guardar la configuración.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const abrirModalSkuCatalogo = (): void => {
     setSkuCatalogoOpen(true);
   };
@@ -1929,6 +1965,9 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
             renderBodegaSelect={renderBodegaSelect}
             abrirModalTiposMovimiento={abrirModalTiposMovimiento}
             abrirModalCausalesMotivo={abrirModalCausalesMotivo}
+            abrirModalKardexControlDuplicado={abrirModalKardexControlDuplicado}
+            abrirAyudaKardexControlDuplicado={abrirAyudaKardexControlDuplicado}
+            kardexOmitirControlDuplicado={config?.kardex?.omitirControlDuplicado === true}
             abrirModalSkuCatalogo={abrirModalSkuCatalogo}
             abrirModalSku={abrirModalCrearSku}
             registrarMovimiento={registrarMovimiento}
@@ -2032,6 +2071,22 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
         onSubmit={() => void guardarTipoMovimiento()}
         onEdit={editarTipoMovimiento}
         onReset={() => setTipoMovimientoDraft(tipoMovimientoDraftInicial)}
+      />
+
+      <InventarioKardexControlDuplicadoModal
+        open={kardexControlModalOpen}
+        saving={saving}
+        omitirControlDuplicado={kardexOmitirControlDuplicadoDraft}
+        auditoria={config?.kardex?.auditoria}
+        historial={config?.kardex?.historial}
+        onOpenChange={setKardexControlModalOpen}
+        onOmitirChange={setKardexOmitirControlDuplicadoDraft}
+        onSubmit={() => void guardarConfigKardexControlDuplicado()}
+      />
+
+      <InventarioKardexControlDuplicadoAyudaDialog
+        open={kardexControlAyudaOpen}
+        onOpenChange={setKardexControlAyudaOpen}
       />
 
       <InventarioSkuModal

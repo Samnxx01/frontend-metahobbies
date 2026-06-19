@@ -181,7 +181,7 @@ const getHerenciaAdminPermitida = async (): Promise<{
         }
 
         const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "/api";
-        const result = await apiFetch(`${API_BASE_URL}/config/permisos/listar/usu/tenant/libres?soloMios=false&includeOrphans=true`, {
+        const result = await apiFetch(`${API_BASE_URL}/config/permisos/listar/usu/tenant/libres?soloMios=true&includeOrphans=true`, {
             method: "GET",
             useAuth: true
         }) as HerenciaUsuarioResponse | null;
@@ -203,13 +203,27 @@ const getHerenciaAdminPermitida = async (): Promise<{
                 }
 
                 if (vista.estadoRuta === false) return;
-                if (vista.layout && !isAdminLayout(vista.layout)) return;
 
-                const vistaId = String(vista._id || vista.iud || "").trim();
+                const layoutRaw = String(
+                    vista.layout?._id ? vista.layout : vista.layout || ''
+                ).trim();
+                if (layoutRaw && !isAdminLayout(layoutRaw)) return;
+
+                const vistaId = String(vista.iud || vista._id || vista.id || "").trim();
                 if (vistaId) idsPermitidos.add(vistaId);
+                const vistaIdAlt = String(vista._id || "").trim();
+                if (vistaIdAlt && vistaIdAlt !== vistaId) idsPermitidos.add(vistaIdAlt);
 
                 const vistaPath = String(vista.path || "").trim();
-                if (vistaPath) pathsPermitidos.add(normalizeRoutePath(vistaPath));
+                if (vistaPath) {
+                    const norm = normalizeRoutePath(vistaPath);
+                    pathsPermitidos.add(norm);
+                    const rel = vistaPath.replace(/^\/admin\/?/i, '').trim();
+                    if (rel) {
+                        pathsPermitidos.add(normalizeRoutePath(`/${rel}`));
+                        pathsPermitidos.add(normalizeRoutePath(`/admin/${rel}`));
+                    }
+                }
             });
         });
 
@@ -340,6 +354,53 @@ const filterTreeByAllowedRoutes = (
         filtered.push({ ...node, children });
         return filtered;
     }, []);
+};
+
+/** No vaciar sidebar si la API no devolvió herencia o si ids/paths no alinean con el árbol. */
+const filterTreeByHerenciaConRescate = (
+    nodes: AdminNavTreeItem[],
+    herencia: { idsPermitidos: Set<string>; pathsPermitidos: Set<string> },
+    logLabel: string
+): AdminNavTreeItem[] => {
+    const hasHerencia = herencia.idsPermitidos.size > 0 || herencia.pathsPermitidos.size > 0;
+    if (!hasHerencia) return nodes;
+    const filtered = filterTreeByAllowedRoutes(nodes, herencia.idsPermitidos, herencia.pathsPermitidos);
+    if (filtered.length === 0 && nodes.length > 0) {
+        console.warn(
+            `[MABS][${logLabel}] Filtro por herencia dejó 0 nodos; usando árbol previo (revisar herencia en API)`
+        );
+        return nodes;
+    }
+    return filtered;
+};
+
+type AdminRouteRow = RouteResponse['data'][number];
+
+const filterAdminRoutesByHerenciaConRescate = (
+    adminSource: AdminRouteRow[],
+    herencia: { idsPermitidos: Set<string>; pathsPermitidos: Set<string> },
+    aplicarHerencia: boolean,
+    logLabel: string
+): AdminRouteRow[] => {
+    if (!aplicarHerencia) return adminSource;
+    const hasHerencia = herencia.idsPermitidos.size > 0 || herencia.pathsPermitidos.size > 0;
+    if (!hasHerencia) return adminSource;
+    const filtered = adminSource.filter((r) => {
+        const routeId = String(r._id || r.iud || '');
+        const rel = toRelativeRoutePath(String(r.path || '').replace(/^\/admin\/?/i, ''));
+        const pathCandidates = [
+            normalizeRoutePath(String(r.path || '')),
+            normalizeRoutePath(`/${rel}`),
+            normalizeRoutePath(`/admin/${rel}`),
+        ];
+        if (herencia.idsPermitidos.has(routeId)) return true;
+        return pathCandidates.some((p) => herencia.pathsPermitidos.has(p));
+    });
+    if (filtered.length === 0 && adminSource.length > 0) {
+        console.warn(`[MABS][${logLabel}] Filtro por herencia dejó 0 rutas; usando catálogo admin completo`);
+        return adminSource;
+    }
+    return filtered;
 };
 
 const resolveSidebarSourceCollection = (actorTipo: AdminActorTipo): string | null => {
@@ -667,6 +728,14 @@ export const shouldShowAdminHerenciaSinPermisoAlert = async (pathname: string): 
         const adminSource = securityResult.data.filter((r) => r.estadoRuta && isAdminLayout(r.layout));
         const matching = adminSource.filter((r) => securityRouteRowMatchesNormalizedPath(r, currentNorm));
         if (matching.length === 0) return false;
+
+        const hasHerenciaResuelta =
+            herencia.idsPermitidos.size > 0 || herencia.pathsPermitidos.size > 0;
+        /**
+         * Si la API no devolvió vistas heredadas, no bloquear la pantalla: `getAuthorizedRoutes`
+         * ya aplica el mismo rescate de catálogo admin (evita 404 + overlay rojo por desalineación de ids).
+         */
+        if (!hasHerenciaResuelta) return false;
 
         const securityLookup = buildAllowedRouteLookup(securityResult.data);
 
@@ -1279,11 +1348,9 @@ export const getPublicNavigationRoutes = async (
                 const isHybrid = hasPublic && hasPrivate;
 
                 if (isAuthenticated) {
-                    const showInSidebar = route.mostrarEnSidebar === true && hasPrivate;
-                    const showInPublicNav = route.mostrarEnNavbarPublico === true && hasPublic;
-
-                    if (!showInSidebar && !showInPublicNav) return false;
-                    if (showInSidebar && route.mostrarEnNavbarPublico === true && !isHybrid) return false;
+                    if (!hasPrivate) return false;
+                    if (route.mostrarEnSidebar !== true) return false;
+                    if (route.mostrarEnNavbarPublico === true && !isHybrid) return false;
                     return true;
                 }
 
@@ -1336,17 +1403,9 @@ export const getAdminSidebarRoutes = async (): Promise<AdminNavItem[]> => {
         const adminSource = result.data.filter((r) => r.estadoRuta && isAdminLayout(r.layout));
         const hasHerenciaAdmin = herencia.idsPermitidos.size > 0 || herencia.pathsPermitidos.size > 0;
         const aplicarHerencia = await debeAplicarFiltroHerenciaSuperAdmin(actorTipo, hasHerenciaAdmin);
-        const adminFiltrado = aplicarHerencia
-            ? adminSource.filter((r) => {
-                const routeId = String(r._id || r.iud || "");
-                const routePath = normalizeRoutePath(r.path);
-                return herencia.idsPermitidos.has(routeId) || herencia.pathsPermitidos.has(routePath);
-            }) : [];
-
         const isSuperadmin = actorTipo === 'SUPERADMIN';
-        /** Si ya aplicamos filtro por herencia (SA con counters corporativo u otro actor), no rellenar con todo el catálogo aunque el filtro deje 0 rutas. */
         const resultado = aplicarHerencia
-            ? adminFiltrado
+            ? filterAdminRoutesByHerenciaConRescate(adminSource, herencia, true, 'getAdminSidebarRoutes')
             : isSuperadmin
                 ? adminSource
                 : [];
@@ -1407,17 +1466,12 @@ export const getAdminSidebarFallbackTree = async (actorTipo: AdminActorTipo): Pr
 
         const hasHerenciaAdmin = herencia.idsPermitidos.size > 0 || herencia.pathsPermitidos.size > 0;
         const aplicarHerencia = await debeAplicarFiltroHerenciaSuperAdmin(effectiveActorTipo, hasHerenciaAdmin);
-        const filterEdByHerencia = aplicarHerencia
-            ? adminSource.filter((r) => {
-                const routeId = String(r._id || r.iud || "");
-                const routePath = normalizeRoutePath(r.path);
-                return herencia.idsPermitidos.has(routeId) || herencia.pathsPermitidos.has(routePath);
-            })
-            : [];
-
         const isSuperAdminEff = effectiveActorTipo === 'SUPERADMIN';
-        const visibleFallback = isSuperAdminEff ? adminSource : [];
-        const visibles = aplicarHerencia ? filterEdByHerencia : visibleFallback;
+        const visibles = aplicarHerencia
+            ? filterAdminRoutesByHerenciaConRescate(adminSource, herencia, true, 'getAdminSidebarFallbackTree')
+            : isSuperAdminEff
+                ? adminSource
+                : [];
 
         if (!visibles.length) return [];
 
@@ -1524,17 +1578,17 @@ const _fetchSidebarTreeWithContext = async (): Promise<AdminSidebarTreeContext> 
                 const jerarquiaCorpSa = await fetchSaJerarquiaTieneCorporativoEnCounters();
                 if (jerarquiaCorpSa === true) {
                     const herenciaSa = await getHerenciaAdminPermitida();
-                    filteredTree = filterTreeByAllowedRoutes(
+                    filteredTree = filterTreeByHerenciaConRescate(
                         filteredTree,
-                        herenciaSa.idsPermitidos,
-                        herenciaSa.pathsPermitidos
+                        herenciaSa,
+                        'getAdminSidebarTree'
                     );
                 }
             }
 
             if (actorTipo === 'GLOBAL' || actorTipo === 'CORPORATIVO' || actorTipo === 'CLIENTE') {
                 const herencia = await getHerenciaAdminPermitida();
-                filteredTree = filterTreeByAllowedRoutes(filteredTree, herencia.idsPermitidos, herencia.pathsPermitidos);
+                filteredTree = filterTreeByHerenciaConRescate(filteredTree, herencia, 'getAdminSidebarTree');
                 filteredTree = filterTreeByAllowedRoutes(filteredTree, securityLookup.ids, securityLookup.paths);
             }
 

@@ -34,9 +34,11 @@ function gridDesdeApi(modulos: GobernanzaModuloCatalogoItemApi[]): GobernanzaMod
     .sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0))
     .map((m) => {
       const local = getGobernanzaModuloCatalogoLocal(m.slug);
+      const moduloId = m.id ?? (m as { iud?: string | null }).iud ?? null;
+      const registradoEnBd = Boolean(m.registradoEnBd ?? moduloId);
       return {
         slug: m.slug,
-        moduloId: m.id ?? null,
+        moduloId,
         rutaId: m.rutaId ?? null,
         title: m.label,
         description: m.description,
@@ -52,7 +54,7 @@ function gridDesdeApi(modulos: GobernanzaModuloCatalogoItemApi[]): GobernanzaMod
         section: m.section,
         disponible: m.disponible !== false,
         accionesDisponibles: m.accionesDisponibles ?? 0,
-        registradoEnBd: Boolean(m.registradoEnBd ?? m.id),
+        registradoEnBd,
       };
     });
 }

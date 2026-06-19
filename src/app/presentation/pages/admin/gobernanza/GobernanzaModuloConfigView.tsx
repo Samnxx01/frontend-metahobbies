@@ -7,6 +7,7 @@ import {
   Link2,
   Loader2,
   Pencil,
+  RefreshCw,
   Settings2,
   Trash2,
 } from 'lucide-react';
@@ -40,12 +41,15 @@ import {
   GOBERNANZA_INVENTARIO_CARD_FOOTER,
   GOBERNANZA_INVENTARIO_CARD_ICON,
   GOBERNANZA_INVENTARIO_PATH_BAR,
+  GOBERNANZA_INVENTARIO_BTN_HEADER,
+  GOBERNANZA_INVENTARIO_BTN_CARD,
 } from './gobernanzaInventarioLayout';
 import { useGobernanzaModuloRutasOpciones } from './useGobernanzaModuloRutasOpciones';
 import {
   upsertGobernanzaModulo,
   desactivarGobernanzaModulo,
   sembrarGobernanzaModulosCatalogo,
+  sincronizarGobernanzaApiConsumo,
   fetchGobernanzaModuloFiltrosOpciones,
   fetchGobernanzaModuloFormularioDetalle,
   fetchGobernanzaModuloMenu,
@@ -80,6 +84,18 @@ function resolveParametrizarSlug(item: Pick<GobernanzaModuloGridItem, 'slug' | '
 
 function resolveParametrizarMenuPath(item: Pick<GobernanzaModuloGridItem, 'menuPath' | 'path'>): string | null {
   return item.menuPath?.trim() || item.path?.trim() || null;
+}
+
+/** Solo módulos persistidos en gobernanzaModuloConfigs pueden desactivarse. */
+function puedeEliminarModuloConfig(item: GobernanzaModuloGridItem): boolean {
+  return Boolean(item.moduloId || item.registradoEnBd);
+}
+
+function tituloEliminarModulo(item: GobernanzaModuloGridItem): string {
+  if (puedeEliminarModuloConfig(item)) {
+    return 'Desactivar registro en gobernanzaModuloConfigs';
+  }
+  return 'Módulo solo en catálogo local. Publica con Parametrizar menú o Importar catálogo.';
 }
 
 function toCheckedMap(ids: string[]): Record<string, boolean> {
@@ -138,6 +154,7 @@ export function GobernanzaModuloConfigView({ className }: GobernanzaModuloConfig
   );
   const [busySlug, setBusySlug] = useState<string | null>(null);
   const [sembrando, setSembrando] = useState(false);
+  const [sincronizando, setSincronizando] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogSlug, setDialogSlug] = useState('tenant');
   const [dialogLabel, setDialogLabel] = useState('');
@@ -418,9 +435,37 @@ export function GobernanzaModuloConfigView({ className }: GobernanzaModuloConfig
     }
   };
 
+  const sincronizarApis = async () => {
+    setSincronizando(true);
+    try {
+      const data = await sincronizarGobernanzaApiConsumo();
+      const partes = [
+        `${data.sincronizadas} API(s) vinculada(s)`,
+        data.creadas > 0 ? `${data.creadas} nueva(s)` : null,
+        data.actualizadas > 0 ? `${data.actualizadas} actualizada(s)` : null,
+      ].filter(Boolean);
+      toast.success(partes.join(' · '));
+      if (data.omitidasSinPath > 0) {
+        toast.warning(`${data.omitidasSinPath} acción(es) sin path API en el módulo.`);
+      }
+      if (data.configsSinRuta > 0) {
+        toast.warning(`${data.configsSinRuta} módulo(s) sin rutaId en rutaseguridads.`);
+      }
+      if (data.conflictos?.length) {
+        toast.warning(
+          `${data.conflictos.length} conflicto(s): mismo path+method con otro formulario.`
+        );
+      }
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Error al sincronizar APIs');
+    } finally {
+      setSincronizando(false);
+    }
+  };
+
   const eliminarModulo = async (item: GobernanzaModuloGridItem) => {
-    if (!item.moduloId) {
-      toast.warning('Este módulo solo existe en catálogo local.');
+    if (!puedeEliminarModuloConfig(item)) {
+      toast.warning('Este módulo aún no está publicado en gobernanzaModuloConfigs.');
       return;
     }
     setBusySlug(item.slug);
@@ -452,12 +497,13 @@ export function GobernanzaModuloConfigView({ className }: GobernanzaModuloConfig
             {esDios && !modulosDesdeApi ? (
               <Button
                 type="button"
-                variant="secondary"
+                variant="outline"
                 size="sm"
+                className={GOBERNANZA_INVENTARIO_BTN_HEADER}
                 disabled={loading || sembrando}
                 onClick={() => void sembrarCatalogo()}
               >
-                {sembrando ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                {sembrando ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                 Importar catálogo
               </Button>
             ) : null}
@@ -465,13 +511,29 @@ export function GobernanzaModuloConfigView({ className }: GobernanzaModuloConfig
               moduloSlug={parametrizarSectionSlug}
               onMenuRefresh={() => void refresh()}
               size="sm"
-              className="shrink-0"
+              className={GOBERNANZA_INVENTARIO_BTN_HEADER}
             />
             <Button
               type="button"
               variant="outline"
               size="sm"
-              className="shrink-0 gap-2"
+              className={GOBERNANZA_INVENTARIO_BTN_HEADER}
+              disabled={loading || sincronizando}
+              title="Vincula las APIs publicadas en gobernanzaModuloConfigs con apiconsumosfrontend (rutaFormulario)"
+              onClick={() => void sincronizarApis()}
+            >
+              {sincronizando ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4" />
+              )}
+              Sincronizar APIs
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className={GOBERNANZA_INVENTARIO_BTN_HEADER}
               disabled={loading}
               onClick={() => {
                 const first = grid[0];
@@ -482,8 +544,15 @@ export function GobernanzaModuloConfigView({ className }: GobernanzaModuloConfig
               <Link2 className="h-4 w-4" />
               Autorización formularios
             </Button>
-            <Button type="button" variant="outline" size="sm" disabled={loading} onClick={() => void refresh()}>
-              {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className={GOBERNANZA_INVENTARIO_BTN_HEADER}
+              disabled={loading}
+              onClick={() => void refresh()}
+            >
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               Actualizar catálogo
             </Button>
           </div>
@@ -531,13 +600,13 @@ export function GobernanzaModuloConfigView({ className }: GobernanzaModuloConfig
                         menuPathInicial={resolveParametrizarMenuPath(item)}
                         onMenuRefresh={() => void refresh()}
                         size="sm"
-                        className="h-8 gap-1.5 text-xs"
+                        className={GOBERNANZA_INVENTARIO_BTN_CARD}
                       />
                       <Button
                         type="button"
                         variant="outline"
                         size="sm"
-                        className="h-8 gap-1.5 text-xs"
+                        className={GOBERNANZA_INVENTARIO_BTN_CARD}
                         disabled={busy}
                         onClick={() => abrirPublicar(item)}
                       >
@@ -550,7 +619,7 @@ export function GobernanzaModuloConfigView({ className }: GobernanzaModuloConfig
                             type="button"
                             variant="outline"
                             size="sm"
-                            className="h-8 gap-1.5 text-xs"
+                            className={GOBERNANZA_INVENTARIO_BTN_CARD}
                             disabled={busy}
                             onClick={() => abrirPublicar(item)}
                           >
@@ -565,8 +634,9 @@ export function GobernanzaModuloConfigView({ className }: GobernanzaModuloConfig
                             type="button"
                             variant="destructive"
                             size="sm"
-                            className="h-8 gap-1.5 text-xs"
-                            disabled={busy || !item.moduloId}
+                            className={GOBERNANZA_INVENTARIO_BTN_CARD}
+                            disabled={busy || !puedeEliminarModuloConfig(item)}
+                            title={tituloEliminarModulo(item)}
                             onClick={() => void eliminarModulo(item)}
                           >
                             {busy ? (

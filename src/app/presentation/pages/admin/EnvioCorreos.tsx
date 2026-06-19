@@ -557,7 +557,7 @@ export default function EnvioCorreos() {
                   setContenido({});
                 }}
                 className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${tipoPreview === t.value
-                  ? 'bg-primary text-primary-foreground border-primary'
+                  ? 'bg-button text-button-foreground border-button'
                   : 'bg-background border-border hover:bg-muted'
                   }`}
               >

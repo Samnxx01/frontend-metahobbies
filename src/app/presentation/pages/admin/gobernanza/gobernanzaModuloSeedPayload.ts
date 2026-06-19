@@ -1,4 +1,4 @@
-import { GOBERNANZA_MODULOS_CATALOGO } from './gobernanzaModulosCatalog';
+import { GOBERNANZA_MODULOS_CATALOGO, normalizeGobernanzaModuloSlug } from './gobernanzaModulosCatalog';
 import { normalizarGobernanzaEndpointId } from './gobernanzaActionIds';
 import { normalizarGobernanzaRefId } from './gobernanzaEntityId';
 import {
@@ -11,7 +11,6 @@ import {
 import type { GobernanzaModuloConfigApi } from './gobernanzaModuloApiTypes';
 import type { GobernanzaAccionCatalogItem } from './gobernanzaModuloParametrizarOpciones';
 import { accionesCatalogDesdeConfig } from './gobernanzaModuloParametrizarOpciones';
-import { TENANT_INLINE_FLOW_ENDPOINT_IDS } from './parametrosGobernanzaConstants';
 import type { EndpointSpec } from './parametrosGobernanzaTypes';
 
 /** Métodos equivalentes entre rutasSeguridad.acciones y catálogo ENDPOINTS. */
@@ -29,18 +28,26 @@ function metodoCoincideCatalogo(catalogMethod: string, formMethod: string): bool
   return aliases.includes(cat);
 }
 
-function accionesDesdeSection(slug: string): Array<Record<string, unknown>> {
-  if (slug === 'tenant') {
-    return accionesPayloadDesdeEndpointIds([...TENANT_INLINE_FLOW_ENDPOINT_IDS]);
+function accionesDesdeSection(
+  slug: string,
+  inlineTenantEndpointIds: string[] = []
+): Array<Record<string, unknown>> {
+  if (slug === 'tenant' && inlineTenantEndpointIds.length) {
+    return accionesPayloadDesdeEndpointIds(inlineTenantEndpointIds);
   }
-  return endpointsPorSection(slug).map((e, idx) => endpointSpecToAccionPayload(e, (idx + 1) * 10));
+  return endpointsPorSection(slug, { excludeHidden: false }).map((e, idx) =>
+    endpointSpecToAccionPayload(e, (idx + 1) * 10)
+  );
 }
 
-function catalogEndpointsParaSlug(slug: string): EndpointSpec[] {
-  if (slug === 'tenant') {
-    return TENANT_INLINE_FLOW_ENDPOINT_IDS.map((id) => ENDPOINTS_BY_ID[id]).filter(Boolean) as EndpointSpec[];
+function catalogEndpointsParaSlug(
+  slug: string,
+  inlineTenantEndpointIds: string[] = []
+): EndpointSpec[] {
+  if (slug === 'tenant' && inlineTenantEndpointIds.length) {
+    return inlineTenantEndpointIds.map((id) => ENDPOINTS_BY_ID[id]).filter(Boolean) as EndpointSpec[];
   }
-  return endpointsPorSection(slug);
+  return endpointsPorSection(slug, { excludeHidden: false });
 }
 
 export type GobernanzaModuloRutaBinding = {
@@ -50,6 +57,8 @@ export type GobernanzaModuloRutaBinding = {
   formularioNombre?: string | null;
   formularioComponent?: string | null;
   tipoId?: string | null;
+  /** Section del tipo en gobernanzaModuloTipos (p. ej. gobernanza). Informativo en upsert. */
+  tipoSection?: string | null;
 };
 
 export type GobernanzaModuloFiltrosVistaPayload = {
@@ -63,10 +72,15 @@ export type GobernanzaModuloUpsertCampos = {
   label?: string;
   description?: string;
   menuPath?: string;
+  /** Section dinámica (gobernanzaModuloConfigs); prioriza sobre catálogo local. */
+  section?: string;
   /** Slug de tarjeta existente en gobernanzaModuloConfigs (modo actualizar). */
   cardSlug?: string;
   filtrosVista?: GobernanzaModuloFiltrosVistaPayload;
   acciones?: Array<Record<string, unknown>>;
+  orden?: number;
+  /** Ids del flujo inline tenant (desde parametrizacionUi.inlineFlowTenant). */
+  inlineTenantEndpointIds?: string[];
 };
 
 /** Acciones de upsert alineadas al formulario (métodos en rutasSeguridad.acciones) + catálogo ENDPOINTS. */
@@ -284,24 +298,35 @@ export function buildGobernanzaModuloUpsertPayload(
   ruta: GobernanzaModuloRutaBinding | string,
   campos?: GobernanzaModuloUpsertCampos
 ): Record<string, unknown> | null {
-  const local = GOBERNANZA_MODULOS_CATALOGO.find((m) => m.slug === slug);
-  if (!local) return null;
+  const key = normalizeGobernanzaModuloSlug(slug);
+  const local = GOBERNANZA_MODULOS_CATALOGO.find((m) => m.slug === key);
 
   const binding: GobernanzaModuloRutaBinding =
     typeof ruta === 'string' ? { rutaPath: ruta } : ruta;
 
   if (!binding.rutaId && !binding.rutaPath?.trim()) return null;
 
-  const nombre = String(campos?.nombre ?? campos?.label ?? local.label).trim();
-  const description = String(campos?.description ?? local.description).trim();
-  const menuPath = String(campos?.menuPath ?? binding.rutaPath ?? '').trim();
+  const section = String(
+    campos?.section || binding.tipoSection || local?.section || key
+  )
+    .trim()
+    .toLowerCase();
+  if (!section) return null;
+
+  const nombre = String(campos?.nombre ?? campos?.label ?? local?.label ?? key).trim();
+  const description = String(campos?.description ?? local?.description ?? '').trim();
+  const menuPath = String(
+    binding.rutaPath?.trim() || campos?.menuPath || ''
+  ).trim();
   if (!nombre) return null;
-  if (!menuPath && !binding.rutaId) return null;
+  if (!binding.rutaId && !menuPath) return null;
 
   const acciones =
     Array.isArray(campos?.acciones) && campos.acciones.length
       ? campos.acciones
-      : accionesDesdeSection(slug);
+      : local
+        ? accionesDesdeSection(key, campos?.inlineTenantEndpointIds ?? [])
+        : [];
 
   const fv = campos?.filtrosVista;
 
@@ -312,9 +337,10 @@ export function buildGobernanzaModuloUpsertPayload(
       ? { formularioComponent: binding.formularioComponent.trim(), rutaComponent: binding.formularioComponent.trim() }
       : {}),
     ...(binding.tipoId?.trim() ? { tipoId: binding.tipoId.trim() } : {}),
+    ...(binding.tipoSection?.trim() ? { tipoSection: binding.tipoSection.trim() } : {}),
     ...(menuPath ? { menuPath } : {}),
-    slug: local.slug,
-    section: local.section,
+    slug: key,
+    section,
     ...(campos?.cardSlug?.trim() ? { cardSlug: campos.cardSlug.trim() } : {}),
     nombre,
     description,
@@ -327,7 +353,7 @@ export function buildGobernanzaModuloUpsertPayload(
           },
         }
       : {}),
-    orden: local.orden,
+    orden: Number(campos?.orden ?? local?.orden ?? 0),
     acciones,
   };
 }

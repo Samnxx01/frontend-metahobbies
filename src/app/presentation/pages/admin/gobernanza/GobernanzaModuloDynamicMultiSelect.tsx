@@ -25,6 +25,8 @@ export type GobernanzaModuloDynamicMultiSelectProps = {
   onSelectedChange: (next: string[]) => void;
   loading?: boolean;
   emptyHint?: string;
+  disabled?: boolean;
+  emptySelectedHint?: string;
 };
 
 /** Select dinámico multi-valor (añade acciones una a una). */
@@ -37,6 +39,8 @@ export function GobernanzaModuloDynamicMultiSelect({
   onSelectedChange,
   loading = false,
   emptyHint,
+  disabled = false,
+  emptySelectedHint = 'Ninguna acción seleccionada.',
 }: GobernanzaModuloDynamicMultiSelectProps): React.ReactElement {
   const disponibles = options.filter((o) => !selected.includes(o.value));
   const cargandoSinOpciones = loading && options.length === 0;
@@ -60,7 +64,7 @@ export function GobernanzaModuloDynamicMultiSelect({
       <Select
         value=""
         onValueChange={agregar}
-        disabled={cargandoSinOpciones || disponibles.length === 0}
+        disabled={disabled || cargandoSinOpciones || disponibles.length === 0}
       >
         <SelectTrigger id={id}>
           <SelectValue
@@ -92,8 +96,9 @@ export function GobernanzaModuloDynamicMultiSelect({
               <span className="max-w-[220px] truncate">{labelPorValor(value)}</span>
               <button
                 type="button"
-                className="rounded-full p-0.5 hover:bg-muted"
+                className="rounded-full p-0.5 hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
                 aria-label={`Quitar ${labelPorValor(value)}`}
+                disabled={disabled}
                 onClick={() => quitar(value)}
               >
                 <X className="h-3 w-3" />
@@ -102,7 +107,7 @@ export function GobernanzaModuloDynamicMultiSelect({
           ))}
         </div>
       ) : (
-        <p className="text-[11px] text-muted-foreground">Ninguna acción seleccionada.</p>
+        <p className="text-[11px] text-muted-foreground">{emptySelectedHint}</p>
       )}
     </div>
   );

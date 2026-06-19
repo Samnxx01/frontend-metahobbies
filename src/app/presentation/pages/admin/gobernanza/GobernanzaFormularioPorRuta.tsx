@@ -2,6 +2,8 @@ import React from 'react';
 import { useLocation } from 'react-router-dom';
 import ParametrosGobernanza from '../ParametrosGobernanza';
 import { endpointIdDesdeComponente } from './permisos-forms/gobernanzaPermisosFormRegistry';
+import { endpointIdDesdeComponenteReglas } from './reglas-forms/gobernanzaReglasFormRegistry';
+import { endpointIdDesdeComponenteTenant } from './tenant-forms/gobernanzaTenantFormRegistry';
 
 export type GobernanzaFormularioPorRutaProps = {
   /** Sección gobernanza (default permisos). */
@@ -25,6 +27,8 @@ export function GobernanzaFormularioPorRuta({
   const { pathname } = useLocation();
   const preferredActionId =
     String(preferredActionIdProp || '').trim()
+    || endpointIdDesdeComponenteTenant(formularioComponent)
+    || endpointIdDesdeComponenteReglas(formularioComponent)
     || endpointIdDesdeComponente(formularioComponent)
     || null;
 

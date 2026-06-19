@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
-import { Building2, KeyRound, Scale, Shield } from 'lucide-react';
+import { Building2, KeyRound, Scale, Shield, ShieldOff } from 'lucide-react';
 import type { EndpointSection } from './parametrosGobernanzaTypes';
 
 export const GOBERNANZA_ADMIN_BASE = '/admin/parametros-gobernanza';
@@ -47,6 +47,15 @@ export const GOBERNANZA_MODULOS_CATALOGO: GobernanzaModuloCatalogo[] = [
     orden: 25,
   },
   {
+    slug: 'politica-bypass',
+    section: 'permisos',
+    label: 'Políticas de bypass',
+    description: 'Semilla de roles y visibilidad por dominio (rutas, referidos, comisiones).',
+    frontPathSegment: 'politica-bypass',
+    icon: ShieldOff,
+    orden: 22,
+  },
+  {
     slug: 'corporativo',
     section: 'corporativo',
     label: 'Gobernanza Corporativo',
@@ -63,6 +72,8 @@ export const gobernanzaModulosOrdenados = (): GobernanzaModuloCatalogo[] =>
 /** Alias de rutas en BD (p. ej. `tenant-global` → módulo `tenant`). */
 const SLUG_ALIASES: Record<string, string> = {
   'tenant-global': 'tenant',
+  'reglas-sa': 'reglas',
+  'reglas-tenant': 'reglas',
 };
 
 export function normalizeGobernanzaModuloSlug(slug: string): string {

@@ -1,7 +1,10 @@
+import productosService from '@/app/services/productosService';
+import { DEFAULT_PRODUCTO_CATALOGO_LIMITES } from '@/app/hooks/useProductoCatalogoConfig';
+
 /**
  * Configuración del mini-carrito (navbar).
- * Ajuste estos valores o sobreescríbalos vía localStorage:
- *   mabs_mini_cart_config = {"sidePanelThreshold":2,"maxVisibleProducts":10}
+ * Valores dinámicos desde GET /api/productos/catalogo-config/mini-carrito
+ * (parametrizables en admin → Configuración catálogo productos).
  */
 export type MiniCartConfig = {
   /** Más de N productos distintos → panel lateral derecho en lugar de dropdown compacto. */
@@ -10,12 +13,7 @@ export type MiniCartConfig = {
   maxVisibleProducts: number;
 };
 
-const DEFAULT_MINI_CART_CONFIG: MiniCartConfig = {
-  sidePanelThreshold: 2,
-  maxVisibleProducts: 10,
-};
-
-const STORAGE_KEY = 'mabs_mini_cart_config';
+const STORAGE_KEY = 'mabs_mini_cart_config_cache_v1';
 
 function clampInt(value: unknown, min: number, max: number, fallback: number): number {
   const n = Number(value);
@@ -23,28 +21,63 @@ function clampInt(value: unknown, min: number, max: number, fallback: number): n
   return Math.min(max, Math.max(min, Math.floor(n)));
 }
 
-export function resolveMiniCartConfig(): MiniCartConfig {
+export function mapLimitesToMiniCartConfig(
+  source: {
+    sidePanelThreshold?: unknown;
+    maxVisibleProducts?: unknown;
+    miniCartSidePanelThreshold?: unknown;
+    miniCartMaxProductos?: unknown;
+  },
+  fallback: MiniCartConfig = mapLimitesToMiniCartConfigFromDefaults(),
+): MiniCartConfig {
+  const sideRaw = source.sidePanelThreshold ?? source.miniCartSidePanelThreshold;
+  const maxRaw = source.maxVisibleProducts ?? source.miniCartMaxProductos;
+  return {
+    sidePanelThreshold: clampInt(sideRaw, 1, 20, fallback.sidePanelThreshold),
+    maxVisibleProducts: clampInt(maxRaw, 1, 50, fallback.maxVisibleProducts),
+  };
+}
+
+function mapLimitesToMiniCartConfigFromDefaults(): MiniCartConfig {
+  return mapLimitesToMiniCartConfig(DEFAULT_PRODUCTO_CATALOGO_LIMITES, {
+    sidePanelThreshold: 1,
+    maxVisibleProducts: 1,
+  });
+}
+
+export function readCachedMiniCartConfig(): MiniCartConfig | null {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { ...DEFAULT_MINI_CART_CONFIG };
+    const raw = sessionStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<MiniCartConfig>;
-    return {
-      sidePanelThreshold: clampInt(parsed.sidePanelThreshold, 1, 20, DEFAULT_MINI_CART_CONFIG.sidePanelThreshold),
-      maxVisibleProducts: clampInt(parsed.maxVisibleProducts, 1, 50, DEFAULT_MINI_CART_CONFIG.maxVisibleProducts),
-    };
+    return mapLimitesToMiniCartConfig(parsed);
   } catch {
-    return { ...DEFAULT_MINI_CART_CONFIG };
+    return null;
   }
 }
 
-export function saveMiniCartConfig(partial: Partial<MiniCartConfig>): MiniCartConfig {
-  const current = resolveMiniCartConfig();
-  const next: MiniCartConfig = {
-    sidePanelThreshold: partial.sidePanelThreshold ?? current.sidePanelThreshold,
-    maxVisibleProducts: partial.maxVisibleProducts ?? current.maxVisibleProducts,
-  };
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-  return next;
+export function cacheMiniCartConfig(config: MiniCartConfig): void {
+  try {
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+  } catch {
+    /* ignore quota / private mode */
+  }
 }
 
-export default DEFAULT_MINI_CART_CONFIG;
+/** Valor inicial síncrono: caché de sesión o defaults de catálogo (solo bootstrap offline). */
+export function getBootstrapMiniCartConfig(): MiniCartConfig {
+  return readCachedMiniCartConfig() ?? mapLimitesToMiniCartConfigFromDefaults();
+}
+
+/** Carga configuración desde API y actualiza caché de sesión. */
+export async function fetchMiniCartConfig(): Promise<MiniCartConfig> {
+  const data = await productosService.obtenerMiniCartConfigPublico();
+  const config = mapLimitesToMiniCartConfig(data);
+  cacheMiniCartConfig(config);
+  return config;
+}
+
+/** @deprecated Usar getBootstrapMiniCartConfig / fetchMiniCartConfig */
+export function resolveMiniCartConfig(): MiniCartConfig {
+  return getBootstrapMiniCartConfig();
+}

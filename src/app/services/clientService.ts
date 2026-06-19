@@ -1,4 +1,5 @@
 import { apiFetch } from './api';
+import { buildImgPerfilVerUrl } from '@/app/utils/normalizeImageRenderUrl';
 import type { UserId, ImageId, ApiResponse } from '../../types/common';
 
 interface ClientData {
@@ -118,7 +119,7 @@ export const getProfileImageURL = async (userId: UserId): Promise<string> => {
 
     try {
         const imageId = await getUserProfileImageId(userId);
-        return `/api/imgPerfil/ver/${imageId}`;
+        return buildImgPerfilVerUrl(imageId);
     } catch (error) {
         if (error instanceof Error && error.message === 'NO_IMAGE') {
             return '';

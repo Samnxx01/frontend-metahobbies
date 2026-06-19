@@ -10,6 +10,7 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover';
 import { getGobernanzaModuloFlowMeta } from './gobernanzaModuloFlowMeta';
+import { useGobernanzaFlowHelpExtra } from './gobernanzaFlowHelpContext';
 
 export type GobernanzaModuloFlowHelpButtonProps = {
   endpointId: string;
@@ -19,6 +20,7 @@ export function GobernanzaModuloFlowHelpButton({
   endpointId,
 }: GobernanzaModuloFlowHelpButtonProps): React.ReactElement {
   const meta = getGobernanzaModuloFlowMeta(endpointId);
+  const helpExtra = useGobernanzaFlowHelpExtra(endpointId);
 
   return (
     <Popover>
@@ -28,7 +30,7 @@ export function GobernanzaModuloFlowHelpButton({
           Ayuda
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-80 sm:w-96">
+      <PopoverContent align="end" className="max-h-[min(70vh,520px)] w-80 overflow-y-auto sm:w-96">
         <PopoverHeader>
           <PopoverTitle>{meta?.helpTitle ?? 'Ayuda de esta acción'}</PopoverTitle>
           <PopoverDescription asChild>
@@ -45,6 +47,7 @@ export function GobernanzaModuloFlowHelpButton({
                   ))}
                 </ul>
               ) : null}
+              {helpExtra}
             </div>
           </PopoverDescription>
         </PopoverHeader>

@@ -7,3 +7,9 @@ export const toId = (value: unknown): string => {
   }
   return normalizePublicIdForApi(value);
 };
+
+/** Lista de ids API (ObjectId o iud ofuscado) → ids públicos canónicos. */
+export const normalizeIdList = (values: unknown[] | undefined | null): string[] =>
+  (values ?? [])
+    .map((value) => toId(value))
+    .filter(Boolean);

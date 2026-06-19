@@ -1,10 +1,9 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { BrandingConfig, obtenerBrandingPublico } from '@/app/services/brandingWidget';
 import { aplicarPaletaEnApp, restaurarPaletaLocal, type ColoresPaleta } from '@/app/utils/ColorUtils';
 import { obtenerColoresPublico, fusionarColoresApp, type ColoresApp } from '@/app/services/coloresAppService';
 import { getSocket } from '@/app/socket/socketService';
-import { useAuth } from '@/app/providers/AuthProvider';
 
 interface BrandingProviderProps {
   children: React.ReactNode;
@@ -100,9 +99,30 @@ const cargarYAplicarPaletaActiva = async (): Promise<void> => {
   }
 };
 
+/** Token de sesión sin useAuth — evita fallos si HMR reordena providers. */
+function useSessionToken(): string | null {
+  const [token, setToken] = useState<string | null>(() =>
+    typeof window !== 'undefined' ? String(localStorage.getItem('token') || '').trim() || null : null
+  );
+
+  useEffect(() => {
+    const sync = (): void => {
+      setToken(String(localStorage.getItem('token') || '').trim() || null);
+    };
+    window.addEventListener('mabs-auth-changed', sync);
+    window.addEventListener('storage', sync);
+    return () => {
+      window.removeEventListener('mabs-auth-changed', sync);
+      window.removeEventListener('storage', sync);
+    };
+  }, []);
+
+  return token;
+}
+
 export default function BrandingProvider({ children }: BrandingProviderProps): React.ReactElement {
   const location = useLocation();
-  const { token } = useAuth();
+  const token = useSessionToken();
   const appliedVarsRef = useRef<Set<string>>(new Set());
 
   // Socket puede conectarse tras el login — enganchamos el evento de paleta en toda la app.

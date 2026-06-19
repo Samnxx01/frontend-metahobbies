@@ -9,6 +9,7 @@ import type { MarcoPermisosAfiliado, RolMarcoParametrizable } from '../types/mar
 type Props = {
   saving: boolean;
   syncing: boolean;
+  marcoLoading?: boolean;
   hasMarco: boolean;
   marcoActivo: MarcoPermisosAfiliado | null;
   roles: RolMarcoParametrizable[];
@@ -25,6 +26,7 @@ type Props = {
 export function MarcoPermisosPageHeader({
   saving,
   syncing,
+  marcoLoading = false,
   hasMarco,
   marcoActivo,
   roles,
@@ -53,7 +55,7 @@ export function MarcoPermisosPageHeader({
           roles={roles}
           rolSeleccionadoId={rolSeleccionadoId}
           onRolChange={onRolChange}
-          disabled={saving || syncing}
+          disabled={saving || syncing || marcoLoading}
         />
       </div>
       <div className="flex flex-wrap gap-2">

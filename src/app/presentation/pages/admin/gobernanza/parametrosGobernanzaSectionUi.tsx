@@ -28,4 +28,9 @@ export const SECTION_META: Record<
     description: 'Catalogos, roles y niveles corporativos.',
     icon: Building2,
   },
+  reglas: {
+    label: 'Gobernanza Reglas',
+    description: 'Reglas de jerarquia por tenant global.',
+    icon: ShieldCheck,
+  },
 };

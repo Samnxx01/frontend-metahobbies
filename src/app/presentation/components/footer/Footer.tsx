@@ -243,7 +243,7 @@ export default function Footer({ variant = 'default' }: FooterProps = {}): React
                                 placeholder="Tu email"
                                 className="flex-1 px-3 py-2 text-sm md:text-base border border-border rounded-md bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                             />
-                            <button className="px-4 py-2 text-sm md:text-base bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors whitespace-nowrap">
+                            <button className="px-4 py-2 text-sm md:text-base bg-button text-button-foreground rounded-md hover:bg-button/90 transition-colors whitespace-nowrap">
                                 Suscribirse
                             </button>
                         </div>

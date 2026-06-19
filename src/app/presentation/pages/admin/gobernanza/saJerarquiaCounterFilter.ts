@@ -99,14 +99,29 @@ export function filtrarSaJerarquiaMetaPorSubarbol<T extends { id?: string }>(
   metas: T[],
   indice: SaJerarquiaCounterIndice[],
   anclaSaId: string,
+  opts: { incluirAncestros?: boolean; incluirDescendientes?: boolean } = {},
 ): T[] {
   if (!indice.length || !String(anclaSaId || '').trim()) return metas;
+  const incluirAncestros = opts.incluirAncestros !== false;
+  const incluirDescendientes = opts.incluirDescendientes !== false;
   const allowed = new Set(
     filtrarIndiceSaSubarbol(indice, {
       anclaSaId,
-      incluirAncestros: true,
-      incluirDescendientes: true,
+      incluirAncestros,
+      incluirDescendientes,
     }).map((r) => r.tenantSuperAdminId),
   );
   return metas.filter((m) => allowed.has(String(m?.id || '').trim()));
+}
+
+/** Rama propia + descendientes (sin ancestros): SA del JWT y tenants SA creados bajo su codigoJerarquia. */
+export function filtrarSaJerarquiaMetaRamaDescendiente<T extends { id?: string }>(
+  metas: T[],
+  indice: SaJerarquiaCounterIndice[],
+  anclaSaId: string,
+): T[] {
+  return filtrarSaJerarquiaMetaPorSubarbol(metas, indice, anclaSaId, {
+    incluirAncestros: false,
+    incluirDescendientes: true,
+  });
 }

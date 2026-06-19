@@ -1,4 +1,5 @@
 import React from 'react';
+import { Loader2 } from 'lucide-react';
 import type { Route } from '@/app/services/routesService';
 import type { AccionOption } from '@/app/services/routesService';
 import { Button } from '@/components/ui/button';
@@ -14,6 +15,7 @@ import type { MarcoCatalogTab } from '../types/marco.types';
 import { toId } from '../utils/toId';
 
 type Props = {
+  loading?: boolean;
   tab: MarcoCatalogTab;
   onTabChange: (tab: MarcoCatalogTab) => void;
   filtroVistas: string;
@@ -36,6 +38,7 @@ type Props = {
 };
 
 export function MarcoPermisosCatalogCard({
+  loading = false,
   tab,
   onTabChange,
   filtroVistas,
@@ -64,7 +67,16 @@ export function MarcoPermisosCatalogCard({
         <CardTitle className="text-base">Catálogo del techo</CardTitle>
         <CardDescription>Marque vistas (rutas de seguridad) y acciones HTTP permitidas</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="relative space-y-4">
+        {loading ? (
+          <div
+            className="absolute inset-0 z-10 flex items-center justify-center rounded-md bg-background/60"
+            aria-busy="true"
+            aria-label="Cargando marco del rol"
+          >
+            <Loader2 className="h-6 w-6 animate-spin text-primary" />
+          </div>
+        ) : null}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
           <div className="flex-1 space-y-2">
             <Label htmlFor="filtro-marco">Buscar</Label>
@@ -119,7 +131,7 @@ export function MarcoPermisosCatalogCard({
                   </li>
                 ) : (
                   rutasFiltradas.map((r) => {
-                    const id = toId(r.iud || r._id);
+                    const id = toId(r);
                     const checked = vistasSel.has(id);
                     const sugerida = SUGERENCIAS_AFILIADO.test(`${r.path} ${r.name}`);
                     return (
@@ -177,7 +189,7 @@ export function MarcoPermisosCatalogCard({
                   </li>
                 ) : (
                   accionesFiltradas.map((a) => {
-                    const id = toId(a._id || a.iud);
+                    const id = toId(a);
                     const checked = accionesSel.has(id);
                     return (
                       <li key={id} className="flex items-center gap-3 py-2">

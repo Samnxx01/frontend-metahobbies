@@ -4,6 +4,7 @@ import { toast } from 'react-toastify';
 import inventarioService from '@/app/services/inventarioService';
 import type {
   InventarioConfigTarjeta,
+  InventarioJerarquiaSaCounterIndice,
   InventarioTenantGlobalOpcion,
   InventarioTenantSuperAdminOpcion,
 } from '@/app/services/inventarioService';
@@ -27,6 +28,7 @@ import {
   normalizePathKey,
   resolveModuleCatalogToPathRow as resolveModuleRouteRow,
 } from '../inventario/inventarioFormularioPathMatch';
+import { isOpaqueDocumentId, normalizePublicIdForApi } from '@/app/utils/entityPublicId';
 
 /** Payload logico enviado al endpoint de inventario (un solo PUT agregado en backend por ruta). */
 export type InventarioFormulariosTenantSavePayload = {
@@ -59,6 +61,16 @@ export type InventarioConfigModule = {
   path: string;
 };
 
+/** Contexto de tarjeta ConfigInventario al abrir «Autorizar» en una fila concreta. */
+export type InventarioAutorizacionFocusTarjeta = {
+  catalogPath: string;
+  menuPath?: string;
+  tab?: string;
+  tarjetaId?: string;
+  rutaId?: string | null;
+  tenantSuperAdminId?: string | null;
+};
+
 type InventarioFormulariosTenantModalProps = {
   modules?: InventarioConfigModule[];
   /** Tras un PUT exitoso (al menos una ruta actualizada); p. ej. refrescar paths en ConfigInventario. */
@@ -68,6 +80,8 @@ type InventarioFormulariosTenantModalProps = {
   onOpenChange?: (open: boolean) => void;
   /** Al abrir, preselecciona este modulo del catalogo (path). */
   focusModulePath?: string | null;
+  /** Datos de la tarjeta parametrizada (ruta, SA, modulo) para precargar el modal. */
+  focusTarjeta?: InventarioAutorizacionFocusTarjeta | null;
   /** Si false, no muestra el boton disparador (solo control externo). */
   showTrigger?: boolean;
 };
@@ -79,6 +93,16 @@ function stripDiacritics(s: string): string {
   } catch {
     return s;
   }
+}
+
+/** IDs válidos para API: ObjectId legacy o UUID público (iud). */
+function esIdApiValido(id: string | null | undefined): boolean {
+  return isOpaqueDocumentId(normalizePublicIdForApi(id));
+}
+
+function normalizarIdApi(id: string | null | undefined): string {
+  const norm = normalizePublicIdForApi(id);
+  return esIdApiValido(norm) ? norm : '';
 }
 
 /** Filtro por palabras: todas las tokens deben aparecer en name+path+tipoNodo+id (insensible a acentos). */
@@ -137,9 +161,38 @@ function mergeUsuariosListas(listas: UsuarioOption[][]): UsuarioOption[] {
   return [...map.values()];
 }
 
+function mergeSaArbolListas(listas: InventarioTenantSuperAdminOpcion[][]): InventarioTenantSuperAdminOpcion[] {
+  const map = new Map<string, InventarioTenantSuperAdminOpcion>();
+  for (const lista of listas) {
+    for (const t of lista) {
+      if (!map.has(t.iud)) map.set(t.iud, t);
+    }
+  }
+  return [...map.values()].sort(
+    (a, b) =>
+      (a.secuenciaJerarquia ?? Number.MAX_SAFE_INTEGER) - (b.secuenciaJerarquia ?? Number.MAX_SAFE_INTEGER) ||
+      String(a.codigoJerarquia || '').localeCompare(String(b.codigoJerarquia || '')),
+  );
+}
+
+function mergeJerarquiaSaListas(listas: InventarioJerarquiaSaCounterIndice[][]): InventarioJerarquiaSaCounterIndice[] {
+  const map = new Map<string, InventarioJerarquiaSaCounterIndice>();
+  for (const lista of listas) {
+    for (const row of lista) {
+      if (!map.has(row.tenantSuperAdminId)) map.set(row.tenantSuperAdminId, row);
+    }
+  }
+  return [...map.values()].sort(
+    (a, b) =>
+      (a.secuenciaJerarquia ?? Number.MAX_SAFE_INTEGER) - (b.secuenciaJerarquia ?? Number.MAX_SAFE_INTEGER) ||
+      String(a.codigoJerarquia || '').localeCompare(String(b.codigoJerarquia || '')),
+  );
+}
+
 function toCheckedMap(ids: string[]): Record<string, boolean> {
   return ids.reduce<Record<string, boolean>>((acc, id) => {
-    if (/^[0-9a-fA-F]{24}$/.test(id)) acc[id] = true;
+    const norm = normalizarIdApi(id);
+    if (norm) acc[norm] = true;
     return acc;
   }, {});
 }
@@ -149,10 +202,89 @@ function usuarioIdsDesdeFormulariosConfig(rows: FormRow[]): string[] {
   rows.forEach((row) => {
     const ids = Array.isArray(row.formulariosConfig?.usuarioIds) ? row.formulariosConfig?.usuarioIds : [];
     ids?.forEach((id) => {
-      if (/^[0-9a-fA-F]{24}$/.test(id)) set.add(id);
+      const norm = normalizarIdApi(id);
+      if (norm) set.add(norm);
     });
   });
   return [...set];
+}
+
+function resolveFocusedRouteRow(
+  formRows: FormRow[],
+  focusTarjeta: InventarioAutorizacionFocusTarjeta | null | undefined,
+  focusModulePath: string | null | undefined,
+): FormRow | null {
+  const rutaId = normalizarIdApi(focusTarjeta?.rutaId ?? null);
+  if (rutaId) {
+    const byId = formRows.find((row) => normalizarIdApi(row.id) === rutaId);
+    if (byId) return byId;
+  }
+
+  const menuPath = String(focusTarjeta?.menuPath || '').trim();
+  if (menuPath) {
+    const { row } = resolveModuleRouteRow(menuPath, formRows);
+    if (row) return row;
+  }
+
+  const catalogPath = String(focusTarjeta?.catalogPath || focusModulePath || '').trim();
+  if (catalogPath) {
+    const { row } = resolveModuleRouteRow(catalogPath, formRows);
+    if (row) return row;
+  }
+
+  const tab = String(focusTarjeta?.tab || '').trim();
+  if (tab) {
+    const byTabHint = formRows.find((row) => {
+      const path = normalizePathKey(row.path);
+      return path.includes(`/${tab}`) || path.includes(tab.replace(/-/g, ''));
+    });
+    if (byTabHint) return byTabHint;
+  }
+
+  return null;
+}
+
+function resolveCatalogPathForFocus(
+  focusTarjeta: InventarioAutorizacionFocusTarjeta | null | undefined,
+  focusModulePath: string | null | undefined,
+  modules: InventarioConfigModule[],
+): string | null {
+  const catalogPath = String(focusTarjeta?.catalogPath || focusModulePath || '').trim();
+  if (catalogPath) {
+    const key = normalizePathKey(catalogPath);
+    const match = modules.find((m) => normalizePathKey(m.path) === key);
+    return match?.path ?? catalogPath;
+  }
+  const tab = String(focusTarjeta?.tab || '').trim();
+  if (tab) {
+    const byTab = modules.find((m) => String(m.tab || '') === tab);
+    if (byTab) return byTab.path;
+  }
+  return null;
+}
+
+function usuarioIdsPermitidosParaSa(
+  saId: string,
+  usuarioIds: string[],
+  usuarios: UsuarioOption[],
+): string[] {
+  const saNorm = normalizarIdApi(saId);
+  if (!saNorm) return [];
+  const porId = new Map(usuarios.map((u) => [u.iud, u]));
+  return usuarioIds.filter((uid) => {
+    const u = porId.get(uid);
+    if (!u) return false;
+    const uSa = normalizarIdApi(u.tenantSuperAdmin);
+    return Boolean(uSa && uSa === saNorm);
+  });
+}
+
+function usuarioPerteneceAlgunaSaMarcada(
+  usuarioId: string,
+  saIds: string[],
+  usuarios: UsuarioOption[],
+): boolean {
+  return saIds.some((saId) => usuarioIdsPermitidosParaSa(saId, [usuarioId], usuarios).length > 0);
 }
 
 export default function InventarioFormulariosTenantModal({
@@ -161,6 +293,7 @@ export default function InventarioFormulariosTenantModal({
   open: openControlled,
   onOpenChange,
   focusModulePath = null,
+  focusTarjeta = null,
   showTrigger = true,
 }: InventarioFormulariosTenantModalProps): React.ReactElement {
   const [openInternal, setOpenInternal] = useState(false);
@@ -173,7 +306,10 @@ export default function InventarioFormulariosTenantModal({
     [onOpenChange],
   );
   const [needleRutas, setNeedleRutas] = useState('');
-  const [needleRama, setNeedleRama] = useState('');
+  /** Filtro solo para la lista de TenantSuperAdmin (seleccion de rama). */
+  const [needleSa, setNeedleSa] = useState('');
+  /** Filtro solo para tenant global ya cargados en la rama marcada. */
+  const [needleTenantGlobal, setNeedleTenantGlobal] = useState('');
   const [needleUsuario, setNeedleUsuario] = useState('');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -181,6 +317,8 @@ export default function InventarioFormulariosTenantModal({
   const [selectedRutas, setSelectedRutas] = useState<Record<string, boolean>>({});
   const [tenantGlobales, setTenantGlobales] = useState<InventarioTenantGlobalOpcion[]>([]);
   const [tenantSuperAdmins, setTenantSuperAdmins] = useState<InventarioTenantSuperAdminOpcion[]>([]);
+  const [saArbolRama, setSaArbolRama] = useState<InventarioTenantSuperAdminOpcion[]>([]);
+  const [jerarquiaSaCounters, setJerarquiaSaCounters] = useState<InventarioJerarquiaSaCounterIndice[]>([]);
   const [usuarios, setUsuarios] = useState<UsuarioOption[]>([]);
   const [selectedUsuarios, setSelectedUsuarios] = useState<Record<string, boolean>>({});
   const [seleccionSaId, setSeleccionSaId] = useState('');
@@ -201,6 +339,30 @@ export default function InventarioFormulariosTenantModal({
     tenantGlobalJerarquiaOk?: boolean;
     totalTenantGlobalEnRama?: number;
     filtroCorporativoCountersActivo?: boolean;
+    formulariosFiltradosPorHerencia?: boolean;
+    herenciaVistasVacias?: boolean;
+    totalVistasHerenciaRama?: number;
+    ejecutorBypassHerencia?: boolean;
+    totalSaEnArbolRama?: number;
+    totalSaArbolRama?: number;
+    totalUsuariosRama?: number;
+    jwtTenantSuperAdminCanonicoId?: string | null;
+    tenantSuperAdminRolParametrizado?: { id: string; nombre: string } | null;
+    rolSesionId?: string | null;
+    rolSesionNombre?: string | null;
+    resolucionSaOk?: boolean;
+    rolParametrizadoCoincideSesion?: boolean;
+    jwtSaDesincronizado?: boolean;
+    diagnosticoRamaUsuarios?: {
+      saIdsEnRama?: string[];
+      totalTgEnRama?: number;
+      totalCorpEnRama?: number;
+      totalRolesEnRama?: number;
+      propietariosSa?: Array<{ usuarioId: string; saId: string }>;
+      documentosRegisCandidatos?: number;
+      rechazadosPorFiltro?: number;
+      saAnclaResuelto?: string | null;
+    } | null;
   } | null>(null);
   /** Ultima ruta marcada en el listado; el panel derecho describe esta fila. */
   const [rutaContextoId, setRutaContextoId] = useState<string | null>(null);
@@ -245,7 +407,21 @@ export default function InventarioFormulariosTenantModal({
     [moduloParametrizarPath, modules],
   );
 
+  const moduloParametrizarMatch = useMemo(
+    () =>
+      moduloParametrizarPath
+        ? moduleRouteMatches.find((m) => normalizePathKey(m.path) === normalizePathKey(moduloParametrizarPath)) ?? null
+        : null,
+    [moduleRouteMatches, moduloParametrizarPath],
+  );
+
+  const moduloParametrizarTieneRuta = !modules.length || Boolean(moduloParametrizarMatch?.route);
+
   const tarjetaModuloActiva = useMemo(() => {
+    if (focusTarjeta?.tarjetaId) {
+      const byId = tarjetasConfig.find((t) => t.id === focusTarjeta.tarjetaId);
+      if (byId) return byId;
+    }
     if (!moduloParametrizarPath) return null;
     const key = normalizePathKey(moduloParametrizarPath);
     return (
@@ -256,10 +432,10 @@ export default function InventarioFormulariosTenantModal({
       )
       ?? null
     );
-  }, [tarjetasConfig, moduloParametrizarPath, moduloParametrizarInfo]);
+  }, [tarjetasConfig, moduloParametrizarPath, moduloParametrizarInfo, focusTarjeta?.tarjetaId]);
 
   const refreshTarjetasConfig = useCallback(async (saQuery?: string) => {
-    const saParam = saQuery && /^[0-9a-fA-F]{24}$/.test(saQuery) ? saQuery : undefined;
+    const saParam = saQuery && esIdApiValido(saQuery) ? normalizePublicIdForApi(saQuery) : undefined;
     try {
       const data = await inventarioService.listarTarjetasConfig(saParam);
       setTarjetasConfig(data);
@@ -270,10 +446,16 @@ export default function InventarioFormulariosTenantModal({
 
   /** Agrega tenant global + usuarios de uno o varios SA sin resetear checkboxes marcados. */
   const refreshRamasSeleccionadas = useCallback(async (saIds: string[]) => {
-    const valid = [...new Set(saIds.filter((id) => /^[0-9a-fA-F]{24}$/.test(id)))];
+    const valid = [
+      ...new Set(
+        saIds.map((id) => normalizePublicIdForApi(id)).filter((id) => esIdApiValido(id)),
+      ),
+    ];
     if (!valid.length) {
       setTenantGlobales([]);
       setUsuarios([]);
+      setSaArbolRama([]);
+      setJerarquiaSaCounters([]);
       setMeta((prev) =>
         prev
           ? {
@@ -293,20 +475,45 @@ export default function InventarioFormulariosTenantModal({
       );
       const mergedTg = mergeTenantGlobalesListas(responses.map((r) => r.tenantGlobales || []));
       const mergedUsuarios = mergeUsuariosListas(responses.map((r) => r.usuarios || []));
+      const mergedSaArbol = mergeSaArbolListas(responses.map((r) => r.saArbolRama || []));
+      const mergedJerarquia = mergeJerarquiaSaListas(responses.map((r) => r.jerarquiaSaCounters || []));
       setTenantGlobales(mergedTg);
       setUsuarios(mergedUsuarios);
+      setSaArbolRama(mergedSaArbol);
+      setJerarquiaSaCounters(mergedJerarquia);
+      setSelectedUsuarios((prev) => {
+        const mergedIds = new Set(mergedUsuarios.map((u) => u.iud));
+        const next: Record<string, boolean> = {};
+        Object.entries(prev).forEach(([id, checked]) => {
+          if (checked && mergedIds.has(id)) next[id] = true;
+        });
+        const yaMarcados = Object.values(next).some(Boolean);
+        if (!yaMarcados && mergedUsuarios.length === 1) {
+          next[mergedUsuarios[0].iud] = true;
+        }
+        return next;
+      });
       setSeleccionSaId(valid[valid.length - 1]);
-      setMeta((prev) =>
-        prev
-          ? {
-              ...prev,
-              tenantGlobalJerarquiaOk: mergedTg.length > 0,
-              totalTenantGlobalEnRama: mergedTg.length,
-              inventarioFormulariosModoAlcance:
-                valid.length > 1 ? 'dios_multi_sa' : prev.inventarioFormulariosModoAlcance,
-            }
-          : null,
-      );
+      const lastMeta = responses[responses.length - 1]?.meta;
+      setMeta((prev) => ({
+        ...(prev || {}),
+        ...(lastMeta || {}),
+        tenantGlobalJerarquiaOk: mergedTg.length > 0,
+        totalTenantGlobalEnRama: mergedTg.length,
+        totalSaArbolRama: mergedSaArbol.length,
+        totalSaEnArbolRama: mergedJerarquia.length,
+        totalUsuariosRama: mergedUsuarios.length,
+        inventarioFormulariosModoAlcance:
+          valid.length > 1 ? 'dios_multi_sa' : lastMeta?.inventarioFormulariosModoAlcance ?? prev?.inventarioFormulariosModoAlcance,
+      }));
+      if (mergedUsuarios.length === 0) {
+        const diag = lastMeta?.diagnosticoRamaUsuarios;
+        const canon = lastMeta?.jwtTenantSuperAdminCanonicoId || '—';
+        const rolP = lastMeta?.tenantSuperAdminRolParametrizado;
+        toast.info(
+          `Sin usuarios en rama. SA canónico: ${canon.slice(-8)} · rol parametrizado: ${rolP?.nombre || '—'} · candidatos Regis: ${diag?.documentosRegisCandidatos ?? 0} · rechazados: ${diag?.rechazadosPorFiltro ?? 0}`,
+        );
+      }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al cargar ramas';
       toast.error(msg);
@@ -319,7 +526,8 @@ export default function InventarioFormulariosTenantModal({
   const loadCatalogo = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await inventarioService.obtenerFormulariosAutorizacionOpciones(undefined);
+      const saTarjeta = normalizarIdApi(focusTarjeta?.tenantSuperAdminId ?? null);
+      const data = await inventarioService.obtenerFormulariosAutorizacionOpciones(saTarjeta || undefined);
       const formRows: FormRow[] = (data.formularios || []).map((f) => ({
         id: f.id,
         name: f.name,
@@ -327,10 +535,12 @@ export default function InventarioFormulariosTenantModal({
         tipoNodo: f.tipoNodo,
         formulariosConfig: f.formulariosConfig,
       }));
+      const focusedRow = resolveFocusedRouteRow(formRows, focusTarjeta, focusModulePath);
       const selectedByModule: Record<string, boolean> = {};
-      if (focusModulePath) {
-        const { row } = resolveModuleRouteRow(focusModulePath, formRows);
-        if (row) selectedByModule[row.id] = true;
+      if (focusedRow) {
+        selectedByModule[focusedRow.id] = true;
+      } else if (focusModulePath || focusTarjeta) {
+        /* tarjeta sin ruta resuelta: no marcar otras filas */
       } else {
         const modulePathSet = new Set(modules.map((module) => normalizePathKey(module.path)));
         formRows.forEach((row) => {
@@ -343,22 +553,42 @@ export default function InventarioFormulariosTenantModal({
       const usuariosParametrizados = usuarioIdsDesdeFormulariosConfig(selectedRows);
       setRows(formRows);
       setSelectedRutas(selectedByModule);
+      setRutaContextoId(focusedRow?.id ?? selectedRows[0]?.id ?? null);
       setTenantSuperAdmins(data.tenantSuperAdmins || []);
+      setSaArbolRama(data.saArbolRama || []);
+      setJerarquiaSaCounters(data.jerarquiaSaCounters || []);
       setSelectedUsuarios(toCheckedMap(usuariosParametrizados));
       setEsDios(Boolean(data.policy?.esDios));
       setMeta(data.meta ?? null);
-      const ancla = data.meta?.tenantSuperAdminAnclaId ? String(data.meta.tenantSuperAdminAnclaId) : '';
+
+      const anclaMeta = data.meta?.tenantSuperAdminAnclaId ? String(data.meta.tenantSuperAdminAnclaId) : '';
+      const ancla = saTarjeta || anclaMeta;
       if (ancla) {
         setSeleccionSaId(ancla);
         setSelectedSaIds({ [ancla]: true });
-        await refreshRamasSeleccionadas([ancla]);
       } else {
         setSeleccionSaId('');
         setSelectedSaIds({});
-        setTenantGlobales([]);
-        setUsuarios([]);
       }
+
       await refreshTarjetasConfig(ancla || undefined);
+
+      if (ancla) {
+        await refreshRamasSeleccionadas([ancla]);
+        if (usuariosParametrizados.length) {
+          setSelectedUsuarios((prev) => {
+            const next = { ...prev };
+            usuariosParametrizados.forEach((id) => {
+              next[id] = true;
+            });
+            return next;
+          });
+        }
+      } else {
+        setTenantGlobales(data.tenantGlobales || []);
+        setUsuarios(data.usuarios || []);
+      }
+
       if (!data.policy?.esDios) {
         toast.info('Solo el rol DIOS puede persistir formulariosConfig en rutas. Podras revisar datos pero no guardar.');
       }
@@ -368,28 +598,23 @@ export default function InventarioFormulariosTenantModal({
     } finally {
       setLoading(false);
     }
-  }, [focusModulePath, modules, refreshTarjetasConfig, refreshRamasSeleccionadas]);
+  }, [focusModulePath, focusTarjeta, modules, refreshTarjetasConfig, refreshRamasSeleccionadas]);
 
   useEffect(() => {
     if (!open) return;
-    setRutaContextoId(null);
     setNeedleRutas('');
     setSeleccionSaId('');
     setSelectedSaIds({});
+    setSaArbolRama([]);
+    setJerarquiaSaCounters([]);
     setTarjetasConfig([]);
-    setNeedleRama('');
+    setNeedleSa('');
+    setNeedleTenantGlobal('');
     setNeedleUsuario('');
-    if (focusModulePath) {
-      const key = normalizePathKey(focusModulePath);
-      const match =
-        modules.find((m) => normalizePathKey(m.path) === key)?.path
-        ?? focusModulePath;
-      setModuloParametrizarPath(match);
-    } else {
-      setModuloParametrizarPath(null);
-    }
+    const catalogMatch = resolveCatalogPathForFocus(focusTarjeta, focusModulePath, modules);
+    setModuloParametrizarPath(catalogMatch);
     void loadCatalogo();
-  }, [open, loadCatalogo, focusModulePath, modules]);
+  }, [open, loadCatalogo, focusModulePath, focusTarjeta, modules]);
 
   const usarSaMultiSelect = esDios && tenantSuperAdmins.length > 0;
 
@@ -399,14 +624,24 @@ export default function InventarioFormulariosTenantModal({
   );
 
   const resolverSaIdsParaGuardar = (): string[] => {
-    if (usarSaMultiSelect && saIdsMarcados.length > 0) {
-      return saIdsMarcados.filter((id) => /^[0-9a-fA-F]{24}$/.test(id));
+    const normList = (ids: string[]) =>
+      [...new Set(ids.map((id) => normalizarIdApi(id)).filter(Boolean))];
+
+    if (usarSaMultiSelect) {
+      const marcados = normList(saIdsMarcados);
+      if (marcados.length) return marcados;
     }
-    const ancla =
-      (typeof meta?.tenantSuperAdminAnclaId === 'string' && meta.tenantSuperAdminAnclaId
-        ? meta.tenantSuperAdminAnclaId
-        : seleccionSaId.trim()) || '';
-    return /^[0-9a-fA-F]{24}$/.test(ancla) ? [ancla] : [];
+
+    const anclaRaw =
+      meta?.tenantSuperAdminAnclaId ||
+      meta?.jwtTenantSuperAdminCanonicoId ||
+      seleccionSaId ||
+      saIdsMarcados[0] ||
+      '';
+    const ancla = normalizarIdApi(anclaRaw);
+    if (ancla) return [ancla];
+
+    return normList(saIdsMarcados);
   };
 
   useEffect(() => {
@@ -420,18 +655,24 @@ export default function InventarioFormulariosTenantModal({
   }, [selectedRutas]);
 
   const filteredRutas = useMemo(
-    () => rows.filter((r) => rowMatchesNeedle(r, needleRutas)),
-    [rows, needleRutas],
+    () => {
+      const base =
+        modules.length > 0 && moduloParametrizarMatch?.route
+          ? rows.filter((r) => r.id === moduloParametrizarMatch.route?.id)
+          : rows;
+      return base.filter((r) => rowMatchesNeedle(r, needleRutas));
+    },
+    [modules.length, moduloParametrizarMatch?.route, moduloParametrizarTieneRuta, rows, needleRutas],
   );
 
   const filteredTenantGlobales = useMemo(
-    () => tenantGlobales.filter((t) => matchesTenantGlobalRow(t, needleRama)),
-    [tenantGlobales, needleRama],
+    () => tenantGlobales.filter((t) => matchesTenantGlobalRow(t, needleTenantGlobal)),
+    [tenantGlobales, needleTenantGlobal],
   );
 
   const filteredTenantSuperAdmins = useMemo(
-    () => tenantSuperAdmins.filter((t) => matchesTenantSuperAdminRow(t, needleRama)),
-    [tenantSuperAdmins, needleRama],
+    () => tenantSuperAdmins.filter((t) => matchesTenantSuperAdminRow(t, needleSa)),
+    [tenantSuperAdmins, needleSa],
   );
 
   const toggleSa = (id: string, checked: boolean): void => {
@@ -440,26 +681,46 @@ export default function InventarioFormulariosTenantModal({
       const marcados = Object.entries(next)
         .filter(([, v]) => v)
         .map(([k]) => k);
+      if (checked) setSeleccionSaId(id);
+      else if (seleccionSaId === id) setSeleccionSaId(marcados[marcados.length - 1] || '');
       void refreshRamasSeleccionadas(marcados);
       return next;
     });
   };
 
   const selectAllSaVisible = (checked: boolean): void => {
-    const next: Record<string, boolean> = {};
+    const visibles = filteredTenantSuperAdmins;
     if (checked) {
-      tenantSuperAdmins.forEach((t) => {
+      const next: Record<string, boolean> = { ...selectedSaIds };
+      visibles.forEach((t) => {
         next[t.iud] = true;
       });
-    }
-    setSelectedSaIds(next);
-    const marcados = checked ? tenantSuperAdmins.map((t) => t.iud) : [];
-    if (checked && marcados.length) {
+      const marcados = Object.entries(next)
+        .filter(([, v]) => v)
+        .map(([k]) => k);
+      setSelectedSaIds(next);
+      if (marcados.length) setSeleccionSaId(marcados[marcados.length - 1]);
       void refreshRamasSeleccionadas(marcados);
-    } else {
-      setSeleccionSaId('');
-      void refreshRamasSeleccionadas([]);
+      return;
     }
+
+    if (needleSa.trim()) {
+      const next = { ...selectedSaIds };
+      visibles.forEach((t) => {
+        delete next[t.iud];
+      });
+      const marcados = Object.entries(next)
+        .filter(([, v]) => v)
+        .map(([k]) => k);
+      setSelectedSaIds(next);
+      setSeleccionSaId(marcados[marcados.length - 1] || '');
+      void refreshRamasSeleccionadas(marcados);
+      return;
+    }
+
+    setSelectedSaIds({});
+    setSeleccionSaId('');
+    void refreshRamasSeleccionadas([]);
   };
 
   const filteredUsuarios = useMemo(
@@ -472,6 +733,8 @@ export default function InventarioFormulariosTenantModal({
     (Boolean(meta?.requiereParametrizacionTenantSuperAdmin) ||
       meta?.inventarioFormulariosModoAlcance === 'jwt_sa' ||
       meta?.inventarioFormulariosModoAlcance === 'dios_param' ||
+      meta?.inventarioFormulariosModoAlcance === 'dios_param_jwt' ||
+      meta?.inventarioFormulariosModoAlcance === 'dios_param_propietario' ||
       meta?.inventarioFormulariosModoAlcance === 'dios_multi_sa');
 
   const toggleRuta = (id: string, checked: boolean): void => {
@@ -480,7 +743,18 @@ export default function InventarioFormulariosTenantModal({
   };
 
   const toggleModuloParametrizar = (modulePath: string, checked: boolean): void => {
-    if (checked) setModuloParametrizarPath(modulePath);
+    if (checked) {
+      const match = moduleRouteMatches.find((m) => normalizePathKey(m.path) === normalizePathKey(modulePath));
+      setModuloParametrizarPath(modulePath);
+      if (match?.route) {
+        setSelectedRutas({ [match.route.id]: true });
+        setRutaContextoId(match.route.id);
+      } else {
+        setSelectedRutas({});
+        setRutaContextoId(null);
+      }
+      return;
+    }
     else setModuloParametrizarPath((prev) => (prev === modulePath ? null : prev));
   };
 
@@ -550,9 +824,22 @@ export default function InventarioFormulariosTenantModal({
     const saIdsGuardar = resolverSaIdsParaGuardar();
     if (esDios && !saIdsGuardar.length) {
       toast.warning(
-        usarSaMultiSelect
-          ? 'Marca al menos un TenantSuperAdmin en la lista (o usa «Marcar todos»).'
-          : 'Elige un tenantSuperAdmin valido (rama con tenants y usuarios) antes de guardar.',
+        usarSaMultiSelect && saIdsMarcados.length > 0
+          ? 'El TenantSuperAdmin marcado no tiene un id válido. Vuelve a marcarlo en la lista.'
+          : usarSaMultiSelect
+            ? 'Marca al menos un TenantSuperAdmin en la lista (o usa «Marcar todos»).'
+            : 'Elige un tenantSuperAdmin valido (rama con tenants y usuarios) antes de guardar.',
+      );
+      return;
+    }
+
+    const saTargets = esDios ? saIdsGuardar : saIdsGuardar.slice(0, 1);
+    const usuariosFueraDeRama = payload.usuarioIds.filter(
+      (uid) => !usuarioPerteneceAlgunaSaMarcada(uid, saTargets, usuarios),
+    );
+    if (saTargets.length > 1 && usuariosFueraDeRama.length) {
+      toast.error(
+        'Hay usuarios marcados que no pertenecen a ninguno de los Tenant SuperAdmin seleccionados. Quita esos usuarios o marca la rama correcta.',
       );
       return;
     }
@@ -575,17 +862,29 @@ export default function InventarioFormulariosTenantModal({
       let totalActualizadas = 0;
       const todosFallos: Array<{ rutaId: string; ok: boolean; error?: string }> = [];
 
-      const saTargets = esDios ? saIdsGuardar : saIdsGuardar.slice(0, 1);
-      for (const idSa of saTargets) {
+      if (saTargets.length > 1) {
         const { actualizadas, resultados } = await inventarioService.aplicarFormulariosAutorizacion({
           rutaIds,
           tenantIds: payload.tenantIds,
           usuarioIds: payload.usuarioIds,
-          tenantSuperAdminId: idSa,
+          tenantSuperAdminId: saTargets[0],
+          tenantSuperAdminIds: saTargets,
           tarjetaConfig: tarjetaConfigBody,
         });
-        totalActualizadas += actualizadas;
+        totalActualizadas = actualizadas;
         todosFallos.push(...resultados.filter((r) => !r.ok));
+      } else {
+        for (const idSa of saTargets) {
+          const { actualizadas, resultados } = await inventarioService.aplicarFormulariosAutorizacion({
+            rutaIds,
+            tenantIds: payload.tenantIds,
+            usuarioIds: payload.usuarioIds,
+            tenantSuperAdminId: idSa,
+            tarjetaConfig: tarjetaConfigBody,
+          });
+          totalActualizadas += actualizadas;
+          todosFallos.push(...resultados.filter((r) => !r.ok));
+        }
       }
 
       const fallos = todosFallos;
@@ -622,8 +921,8 @@ export default function InventarioFormulariosTenantModal({
       ) : null}
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[92vh] max-w-4xl gap-0 overflow-hidden p-0">
-          <DialogHeader className="border-b border-border px-6 py-4">
+        <DialogContent className="flex max-h-[92vh] w-[min(96vw,56rem)] max-w-4xl flex-col gap-0 overflow-hidden p-0">
+          <DialogHeader className="shrink-0 border-b border-border px-6 py-4">
             <DialogTitle>Formularios, subformularios y autorizados</DialogTitle>
             <DialogDescription>
               Datos desde{' '}
@@ -635,7 +934,8 @@ export default function InventarioFormulariosTenantModal({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="grid max-h-[calc(92vh-9rem)] gap-4 px-6 py-4 md:grid-cols-2">
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
+            <div className="grid gap-4 md:grid-cols-2 md:items-start">
             <div className="flex min-h-0 flex-col gap-2">
               {modules.length > 0 ? (
                 <div className="rounded-md border border-border bg-muted/30 p-2">
@@ -685,7 +985,11 @@ export default function InventarioFormulariosTenantModal({
                                 <span className="mt-0.5 block break-all font-mono text-[10px] text-muted-foreground">
                                   Posible fila en listado: {item.route.path}
                                 </span>
-                              ) : null}
+                              ) : (
+                                <span className="mt-0.5 block text-[10px] text-amber-700 dark:text-amber-300">
+                                  Pendiente: parametriza primero la ruta/path desde ConfigInventario.
+                                </span>
+                              )}
                             </div>
                             <span className={`shrink-0 font-medium ${estadoClass}`}>{estadoEtiqueta}</span>
                           </div>
@@ -734,7 +1038,7 @@ export default function InventarioFormulariosTenantModal({
                       ? '. Sin candidatos en BD.'
                       : ''}
               </p>
-              <ScrollArea key={needleRutas} className="h-[min(380px,48vh)] rounded-md border border-border">
+              <ScrollArea key={needleRutas} className="h-[min(320px,38vh)] rounded-md border border-border">
                 <div className="space-y-0 p-3">
                   {loading ? (
                     <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
@@ -796,9 +1100,9 @@ export default function InventarioFormulariosTenantModal({
               ) : null}
             </div>
 
-            <div className="flex min-h-0 flex-col gap-3">
+            <div className="flex min-h-0 flex-col gap-3 md:max-h-[calc(92vh-11rem)]">
               {modules.length > 0 && !moduloParametrizarPath ? (
-                <Alert className="border-amber-500/50 bg-amber-50/80 py-2 text-amber-950 dark:bg-amber-950/20 dark:text-amber-100">
+                <Alert className="shrink-0 border-amber-500/50 bg-amber-50/80 py-2 text-amber-950 dark:bg-amber-950/20 dark:text-amber-100">
                   <AlertTitle className="text-xs font-medium">Falta elegir modulo</AlertTitle>
                   <AlertDescription className="text-[11px] leading-relaxed">
                     Marca un modulo en el recuadro &quot;1. Modulo de inventario a parametrizar&quot; (arriba a la izquierda) para
@@ -807,8 +1111,18 @@ export default function InventarioFormulariosTenantModal({
                 </Alert>
               ) : null}
 
+              {modules.length > 0 && moduloParametrizarPath && !moduloParametrizarTieneRuta ? (
+                <Alert className="shrink-0 border-amber-500/50 bg-amber-50/80 py-2 text-amber-950 dark:bg-amber-950/20 dark:text-amber-100">
+                  <AlertTitle className="text-xs font-medium">Ruta no parametrizada</AlertTitle>
+                  <AlertDescription className="text-[11px] leading-relaxed">
+                    Este módulo existe en el catálogo, pero no tiene un path relacionado en rutas. No se renderiza el formulario
+                    hasta que lo parametrices desde ConfigInventario.
+                  </AlertDescription>
+                </Alert>
+              ) : null}
+
               {moduloParametrizarInfo ? (
-                <Alert className="border-border bg-muted/30 py-2">
+                <Alert className="shrink-0 border-border bg-muted/30 py-2">
                   <AlertTitle className="text-xs font-medium">Modulo marcado para parametrizar</AlertTitle>
                   <AlertDescription className="space-y-1 text-[11px] leading-relaxed">
                     <span className="font-medium text-foreground">{moduloParametrizarInfo.title}</span>
@@ -827,7 +1141,7 @@ export default function InventarioFormulariosTenantModal({
               ) : null}
 
               {rutaContextoRow ? (
-                <Alert className="border-primary/40 bg-primary/5 py-2">
+                <Alert className="shrink-0 border-primary/40 bg-primary/5 py-2">
                   <AlertTitle className="text-xs font-medium">Ruta activa en el listado (ultima marcada)</AlertTitle>
                   <AlertDescription className="space-y-1 text-[11px] leading-relaxed">
                     <span className="font-medium text-foreground">{rutaContextoRow.name}</span>
@@ -846,20 +1160,10 @@ export default function InventarioFormulariosTenantModal({
                   </AlertDescription>
                 </Alert>
               ) : (
-                <p className="rounded-md border border-dashed border-border bg-muted/20 px-2 py-1.5 text-[10px] text-muted-foreground">
+                <p className="shrink-0 rounded-md border border-dashed border-border bg-muted/20 px-2 py-1.5 text-[10px] text-muted-foreground">
                   Marca al menos un formulario en el listado de la izquierda: aqui veras el path de la ultima fila marcada.
                 </p>
               )}
-
-              <div className="space-y-1">
-                <Label className="text-sm font-medium">Filtrar rama (tenant global / codigo SA)</Label>
-                <Input
-                  value={needleRama}
-                  onChange={(e) => setNeedleRama(e.target.value)}
-                  placeholder="Codigo TG, id, etiqueta..."
-                  disabled={loading}
-                />
-              </div>
 
               {meta?.requiereParametrizacionTenantSuperAdmin ? (
                 <Alert className="border-amber-500/50 bg-amber-50/80 text-amber-950 dark:bg-amber-950/20 dark:text-amber-100">
@@ -872,7 +1176,7 @@ export default function InventarioFormulariosTenantModal({
               ) : null}
 
               {mostrarSelectorSa ? (
-                <div className="space-y-1.5">
+                <div className="shrink-0 space-y-1.5">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <Label className="text-xs font-medium text-muted-foreground">
                       1. TenantSuperAdmin
@@ -888,7 +1192,7 @@ export default function InventarioFormulariosTenantModal({
                           disabled={loading}
                           onClick={() => selectAllSaVisible(true)}
                         >
-                          Marcar todos
+                          {needleSa.trim() ? 'Marcar visibles' : 'Marcar todos'}
                         </Button>
                         <Button
                           type="button"
@@ -898,11 +1202,19 @@ export default function InventarioFormulariosTenantModal({
                           disabled={loading}
                           onClick={() => selectAllSaVisible(false)}
                         >
-                          Ninguno
+                          {needleSa.trim() ? 'Quitar visibles' : 'Ninguno'}
                         </Button>
                       </div>
                     ) : null}
                   </div>
+
+                  <Input
+                    value={needleSa}
+                    onChange={(e) => setNeedleSa(e.target.value)}
+                    placeholder="Filtrar SA por codigo, id o etiqueta..."
+                    disabled={loading}
+                    className="h-8 text-xs"
+                  />
 
                   {usarSaMultiSelect ? (
                     <ScrollArea className="h-[min(140px,20vh)] rounded-md border border-border bg-background">
@@ -913,7 +1225,11 @@ export default function InventarioFormulariosTenantModal({
                             Cargando...
                           </div>
                         ) : filteredTenantSuperAdmins.length === 0 ? (
-                          <p className="py-3 text-center text-xs text-muted-foreground">Sin tenant SuperAdmin en catalogo.</p>
+                          <p className="py-3 text-center text-xs text-muted-foreground">
+                            {needleSa.trim()
+                              ? 'Sin SA con ese filtro.'
+                              : 'Sin tenant SuperAdmin en catalogo.'}
+                          </p>
                         ) : (
                           filteredTenantSuperAdmins.map((t) => {
                             const esVista = seleccionSaId === t.iud;
@@ -972,10 +1288,71 @@ export default function InventarioFormulariosTenantModal({
                 </div>
               ) : null}
 
-              <div className="flex min-h-0 flex-col gap-1">
+              {saIdsMarcados.length > 0 ? (
+                <div className="flex min-h-0 shrink-0 flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-muted-foreground">
+                    Árbol TenantSuperAdmin (rama seleccionada)
+                    {saArbolRama.length > 0 ? ` · ${saArbolRama.length} nodo(s)` : ''}
+                  </Label>
+                  <ScrollArea className="h-[min(110px,15vh)] rounded-md border border-border bg-muted/10">
+                    <div className="space-y-0 p-2">
+                      {loading ? (
+                        <div className="flex items-center gap-2 py-4 text-xs text-muted-foreground">
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                          Cargando árbol...
+                        </div>
+                      ) : saArbolRama.length === 0 ? (
+                        <p className="py-3 text-center text-xs text-muted-foreground">
+                          Sin subárbol SA visible para el tenant marcado (revisa tenantjerarquiacounters o
+                          codigoPadre en tenantsupertenants).
+                        </p>
+                      ) : (
+                        saArbolRama.map((t) => {
+                          const depth = t.profundidad ?? 0;
+                          const esAncla = saIdsMarcados.includes(t.iud);
+                          return (
+                            <div
+                              key={t.iud}
+                              className={`border-b border-border/40 py-1.5 text-xs last:border-0 ${
+                                esAncla ? 'rounded bg-primary/5' : ''
+                              }`}
+                              style={{ paddingLeft: `${8 + depth * 14}px` }}
+                            >
+                              <span className="font-medium text-foreground">
+                                {t.codigoJerarquia ? `SA ${t.codigoJerarquia}` : t.label}
+                              </span>
+                              {t.codigoPadre ? (
+                                <span className="ml-1 text-[10px] text-muted-foreground">← {t.codigoPadre}</span>
+                              ) : null}
+                              {esAncla ? (
+                                <span className="ml-1 text-[10px] font-medium text-primary">ancla</span>
+                              ) : null}
+                              <span className="mt-0.5 block font-mono text-[10px] text-muted-foreground">{t.iud}</span>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </ScrollArea>
+                  {jerarquiaSaCounters.length > 0 ? (
+                    <p className="text-[10px] text-muted-foreground">
+                      Índice counters: {jerarquiaSaCounters.length} fila(s) · orden por secuenciaJerarquia ASC.
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+
+              <div className="flex min-h-0 shrink-0 flex-col gap-1.5">
                 <Label className="text-xs font-medium text-muted-foreground">2. Rama tenant global (validacion)</Label>
+                <Input
+                  value={needleTenantGlobal}
+                  onChange={(e) => setNeedleTenantGlobal(e.target.value)}
+                  placeholder="Filtrar tenant global por codigo, id o etiqueta..."
+                  disabled={loading || saIdsMarcados.length === 0}
+                  className="h-8 text-xs"
+                />
                 {saIdsMarcados.length > 0 ? (
-                  <p className="text-[10px] text-muted-foreground">
+                  <p className="text-[10px] leading-relaxed text-muted-foreground">
                     SA marcados: <span className="font-semibold">{saIdsMarcados.length}</span>
                     {meta?.inventarioFormulariosModoAlcance ? ` · modo ${meta.inventarioFormulariosModoAlcance}` : ''}
                     {meta?.totalTenantGlobalEnRama != null
@@ -1007,6 +1384,21 @@ export default function InventarioFormulariosTenantModal({
                           : 'sin corporativo en counters (parametrizacion libre en subrama).'}
                       </span>
                     ) : null}
+                    {meta?.formulariosFiltradosPorHerencia ? (
+                      <span className="ml-1 text-muted-foreground">
+                        · Formularios acotados a {meta.totalVistasHerenciaRama ?? 0} vista(s) heredada(s) en la rama.
+                      </span>
+                    ) : null}
+                    {meta?.herenciaVistasVacias ? (
+                      <span className="ml-1 text-amber-800 dark:text-amber-300">
+                        · Sin vistas en herencia para esta rama; se muestra catalogo inventario completo.
+                      </span>
+                    ) : null}
+                    {meta?.ejecutorBypassHerencia ? (
+                      <span className="ml-1 text-emerald-700 dark:text-emerald-400">
+                        · Ejecutor con bypass de herencia (politicas runtime / counters).
+                      </span>
+                    ) : null}
                     {meta?.tenantGlobalJerarquiaOk ? (
                       <span className="mt-1 block text-emerald-700 dark:text-emerald-400">
                         Jerarquia tenant global: con filas en al menos una rama marcada.
@@ -1022,7 +1414,7 @@ export default function InventarioFormulariosTenantModal({
                 ) : (
                   <p className="text-[10px] text-muted-foreground">Sin ancla SA todavia.</p>
                 )}
-                <ScrollArea className="h-[min(160px,22vh)] rounded-md border border-border">
+                <ScrollArea className="h-[min(120px,16vh)] rounded-md border border-border">
                   <div className="space-y-0 p-2">
                     {loading ? (
                       <div className="flex items-center gap-2 py-6 text-xs text-muted-foreground">
@@ -1033,6 +1425,8 @@ export default function InventarioFormulariosTenantModal({
                       <p className="py-4 text-center text-xs text-muted-foreground">
                         {saIdsMarcados.length === 0
                           ? 'Marca al menos un TenantSuperAdmin para validar tenant global.'
+                          : needleTenantGlobal.trim() && tenantGlobales.length > 0
+                            ? 'Sin tenant global con ese filtro en la rama marcada.'
                           : saIdsMarcados.length > 1
                             ? `Sin tenant global en las ${saIdsMarcados.length} ramas marcadas.`
                             : 'Sin tenant global en la rama del SA seleccionado.'}
@@ -1068,23 +1462,78 @@ export default function InventarioFormulariosTenantModal({
                 </div>
               ) : null}
 
-              <div className="flex min-h-0 flex-col gap-2">
-                <div className="flex min-h-0 flex-col gap-1">
-                  <Label className="text-xs font-medium text-muted-foreground">3. Usuarios de la rama (autorizar)</Label>
-                  <Input
-                    value={needleUsuario}
-                    onChange={(e) => setNeedleUsuario(e.target.value)}
-                    placeholder="Filtrar por nombre o correo..."
-                    disabled={loading}
-                    className="h-8 text-xs"
-                  />
+              {saIdsMarcados.length > 0 ? (
+                <div className="rounded-md border border-dashed border-border/80 bg-muted/15 px-2.5 py-2 text-[10px] leading-relaxed text-muted-foreground">
+                  <p className="font-medium text-foreground">Diagnóstico resolución (GET meta)</p>
+                  <p className="mt-1">
+                    Usuarios rama: <span className="font-semibold text-foreground">{meta?.totalUsuariosRama ?? 0}</span>
+                    {' · '}
+                    SA canónico:{' '}
+                    <code className="rounded bg-muted px-0.5">
+                      {meta?.jwtTenantSuperAdminCanonicoId?.slice(-12) || meta?.tenantSuperAdminAnclaId?.slice(-12) || '—'}
+                    </code>
+                    {meta?.jwtSaDesincronizado ? (
+                      <span className="text-amber-700 dark:text-amber-300"> · JWT SA desincronizado (corregido en canónico)</span>
+                    ) : null}
+                  </p>
+                  <p>
+                    Rol parametrizado:{' '}
+                    <span className="text-foreground">
+                      {meta?.tenantSuperAdminRolParametrizado?.nombre || '—'}{' '}
+                      {meta?.tenantSuperAdminRolParametrizado?.id
+                        ? `(${meta.tenantSuperAdminRolParametrizado.id.slice(-8)})`
+                        : ''}
+                    </span>
+                    {' · '}
+                    Rol sesión: {meta?.rolSesionNombre || '—'}
+                    {meta?.rolParametrizadoCoincideSesion ? (
+                      <span className="text-emerald-700 dark:text-emerald-400"> · coincide</span>
+                    ) : meta?.tenantSuperAdminRolParametrizado?.id ? (
+                      <span className="text-amber-700 dark:text-amber-300"> · no coincide con sesión</span>
+                    ) : null}
+                  </p>
+                  {meta?.diagnosticoRamaUsuarios ? (
+                    <p>
+                      Regis candidatos: {meta.diagnosticoRamaUsuarios.documentosRegisCandidatos ?? 0}
+                      {' · '}
+                      rechazados filtro: {meta.diagnosticoRamaUsuarios.rechazadosPorFiltro ?? 0}
+                      {' · '}
+                      SA en rama: {meta.diagnosticoRamaUsuarios.saIdsEnRama?.length ?? 0}
+                      {' · '}
+                      TG: {meta.diagnosticoRamaUsuarios.totalTgEnRama ?? 0}
+                      {' · '}
+                      roles: {meta.diagnosticoRamaUsuarios.totalRolesEnRama ?? 0}
+                      {' · '}
+                      dueños SA: {meta.diagnosticoRamaUsuarios.propietariosSa?.length ?? 0}
+                    </p>
+                  ) : null}
                 </div>
-                <div className="flex items-center justify-end">
-                  <Button type="button" variant="ghost" size="sm" className="h-7 text-[10px]" onClick={() => selectAllUsuariosVisible(true)}>
+              ) : null}
+
+              <div className="flex min-h-[min(240px,32vh)] flex-1 flex-col gap-2 border-t border-border/60 pt-3">
+                <div className="flex shrink-0 flex-wrap items-end justify-between gap-2">
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <Label className="text-xs font-medium text-muted-foreground">3. Usuarios de la rama (autorizar)</Label>
+                    <Input
+                      value={needleUsuario}
+                      onChange={(e) => setNeedleUsuario(e.target.value)}
+                      placeholder="Filtrar por nombre o correo..."
+                      disabled={loading || saIdsMarcados.length === 0}
+                      className="h-8 text-xs"
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 shrink-0 text-[10px]"
+                    disabled={loading || saIdsMarcados.length === 0}
+                    onClick={() => selectAllUsuariosVisible(true)}
+                  >
                     Marcar visibles
                   </Button>
                 </div>
-                <ScrollArea className="h-[min(200px,28vh)] rounded-md border border-border">
+                <ScrollArea className="h-[min(220px,30vh)] rounded-md border border-border">
                   <div className="space-y-0 p-2">
                     {loading ? (
                       <div className="flex items-center gap-2 py-6 text-xs text-muted-foreground">
@@ -1093,7 +1542,11 @@ export default function InventarioFormulariosTenantModal({
                       </div>
                     ) : filteredUsuarios.length === 0 ? (
                       <p className="py-4 text-center text-xs text-muted-foreground">
-                        Sin usuarios en esta rama. Asegura usuarios con rol, tenantId o perfil asociado al tenant seleccionado.
+                        {saIdsMarcados.length === 0
+                          ? 'Marca un TenantSuperAdmin para cargar usuarios de su rama.'
+                          : needleUsuario.trim() && usuarios.length > 0
+                            ? 'Sin usuarios con ese filtro en la rama marcada.'
+                            : 'Sin usuarios en esta rama. Asegura usuarios con rol, tenantId o perfil asociado al tenant seleccionado.'}
                       </p>
                     ) : (
                       filteredUsuarios.map((u) => (
@@ -1112,6 +1565,9 @@ export default function InventarioFormulariosTenantModal({
                             <span className="mt-0.5 block text-[10px] text-muted-foreground">
                               Rol: {u.rol || '—'} · SA: {u.tenantSuperAdmin || '—'}
                               {u.tenantGlobal ? ` · TG: ${u.tenantGlobal}` : ''}
+                              {(u as { bypassHerencia?: boolean }).bypassHerencia ? (
+                                <span className="ml-1 text-emerald-700 dark:text-emerald-400">· bypass herencia</span>
+                              ) : null}
                             </span>
                           </span>
                         </label>
@@ -1121,9 +1577,10 @@ export default function InventarioFormulariosTenantModal({
                 </ScrollArea>
               </div>
             </div>
+            </div>
           </div>
 
-          <DialogFooter className="sticky bottom-0 z-10 flex flex-col gap-3 border-t border-border bg-background px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <DialogFooter className="shrink-0 flex flex-col gap-3 border-t border-border bg-background px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-xs text-muted-foreground">
               {moduloParametrizarInfo ? (
                 <>
@@ -1147,7 +1604,6 @@ export default function InventarioFormulariosTenantModal({
               <Button
                 type="button"
                 variant="default"
-                className="bg-primary text-primary-foreground"
                 onClick={() => void guardar()}
                 disabled={loading || saving || !esDios}
               >

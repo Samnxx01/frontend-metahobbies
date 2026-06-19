@@ -49,7 +49,7 @@ export const useTenantUsuarios = () => {
         try {
             setLoadingJerarquia(true);
             setErrorJerarquia(null);
-            const data = await getJerarquiaUsuarios();
+            const data = await getJerarquiaUsuarios({ useAuth: Boolean(token) });
             setJerarquia(data);
         } catch (err: any) {
             const status = err?.status ?? err?.response?.status ?? null;
@@ -61,7 +61,7 @@ export const useTenantUsuarios = () => {
         } finally {
             setLoadingJerarquia(false);
         }
-    }, []);
+    }, [token]);
 
     useEffect(() => {
         fetchJerarquia();

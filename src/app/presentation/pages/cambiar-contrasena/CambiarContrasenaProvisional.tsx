@@ -56,29 +56,49 @@ export default function CambiarContrasenaProvisional(): React.ReactElement {
                 throw new Error('No se encontró el token de autenticación');
             }
 
-            // Obtener el correo del usuario logueado desde localStorage
             const userJson = localStorage.getItem('user');
             if (!userJson) {
                 throw new Error('No se encontró información del usuario');
             }
 
-            const user = JSON.parse(userJson);
-            if (!user.correo) {
-                throw new Error('No se encontró el correo del usuario');
-            }
+            const user = JSON.parse(userJson) as {
+                correo?: string;
+                provisional?: boolean;
+                rol?: string;
+                role?: string;
+            };
+            const rolUsuario = String(user.rol || user.role || '').trim().toUpperCase();
+            const esInvitadoPipelineB = rolUsuario === 'INVITADO';
+            const esProvisionalReferido = user.provisional === true && !esInvitadoPipelineB;
 
-            const response = await apiFetch(`/api/referido/enlaceVer/${token}`, {
+            const endpoint = esProvisionalReferido
+                ? `/api/referido/enlaceVer/${token}`
+                : '/api/terceros/cuenta-cliente/activar-password';
+
+            const body = esProvisionalReferido
+                ? { correo: user.correo, password: data.password }
+                : { password: data.password };
+
+            const response = await apiFetch(endpoint, {
                 method: 'PATCH',
-                body: {
-                    correo: user.correo,
-                    password: data.password
-                }
+                body,
             });
 
             if (response) {
                 toast.success('Contraseña actualizada exitosamente');
-                
-                // Redirigir al perfil después de 1 segundo
+
+                const comisionesCreadas = Number(response?.comisiones?.created || 0);
+                if (!esProvisionalReferido) {
+                    if (comisionesCreadas > 0) {
+                        toast.info(`Comisiones Pipeline B procesadas (${comisionesCreadas} registro(s)).`);
+                    } else if (response?.comisiones?.processed > 0) {
+                        toast.warning(
+                            response?.comisiones?.detalle?.[0]?.msg
+                            || 'La venta quedó registrada pero las comisiones Pipeline B no se materializaron. Usa Reencolar en el dashboard.',
+                        );
+                    }
+                }
+
                 setTimeout(() => {
                     navigate('/perfil');
                 }, 1000);
@@ -162,7 +182,7 @@ export default function CambiarContrasenaProvisional(): React.ReactElement {
                             {/* Botón de Actualizar */}
                             <Button
                                 type="submit"
-                                className="w-full h-12 text-base font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors mt-6"
+                                className="w-full h-12 text-base font-semibold transition-colors mt-6"
                                 disabled={isSubmitting}
                             >
                                 {isSubmitting ? (

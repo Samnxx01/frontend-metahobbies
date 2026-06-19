@@ -19,6 +19,13 @@ export type GobernanzaModuloMenuAccion = {
   endpointId?: string | null;
   /** Slug de la tarjeta en gobernanzaModuloConfigs (puede diferir del slug de sección). */
   configSlug?: string | null;
+  /** rutaseguridads._id vinculado en gobernanzaModuloConfigs. */
+  rutaId?: string | null;
+  /** Validación GET operativo (config ↔ ruta). */
+  validacion?: {
+    ok: boolean;
+    mensajes: string[];
+  };
 };
 
 export type GobernanzaModuloConfigApi = {
@@ -32,6 +39,7 @@ export type GobernanzaModuloConfigApi = {
   frontPath: string;
   menuPath?: string | null;
   rutaId?: string | null;
+  rutaPath?: string | null;
   formularioId?: string | null;
   formularioNombre?: string | null;
   formularioComponent?: string | null;
@@ -55,8 +63,13 @@ export type GobernanzaModuloConfigApi = {
   tipoId?: string | null;
   tipoCodigo?: string | null;
   tipoNombre?: string | null;
+  tipoSection?: string | null;
   tipoFormularioComponent?: string | null;
   tipoFormularios?: GobernanzaModuloTipoFormularioApi[];
+  validacion?: {
+    ok: boolean;
+    mensajes: string[];
+  };
 };
 
 export type GobernanzaModuloTipoFormularioApi = {
@@ -100,11 +113,13 @@ export type GobernanzaModuloMenuResponse = {
 export type GobernanzaModuloOperativoResponse = GobernanzaModuloMenuResponse & {
   section: string;
   configs: GobernanzaModuloConfigApi[];
+  parametrizacionUi?: import('./gobernanzaParametrizacionUi').GobernanzaParametrizacionUi;
   meta?: {
     section?: string;
     configCount?: number;
     accionesCount?: number;
     hubOperaciones?: boolean;
+    tipoSection?: string | null;
   };
 };
 export type GobernanzaRutaOpcionApi = {
@@ -168,6 +183,22 @@ export type GobernanzaModuloSembrarResponse = {
     omitidos: Array<{ slug: string; motivo: string }>;
     totalSembrados: number;
   };
+};
+
+export type GobernanzaApiConsumoSyncData = {
+  totalConfigs: number;
+  sincronizadas: number;
+  creadas: number;
+  actualizadas: number;
+  omitidasSinPath: number;
+  configsSinRuta: number;
+  conflictos: Array<{ path: string; method: string; slug: string; mensaje: string }>;
+};
+
+export type GobernanzaApiConsumoSyncResponse = {
+  ok: boolean;
+  msg?: string;
+  data?: GobernanzaApiConsumoSyncData;
 };
 
 export type GobernanzaModuloFiltrosVistaApi = {

@@ -111,6 +111,15 @@ const buildSafeHeaders = (
         delete safeHeaders['x-token'];
     }
 
+    // Token de referido (checkout membresía): conservar aunque useAuth sea false.
+    const referidosHeader = String(headers?.referidos || '').trim();
+    if (referidosHeader) {
+        safeHeaders.referidos = referidosHeader;
+        if (!safeHeaders.Authorization) {
+            safeHeaders.Authorization = `Bearer ${referidosHeader}`;
+        }
+    }
+
     if (spaFrontendPath) {
         safeHeaders['x-mabs-frontend-path'] = spaFrontendPath;
     } else {
@@ -129,7 +138,7 @@ const appendSpaContextQuery = (endpoint: string, spaFrontendPath = ''): string =
 
 export const apiFetch = async (
     endpoint: string,
-    options: ApiOptions
+    options: ApiOptions = {}
 ): Promise<any | Response | null> => {
     const token: string | null = localStorage.getItem('token');
     const useAuth: boolean = options.useAuth ?? true;
@@ -196,7 +205,13 @@ export const apiFetch = async (
                     ? data.errors.map((e: any) => e?.msg || e?.message || String(e)).join(' | ')
                     : null) ||
                 (typeof data === 'object' ? JSON.stringify(data) : String(data));
-            throw new Error(`[${response.status}] ${backendMsg}`);
+            const err = new Error(`[${response.status}] ${backendMsg}`) as Error & {
+                tipoError?: string;
+                detalle?: string;
+            };
+            if (data?.tipoError) err.tipoError = String(data.tipoError);
+            if (data?.detalle) err.detalle = String(data.detalle);
+            throw err;
         }
 
         return data;

@@ -48,11 +48,11 @@ const COLOR_META: Array<{
         cssVar: '--primary',
         afecta: 'Define el tono dominante de toda la marca.',
         elementos: [
-            'Botones primarios ("Ingresar", "Guardar", "Configurar")',
             'Íconos activos del menú lateral',
             'Texto de títulos y enlaces de marca',
             'Anillo de foco al hacer clic en inputs',
             'Color de encabezado del navbar',
+            'Texto sobre botones (contraste)',
         ],
     },
     {
@@ -104,14 +104,15 @@ const COLOR_META: Array<{
     },
     {
         key: 'COLOR_SUNSET',
-        label: 'Color sunset (secundario)',
-        cssVar: '--secondary',
-        afecta: 'Tono cálido complementario para botones y bordes de énfasis.',
+        label: 'Color sunset (botones)',
+        cssVar: '--button',
+        afecta: 'Color estándar de TODOS los botones de acción de la aplicación.',
         elementos: [
-            'Botones secundarios (variante "secondary")',
+            'Botones primarios ("Ingresar", "Guardar", "Configurar")',
+            'Botones de formularios, modales y confirmaciones (SweetAlert)',
+            'CTAs del home, footer y landing',
             'Bordes internos de bloques y separadores cálidos',
             'Fondo de badges de estado "secondary"',
-            'Bordes de bloques en emails de la plataforma',
         ],
     },
 ];
@@ -832,7 +833,7 @@ export default function Dashboard(): React.ReactElement {
                                 <div className="w-5 h-5 rounded-full" style={{ backgroundColor: `hsl(var(--primary))` }} />
                                 <span className="font-semibold" style={{ color: `hsl(var(--primary))` }}>Navbar / Logo</span>
                                 <div className="ml-auto flex gap-1.5">
-                                    <div className="px-2 py-0.5 rounded text-white text-[10px]" style={{ backgroundColor: `hsl(var(--primary))` }}>Boton</div>
+                                    <div className="px-2 py-0.5 rounded text-[10px] flex items-center" style={{ backgroundColor: `hsl(var(--button))`, color: `hsl(var(--button-foreground))` }}>Boton</div>
                                     <div className="px-2 py-0.5 rounded text-[10px]" style={{ backgroundColor: `hsl(var(--accent))`, color: `hsl(var(--primary))` }}>Badge</div>
                                 </div>
                             </div>
@@ -847,8 +848,8 @@ export default function Dashboard(): React.ReactElement {
                                     <div className="h-1.5 rounded w-1/3 mb-2" style={{ backgroundColor: `hsl(var(--primary))` }} />
                                     <div className="h-5 rounded mb-1.5 w-full" style={{ backgroundColor: `hsl(var(--muted))`, border: `1px solid hsl(var(--muted))` }} />
                                     <div className="flex gap-1 mt-2">
-                                        <div className="h-4 px-2 rounded text-[9px] text-white flex items-center" style={{ backgroundColor: `hsl(var(--primary))` }}>Guardar</div>
-                                        <div className="h-4 px-2 rounded text-[9px] flex items-center" style={{ backgroundColor: `hsl(var(--secondary))`, color: `hsl(var(--primary))` }}>Cancelar</div>
+                                        <div className="h-4 px-2 rounded text-[9px] flex items-center" style={{ backgroundColor: `hsl(var(--button))`, color: `hsl(var(--button-foreground))` }}>Guardar</div>
+                                        <div className="h-4 px-2 rounded text-[9px] flex items-center border" style={{ borderColor: `hsl(var(--primary) / 0.2)`, color: `hsl(var(--primary))` }}>Cancelar</div>
                                     </div>
                                 </div>
                             </div>

@@ -7,6 +7,8 @@ import type {
   GobernanzaModuloFiltrosOpcionesResponse,
   GobernanzaModuloRutasOpcionesResponse,
   GobernanzaModuloSembrarResponse,
+  GobernanzaApiConsumoSyncResponse,
+  GobernanzaApiConsumoSyncData,
   GobernanzaModulosCatalogoResponse,
   GobernanzaModuloTiposResponse,
   GobernanzaModuloTipoApi,
@@ -16,15 +18,18 @@ import {
   logGobernanzaOperativo,
   warnGobernanzaOperativo,
 } from './gobernanzaModuloDebug';
+import { canonicalGobernanzaTipoSection } from './gobernanzaModuloTipoDefaults';
 
 const CATALOGO_PATH = '/api/config/global/gobernanza/modulos/catalogo';
 const CONFIGS_PATH = '/api/config/global/gobernanza/modulos/configs';
 const OPERATIVO_PATH = '/api/config/global/gobernanza/modulos/operativo';
+const PARAMETRIZACION_UI_PATH = '/api/config/global/gobernanza/modulos/parametrizacion-ui';
 const UPSERT_PATH = '/api/config/global/gobernanza/modulos/upsert';
 const RUTAS_OPCIONES_PATH = '/api/config/global/gobernanza/modulos/rutas-opciones';
 const FORMULARIO_DETALLE_PATH = '/api/config/global/gobernanza/modulos/formulario-detalle';
 const FILTROS_OPCIONES_PATH = '/api/config/global/gobernanza/modulos/filtros-opciones';
 const SEMBRAR_PATH = '/api/config/global/gobernanza/modulos/sembrar';
+const SINCRONIZAR_API_CONSUMO_PATH = '/api/config/global/gobernanza/modulos/sincronizar-api-consumo';
 const TIPOS_PATH = '/api/config/global/gobernanza/modulos/tipos';
 const TIPOS_SECTIONS_PATH = '/api/config/global/gobernanza/modulos/tipos/sections';
 const TIPOS_UPSERT_PATH = '/api/config/global/gobernanza/modulos/tipos/upsert';
@@ -58,6 +63,8 @@ export type FetchGobernanzaModuloOperativoOptions = {
   menuPath?: string;
   /** Hub contenedor (PermisosGlobal): lista tarjetas de gobernanzaModuloConfigs, no la ruta hub. */
   hubOperaciones?: boolean;
+  /** Filtra configs por gobernanzaModuloTipos.section (p. ej. gobernanza en TenantSuperAdmin). */
+  tipoSection?: string | null;
 };
 
 /** GET directo desde gobernanzaModuloConfigs (acciones + formularios para la vista). */
@@ -72,9 +79,13 @@ export async function fetchGobernanzaModuloOperativo(
     typeof opts === 'string' ? '' : String(opts.menuPath || '').trim();
   const hubOperaciones =
     typeof opts === 'string' ? false : opts.hubOperaciones === true;
+  const tipoSectionRaw =
+    typeof opts === 'string' ? '' : String(opts.tipoSection || '').trim();
+  const tipoSection = tipoSectionRaw ? canonicalGobernanzaTipoSection(tipoSectionRaw) : '';
   const params = new URLSearchParams({ section });
   if (menuPath) params.set('menuPath', menuPath);
   if (hubOperaciones) params.set('hubOperaciones', '1');
+  if (tipoSection) params.set('tipoSection', tipoSection);
   const url = `${OPERATIVO_PATH}?${params.toString()}`;
   logGobernanzaOperativo('apiFetch operativo →', url);
 
@@ -99,6 +110,28 @@ export async function fetchGobernanzaModuloOperativo(
   }
 
   return payload as GobernanzaModuloOperativoResponse;
+}
+
+/** GET conjuntos UI (ocultar panel, reglas, jerarquía…) desde gobernanzaModuloConfigs. */
+export async function fetchGobernanzaParametrizacionUi(): Promise<
+  import('./gobernanzaParametrizacionUi').GobernanzaParametrizacionUi
+> {
+  const payload = await apiFetch(PARAMETRIZACION_UI_PATH, {
+    method: 'GET',
+    cache: 'no-store',
+    headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' },
+  });
+
+  if (!payload || (payload as { ok?: boolean }).ok === false) {
+    throw new Error((payload as { msg?: string })?.msg || 'No se pudo cargar parametrización UI');
+  }
+
+  const ui = (payload as { parametrizacionUi?: unknown }).parametrizacionUi;
+  if (!ui || typeof ui !== 'object') {
+    throw new Error('Respuesta de parametrización UI inválida');
+  }
+
+  return ui as import('./gobernanzaParametrizacionUi').GobernanzaParametrizacionUi;
 }
 
 /** GET crudo de gobernanzaModuloConfigs por sección. */
@@ -143,8 +176,9 @@ export async function fetchGobernanzaModuloTiposSections(): Promise<string[]> {
 export async function fetchGobernanzaModuloTipos(
   section: string
 ): Promise<GobernanzaModuloTiposResponse> {
+  const sectionKey = canonicalGobernanzaTipoSection(section);
   const payload = await apiFetch(
-    `${TIPOS_PATH}?section=${encodeURIComponent(section.trim())}`,
+    `${TIPOS_PATH}?section=${encodeURIComponent(sectionKey)}`,
     {
       method: 'GET',
       cache: 'no-store',
@@ -271,6 +305,23 @@ export async function sembrarGobernanzaModulosCatalogo(): Promise<GobernanzaModu
   }
 
   return (payload as GobernanzaModuloSembrarResponse).data;
+}
+
+export async function sincronizarGobernanzaApiConsumo(): Promise<GobernanzaApiConsumoSyncData> {
+  const payload = await apiFetch(SINCRONIZAR_API_CONSUMO_PATH, {
+    method: 'POST',
+    body: {},
+  });
+
+  if (!payload || (payload as GobernanzaApiConsumoSyncResponse).ok === false) {
+    throw new Error((payload as GobernanzaApiConsumoSyncResponse)?.msg || 'No se pudo sincronizar apiconsumosfrontend');
+  }
+
+  const data = (payload as GobernanzaApiConsumoSyncResponse).data;
+  if (!data) {
+    throw new Error('Respuesta de sincronización sin datos');
+  }
+  return data;
 }
 
 const DESACTIVAR_PATH = '/api/config/global/gobernanza/modulos/desactivar';

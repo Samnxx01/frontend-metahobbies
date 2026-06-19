@@ -3,7 +3,17 @@ import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import type { GobernanzaModuloConfig } from './gobernanzaModuloConfig';
 import { GOBERNANZA_MODULO_ACTION_QUERY_DEFAULT, gobernanzaModuloOperativoStub } from './gobernanzaModuloConfig';
 import { getGobernanzaModuloCatalogoLocal, normalizeGobernanzaModuloSlug } from './gobernanzaModulosCatalog';
-import { accionMenuToEndpointSpec, endpointSpecParaFormulario, esAccionMenuFormulario, buildAccionesFromConfigsClient, buildAccionesHubDesdeConfigsClient, accionToEndpointSpecMinimo, enriquecerAccionesDesdeConfigs, resolverConfigActivaPorMenuPath } from './gobernanzaModuloMenuMappers';
+import {
+  accionMenuToEndpointSpec,
+  accionToEndpointSpecMinimo,
+  buildAccionesFromConfigsClient,
+  buildAccionesHubDesdeConfigsClient,
+  endpointSpecCatalogoSinFieldsSiComponente,
+  endpointSpecParaFormulario,
+  enriquecerAccionesDesdeConfigs,
+  esAccionMenuFormulario,
+  resolverConfigActivaPorMenuPath,
+} from './gobernanzaModuloMenuMappers';
 import {
   buildGobernanzaAccionesGridFromEndpoints,
   buildGobernanzaMenuTabsFromEndpoints,
@@ -18,6 +28,7 @@ import {
   resolverGobernanzaEndpointId,
   GOBERNANZA_GENERIC_ACTION_IDS,
 } from './gobernanzaActionIds';
+import { canonicalGobernanzaTipoSection } from './gobernanzaModuloTipoDefaults';
 import {
   errorGobernanzaOperativo,
   groupGobernanzaOperativo,
@@ -69,6 +80,8 @@ export type UseGobernanzaModuloMenuOptions = {
   inlineFormularios?: boolean;
   /** Hub operaciones: fuerza menú desde gobernanzaModuloConfigs (excluye ruta contenedora). */
   operacionesHub?: boolean;
+  /** Filtra por gobernanzaModuloTipos.section (p. ej. gobernanza). */
+  tipoSection?: string | null;
   /** Si false, no llama al API (p. ej. cuando ParametrosGobernanza no está en flujo inline). */
   enabled?: boolean;
   /** Acción del catálogo al abrir subruta (p. ej. perm-admin-tenant-global). */
@@ -82,6 +95,7 @@ export function useGobernanzaModuloMenu({
   syncDefaultAction = true,
   inlineFormularios = false,
   operacionesHub = false,
+  tipoSection = null,
   enabled = true,
   preferredActionId = null,
 }: UseGobernanzaModuloMenuOptions) {
@@ -92,6 +106,7 @@ export function useGobernanzaModuloMenu({
   const sectionQuery = String(sectionKey || slug || 'permisos').trim().toLowerCase();
   const menuPathNorm = normalizarGobernanzaMenuPath(menuPath);
   const preferredActionNorm = String(preferredActionId || '').trim();
+  const tipoSectionNorm = canonicalGobernanzaTipoSection(tipoSection);
 
   const [menuLoading, setMenuLoading] = useState(Boolean(enabled && sectionQuery));
   const [menuError, setMenuError] = useState<string | null>(null);
@@ -129,12 +144,13 @@ export function useGobernanzaModuloMenu({
     setMenuError(null);
     try {
       logGobernanzaOperativo('fetch GET operativo', {
-        url: `/operativo?section=${sectionQuery}${menuPathNorm ? `&menuPath=${menuPathNorm}` : ''}${operacionesHub ? '&hubOperaciones=1' : ''}`,
+        url: `/operativo?section=${sectionQuery}${menuPathNorm ? `&menuPath=${menuPathNorm}` : ''}${operacionesHub ? '&hubOperaciones=1' : ''}${tipoSectionNorm ? `&tipoSection=${tipoSectionNorm}` : ''}`,
       });
       const res = await fetchGobernanzaModuloOperativo({
         section: sectionQuery,
         menuPath: menuPathNorm || undefined,
         hubOperaciones: operacionesHub,
+        tipoSection: tipoSectionNorm || undefined,
       });
       let acciones = Array.isArray(res.acciones) ? res.acciones : [];
       let configs = Array.isArray(res.configs) ? res.configs : [];
@@ -264,7 +280,7 @@ export function useGobernanzaModuloMenu({
     } finally {
       setMenuLoading(false);
     }
-  }, [enabled, sectionQuery, menuPathNorm, operacionesHub]);
+  }, [enabled, sectionQuery, menuPathNorm, operacionesHub, tipoSectionNorm]);
 
   useEffect(() => {
     void refreshMenu();
@@ -449,7 +465,7 @@ export function useGobernanzaModuloMenu({
             formularioComponent: a.formularioComponent,
           }) === activeActionId
       ) ??
-      menuAcciones[0]
+      null
     );
   }, [menuAcciones, activeActionId]);
 
@@ -465,20 +481,34 @@ export function useGobernanzaModuloMenu({
       menuPath: activeAccionMenu?.menuPath,
     });
     if (catalogFromAccion && ENDPOINTS_BY_ID[catalogFromAccion]) {
-      return ENDPOINTS_BY_ID[catalogFromAccion];
+      const base = ENDPOINTS_BY_ID[catalogFromAccion];
+      return endpointSpecCatalogoSinFieldsSiComponente(
+        {
+          ...base,
+          title: String(activeAccionMenu?.shortLabel || activeAccionMenu?.title || base.title).trim(),
+          description: String(activeAccionMenu?.description || base.description).trim(),
+        },
+        componentHint
+      );
     }
     if (activeActionId && ENDPOINTS_BY_ID[activeActionId]) {
-      return ENDPOINTS_BY_ID[activeActionId];
+      return endpointSpecCatalogoSinFieldsSiComponente(
+        ENDPOINTS_BY_ID[activeActionId],
+        componentHint
+      );
     }
     const formSpec = endpointSpecParaFormulario(activeAccionMenu, config.section, componentHint);
-    if (formSpec?.fields?.length) return formSpec;
-    if (formSpec && ENDPOINTS_BY_ID[formSpec.id]) return ENDPOINTS_BY_ID[formSpec.id];
+    if (formSpec) return formSpec;
     const found = endpoints.find((e) => e.id === activeActionId);
-    if (found?.fields?.length) return found;
     if (activeAccionMenu) return accionToEndpointSpecMinimo(activeAccionMenu, config.section);
     const fromComponent = resolverGobernanzaEndpointId({ formularioComponent: componentHint });
-    if (fromComponent && ENDPOINTS_BY_ID[fromComponent]) return ENDPOINTS_BY_ID[fromComponent];
-    return found ?? formSpec ?? null;
+    if (fromComponent && ENDPOINTS_BY_ID[fromComponent]) {
+      return endpointSpecCatalogoSinFieldsSiComponente(
+        ENDPOINTS_BY_ID[fromComponent],
+        componentHint
+      );
+    }
+    return found ?? null;
   }, [
     activeAccionMenu,
     config.section,

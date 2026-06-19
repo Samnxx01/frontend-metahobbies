@@ -33,6 +33,8 @@ export type GobernanzaModuloDinamicoProps = {
   menuOnly?: boolean;
   /** Oculta título/subtítulo encima de las pestañas (hub PermisosGlobal). */
   hideSubmenuHeader?: boolean;
+  /** Oculta botón «Parametrizar menú» (hubs TenantSuperAdmin, ReglasTenant, etc.). */
+  hideParametrizarMenu?: boolean;
 };
 
 function GobernanzaModuloOperational({
@@ -45,6 +47,7 @@ function GobernanzaModuloOperational({
   hideTabsWhenSingleForm = false,
   menuOnly = false,
   hideSubmenuHeader = false,
+  hideParametrizarMenu = false,
 }: Required<Pick<GobernanzaModuloDinamicoProps, 'menuState' | 'renderForm' | 'getCapabilities'>> & {
   paginaComponent?: string;
   menuLayout?: GobernanzaModuloMenuLayout;
@@ -52,6 +55,7 @@ function GobernanzaModuloOperational({
   hideTabsWhenSingleForm?: boolean;
   menuOnly?: boolean;
   hideSubmenuHeader?: boolean;
+  hideParametrizarMenu?: boolean;
 }): React.ReactElement {
   const {
     config,
@@ -72,7 +76,8 @@ function GobernanzaModuloOperational({
   } = menuState;
 
   const moduloSlug = String(config.slug || '').trim();
-  const showParametrizarMenu = config.section !== 'permisos' && config.section !== 'reglas';
+  const showParametrizarMenu =
+    !hideParametrizarMenu && config.section !== 'permisos' && config.section !== 'reglas';
   const menuPathInicial =
     activeAccionMenu?.menuPath ?? config.menuPath ?? null;
 
@@ -143,14 +148,17 @@ function GobernanzaModuloOperational({
           ...config,
           formularioComponent: activeAccionMenu?.formularioComponent ?? config.formularioComponent,
           menuPath: activeAccionMenu?.menuPath ?? config.menuPath,
+          rutaId: activeAccionMenu?.rutaId ?? config.rutaId,
         },
         activeEndpoint,
         menuEndpointIds: endpoints.map((e) => e.id),
         menuDesdeApi,
         menuLoading,
         paginaComponent,
+        accionMenu: activeAccionMenu,
+        operacionesHub: hideParametrizarMenu,
       }),
-    [config, activeAccionMenu, activeEndpoint, endpoints, menuDesdeApi, menuLoading, paginaComponent]
+    [config, activeAccionMenu, activeEndpoint, endpoints, menuDesdeApi, menuLoading, paginaComponent, hideParametrizarMenu]
   );
 
   if (!menuLoading && !endpoints.length && !(menuAcciones?.length)) {
@@ -227,9 +235,24 @@ function GobernanzaModuloOperational({
   const renderPanelFormulario = (endpoint: EndpointSpec, validacionTab: typeof validacion) => {
     if (!endpoint || validacionTab.bloquearRender) {
       return (
-        <p className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
-          Corrige la parametrización del menú para continuar.
-        </p>
+        <div className="space-y-3">
+          {!validacionTab.ok && validacionTab.mensajes.length > 0 ? (
+            <Alert variant="destructive">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>Validación del módulo</AlertTitle>
+              <AlertDescription>
+                <ul className="mt-2 list-disc space-y-1 pl-5">
+                  {validacionTab.mensajes.map((msg) => (
+                    <li key={msg}>{msg}</li>
+                  ))}
+                </ul>
+              </AlertDescription>
+            </Alert>
+          ) : null}
+          <p className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
+            Corrige la parametrización del menú para continuar.
+          </p>
+        </div>
       );
     }
     return (
@@ -373,12 +396,15 @@ function GobernanzaModuloOperational({
                 ...config,
                 formularioComponent: accionTab?.formularioComponent ?? config.formularioComponent,
                 menuPath: accionTab?.menuPath ?? config.menuPath,
+                rutaId: accionTab?.rutaId ?? config.rutaId,
               },
               activeEndpoint: endpointParaFormulario,
               menuEndpointIds: endpoints.map((e) => e.id),
               menuDesdeApi,
               menuLoading,
               paginaComponent,
+              accionMenu: accionTab,
+              operacionesHub: hideParametrizarMenu,
             });
             return (
               <TabsContent key={endpoint.id} value={endpoint.id} className="mt-0 space-y-4">
@@ -405,6 +431,7 @@ export function GobernanzaModuloDinamico({
   hideTabsWhenSingleForm = false,
   menuOnly = false,
   hideSubmenuHeader = false,
+  hideParametrizarMenu = false,
 }: GobernanzaModuloDinamicoProps): React.ReactElement {
   if (variant === 'config') {
     return <GobernanzaModuloConfigView className={className} />;
@@ -429,6 +456,7 @@ export function GobernanzaModuloDinamico({
       hideTabsWhenSingleForm={hideTabsWhenSingleForm}
       menuOnly={menuOnly}
       hideSubmenuHeader={hideSubmenuHeader}
+      hideParametrizarMenu={hideParametrizarMenu}
     />
   );
 }

@@ -1,35 +1,34 @@
 import React from 'react';
 
-import { GobernanzaFormularioPorRuta } from '../GobernanzaFormularioPorRuta';
-
-import { resolverReglasFormComponent } from './gobernanzaReglasFormRegistry';
-import type { GobernanzaReglasFormProps } from './gobernanzaReglasFormRegistry';
+import {
+  resolverReglasFormComponent,
+  resolverReglasFormPorEndpoint,
+} from './gobernanzaReglasFormResolver';
+import { ReglasListarTenantForm } from './ReglasListarTenantForm';
+import type { GobernanzaReglasFormProps } from './types';
 
 export type GobernanzaReglasFormByEndpointProps = GobernanzaReglasFormProps & {
   formularioComponent?: string | null;
 };
 
-/** Resolución por nombre de componente en gobernanzaModuloConfigs / gobernanzaModuloTipos. */
+/** Resolución por componente en gobernanzaModuloConfigs / gobernanzaModuloTipos o por endpointId. */
 export function GobernanzaReglasFormByEndpoint({
   formularioComponent,
   embeddedApiForm,
+  endpoint,
   ...props
 }: GobernanzaReglasFormByEndpointProps): React.ReactElement {
-  const Form = resolverReglasFormComponent(formularioComponent);
-
-  if (Form) {
-    return <Form embeddedApiForm={embeddedApiForm} formularioComponent={formularioComponent} {...props} />;
-  }
-
-  if (embeddedApiForm) {
-    return <>{embeddedApiForm}</>;
-  }
+  const Form =
+    resolverReglasFormComponent(formularioComponent)
+    ?? resolverReglasFormPorEndpoint(endpoint?.id)
+    ?? ReglasListarTenantForm;
 
   return (
-    <GobernanzaFormularioPorRuta
-      section="reglas"
-      moduloSlug="reglas"
+    <Form
+      embeddedApiForm={embeddedApiForm}
+      endpoint={endpoint}
       formularioComponent={formularioComponent}
+      {...props}
     />
   );
 }

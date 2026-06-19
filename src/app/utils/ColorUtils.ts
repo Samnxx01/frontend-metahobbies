@@ -87,8 +87,11 @@ export function aplicarPaletaEnApp(colores: ColoresPaleta): void {
     root.style.setProperty('--accent', hsl('COLOR_ACCENT'));
     root.style.setProperty('--accent-foreground', hsl('COLOR_PRIMARY'));
 
-    // COLOR_SUNSET → secondary (tono cálido complementario)
-    root.style.setProperty('--secondary', hsl('COLOR_SUNSET'));
+    // COLOR_SUNSET → botones de acción y tono secundario complementario
+    const sunsetHsl = hsl('COLOR_SUNSET');
+    root.style.setProperty('--button', sunsetHsl);
+    root.style.setProperty('--button-foreground', hsl('COLOR_PRIMARY'));
+    root.style.setProperty('--secondary', sunsetHsl);
     root.style.setProperty('--secondary-foreground', hsl('COLOR_PRIMARY'));
 
     // COLOR_LIGHT → muted, border, input
@@ -136,6 +139,7 @@ export function limpiarPaletaApp(): void {
         '--background',
         '--primary', '--primary-foreground', '--ring',
         '--accent', '--accent-foreground',
+        '--button', '--button-foreground',
         '--secondary', '--secondary-foreground',
         '--muted', '--muted-foreground',
         '--border', '--input',

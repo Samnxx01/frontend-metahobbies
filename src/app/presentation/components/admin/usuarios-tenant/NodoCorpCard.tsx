@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ChevronDown, ChevronRight, Building2, Users, UserCheck, UserPlus, Edit } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { BTN_GHOST_ACCENT } from '@/app/utils/buttonStyles';
 import { Button } from '@/components/ui/button';
 import type { CorpNode, TenantUsuario } from '@/app/services/tenantUsuariosService';
 
@@ -28,7 +29,7 @@ const UsuarioRow = ({ usuario, tipo, onEdit }: UsuarioRowProps) => (
                 {tipo === 'cliente' ? 'Cliente' : 'Admin'}
             </Badge>
             {onEdit && (
-                <Button variant="ghost" size="icon" className="h-7 w-7 text-foreground/70 hover:bg-primary/10 hover:text-primary" onClick={onEdit}>
+                <Button variant="ghost" size="icon" className={`h-7 w-7 ${BTN_GHOST_ACCENT}`} onClick={onEdit}>
                     <Edit className="h-3.5 w-3.5" />
                 </Button>
             )}

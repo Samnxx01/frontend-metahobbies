@@ -1,4 +1,5 @@
 import { apiFetch } from '@/app/services/api';
+import { resolveEntityPublicId, type EntityRef } from '@/app/utils/entityPublicId';
 
 export type GenericSelectOption = {
   id: string;
@@ -7,12 +8,24 @@ export type GenericSelectOption = {
   meta?: Record<string, string | number | undefined>;
 };
 
+/** Resuelve fila de select API (objeto con iud/id o UUID/ObjectId suelto tras publicId middleware). */
+function resolveSelectRowId(row: unknown): string {
+  if (row == null) return '';
+  if (typeof row === 'string' || typeof row === 'number') {
+    return String(row).trim();
+  }
+  return resolveEntityPublicId(row as EntityRef);
+}
+
 const mapRows = (rows: unknown[] | undefined, fallbackKey: string): GenericSelectOption[] =>
   (Array.isArray(rows) ? rows : [])
     .map((row: unknown) => {
-      const r = row as Record<string, unknown>;
-      const id = String(r?.iud || r?.id || r?._id || '').trim();
+      const id = resolveSelectRowId(row);
       if (!id) return null;
+      if (typeof row !== 'object' || row == null) {
+        return { id, label: id };
+      }
+      const r = row as Record<string, unknown>;
       const label =
         String(
           r?.label ||
@@ -76,8 +89,10 @@ export function buildTenantGlobalSelectsFromApi(data: Record<string, unknown>): 
     ownerType: mapRows(Array.isArray(data.ownerTypes) ? (data.ownerTypes as unknown[]) : [], 'tipo_comprador'),
     nvlGeneracionTenant: (Array.isArray(data.nivelesGlobales) ? data.nivelesGlobales : [])
       .map((row: unknown) => {
-        const r = row as Record<string, unknown>;
-        const id = String(r?.id || r?._id || '').trim();
+        const r = (typeof row === 'object' && row != null ? row : {}) as Record<string, unknown>;
+        const configId = String(r?.configNvlGlobalId || '').trim();
+        const catalogId = String(r?.nvlGeneracionGlobalId || r?._id || r?.id || '').trim();
+        const id = configId || catalogId || resolveSelectRowId(row);
         if (!id) return null;
         const nvl = String(r?.nvl ?? '').trim();
         const generationTenant = String(r?.generation_tenant || '').trim();
@@ -94,18 +109,27 @@ export function buildTenantGlobalSelectsFromApi(data: Record<string, unknown>): 
             generationTenant,
             secuencia,
             securityPlatform: securityPlatform ? 'true' : 'false',
+            nvlGeneracionGlobalId: catalogId || undefined,
+            configNvlGlobalId: configId || undefined,
           },
         };
       })
       .filter(Boolean) as GenericSelectOption[],
     apisDominios: resolveDominiosOptionsFromSelectsApi(data),
     apis: resolveDominiosOptionsFromSelectsApi(data),
-    accionesUsu: mapRows(Array.isArray(data.acciones) ? (data.acciones as unknown[]) : [], 'method'),
+    accionesUsu: mapRows(
+      Array.isArray(data.accionesCatalogo)
+        ? (data.accionesCatalogo as unknown[])
+        : Array.isArray(data.acciones)
+          ? (data.acciones as unknown[])
+          : [],
+      'method',
+    ),
     rolesMabs: rawRolesMabs
       .map((row: unknown) => {
-        const r = row as Record<string, unknown>;
-        const id = String(r?.id || r?._id || '').trim();
+        const id = resolveSelectRowId(row);
         if (!id) return null;
+        const r = (typeof row === 'object' && row != null ? row : {}) as Record<string, unknown>;
         const rol = String(r?.rol || '').trim();
         const label = String(r?.label || rol || id);
         return { id, label, rol };
@@ -121,9 +145,9 @@ export function buildTenantGlobalSelectsFromApi(data: Record<string, unknown>): 
         : [];
       const jer = jerRaw
         .map((row: unknown) => {
-          const r = row as Record<string, unknown>;
-          const id = String(r?.id || '').trim();
+          const id = resolveSelectRowId(row);
           if (!id) return null;
+          const r = (typeof row === 'object' && row != null ? row : {}) as Record<string, unknown>;
           return { id, label: String(r?.label || id) };
         })
         .filter(Boolean) as GenericSelectOption[];
@@ -132,9 +156,9 @@ export function buildTenantGlobalSelectsFromApi(data: Record<string, unknown>): 
 
       return (Array.isArray(data.tenantGlobalesRegistrados) ? data.tenantGlobalesRegistrados : [])
         .map((row: unknown) => {
-          const r = row as Record<string, unknown>;
-          const id = String(r?.id || r?._id || '').trim();
+          const id = resolveSelectRowId(row);
           if (!id) return null;
+          const r = (typeof row === 'object' && row != null ? row : {}) as Record<string, unknown>;
           const rol = String(r?.rol || 'TENANT').trim();
           const corp = String(r?.coporativoNombre || '').trim();
           const suffix = corp ? ` | ${corp}` : '';

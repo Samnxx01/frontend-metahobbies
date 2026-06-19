@@ -18,6 +18,7 @@ export default function UsuarioSuperAdminModalPage(): React.ReactElement {
         sincronizarGlobalCanReferirUsuarios,
         isSincronizandoGlobalCanReferir,
         errorSincronizarGlobalCanReferir,
+        jerarquia,
     } = useTenantUsuarios();
 
     const handleClose = (): void => {
@@ -34,6 +35,7 @@ export default function UsuarioSuperAdminModalPage(): React.ReactElement {
             isSubmitting={isCreatingSuperAdmin}
             submitError={errorCrearSuperAdmin}
             scope="SUPER_ADMIN"
+            diosUserExists={Boolean(jerarquia?.publicChecks?.diosUserExists)}
             onSincronizarGlobalCanReferir={token ? sincronizarGlobalCanReferirUsuarios : undefined}
             isSincronizandoGlobal={isSincronizandoGlobalCanReferir}
             sincronizarGlobalError={errorSincronizarGlobalCanReferir}

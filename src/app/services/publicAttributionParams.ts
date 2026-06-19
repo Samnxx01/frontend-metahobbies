@@ -72,11 +72,19 @@ export function resolvePublicAttributionContext(search = ''): PublicAttributionC
     };
 }
 
+/** Código corto de atribución en URL (`?at=` o alias legacy `?st=`). */
+export function getAttributionLinkCodeFromSearch(search = ''): string {
+    const query = search.startsWith('?') ? search.slice(1) : search;
+    if (!query) return '';
+    const params = new URLSearchParams(query);
+    const fromUrl = params.get('at')?.trim() || params.get('st')?.trim() || '';
+    return fromUrl ? fromUrl.toUpperCase() : '';
+}
+
 /** Extrae código corto ?at=MABS-XXXX de la URL o del storage. */
 export function getAttributionLinkCode(search = ''): string {
-    const query = search.startsWith('?') ? search.slice(1) : search;
-    const fromUrl = query ? new URLSearchParams(query).get('at')?.trim() : '';
-    if (fromUrl) return fromUrl.toUpperCase();
+    const fromUrl = getAttributionLinkCodeFromSearch(search);
+    if (fromUrl) return fromUrl;
 
     const stored = readStored();
     return String(stored.linkCode || stored.codigoReferido || '').trim().toUpperCase();
@@ -91,10 +99,6 @@ export function isGeneradorEnlaceVentasFlow(search = ''): boolean {
         return true;
     }
 
-    if (getAttributionLinkCode(search)) {
-        return true;
-    }
-
     const ctx = resolvePublicAttributionContext(search);
     if (ctx.originType === 'producto' && Boolean(ctx.guestSessionId || ctx.ref)) {
         return true;
@@ -102,6 +106,10 @@ export function isGeneradorEnlaceVentasFlow(search = ''): boolean {
 
     const redirect = String(stored.redirectTo || '').trim().toLowerCase();
     if ((redirect === 'home' || redirect === 'productos') && Boolean(ctx.guestSessionId || ctx.ref)) {
+        return true;
+    }
+
+    if (stored.flow === 'venta' && stored.pipelineB === '1') {
         return true;
     }
 
@@ -144,11 +152,10 @@ export function capturePublicAttributionFromSearch(search: string): void {
     const stored = readStored();
     let updated = false;
 
-    const linkCode = incoming.get('at')?.trim();
+    const linkCode = incoming.get('at')?.trim() || incoming.get('st')?.trim();
     if (linkCode) {
         stored.linkCode = linkCode.toUpperCase();
         stored.codigoReferido = stored.linkCode;
-        stored.allowGuestProductCheckout = '1';
         updated = true;
     }
 
@@ -189,8 +196,11 @@ export function applyResolvedAttributionToStorage(resolved: ResolvedAttributionL
     if (resolved.pipelineB || resolved.originType === 'producto') {
         stored.pipelineB = '1';
     }
-    if (resolved.allowGuestProductCheckout || stored.linkCode) {
+    if (resolved.allowGuestProductCheckout && (resolved.pipelineB || resolved.originType === 'producto')) {
         stored.allowGuestProductCheckout = '1';
+    } else if (resolved.flow === 'referidos' || resolved.redirectTo === 'referidos') {
+        delete stored.allowGuestProductCheckout;
+        delete stored.pipelineB;
     }
     sessionStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
 

@@ -1,5 +1,4 @@
 import { ENDPOINTS } from './parametrosGobernanzaEndpoints';
-import { HIDDEN_ENDPOINT_IDS } from './parametrosGobernanzaConstants';
 import { GOBERNANZA_GENERIC_ACTION_IDS } from './gobernanzaActionIds';
 import type { EndpointActor, EndpointSection, EndpointSpec, HttpMethod } from './parametrosGobernanzaTypes';
 import type { GobernanzaModuloMenuAccion } from './gobernanzaModuloApiTypes';
@@ -10,16 +9,17 @@ export const ENDPOINTS_BY_ID: Record<string, EndpointSpec> = Object.fromEntries(
 
 const HTTP_VERBS = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']);
 
-/** Endpoints visibles de una sección (sin lista quemada por id). */
+/** Endpoints visibles de una sección; ocultos según gobernanzaModuloConfigs (parametrizacionUi). */
 export function endpointsPorSection(
   section: string,
-  opts?: { excludeHidden?: boolean }
+  opts?: { excludeHidden?: boolean; hiddenEndpointIds?: Set<string> }
 ): EndpointSpec[] {
   const key = String(section || '').trim().toLowerCase();
   const excludeHidden = opts?.excludeHidden !== false;
+  const hidden = opts?.hiddenEndpointIds ?? new Set<string>();
   return ENDPOINTS.filter((e) => {
     if (String(e.section || '').toLowerCase() !== key) return false;
-    if (excludeHidden && HIDDEN_ENDPOINT_IDS.has(e.id)) return false;
+    if (excludeHidden && hidden.has(e.id)) return false;
     return true;
   });
 }
@@ -102,7 +102,7 @@ export function accionApiToEndpointSpec(
     path: accion.path || base?.path || '',
     title: accion.title || accion.shortLabel || base?.title || (GOBERNANZA_GENERIC_ACTION_IDS.has(id) ? '' : id) || '',
     description: accion.description || base?.description || '',
-    fields: base?.fields ?? [],
+    fields: [],
     primary: base?.primary,
   };
 }

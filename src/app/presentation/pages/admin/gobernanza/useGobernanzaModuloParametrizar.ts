@@ -46,8 +46,8 @@ import {
 import { normalizarGobernanzaRefId } from './gobernanzaEntityId';
 import { useGobernanzaModuloRutasOpciones } from './useGobernanzaModuloRutasOpciones';
 import {
+  canonicalGobernanzaTipoSection,
   esSectionSlugValido,
-  normalizarSectionInput,
   resolverTipoSectionFiltroInicial,
   sectionDesdeComponente,
 } from './gobernanzaModuloTipoDefaults';
@@ -168,15 +168,17 @@ export function useGobernanzaModuloParametrizar({
   );
 
   const componenteActivo = useMemo(() => {
-    const fromTipo = tipoSeleccionado?.formularioComponent?.trim();
-    if (fromTipo) return fromTipo;
+    const fromRuta = rutaSeleccionada?.component?.trim();
+    if (fromRuta) return fromRuta;
+    const fromDetalle = formularioDetalle?.component?.trim();
+    if (fromDetalle) return fromDetalle;
     const fromConfig = configSeleccionada?.formularioComponent?.trim();
     if (fromConfig) return fromConfig;
     const fromConfigTipo = configSeleccionada?.tipoFormularioComponent?.trim();
     if (fromConfigTipo) return fromConfigTipo;
-    const fromDetalle = formularioDetalle?.component?.trim();
-    if (fromDetalle) return fromDetalle;
-    return rutaSeleccionada?.component?.trim() ?? '';
+    const fromTipo = tipoSeleccionado?.formularioComponent?.trim();
+    if (fromTipo) return fromTipo;
+    return '';
   }, [tipoSeleccionado, configSeleccionada, formularioDetalle, rutaSeleccionada]);
 
   const configsOpciones = useMemo(() => buildConfigsOpciones(moduloConfigs), [moduloConfigs]);
@@ -228,9 +230,18 @@ export function useGobernanzaModuloParametrizar({
   const resolverRutaIdDesdeConfig = useCallback((cfg: GobernanzaModuloConfigApi): string => {
     const directo = normalizarGobernanzaRutaId(cfg.rutaId || cfg.formularioId);
     if (directo) return directo;
-    const menuPath = String(cfg.menuPath || cfg.frontPath || '').trim();
+    const component = String(cfg.formularioComponent || cfg.tipoFormularioComponent || '').trim();
+    if (component) {
+      const byComponent = rutasRef.current.find(
+        (r) => String(r.component || '').trim() === component
+      );
+      if (byComponent?.id) return byComponent.id;
+    }
+    const menuPath = String(cfg.menuPath || cfg.frontPath || cfg.rutaPath || '').trim();
     if (!menuPath) return '';
-    const match = rutasRef.current.find((r) => String(r.path || '').trim() === menuPath);
+    const match = rutasRef.current.find(
+      (r) => normalizarGobernanzaMenuPath(r.path).toLowerCase() === normalizarGobernanzaMenuPath(menuPath).toLowerCase()
+    );
     return match?.id ?? '';
   }, []);
 
@@ -426,7 +437,7 @@ export function useGobernanzaModuloParametrizar({
   }, [open, rutaId, cargarFormularioDetalle, tipoSeleccionado]);
 
   const refrescarTipos = useCallback((sectionOverride?: string) => {
-    const sec = String(sectionOverride || tipoSectionFiltro).trim();
+    const sec = canonicalGobernanzaTipoSection(sectionOverride || tipoSectionFiltro);
     if (!sec) return Promise.resolve();
     setTiposLoading(true);
     return fetchGobernanzaModuloTipos(sec)
@@ -436,7 +447,7 @@ export function useGobernanzaModuloParametrizar({
   }, [tipoSectionFiltro]);
 
   const seleccionarTipoSectionFiltro = useCallback((section: string) => {
-    const sec = normalizarSectionInput(section);
+    const sec = canonicalGobernanzaTipoSection(section);
     if (!esSectionSlugValido(sec)) return;
     setTipoSectionFiltro(sec);
     setTipoId('');
@@ -449,7 +460,11 @@ export function useGobernanzaModuloParametrizar({
       setTipoSectionFiltro(fromComp);
       return;
     }
-    setTipoSectionFiltro(resolverTipoSectionFiltroInicial(null, sectionKey, moduloSlug));
+    setTipoSectionFiltro(
+      canonicalGobernanzaTipoSection(
+        resolverTipoSectionFiltroInicial(null, sectionKey, moduloSlug)
+      )
+    );
   }, [open, rutaSeleccionada?.component, sectionKey, moduloSlug]);
 
   useEffect(() => {
@@ -734,6 +749,7 @@ export function useGobernanzaModuloParametrizar({
 
   const guardar = async () => {
     const nombre = label.trim();
+    const rid = normalizarGobernanzaRutaId(rutaId);
     const path = rutaSeleccionada?.path?.trim() ?? formularioDetalle?.path?.trim() ?? '';
     if (!nombre) {
       toast.error('Ingresa el nombre del módulo.');
@@ -750,13 +766,18 @@ export function useGobernanzaModuloParametrizar({
       toast.error(`El tipo debe pertenecer a la section «${tipoSectionFiltro}».`);
       return;
     }
-    if (!rutaId || !path) {
-      toast.error('Selecciona una ruta de rutaseguridads.');
+    if (!rid) {
+      toast.error('Selecciona una ruta de rutaseguridads (se guarda el id de la ruta).');
+      return;
+    }
+    if (!path) {
+      toast.error('La ruta seleccionada no tiene path en rutaseguridads.');
       return;
     }
     const component =
-      tipoSeleccionado?.formularioComponent?.trim() ||
+      rutaSeleccionada?.component?.trim() ||
       formularioDetalle?.component?.trim() ||
+      tipoSeleccionado?.formularioComponent?.trim() ||
       configSeleccionada?.formularioComponent?.trim() ||
       '';
     if (!component) {
@@ -783,15 +804,20 @@ export function useGobernanzaModuloParametrizar({
     const body = buildGobernanzaModuloUpsertPayload(
       moduloSlug,
       {
-        rutaId: normalizarGobernanzaRutaId(rutaId),
+        rutaId: rid,
         rutaPath: path,
         formularioComponent: component,
         tipoId: normalizarGobernanzaTipoId(tipoId),
+        tipoSection:
+          String(tipoSeleccionado?.section || tipoSectionFiltro || '').trim() || null,
       },
       {
         nombre,
         description: description.trim(),
         menuPath: path,
+        section: String(tipoSeleccionado?.section || tipoSectionFiltro || sectionKey)
+          .trim()
+          .toLowerCase(),
         acciones: accionesPayload,
         ...(configSlug?.trim() ? { cardSlug: configSlug.trim() } : {}),
       }

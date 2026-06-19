@@ -6,7 +6,46 @@ import {
 } from './gobernanzaActionIds';
 import { accionApiToEndpointSpec, ENDPOINTS_BY_ID } from './gobernanzaEndpointCatalog';
 import type { GobernanzaModuloConfigApi, GobernanzaModuloMenuAccion } from './gobernanzaModuloApiTypes';
-import type { EndpointSection, EndpointSpec } from './parametrosGobernanzaTypes';
+import type { EndpointSection, EndpointSpec, FieldSpec } from './parametrosGobernanzaTypes';
+
+/** true cuando el formulario React publicado en BD/config resuelve la UI. */
+export function tieneFormularioComponentResuelto(
+  accion?: { formularioComponent?: string | null } | null,
+  hint?: string | null
+): boolean {
+  return Boolean(String(hint ?? accion?.formularioComponent ?? '').trim());
+}
+
+/** Pestañas/menú: nunca llevan fields del catálogo TS. */
+function fieldsParaMenuSpec(): FieldSpec[] {
+  return [];
+}
+
+/** Formulario operativo: conserva fields del catálogo hasta migrar cada componente. */
+function fieldsParaEndpointOperativo(baseFields: FieldSpec[] | undefined): FieldSpec[] {
+  return baseFields ?? [];
+}
+
+/** Metadata del catálogo TS sin fields (solo menú / activeEndpoint de navegación). */
+export function endpointSpecCatalogoSinFieldsSiComponente(
+  base: EndpointSpec,
+  formularioComponent?: string | null
+): EndpointSpec {
+  if (!tieneFormularioComponentResuelto({ formularioComponent })) return base;
+  return { ...base, fields: fieldsParaMenuSpec() };
+}
+
+/** Spec operativo para render/ejecución: metadata + fields del catálogo. */
+export function endpointSpecOperativoDesdeCatalogo(
+  base: EndpointSpec,
+  overrides: Partial<EndpointSpec> = {}
+): EndpointSpec {
+  return {
+    ...base,
+    ...overrides,
+    fields: fieldsParaEndpointOperativo(base.fields),
+  };
+}
 
 function nombreDesdeConfig(cfg: GobernanzaModuloConfigApi | null | undefined): string {
   return String(cfg?.nombre || cfg?.label || '').trim();
@@ -89,6 +128,9 @@ export function enriquecerAccionesDesdeConfigs(
     return {
       ...accion,
       formularioComponent: formularioComponent || accion.formularioComponent,
+      menuPath: String(accion.menuPath || cfgMatch?.menuPath || '').trim() || accion.menuPath,
+      rutaId: accion.rutaId ?? cfgMatch?.rutaId ?? null,
+      validacion: accion.validacion ?? cfgMatch?.validacion,
       title: titulo,
       shortLabel: String(accion.shortLabel || accion.title || nombreCfg || catalogTitle || titulo).trim(),
       description: String(accion.description || cfgMatch?.description || '').trim(),
@@ -104,6 +146,7 @@ export function esAccionMenuFormulario(accion: GobernanzaModuloMenuAccion): bool
 const GOBERNANZA_HUB_FORM_COMPONENTS = new Set([
   'PermisosGlobal',
   'TenantSuperAdmin',
+  'TenantGlobal',
   'ParametrosGobernanza',
   'GobernanzaModuloPorRuta',
 ]);
@@ -148,6 +191,8 @@ export function buildAccionesHubDesdeConfigsClient(
         formularioComponent,
         endpointId: catalogEndpointId || cfg.defaultActionId || null,
         configSlug: cfg.slug || null,
+        rutaId: cfg.rutaId ?? null,
+        validacion: cfg.validacion,
         method: 'GET',
         path: menuPath,
         title: nombreCfg || cfg.label || id,
@@ -281,7 +326,7 @@ export function accionToEndpointSpecMinimo(
     path: String(accion.path || base?.path || '').trim(),
     title: String(accion.title || accion.shortLabel || base?.title || tabId).trim(),
     description: String(accion.description || base?.description || '').trim(),
-    fields: base?.fields ?? [],
+    fields: fieldsParaMenuSpec(),
     primary: base?.primary,
   };
 }
@@ -306,12 +351,15 @@ export function accionMenuToEndpointSpec(
 
   if (!esAccionMenuFormulario(accion)) {
     if (catalogId && base) {
-      return {
-        ...base,
-        id: tabId || catalogId,
-        title: titulo,
-        description: String(accion.description || base.description || '').trim(),
-      };
+      return endpointSpecCatalogoSinFieldsSiComponente(
+        {
+          ...base,
+          id: tabId || catalogId,
+          title: titulo,
+          description: String(accion.description || base.description || '').trim(),
+        },
+        accion.formularioComponent
+      );
     }
     const spec = accionApiToEndpointSpec(
       {
@@ -327,6 +375,7 @@ export function accionMenuToEndpointSpec(
         id: tabId || spec.id,
         title: titulo || spec.title,
         description: String(accion.description || spec.description || '').trim(),
+        fields: fieldsParaMenuSpec(),
       };
     }
     return accionToEndpointSpecMinimo(accion, sectionFallback);
@@ -346,12 +395,12 @@ export function accionMenuToEndpointSpec(
     path: base?.path || menuPath,
     title: titulo || menuPath,
     description: String(accion.description || base?.description || '').trim(),
-    fields: base?.fields ?? [],
+    fields: fieldsParaMenuSpec(),
     primary: base?.primary,
   };
 }
 
-/** EndpointSpec para ejecutar/renderizar campos API (usa endpointId del formulario publicado). */
+/** EndpointSpec para ejecutar/renderizar formulario (conserva fields del catálogo). */
 export function endpointSpecParaFormulario(
   accion: GobernanzaModuloMenuAccion | null | undefined,
   sectionFallback: EndpointSection,
@@ -365,7 +414,7 @@ export function endpointSpecParaFormulario(
     menuPath: accion.menuPath,
   });
   if (catalogId && ENDPOINTS_BY_ID[catalogId]) {
-    return ENDPOINTS_BY_ID[catalogId];
+    return endpointSpecOperativoDesdeCatalogo(ENDPOINTS_BY_ID[catalogId]);
   }
   return accionMenuToEndpointSpec(accion, sectionFallback);
 }

@@ -134,21 +134,17 @@ export default function ComisionArbolProductoModal({
 
         setSaving(true);
         try {
-            if (editingConfigId) {
-                await dashboardVentaService.actualizarConfiguracion(editingConfigId, {
-                    levels: normalizedLevels,
-                    estado: true,
-                });
-                toast.success('Porcentajes del árbol de referidos actualizados.');
-            } else {
-                await dashboardVentaService.crearConfiguracion({
-                    originType: VENTA_REFERIDO_ARBOL.originType,
-                    originId: VENTA_REFERIDO_ARBOL.originId,
-                    levels: normalizedLevels,
-                    estado: true,
-                });
-                toast.success('Porcentajes del árbol de referidos creados.');
-            }
+            await dashboardVentaService.guardarNivelesOrigen({
+                originType: VENTA_REFERIDO_ARBOL.originType,
+                originId: VENTA_REFERIDO_ARBOL.originId,
+                levels: normalizedLevels,
+                estado: true,
+            });
+            toast.success(
+                configCargada
+                    ? 'Porcentajes del árbol de referidos actualizados.'
+                    : 'Porcentajes del árbol de referidos creados.',
+            );
 
             await loadData();
             setConfigCargada(true);
@@ -201,6 +197,11 @@ export default function ComisionArbolProductoModal({
                             <p>
                                 <span className="font-semibold text-slate-800">Disparo:</span> motorProductos →
                                 APPROVED + tercero + invoice FAC-* + referidoId → sponsor en refeClient → comisión por árbol.
+                            </p>
+                            <p className="mt-2 border-t border-slate-200 pt-2">
+                                <span className="font-semibold text-slate-800">Cálculo en dos pasos:</span>{' '}
+                                primero la regla del producto sobre el monto cobrado (ej. $2.000 × 75% = $1.500 base);
+                                luego cada % del árbol se aplica sobre esa base (ej. Gen1 20% → $300).
                             </p>
                         </div>
 

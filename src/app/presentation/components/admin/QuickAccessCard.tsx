@@ -1,4 +1,4 @@
-import React from 'react';
+import { BTN_ACTION } from '@/app/utils/buttonStyles';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import type { QuickAccessCardProps } from '@/types/components';
@@ -24,11 +24,9 @@ export default function QuickAccessCard({
     const getButtonStyles = () => {
         switch (variant) {
             case 'primary':
-                return 'bg-primary/20 text-primary hover:bg-primary/30';
             case 'secondary':
-                return 'bg-secondary/25 text-secondary-foreground hover:bg-secondary/35';
             default:
-                return 'bg-accent/20 text-accent-foreground hover:bg-accent/30';
+                return BTN_ACTION;
         }
     };
 
@@ -55,12 +53,7 @@ export default function QuickAccessCard({
             
             <Button 
                 onClick={onClick}
-                className={`
-                    w-full font-bold rounded-lg 
-                    text-sm shadow-none
-                    ${getButtonStyles()}
-                `}
-                variant="ghost"
+                className={`w-full font-bold rounded-lg text-sm shadow-none ${getButtonStyles()}`}
             >
                 Acceder
             </Button>

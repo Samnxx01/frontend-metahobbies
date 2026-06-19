@@ -14,7 +14,7 @@ export default function CustomStepper({ activeStep, steps }: CustomStepperProps)
         const isActive = index === activeStep;
         return (
           <div key={label} className="flex flex-col items-center w-full z-10">
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm transition-colors duration-300 ring-4 ring-background ${isCompleted ? 'bg-primary text-primary-foreground' : isActive ? 'bg-primary border-2 border-primary text-primary-foreground' : 'bg-card text-muted-foreground border border-input'}`}>
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm transition-colors duration-300 ring-4 ring-background ${isCompleted ? 'bg-button text-button-foreground' : isActive ? 'bg-button border-2 border-button text-button-foreground' : 'bg-card text-muted-foreground border border-input'}`}>
               {isCompleted ? <Check className="w-4 h-4" /> : index + 1}
             </div>
             <span className={`mt-2 text-center text-xs sm:text-sm font-medium transition-colors duration-300 ${isActive ? 'text-primary' : 'text-foreground'}`}>{label}</span>

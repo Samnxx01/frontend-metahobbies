@@ -195,7 +195,7 @@ export const resolverComportamientoDesdeReglaVenta = (
   const catalogo = tipos.find((item) => item.codigo === tipoCodigo);
   if (catalogo?.comportamiento) return catalogo.comportamiento;
   if (tipoCodigo === 'CANTIDAD_MAXIMA') return 'LIMITE_CANTIDAD';
-  if (tipoCodigo === 'PORCENTAJE') return 'DESCUENTO_PORCENTAJE';
+  if (tipoCodigo === 'PORCENTAJE' || tipoCodigo === 'PORCENTAJE_CALCULO') return 'DESCUENTO_PORCENTAJE';
   if (tipoCodigo === 'FIJO') return 'DESCUENTO_FIJO';
   return null;
 };

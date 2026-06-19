@@ -14,9 +14,10 @@ import {
 import { gobernanzaEntityId, normalizarGobernanzaRefId } from './gobernanzaEntityId';
 import { endpointIdDesdeComponente } from './permisos-forms/gobernanzaPermisosFormRegistry';
 import { endpointIdDesdeComponenteReglas } from './reglas-forms/gobernanzaReglasFormRegistry';
+import { endpointIdDesdeComponenteTenant } from './tenant-forms/gobernanzaTenantFormRegistry';
 
 function endpointIdFromAnyComponent(component?: string | null): string {
-  return endpointIdDesdeComponente(component) || endpointIdDesdeComponenteReglas(component);
+  return endpointIdDesdeComponente(component) || endpointIdDesdeComponenteReglas(component) || endpointIdDesdeComponenteTenant(component);
 }
 
 const HTTP_VERBS = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']);

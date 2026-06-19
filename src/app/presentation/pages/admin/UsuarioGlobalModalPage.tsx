@@ -47,9 +47,6 @@ export default function UsuarioGlobalModalPage(): React.ReactElement {
                 submitError={errorCrearGlobal}
                 tenantsGlobales={tenantsGlobales}
                 scope={scope as 'SUPER_ADMIN' | 'TENANT_GLOBAL' | 'CORPORATIVO'}
-                onSincronizarCanReferir={scope === 'TENANT_GLOBAL' ? sincronizarGlobal : undefined}
-                isSincronizando={isSincronizandoCanReferir}
-                sincronizarError={errorSincronizarCanReferir}
             />
         </div>
     );

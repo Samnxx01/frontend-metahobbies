@@ -32,7 +32,9 @@ import { resolveMenuPathForCatalogModule } from '../inventario/inventarioFormula
 import { FLUJO_COMPRAS_PASOS } from '../inventario/inventarioComprasMensajes';
 import { useInventarioTarjetasDinamicas } from '../inventario/useInventarioTarjetasDinamicas';
 import { useMetodosValuacionOpciones } from '../inventario/useMetodosValuacionOpciones';
-import InventarioFormulariosTenantModal from './InventarioFormulariosTenantModal';
+import InventarioFormulariosTenantModal, {
+  type InventarioAutorizacionFocusTarjeta,
+} from './InventarioFormulariosTenantModal';
 
 type ConfigInventarioProps = {
   config: InventarioConfig | null;
@@ -62,6 +64,8 @@ type ConfigInventarioGridItem = {
   catalogPath: string;
   /** Id en GET `/config/tarjetas` (solo tarjetas dinamicas). */
   tarjetaId?: string;
+  rutaId?: string | null;
+  tenantSuperAdminId?: string | null;
   orden?: number;
 };
 
@@ -97,7 +101,7 @@ export default function ConfigInventario({
   const [recepcionAutomaticaLocal, setRecepcionAutomaticaLocal] = useState(false);
   const [ayudaComprasOpen, setAyudaComprasOpen] = useState(false);
   const [modalAutorizacionOpen, setModalAutorizacionOpen] = useState(false);
-  const [modalFocusCatalogPath, setModalFocusCatalogPath] = useState<string | null>(null);
+  const [modalFocusTarjeta, setModalFocusTarjeta] = useState<InventarioAutorizacionFocusTarjeta | null>(null);
   const [tarjetaBusyId, setTarjetaBusyId] = useState<string | null>(null);
   const [editarTarjetaOpen, setEditarTarjetaOpen] = useState(false);
   const [editarTarjetaSaving, setEditarTarjetaSaving] = useState(false);
@@ -109,8 +113,19 @@ export default function ConfigInventario({
   const recepcionAutomatica = recepcionAutomaticaLocal;
   const tabsCatalogo = useMemo(() => inventarioTabsDesdeCatalogo(), []);
 
-  const abrirModalAutorizacion = useCallback((catalogPath?: string | null) => {
-    setModalFocusCatalogPath(catalogPath ?? null);
+  const abrirModalAutorizacion = useCallback((item?: ConfigInventarioGridItem | null) => {
+    if (item) {
+      setModalFocusTarjeta({
+        catalogPath: item.catalogPath,
+        menuPath: item.path,
+        tab: item.tab,
+        tarjetaId: item.tarjetaId,
+        rutaId: item.rutaId ?? null,
+        tenantSuperAdminId: item.tenantSuperAdminId ?? null,
+      });
+    } else {
+      setModalFocusTarjeta(null);
+    }
     setModalAutorizacionOpen(true);
   }, []);
 
@@ -192,6 +207,8 @@ export default function ConfigInventario({
           icon: base?.icon || Boxes,
           catalogPath,
           tarjetaId: tarjeta.id,
+          rutaId: tarjeta.rutaId ?? null,
+          tenantSuperAdminId: tarjeta.tenantSuperAdminId ?? null,
           orden: tarjeta.orden,
         };
       });
@@ -451,7 +468,12 @@ export default function ConfigInventario({
                     size="sm"
                     className="h-8 gap-1.5 text-xs"
                     disabled={busy}
-                    onClick={() => abrirModalAutorizacion(item.catalogPath)}
+                    onClick={() =>
+                      abrirModalAutorizacion({
+                        ...item,
+                        path: displayPath,
+                      })
+                    }
                   >
                     <Link2 className="h-3.5 w-3.5" />
                     Autorizar
@@ -501,9 +523,10 @@ export default function ConfigInventario({
         open={modalAutorizacionOpen}
         onOpenChange={(next) => {
           setModalAutorizacionOpen(next);
-          if (!next) setModalFocusCatalogPath(null);
+          if (!next) setModalFocusTarjeta(null);
         }}
-        focusModulePath={modalFocusCatalogPath}
+        focusModulePath={modalFocusTarjeta?.catalogPath ?? null}
+        focusTarjeta={modalFocusTarjeta}
         showTrigger={false}
       />
 

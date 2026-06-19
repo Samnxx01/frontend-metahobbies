@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { obtenerBrandingPublico } from '@/app/services/brandingWidget';
 import { fetchSplashLogo, resolveSplashLogoUrl } from '@/app/services/splashLogoService';
+import { normalizeImageRenderUrl } from '@/app/utils/normalizeImageRenderUrl';
 
 const isPublicPath = (): boolean => {
     if (typeof window === 'undefined') return true;
@@ -29,7 +30,7 @@ export default function LoadingScreen(): React.ReactElement {
                 if (brandingResult.status === 'fulfilled') {
                     const branding = brandingResult.value;
                     const loadingBackground = branding?.widgets?.loadingBackground;
-                    const nextBackgroundUrl = String(loadingBackground?.imageUrl || '').trim();
+                    const nextBackgroundUrl = normalizeImageRenderUrl(loadingBackground?.imageUrl);
                     setBackgroundUrl(loadingBackground?.enabled !== false ? nextBackgroundUrl : '');
                 } else {
                     setBackgroundUrl('');

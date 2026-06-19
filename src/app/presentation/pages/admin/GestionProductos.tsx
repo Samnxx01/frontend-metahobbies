@@ -23,6 +23,7 @@ import reglasVentasService, {
 } from '@/app/services/reglasVentasService';
 import { useTiposReglaVenta } from '@/app/hooks/useTiposReglaVenta';
 import { useProductoCatalogoConfig } from '@/app/hooks/useProductoCatalogoConfig';
+import { BTN_GHOST_ACCENT } from '@/app/utils/buttonStyles';
 import ReglasVentasModal from '@/app/presentation/pages/admin/components/ReglasVentasModal';
 import ConfigCatalogoProductosModal, {
   ConfigCatalogoProductosTrigger,
@@ -36,7 +37,7 @@ import { Switch } from '@/components/ui/switch';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import VentaWompiSecuenciaModal from '@/app/presentation/pages/admin/components/VentaWompiSecuenciaModal';
-import { DollarSign, Eye, FolderTree, Hash, Pencil, Plus, RefreshCw, Search, Settings2, Star, Trash2 } from 'lucide-react';
+import { DollarSign, Eye, FolderTree, Hash, Pencil, Plus, RefreshCw, Search, Settings2, Star, Trash2, X } from 'lucide-react';
 
 type DialogType = 'add' | 'edit' | 'view' | 'delete';
 
@@ -69,6 +70,18 @@ interface ProductRow {
 }
 
 const PLACEHOLDER = 'https://placehold.co/80x80/f3f4f6/a3a3a3?text=IMG';
+const MAX_PRODUCT_IMAGES = 4;
+
+type PendingProductMedia = {
+  id: string;
+  file: File;
+  previewUrl: string;
+  kind: 'image' | 'video';
+  duration?: number;
+};
+
+const mediaRowId = (item: { iud?: string; _id?: string; url?: string }): string =>
+  String(item.iud || item._id || item.url || '');
 const isDataImage = (value: string): boolean => /^data:image\//i.test(String(value || ''));
 const isBlobUrl = (value: string): boolean => /^blob:/i.test(String(value || ''));
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
@@ -283,9 +296,8 @@ export default function GestionProductos(): React.ReactElement {
   const [stockKardex, setStockKardex] = useState<Record<string, number>>({});
   const [selected, setSelected] = useState<ProductRow | null>(null);
   const [form, setForm] = useState<ProductRow>(EMPTY_PRODUCT);
-  const [mediaFile, setMediaFile] = useState<File | null>(null);
-  const [mediaPreviewUrl, setMediaPreviewUrl] = useState<string | null>(null);
-  const [mediaDuration, setMediaDuration] = useState<number | undefined>(undefined);
+  const [pendingMedia, setPendingMedia] = useState<PendingProductMedia[]>([]);
+  const [removedMediaIds, setRemovedMediaIds] = useState<string[]>([]);
   const [categorySaving, setCategorySaving] = useState(false);
   const [categoryMediaFile, setCategoryMediaFile] = useState<File | null>(null);
   const [categoryMediaDuration, setCategoryMediaDuration] = useState<number | undefined>(undefined);
@@ -344,28 +356,56 @@ export default function GestionProductos(): React.ReactElement {
   }, []);
 
   useEffect(() => () => {
-    if (mediaPreviewUrl && isBlobUrl(mediaPreviewUrl)) {
-      URL.revokeObjectURL(mediaPreviewUrl);
-    }
-  }, [mediaPreviewUrl]);
+    pendingMedia.forEach((item) => {
+      if (isBlobUrl(item.previewUrl)) URL.revokeObjectURL(item.previewUrl);
+    });
+  }, [pendingMedia]);
 
   const clearMediaSelection = (): void => {
-    if (mediaPreviewUrl && isBlobUrl(mediaPreviewUrl)) {
-      URL.revokeObjectURL(mediaPreviewUrl);
-    }
-    setMediaPreviewUrl(null);
-    setMediaFile(null);
-    setMediaDuration(undefined);
+    pendingMedia.forEach((item) => {
+      if (isBlobUrl(item.previewUrl)) URL.revokeObjectURL(item.previewUrl);
+    });
+    setPendingMedia([]);
+    setRemovedMediaIds([]);
   };
 
-  const productImagePreview = (imagen: string): string => {
-    if (mediaPreviewUrl) return mediaPreviewUrl;
-    if (isBlobUrl(imagen)) return PLACEHOLDER;
-    return imagen || PLACEHOLDER;
+  const activeExistingImages = (media: ProductRow['media'] = []): NonNullable<ProductRow['media']> =>
+    (media || []).filter(
+      (item) => item.tipo === 'image' && !removedMediaIds.includes(mediaRowId(item)),
+    );
+
+  const activeExistingVideos = (media: ProductRow['media'] = []): NonNullable<ProductRow['media']> =>
+    (media || []).filter(
+      (item) => item.tipo === 'video' && !removedMediaIds.includes(mediaRowId(item)),
+    );
+
+  const pendingImagesCount = pendingMedia.filter((item) => item.kind === 'image').length;
+  const pendingVideosCount = pendingMedia.filter((item) => item.kind === 'video').length;
+
+  const totalImagesCount = (media: ProductRow['media'] = []): number =>
+    activeExistingImages(media).length + pendingImagesCount;
+
+  const totalVideosCount = (media: ProductRow['media'] = []): number =>
+    activeExistingVideos(media).length + pendingVideosCount;
+
+  const remainingImageSlots = (media: ProductRow['media'] = []): number =>
+    Math.max(0, MAX_PRODUCT_IMAGES - totalImagesCount(media));
+
+  const markMediaForRemoval = (mediaId: string): void => {
+    if (!mediaId) return;
+    setRemovedMediaIds((prev) => (prev.includes(mediaId) ? prev : [...prev, mediaId]));
+  };
+
+  const removePendingMedia = (pendingId: string): void => {
+    setPendingMedia((prev) => {
+      const target = prev.find((item) => item.id === pendingId);
+      if (target && isBlobUrl(target.previewUrl)) URL.revokeObjectURL(target.previewUrl);
+      return prev.filter((item) => item.id !== pendingId);
+    });
   };
 
   const imagenUrlInputValue = (imagen: string): string => {
-    if (mediaFile) return '';
+    if (pendingImagesCount > 0) return '';
     if (imagen === PLACEHOLDER || isBlobUrl(imagen)) return '';
     return imagen;
   };
@@ -563,37 +603,90 @@ export default function GestionProductos(): React.ReactElement {
     video.src = url;
   });
 
-  const onImageFileChange = async (file?: File): Promise<void> => {
-    if (!file) return;
-    const isImage = file.type.startsWith('image/');
-    const isVideo = file.type.startsWith('video/');
-    if (!isImage && !isVideo) {
-      toast.error('Selecciona una imagen o un video.');
-      return;
-    }
+  const onProductMediaFilesChange = async (files?: FileList | File[]): Promise<void> => {
+    const list = Array.from(files || []);
+    if (!list.length) return;
 
-    if (isVideo) {
+    const slots = remainingImageSlots(form.media);
+    let videoSlots = totalVideosCount(form.media) >= 1 ? 0 : 1;
+    const accepted: PendingProductMedia[] = [];
+
+    for (const file of list) {
+      const isImage = file.type.startsWith('image/');
+      const isVideo = file.type.startsWith('video/');
+      if (!isImage && !isVideo) {
+        toast.error(`"${file.name}" no es imagen ni video válido.`);
+        continue;
+      }
+
+      if (isImage) {
+        if (slots - accepted.filter((item) => item.kind === 'image').length <= 0) {
+          toast.error(`Máximo ${MAX_PRODUCT_IMAGES} imágenes por producto.`);
+          break;
+        }
+        accepted.push({
+          id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          file,
+          previewUrl: URL.createObjectURL(file),
+          kind: 'image',
+        });
+        continue;
+      }
+
+      if (videoSlots <= 0 || accepted.some((item) => item.kind === 'video')) {
+        toast.error('Solo se permite un video corto por producto.');
+        continue;
+      }
+
       try {
         const duration = await readVideoDuration(file);
         if (duration > 30) {
-          toast.error('El video debe durar maximo 30 segundos.');
-          return;
+          toast.error('El video debe durar máximo 30 segundos.');
+          continue;
         }
-        setMediaDuration(duration);
+        accepted.push({
+          id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          file,
+          previewUrl: URL.createObjectURL(file),
+          kind: 'video',
+          duration,
+        });
+        videoSlots -= 1;
       } catch (error) {
-        toast.error(errorMessage(error, 'No se pudo validar la duracion del video.'));
-        return;
+        toast.error(errorMessage(error, 'No se pudo validar la duración del video.'));
       }
-    } else {
-      setMediaDuration(undefined);
     }
 
-    if (mediaPreviewUrl && isBlobUrl(mediaPreviewUrl)) {
-      URL.revokeObjectURL(mediaPreviewUrl);
+    if (!accepted.length) return;
+    setPendingMedia((prev) => [...prev, ...accepted]);
+    toast.success(
+      accepted.length === 1
+        ? 'Archivo listo para subir al guardar.'
+        : `${accepted.length} archivos listos para subir al guardar.`,
+    );
+  };
+
+  const syncProductMediaAfterSave = async (relacionId: string, media: ProductRow['media'] = []): Promise<void> => {
+    for (const mediaId of removedMediaIds) {
+      await productosService.eliminarMediaProductoVenta(mediaId);
     }
-    setMediaPreviewUrl(URL.createObjectURL(file));
-    setMediaFile(file);
-    toast.success(isVideo ? 'Video listo para subir al guardar.' : 'Imagen lista para subir al guardar.');
+
+    const existingImages = activeExistingImages(media);
+    let markPrincipal = existingImages.length === 0;
+
+    for (const item of pendingMedia) {
+      if (item.kind === 'video') {
+        await productosService.subirMediaProductoVenta(relacionId, item.file, {
+          duracionSegundos: item.duration,
+          principal: false,
+        });
+        continue;
+      }
+      await productosService.subirMediaProductoVenta(relacionId, item.file, {
+        principal: markPrincipal,
+      });
+      markPrincipal = false;
+    }
   };
 
   const onCantidadColoresChange = (cantidad: number): void => {
@@ -821,8 +914,8 @@ export default function GestionProductos(): React.ReactElement {
         const created = await productosService.crearProductoAdmin(buildProductoPayload());
         const createdRow = mapProduct(created);
         const relacionId = getProductoVentaRelacionId(created);
-        if (mediaFile && relacionId) {
-          await productosService.subirMediaProductoVenta(relacionId, mediaFile, mediaDuration);
+        if (relacionId && (pendingMedia.length > 0 || removedMediaIds.length > 0)) {
+          await syncProductMediaAfterSave(relacionId, createdRow.media);
         }
         setProductos((prev) => [createdRow, ...prev]);
         toast.success('Producto creado exitosamente');
@@ -830,8 +923,8 @@ export default function GestionProductos(): React.ReactElement {
         const updated = await productosService.actualizarProductoAdmin(form.id, buildProductoPayload());
         const updatedRow = mapProduct(updated);
         const relacionId = getProductoVentaRelacionId(updated);
-        if (mediaFile && relacionId) {
-          await productosService.subirMediaProductoVenta(relacionId, mediaFile, mediaDuration);
+        if (relacionId && (pendingMedia.length > 0 || removedMediaIds.length > 0)) {
+          await syncProductMediaAfterSave(relacionId, updatedRow.media);
         }
         setProductos((prev) => prev.map((item) => item.id === form.id ? updatedRow : item));
         if (updated.cambiosReglasVentas?.length) {
@@ -1098,7 +1191,7 @@ export default function GestionProductos(): React.ReactElement {
                   <Switch checked={producto.publicado} onCheckedChange={() => { void onTogglePublished(producto); }} />
                 </TableCell>
                 <TableCell className="space-x-1 text-right">
-                  <Button variant="ghost" size="icon" className="h-8 w-8 text-primary hover:bg-primary/10" onClick={() => openEdit(producto)}>
+                  <Button variant="ghost" size="icon" className={`h-8 w-8 ${BTN_GHOST_ACCENT}`} onClick={() => openEdit(producto)}>
                     <Pencil className="h-4 w-4" />
                   </Button>
                   <Button variant="ghost" size="icon" className="h-8 w-8 text-secondary hover:bg-secondary/10" onClick={() => { void openView(producto); }}>
@@ -1476,26 +1569,66 @@ export default function GestionProductos(): React.ReactElement {
                   )}
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="imagenProducto">Imagen o video corto del producto</Label>
+                  <Label htmlFor="imagenProducto">
+                    Imágenes del producto
+                    {' '}
+                    <span className="text-xs font-normal text-muted-foreground">
+                      (máx. {MAX_PRODUCT_IMAGES}
+                      {totalVideosCount(current.media) > 0 || pendingVideosCount > 0 ? ', 1 video' : ''}
+                      )
+                    </span>
+                  </Label>
                   <div className="flex flex-col gap-3">
-                    {mediaFile?.type.startsWith('video/') && mediaPreviewUrl ? (
-                      <video
-                        src={mediaPreviewUrl}
-                        controls
-                        className="max-h-32 w-full max-w-[12rem] rounded-md border object-cover"
-                      />
-                    ) : (
-                      <img
-                        src={productImagePreview(current.imagen)}
-                        alt={current.nombre || 'Producto'}
-                        className="h-24 w-24 rounded-md border object-cover"
-                        onError={(e) => {
-                          const target = e.target as HTMLImageElement;
-                          target.onerror = null;
-                          target.src = PLACEHOLDER;
-                        }}
-                      />
-                    )}
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                      {activeExistingImages(current.media).map((item) => {
+                        const id = mediaRowId(item);
+                        return (
+                          <div key={id} className="relative">
+                            <img
+                              src={mediaSrc(item.url)}
+                              alt={current.nombre || 'Producto'}
+                              className="h-24 w-full rounded-md border object-cover"
+                              onError={(e) => {
+                                const target = e.target as HTMLImageElement;
+                                target.onerror = null;
+                                target.src = PLACEHOLDER;
+                              }}
+                            />
+                            {dialogType !== 'view' && (
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="destructive"
+                                className="absolute right-1 top-1 h-6 w-6"
+                                onClick={() => markMediaForRemoval(id)}
+                              >
+                                <X className="h-3 w-3" />
+                              </Button>
+                            )}
+                          </div>
+                        );
+                      })}
+                      {pendingMedia.filter((item) => item.kind === 'image').map((item) => (
+                        <div key={item.id} className="relative">
+                          <img
+                            src={item.previewUrl}
+                            alt="Nueva imagen"
+                            className="h-24 w-full rounded-md border object-cover"
+                          />
+                          {dialogType !== 'view' && (
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="destructive"
+                              className="absolute right-1 top-1 h-6 w-6"
+                              onClick={() => removePendingMedia(item.id)}
+                            >
+                              <X className="h-3 w-3" />
+                            </Button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                     <div className="space-y-2">
                       <Input
                         id="imagenProducto"
@@ -1505,28 +1638,61 @@ export default function GestionProductos(): React.ReactElement {
                           clearMediaSelection();
                           setForm((prev) => ({ ...prev, imagen: e.target.value || PLACEHOLDER }));
                         }}
-                        placeholder="URL de imagen del producto"
+                        placeholder="URL de imagen principal (opcional)"
                       />
                       {dialogType !== 'view' && (
                         <Input
                           type="file"
                           accept="image/*,video/mp4,video/webm,video/quicktime"
-                          onChange={(e) => { void onImageFileChange(e.target.files?.[0]); }}
+                          multiple
+                          disabled={remainingImageSlots(current.media) <= 0 && totalVideosCount(current.media) >= 1}
+                          onChange={(e) => {
+                            void onProductMediaFilesChange(e.target.files);
+                            e.target.value = '';
+                          }}
                         />
                       )}
-                      {mediaFile && (
-                        <p className="text-xs text-muted-foreground">
-                          {mediaFile.name}
-                          {typeof mediaDuration === 'number' ? ` | ${mediaDuration.toFixed(1)} seg` : ''}
-                        </p>
-                      )}
-                      {current.media?.some((item) => item.tipo === 'video') && (
-                        <div className="space-y-1">
-                          {current.media.filter((item) => item.tipo === 'video').map((item) => (
-                            <video key={item.iud || item._id || item.url} src={mediaSrc(item.url)} controls className="max-h-32 w-full rounded border" />
-                          ))}
+                      <p className="text-xs text-muted-foreground">
+                        {totalImagesCount(current.media)}
+                        /
+                        {MAX_PRODUCT_IMAGES}
+                        {' '}
+                        imágenes
+                        {pendingMedia.length > 0 ? ' · se suben al guardar' : ''}
+                      </p>
+                      {activeExistingVideos(current.media).map((item) => {
+                        const id = mediaRowId(item);
+                        return (
+                          <div key={id} className="space-y-1">
+                            <video src={mediaSrc(item.url)} controls className="max-h-32 w-full rounded border" />
+                            {dialogType !== 'view' && (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => markMediaForRemoval(id)}
+                              >
+                                Quitar video
+                              </Button>
+                            )}
+                          </div>
+                        );
+                      })}
+                      {pendingMedia.filter((item) => item.kind === 'video').map((item) => (
+                        <div key={item.id} className="space-y-1">
+                          <video src={item.previewUrl} controls className="max-h-32 w-full rounded border" />
+                          {dialogType !== 'view' && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => removePendingMedia(item.id)}
+                            >
+                              Quitar video pendiente
+                            </Button>
+                          )}
                         </div>
-                      )}
+                      ))}
                     </div>
                   </div>
                 </div>

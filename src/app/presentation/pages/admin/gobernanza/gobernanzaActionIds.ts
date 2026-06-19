@@ -3,7 +3,14 @@ import { normalizarGobernanzaRefId } from './gobernanzaEntityId';
 import { ENDPOINTS_BY_ID } from './gobernanzaEndpointCatalog';
 import { endpointIdDesdeComponente } from './permisos-forms/gobernanzaPermisosFormRegistry';
 import { endpointIdDesdeComponenteReglas } from './reglas-forms/gobernanzaReglasFormRegistry';
+import { endpointIdDesdeComponenteTenant } from './tenant-forms/gobernanzaTenantFormRegistry';
 import type { GobernanzaModuloMenuAccion } from './gobernanzaModuloApiTypes';
+
+export {
+  GOBERNANZA_TIPO_SECTION_REGLAS_SA,
+  GOBERNANZA_TIPO_SECTION_TENANT_SUPER_ADMIN,
+  GOBERNANZA_TIPO_SECTION_TENANT_GLOBAL,
+} from './gobernanzaTipoSectionConstants';
 
 export const GOBERNANZA_GENERIC_ACTION_IDS = new Set(['accion-api', 'formulario']);
 
@@ -31,10 +38,36 @@ export function esRutaHubGobernanzaPermisos(menuPath?: string | null): boolean {
   return Boolean(path && /\/gobernanza\/parametros\/[^/]+\/permisos$/.test(path));
 }
 
-/** Hub contenedor de operaciones reglas (ReglasTenant / …/reglas). */
+/** Hub contenedor de operaciones reglas (ReglasTenant / …/reglas, …/reglas-sa). */
 export function esRutaHubGobernanzaReglas(menuPath?: string | null): boolean {
   const path = normalizarGobernanzaMenuPath(menuPath)?.toLowerCase();
-  return Boolean(path && (/\/reglas$/.test(path) || /\/gobernanza\/parametros\/[^/]+\/reglas$/.test(path)));
+  return Boolean(
+    path
+    && (
+      /\/reglas$/.test(path)
+      || /\/reglas-sa$/.test(path)
+      || /\/gobernanza\/parametros\/[^/]+\/reglas$/.test(path)
+      || /\/reglas-tenant\/reglas-sa$/.test(path)
+    )
+  );
+}
+
+/** Hub contenedor TenantSuperAdmin (…/parametros/tenantsuperadmin). */
+export function esRutaHubGobernanzaTenant(menuPath?: string | null): boolean {
+  const path = normalizarGobernanzaMenuPath(menuPath)?.toLowerCase();
+  return Boolean(path && /\/gobernanza\/parametros\/tenantsuperadmin$/.test(path));
+}
+
+/** Hub contenedor TenantGlobal (…/parametros/tenantglobal). */
+export function esRutaHubGobernanzaTenantGlobal(menuPath?: string | null): boolean {
+  const path = normalizarGobernanzaMenuPath(menuPath)?.toLowerCase();
+  return Boolean(
+    path
+    && (
+      /\/gobernanza\/parametros\/tenantglobal$/.test(path)
+      || /\/gobernanza\/parametros\/tenant-global$/.test(path)
+    )
+  );
 }
 
 export function esGobernanzaEndpointIdCatalogo(id: string): boolean {
@@ -54,7 +87,14 @@ export type ResolverGobernanzaEndpointIdInput = {
 export function resolverGobernanzaEndpointId(input: ResolverGobernanzaEndpointIdInput): string {
   const fromComponent =
     endpointIdDesdeComponente(input.formularioComponent)
-    || endpointIdDesdeComponenteReglas(input.formularioComponent);
+    || endpointIdDesdeComponenteReglas(input.formularioComponent)
+    || endpointIdDesdeComponenteTenant(input.formularioComponent);
+
+  /** formularioComponent publicado en BD es la fuente de verdad del formulario por pestaña. */
+  if (fromComponent && esGobernanzaEndpointIdCatalogo(fromComponent)) {
+    return fromComponent;
+  }
+
   const candidates = [
     input.endpointId,
     input.id,
@@ -88,7 +128,8 @@ export function resolverGobernanzaActionTabId(input: ResolverGobernanzaEndpointI
 
   const fromComponent =
     endpointIdDesdeComponente(input.formularioComponent)
-    || endpointIdDesdeComponenteReglas(input.formularioComponent);
+    || endpointIdDesdeComponenteReglas(input.formularioComponent)
+    || endpointIdDesdeComponenteTenant(input.formularioComponent);
   if (fromComponent) return fromComponent;
 
   return raw || 'accion-api';
@@ -158,6 +199,18 @@ export function normalizarGobernanzaMenuAccion(
     title: normalizarGobernanzaTextId(accion.title) || nombre,
     shortLabel: normalizarGobernanzaTextId(accion.shortLabel) || normalizarGobernanzaTextId(accion.title) || nombre,
     tipo: catalogId ? 'endpoint' : accion.tipo,
+    ...(accion.validacion
+      ? {
+          validacion: {
+            ok: accion.validacion.ok !== false,
+            mensajes: Array.isArray(accion.validacion.mensajes)
+              ? accion.validacion.mensajes.map((m) => String(m ?? '').trim()).filter(Boolean)
+              : typeof accion.validacion.mensajes === 'string' && accion.validacion.mensajes.trim()
+                ? [accion.validacion.mensajes.trim()]
+                : [],
+          },
+        }
+      : {}),
   };
 }
 

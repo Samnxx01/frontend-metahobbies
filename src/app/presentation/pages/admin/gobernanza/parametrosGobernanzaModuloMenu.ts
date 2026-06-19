@@ -29,7 +29,7 @@ const MENU_TENANT: ParametrosGobernanzaModuloMenuParametrizacion = {
   actionQueryParam: GOBERNANZA_MODULO_ACTION_QUERY_DEFAULT,
   submenuTitle: 'Operaciones',
   submenuHint: 'Selecciona una acción; el formulario aparece debajo sin modales.',
-  defaultActionId: 'tenant-listar-libres-tenantglobal',
+  defaultActionId: '',
   syncDefaultAction: true,
 };
 

@@ -1,6 +1,7 @@
 import { apiFetch } from './api';
 import type { ApiResponsePayload } from '@/app/utils/apiErrorMessage';
 import type { UsuarioOption } from './routesService';
+import { isOpaqueDocumentId, normalizePublicIdForApi } from '@/app/utils/entityPublicId';
 
 export type InventarioApiResult<T> = {
   data: T;
@@ -73,10 +74,15 @@ export type InventarioConfigTarjetaInput = {
   contenido?: Record<string, unknown>;
 };
 
-const tarjetasConfigQuery = (tenantSuperAdminId?: string): string =>
-  tenantSuperAdminId && /^[0-9a-fA-F]{24}$/.test(tenantSuperAdminId)
-    ? `?tenantSuperAdminId=${encodeURIComponent(tenantSuperAdminId)}`
+const tenantSuperAdminIdQuery = (tenantSuperAdminId?: string): string => {
+  const ancla = normalizePublicIdForApi(tenantSuperAdminId);
+  return ancla && isOpaqueDocumentId(ancla)
+    ? `?tenantSuperAdminId=${encodeURIComponent(ancla)}`
     : '';
+};
+
+const tarjetasConfigQuery = (tenantSuperAdminId?: string): string =>
+  tenantSuperAdminIdQuery(tenantSuperAdminId);
 
 /** Tenant global visible segun JWT o tenantSuperAdminId (DIOS). */
 export type InventarioTenantGlobalOpcion = {
@@ -90,6 +96,17 @@ export type InventarioTenantSuperAdminOpcion = {
   iud: string;
   label: string;
   codigoJerarquia?: string | null;
+  codigoPadre?: string | null;
+  secuenciaJerarquia?: number | null;
+  profundidad?: number;
+};
+
+export type InventarioJerarquiaSaCounterIndice = {
+  tenantSuperAdminId: string;
+  codigoJerarquia?: string | null;
+  codigoPadre?: string | null;
+  secuenciaJerarquia?: number | null;
+  corporativoId?: string | null;
 };
 
 export type InventarioFormulariosAutorizacionPolicy = {
@@ -112,6 +129,7 @@ export interface InventarioConfig {
   metodoBloqueadoDesdeAnioFiscal?: number | null;
   periodosCerrados: string[];
   compras?: InventarioComprasConfig;
+  kardex?: InventarioKardexConfig;
   documentosSoporte?: DocumentoSoporteTipoConfig[];
   monedaInventario?: MonedaInventarioConfig;
 }
@@ -133,6 +151,21 @@ export interface EstadoOrdenCompraConfig {
 export interface InventarioComprasConfig {
   recepcionAutomatica: boolean;
   estadosOrdenCompra?: EstadoOrdenCompraConfig[];
+}
+
+/** false = validar duplicados (recomendado); true = omitir validación. */
+export type InventarioKardexAuditoriaParametro = {
+  usuarioId: string | null;
+  usuarioCorreo: string | null;
+  modificadoEn: string | null;
+  valorAnterior: boolean | null;
+  valorNuevo: boolean | null;
+};
+
+export interface InventarioKardexConfig {
+  omitirControlDuplicado: boolean;
+  auditoria?: InventarioKardexAuditoriaParametro;
+  historial?: InventarioKardexAuditoriaParametro[];
 }
 
 export interface MonedaInventarioConfig {
@@ -544,6 +577,7 @@ export interface MovimientoPayload {
   motivo?: MotivoMovimiento;
   ubicacion?: UbicacionInventario;
   documentoRelacionado: DocumentoRelacionado;
+  omitirControlDuplicado?: boolean;
 }
 
 export interface BodegaInventario {
@@ -911,6 +945,14 @@ const inventarioService = {
     return resp?.data as InventarioConfig;
   },
 
+  async actualizarConfigKardex(kardex: InventarioKardexConfig): Promise<InventarioConfig> {
+    const resp = await apiFetch('/api/inventario/config/kardex', {
+      method: 'PUT',
+      body: kardex,
+    });
+    return resp?.data as InventarioConfig;
+  },
+
   async listarDocumentosSoporte(): Promise<DocumentoSoporteTipoConfig[]> {
     const resp = await apiFetch('/api/inventario/config/documentos-soporte', { method: 'GET' });
     return (resp?.data ?? []) as DocumentoSoporteTipoConfig[];
@@ -1104,6 +1146,8 @@ const inventarioService = {
     formularios: InventarioFormularioRutaOpcion[];
     tenantGlobales: InventarioTenantGlobalOpcion[];
     tenantSuperAdmins: InventarioTenantSuperAdminOpcion[];
+    saArbolRama: InventarioTenantSuperAdminOpcion[];
+    jerarquiaSaCounters: InventarioJerarquiaSaCounterIndice[];
     usuarios: UsuarioOption[];
     policy: InventarioFormulariosAutorizacionPolicy;
     meta?: {
@@ -1120,18 +1164,41 @@ const inventarioService = {
       totalTenantGlobalEnRama?: number;
       /** true si el ancla JWT tiene SA+ corporativo en tenantJerarquiaCounter (rama restringida). */
       filtroCorporativoCountersActivo?: boolean;
+      formulariosFiltradosPorHerencia?: boolean;
+      herenciaVistasVacias?: boolean;
+      totalVistasHerenciaRama?: number;
+      ejecutorBypassHerencia?: boolean;
+      totalSaEnArbolRama?: number;
+      totalSaArbolRama?: number;
+      totalUsuariosRama?: number;
+      jwtTenantSuperAdminCanonicoId?: string | null;
+      tenantSuperAdminRolParametrizado?: { id: string; nombre: string } | null;
+      rolSesionId?: string | null;
+      rolSesionNombre?: string | null;
+      resolucionSaOk?: boolean;
+      rolParametrizadoCoincideSesion?: boolean;
+      jwtSaDesincronizado?: boolean;
+      diagnosticoRamaUsuarios?: {
+        saIdsEnRama?: string[];
+        totalTgEnRama?: number;
+        totalCorpEnRama?: number;
+        totalRolesEnRama?: number;
+        propietariosSa?: Array<{ usuarioId: string; saId: string }>;
+        documentosRegisCandidatos?: number;
+        rechazadosPorFiltro?: number;
+        saAnclaResuelto?: string | null;
+      } | null;
     };
   }> {
-    const q =
-      tenantSuperAdminId && /^[0-9a-fA-F]{24}$/.test(tenantSuperAdminId)
-        ? `?tenantSuperAdminId=${encodeURIComponent(tenantSuperAdminId)}`
-        : '';
+    const q = tenantSuperAdminIdQuery(tenantSuperAdminId);
     const resp = await apiFetch(`/api/inventario/config/formularios-autorizacion/opciones${q}`, { method: 'GET' });
     const data = resp?.data ?? {};
     return {
       formularios: (data.formularios ?? []) as InventarioFormularioRutaOpcion[],
       tenantGlobales: (data.tenantGlobales ?? []) as InventarioTenantGlobalOpcion[],
       tenantSuperAdmins: (data.tenantSuperAdmins ?? []) as InventarioTenantSuperAdminOpcion[],
+      saArbolRama: (data.saArbolRama ?? []) as InventarioTenantSuperAdminOpcion[],
+      jerarquiaSaCounters: (data.jerarquiaSaCounters ?? []) as InventarioJerarquiaSaCounterIndice[],
       usuarios: (data.usuarios ?? []) as UsuarioOption[],
       policy: (data.policy ?? {}) as InventarioFormulariosAutorizacionPolicy,
       meta: data.meta,
@@ -1170,6 +1237,8 @@ const inventarioService = {
     tenantIds: string[];
     usuarioIds: string[];
     tenantSuperAdminId?: string;
+    /** DIOS: varias ramas SA; valida usuarios contra la union de ramas. */
+    tenantSuperAdminIds?: string[];
     tarjetaConfig?: {
       tab?: string | null;
       moduloPath?: string | null;

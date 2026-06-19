@@ -11,6 +11,15 @@ export type SaJerarquiaUsuarioRegistrado = {
   esAsignadoTenant?: boolean;
 };
 
+export type SaJerarquiaLabelMeta = {
+  id?: string;
+  codigoJerarquia?: string | null;
+  coporativoNombre?: string | null;
+  rolNombre?: string | null;
+  usuarioNombre?: string | null;
+  usuarioCorreo?: string | null;
+};
+
 export type SaJerarquiaMetaPanel = {
   id: string;
   codigoJerarquia?: string | null;
@@ -65,7 +74,7 @@ function usuariosUnicosDeMeta(meta: SaJerarquiaMetaPanel): SaJerarquiaUsuarioReg
 }
 
 /** Etiqueta de combo sin secuencia ni rama superior (validación jerárquica solo en backend). */
-export function formatSaJerarquiaOptionLabel(meta: SaJerarquiaMetaPanel): string {
+export function formatSaJerarquiaOptionLabel(meta: SaJerarquiaLabelMeta): string {
   const codigo = String(meta.codigoJerarquia || 'SA').trim();
   const corp = String(meta.coporativoNombre || '').trim();
   const rol = String(meta.rolNombre || '').trim();
@@ -73,6 +82,29 @@ export function formatSaJerarquiaOptionLabel(meta: SaJerarquiaMetaPanel): string
   if (usr) return rol ? `${codigo} · ${usr} · ${rol}` : `${codigo} · ${usr}`;
   if (corp) return rol ? `${codigo} · ${corp} · ${rol}` : `${codigo} · ${corp}`;
   return rol ? `${codigo} · ${rol}` : codigo;
+}
+
+/** Select tenant SA: solo código jerárquico (+ corporativo/rol), sin nombre ni correo de usuario. */
+export function formatSaTenantJerarquiaSelectLabel(meta: SaJerarquiaLabelMeta): string {
+  const codigo = String(meta.codigoJerarquia || 'SA').trim();
+  const corp = String(meta.coporativoNombre || '').trim();
+  const rol = String(meta.rolNombre || '').trim();
+  if (corp) return rol ? `${codigo} · ${corp} · ${rol}` : `${codigo} · ${corp}`;
+  return rol ? `${codigo} · ${rol}` : codigo;
+}
+
+/** Solo usuario a parametrizar (formularios reglas DIOS: sin código SA, seq, rama ni sufijo id). */
+export function formatSaUsuarioParametrizarLabel(meta: SaJerarquiaLabelMeta): string {
+  const rol = String(meta.rolNombre || '').trim();
+  const nombre = String(meta.usuarioNombre || '').trim();
+  const correo = String(meta.usuarioCorreo || '').trim();
+  const usr = nombre
+    ? `${nombre}${correo ? ` (${correo})` : ''}`
+    : correo || '';
+  if (usr) return rol ? `${rol} - ${usr}` : usr;
+  const corp = String(meta.coporativoNombre || '').trim();
+  if (corp) return rol ? `${rol} - ${corp}` : corp;
+  return rol || String(meta.codigoJerarquia || meta.id || 'Tenant SuperAdmin').trim();
 }
 
 type Props = {

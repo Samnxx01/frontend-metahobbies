@@ -14,6 +14,14 @@ import type {
 } from '../types/marco.types';
 import { SUGERENCIAS_AFILIADO } from '../constants/catalog-filters';
 import { toId } from '../utils/toId';
+import {
+  normalizeAccionCatalogRow,
+  normalizeRouteCatalogRow,
+} from '../utils/normalizeMarcoEntities';
+import {
+  persistRolMarcoId,
+  readPersistedRolMarcoId,
+} from '../utils/marcoRolKeys';
 import { normalizePublicIdForApi } from '@/app/utils/entityPublicId';
 import { getAllRoutes, getAccionesCatalogo, type Route } from '@/app/services/routesService';
 import type { AccionOption } from '@/app/services/routesService';
@@ -27,21 +35,26 @@ const toggleSet = (set: Set<string>, id: string, checked: boolean): Set<string> 
 
 function resolverRolPorDefecto(
   roles: RolMarcoParametrizable[],
-  actual: string | null
+  actual: string | null,
+  persisted: string | null
 ): string | null {
   if (actual && roles.some((r) => r._id === actual)) return actual;
+  if (persisted && roles.some((r) => r._id === persisted)) return persisted;
   const clienteGlobal =
     roles.find((r) => r.rol === 'CLIENTE' && !r.tenantCorporativo)?._id ?? null;
   return clienteGlobal ?? roles[0]?._id ?? null;
 }
 
 export function useMarcoPermisosParametrizacion() {
-  const [loading, setLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [marcoLoading, setMarcoLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncingLote, setSyncingLote] = useState(false);
   const [roles, setRoles] = useState<RolMarcoParametrizable[]>([]);
-  const [rolSeleccionadoId, setRolSeleccionadoId] = useState<string | null>(null);
+  const [rolSeleccionadoId, setRolSeleccionadoId] = useState<string | null>(() =>
+    readPersistedRolMarcoId()
+  );
   const [marcoActivo, setMarcoActivo] = useState<MarcoPermisosAfiliado | null>(null);
   const [rutas, setRutas] = useState<Route[]>([]);
   const [acciones, setAcciones] = useState<AccionOption[]>([]);
@@ -51,7 +64,14 @@ export function useMarcoPermisosParametrizacion() {
   const [filtroAcciones, setFiltroAcciones] = useState('');
   const [soloSugeridas, setSoloSugeridas] = useState(false);
   const [tab, setTab] = useState<MarcoCatalogTab>('vistas');
-  const rolSeleccionadoIdRef = useRef<string | null>(null);
+  const rolSeleccionadoIdRef = useRef<string | null>(readPersistedRolMarcoId());
+  const isFirstLoadRef = useRef(true);
+
+  const setRolActivo = useCallback((rolId: string | null) => {
+    setRolSeleccionadoId(rolId);
+    rolSeleccionadoIdRef.current = rolId;
+    persistRolMarcoId(rolId);
+  }, []);
 
   const rolSeleccionado = useMemo(
     () => roles.find((r) => r._id === rolSeleccionadoId) ?? null,
@@ -91,7 +111,12 @@ export function useMarcoPermisosParametrizacion() {
   );
 
   const cargar = useCallback(async () => {
-    setLoading(true);
+    const firstLoad = isFirstLoadRef.current;
+    if (firstLoad) {
+      setInitialLoading(true);
+    } else {
+      setMarcoLoading(true);
+    }
     try {
       const [rolesRes, rutasRes, accRes] = await Promise.all([
         getRolesMarcoParametrizables(),
@@ -104,24 +129,33 @@ export function useMarcoPermisosParametrizacion() {
 
       if (rolesLista.length === 0) {
         toast.warn('No hay roles corporativos activos para parametrizar.');
-        setRolSeleccionadoId(null);
+        setRolActivo(null);
         setMarcoActivo(null);
         setVistasSel(new Set());
         setAccionesSel(new Set());
       } else {
-        const rolId = resolverRolPorDefecto(rolesLista, rolSeleccionadoIdRef.current);
-        setRolSeleccionadoId(rolId);
-        rolSeleccionadoIdRef.current = rolId;
+        const rolId = resolverRolPorDefecto(
+          rolesLista,
+          rolSeleccionadoIdRef.current,
+          readPersistedRolMarcoId()
+        );
+        setRolActivo(rolId);
         if (rolId) {
           await cargarMarcoParaRol(rolId, false);
         }
       }
 
-      setRutas((rutasRes?.data ?? []).filter((r) => r.estadoRuta !== false));
-
-      const accionesLista = (accRes?.data ?? []).filter(
-        (a) => a._id && a.estadoAccion !== false
+      setRutas(
+        (rutasRes?.data ?? [])
+          .filter((r) => r.estadoRuta !== false)
+          .map((r) => normalizeRouteCatalogRow(r))
+          .filter((r) => Boolean(r.iud))
       );
+
+      const accionesLista = (accRes?.data ?? [])
+        .filter((a) => a.estadoAccion !== false)
+        .map((a) => normalizeAccionCatalogRow(a))
+        .filter((a) => Boolean(a._id));
       setAcciones(accionesLista);
 
       if (accionesLista.length === 0) {
@@ -133,25 +167,29 @@ export function useMarcoPermisosParametrizacion() {
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Error al cargar datos');
     } finally {
-      setLoading(false);
+      if (firstLoad) {
+        setInitialLoading(false);
+        isFirstLoadRef.current = false;
+      } else {
+        setMarcoLoading(false);
+      }
     }
-  }, [cargarMarcoParaRol]);
+  }, [cargarMarcoParaRol, setRolActivo]);
 
   const seleccionarRol = useCallback(
     async (rolId: string) => {
       if (!rolId || rolId === rolSeleccionadoIdRef.current) return;
-      setRolSeleccionadoId(rolId);
-      rolSeleccionadoIdRef.current = rolId;
-      setLoading(true);
+      setRolActivo(rolId);
+      setMarcoLoading(true);
       try {
         await cargarMarcoParaRol(rolId, false, true);
       } catch (err: unknown) {
         toast.error(err instanceof Error ? err.message : 'Error al cargar marco del rol');
       } finally {
-        setLoading(false);
+        setMarcoLoading(false);
       }
     },
-    [cargarMarcoParaRol]
+    [cargarMarcoParaRol, setRolActivo]
   );
 
   useEffect(() => {
@@ -187,7 +225,7 @@ export function useMarcoPermisosParametrizacion() {
   const seleccionarTodasVistasVisibles = () => {
     setVistasSel((prev) => {
       const next = new Set(prev);
-      rutasFiltradas.forEach((r) => next.add(toId(r.iud || r._id)));
+      rutasFiltradas.forEach((r) => next.add(toId(r)));
       return next;
     });
   };
@@ -195,7 +233,7 @@ export function useMarcoPermisosParametrizacion() {
   const limpiarVistasVisibles = () => {
     setVistasSel((prev) => {
       const next = new Set(prev);
-      rutasFiltradas.forEach((r) => next.delete(toId(r.iud || r._id)));
+      rutasFiltradas.forEach((r) => next.delete(toId(r)));
       return next;
     });
   };
@@ -203,7 +241,7 @@ export function useMarcoPermisosParametrizacion() {
   const seleccionarTodasAccionesVisibles = () => {
     setAccionesSel((prev) => {
       const next = new Set(prev);
-      accionesFiltradas.forEach((a) => next.add(toId(a._id || a.iud)));
+      accionesFiltradas.forEach((a) => next.add(toId(a)));
       return next;
     });
   };
@@ -211,7 +249,7 @@ export function useMarcoPermisosParametrizacion() {
   const limpiarAccionesVisibles = () => {
     setAccionesSel((prev) => {
       const next = new Set(prev);
-      accionesFiltradas.forEach((a) => next.delete(toId(a._id || a.iud)));
+      accionesFiltradas.forEach((a) => next.delete(toId(a)));
       return next;
     });
   };
@@ -266,7 +304,7 @@ export function useMarcoPermisosParametrizacion() {
       const next = new Set(prev);
       rutas
         .filter((r) => SUGERENCIAS_AFILIADO.test(`${r.path} ${r.name} ${r.component}`))
-        .forEach((r) => next.add(toId(r.iud || r._id)));
+        .forEach((r) => next.add(toId(r)));
       return next;
     });
     setAccionesSel((prev) => {
@@ -276,7 +314,7 @@ export function useMarcoPermisosParametrizacion() {
           SUGERENCIAS_AFILIADO.test(`${a.method} ${a.etiquetas}`) ||
           ['GET', 'POST'].includes(String(a.method || '').toUpperCase())
         )
-        .forEach((a) => next.add(toId(a._id || a.iud)));
+        .forEach((a) => next.add(toId(a)));
       return next;
     });
     setSoloSugeridas(true);
@@ -328,7 +366,8 @@ export function useMarcoPermisosParametrizacion() {
   };
 
   return {
-    loading,
+    initialLoading,
+    marcoLoading,
     saving,
     syncing,
     syncingLote,
