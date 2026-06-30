@@ -1,17 +1,28 @@
 import React from 'react';
 import { TenantFormShell } from './TenantFormShell';
 import type { GobernanzaTenantFormProps } from './types';
-import { createGobernanzaTenantFormRoute } from './gobernanzaTenantFormRoute';
+import { ENDPOINT_ID_BY_TENANT_COMPONENT } from './gobernanzaTenantFormRegistry';
+import { ParametrosGobernanzaWithRouting } from '../';
 import { resolveTenantSuperAdminInsertHint } from './tenantSuperAdminInsertHints';
 
-const TenantSuperAdminInsertFormRoute = createGobernanzaTenantFormRoute('tenant-superadmin-insert-documento');
+const ENDPOINT_ID = ENDPOINT_ID_BY_TENANT_COMPONENT.TenantSuperAdminInsertForm;
 
 /**
  * Formulario parametrizable (gobernanzaModuloConfigs) para INSERT en `tenantsupertenants`.
  * El endpoint concreto lo resuelve ParametrosGobernanza según `endpointId` de la pestaña.
  */
 export function TenantSuperAdminInsertForm(props: GobernanzaTenantFormProps): React.ReactElement {
-  if (!props.embeddedApiForm) return <TenantSuperAdminInsertFormRoute />;
+  if (!props.embeddedApiForm) {
+    return (
+      <ParametrosGobernanzaWithRouting
+        mode="full"
+        initialSection="tenant"
+        lockedSection="tenant"
+        allowedEndpointIds={[ENDPOINT_ID]}
+        singleFormInline
+      />
+    );
+  }
 
   const { eyebrow, hint } = resolveTenantSuperAdminInsertHint(props.endpoint?.id);
 

@@ -47,7 +47,7 @@ export function GobernanzaTenantParametrizadoPage({
 /** Página de subformulario en rutasSeguridad con acción sugerida al entrar. */
 export function createGobernanzaTenantFormRoute(
   preferredActionId?: string,
-  opts?: Pick<GobernanzaTenantParametrizadoPageProps, 'section' | 'moduloSlug'>,
+  opts?: Pick<GobernanzaTenantParametrizadoPageProps, 'section' | 'moduloSlug' | 'tipoSection'>,
 ) {
   return function GobernanzaTenantFormRoute(): React.ReactElement {
     return (
@@ -55,6 +55,7 @@ export function createGobernanzaTenantFormRoute(
         preferredActionId={preferredActionId}
         section={opts?.section}
         moduloSlug={opts?.moduloSlug}
+        tipoSection={opts?.tipoSection}
       />
     );
   };

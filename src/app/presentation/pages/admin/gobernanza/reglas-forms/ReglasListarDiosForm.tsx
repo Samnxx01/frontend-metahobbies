@@ -2,8 +2,8 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
-import { createGobernanzaReglasFormRoute } from './gobernanzaReglasFormRoute';
 import { ENDPOINT_ID_BY_REGLAS_COMPONENT } from './gobernanzaReglasFormRegistry';
+import { ParametrosGobernanzaWithRouting } from '../';
 import type { GobernanzaReglasFormProps } from './types';
 import { ReglaDetailPanel } from './ReglaDetailPanel';
 import {
@@ -14,12 +14,13 @@ import {
 } from '@/app/services/reglasGobernanzaDiosService';
 
 const ENDPOINT_ID = ENDPOINT_ID_BY_REGLAS_COMPONENT.ReglasListarDiosForm;
-const ReglasListarDiosFormRoute = createGobernanzaReglasFormRoute(ENDPOINT_ID);
 
 type Fase = 'idle' | 'loading' | 'error';
 
 export function ReglasListarDiosForm(props: GobernanzaReglasFormProps): React.ReactElement {
-  if (!props.embeddedApiForm) return <ReglasListarDiosFormRoute />;
+  if (!props.embeddedApiForm) return (
+    <ParametrosGobernanzaWithRouting mode="full" initialSection="reglas" lockedSection="reglas" allowedEndpointIds={[ENDPOINT_ID]} initialEndpointId={ENDPOINT_ID} singleFormInline />
+  );
   return <ReglasListarDiosFormContent />;
 }
 

@@ -22,13 +22,13 @@ export type ReglasActualizarSaAlcancePanelProps = {
   actorTsaJwt?: string;
   actorTgJwt?: string;
   actorTcJwt?: string;
-  saJerarquiaConCorporativo: boolean;
-  jerarquiaSaCounters: SaJerarquiaCounterIndice[];
-  tenantSuperAdminsJerarquiaCounters: SaJerarquiaMetaLite[];
-  saOptions: SaJerarquiaMetaLite[];
+  saJerarquiaConCorporativo?: boolean;
+  jerarquiaSaCounters?: SaJerarquiaCounterIndice[];
+  tenantSuperAdminsJerarquiaCounters?: SaJerarquiaMetaLite[];
+  saOptions?: SaJerarquiaMetaLite[];
   selectedSaId: string;
   onSaChange: (saId: string) => void;
-  tenantGlobales: TenantGlobalJerarquiaRow[];
+  tenantGlobales?: TenantGlobalJerarquiaRow[];
   tenantGlobalRefs?: Array<{ id: string; label: string; meta?: Record<string, string | number | undefined> }>;
   selectedTenantGlobalId?: string;
 };
@@ -76,16 +76,17 @@ export function ReglasActualizarSaAlcancePanel({
   actorTsaJwt = '',
   actorTgJwt = '',
   actorTcJwt = '',
-  saJerarquiaConCorporativo,
-  jerarquiaSaCounters,
-  tenantSuperAdminsJerarquiaCounters,
-  saOptions,
+  saJerarquiaConCorporativo = false,
+  jerarquiaSaCounters = [],
+  tenantSuperAdminsJerarquiaCounters = [],
+  saOptions = [],
   selectedSaId,
   onSaChange,
-  tenantGlobales,
+  tenantGlobales = [],
   tenantGlobalRefs = [],
   selectedTenantGlobalId = '',
 }: ReglasActualizarSaAlcancePanelProps) {
+  console.log('[SAPanel] saOptions:', saOptions, '| tenantGlobales:', tenantGlobales, '| selectedSaId:', selectedSaId, '| actorTsaJwt:', actorTsaJwt);
   const saSel = String(selectedSaId || actorTsaJwt || '').trim();
   const tgJwt = String(actorTgJwt || '').trim();
   const tc = String(actorTcJwt || '').trim();

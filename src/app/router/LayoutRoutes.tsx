@@ -30,6 +30,7 @@ import Carrito from '@/app/presentation/pages/carrito/Carrito';
 import Checkout from '@/app/presentation/pages/checkout/Checkout';
 import DetalleProducto from '@/app/presentation/pages/producto/DetalleProducto';
 import DynamicRouteFallback from '@/app/presentation/pages/admin/DynamicRouteFallback';
+import EstadoSistema from '@/app/presentation/pages/admin/EstadoSistema';
 
 // —— Dynamic component map via Vite glob —————————————————————
 // Escanea TODOS los .tsx de pages/ y components/admin/ automáticamente.
@@ -315,6 +316,18 @@ export default function LayoutRoutes(): ReactElement {
     }, [user]);
 
     if (routeLoadError) {
+        // Estado-sistema siempre debe ser accesible aunque el backend esté caído
+        if (location.pathname.includes('estado-sistema')) {
+            return (
+                <Routes>
+                    <Route element={<PublicLayout />}>
+                        <Route path="public/render/estado-sistema" element={<EstadoSistema />} />
+                    </Route>
+                    <Route path="*" element={<Navigate to="/public/render/estado-sistema" replace />} />
+                </Routes>
+            );
+        }
+
         const is403 = routeLoadError.status === 403;
         const is401 = routeLoadError.status === 401;
         return (

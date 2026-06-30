@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
     Activity,
+    AlertTriangle,
     Building2,
     CheckCircle2,
     Database,
@@ -8,14 +9,25 @@ import {
     RefreshCw,
     Wallet,
     XCircle,
+    Zap,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
-import { getHealthStatus, type HealthResponse } from '@/app/services/healthService';
+import { getHealthStatus, pingDianSoap, type DianPingData, type HealthResponse } from '@/app/services/healthService';
 
 const AUTO_REFRESH_MS = 30_000;
+const CACHE_KEY = 'health_status_cache';
+
+interface HealthCache { data: HealthResponse; savedAt: string; }
+
+function saveHealthCache(data: HealthResponse): void {
+    try { localStorage.setItem(CACHE_KEY, JSON.stringify({ data, savedAt: new Date().toISOString() })); } catch { /* quota — ignorar */ }
+}
+function loadHealthCache(): HealthCache | null {
+    try { const raw = localStorage.getItem(CACHE_KEY); return raw ? (JSON.parse(raw) as HealthCache) : null; } catch { return null; }
+}
 
 // ─── Sub-componentes ──────────────────────────────────────────────────────────
 
@@ -72,6 +84,9 @@ export default function EstadoSistema(): React.ReactElement {
     const [error, setError] = useState<string | null>(null);
     const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
     const [refreshing, setRefreshing] = useState(false);
+    const [pinging, setPinging] = useState(false);
+    const [pingResult, setPingResult] = useState<DianPingData | null>(null);
+    const [cachedAt, setCachedAt] = useState<string | null>(null);
 
     const fetchStatus = useCallback(async (manual = false) => {
         if (manual) setRefreshing(true);
@@ -82,13 +97,35 @@ export default function EstadoSistema(): React.ReactElement {
             const result = await getHealthStatus();
             setData(result);
             setLastUpdated(new Date());
+            setCachedAt(null);
+            saveHealthCache(result);
         } catch {
-            setError('No se pudo conectar al servidor. Verifica tu conexión.');
+            const cached = loadHealthCache();
+            if (cached) {
+                setData(cached.data);
+                setCachedAt(cached.savedAt);
+                setError('backend-down');
+            } else {
+                setError('No se pudo conectar al servidor. Verifica tu conexión.');
+            }
         } finally {
             setLoading(false);
             setRefreshing(false);
         }
     }, [data]);
+
+    const handleDianPing = useCallback(async () => {
+        setPinging(true);
+        setPingResult(null);
+        try {
+            const res = await pingDianSoap();
+            setPingResult(res.data);
+        } catch {
+            setPingResult({ ok: false, latencyMs: 0, error: 'No se pudo conectar al backend.' });
+        } finally {
+            setPinging(false);
+        }
+    }, []);
 
     useEffect(() => {
         fetchStatus();
@@ -97,6 +134,9 @@ export default function EstadoSistema(): React.ReactElement {
     }, []);
 
     const globalStatus = data?.status ?? 'error';
+
+    const isBackendDown = error === 'backend-down';
+    const isHardError = error && !isBackendDown;
 
     return (
         <div className="p-4 md:p-6 lg:p-8 space-y-6 max-w-3xl mx-auto">
@@ -123,6 +163,23 @@ export default function EstadoSistema(): React.ReactElement {
                 </Button>
             </div>
 
+            {/* Banner: backend caído pero hay caché */}
+            {isBackendDown && cachedAt && (
+                <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+                    <div className="text-sm">
+                        <p className="font-medium text-amber-800">Backend no disponible</p>
+                        <p className="text-amber-700 mt-0.5">
+                            Mostrando último estado conocido registrado el{' '}
+                            {new Date(cachedAt).toLocaleString('es-CO', {
+                                dateStyle: 'medium',
+                                timeStyle: 'short',
+                            })}
+                        </p>
+                    </div>
+                </div>
+            )}
+
             {/* Estado global */}
             <Card
                 className={
@@ -145,7 +202,7 @@ export default function EstadoSistema(): React.ReactElement {
                             <Loader2 className="w-4 h-4 animate-spin" />
                             Verificando...
                         </div>
-                    ) : error ? (
+                    ) : isHardError ? (
                         <p className="text-sm text-red-600">{error}</p>
                     ) : (
                         <div className="flex items-center justify-between">
@@ -210,12 +267,54 @@ export default function EstadoSistema(): React.ReactElement {
                                 detail="Pasarela de pagos"
                             />
                             <Separator />
-                            <ServiceRow
-                                icon={<Building2 className="w-4 h-4" />}
-                                label="DIAN"
-                                status={data?.servicios_externos.dian.status ?? 'error'}
-                                detail="Facturación electrónica SOAP"
-                            />
+                            <div className="flex flex-col gap-2 py-3">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                        <span className="text-muted-foreground">
+                                            <Building2 className="w-4 h-4" />
+                                        </span>
+                                        <div>
+                                            <p className="text-sm font-medium">DIAN</p>
+                                            <p className="text-xs text-muted-foreground mt-0.5">
+                                                Facturación electrónica SOAP · Habilitación
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <StatusBadge status={data?.servicios_externos.dian.status ?? 'error'} />
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={handleDianPing}
+                                            disabled={pinging}
+                                            className="h-7 text-xs px-2"
+                                        >
+                                            {pinging ? (
+                                                <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                                            ) : (
+                                                <Zap className="w-3 h-3 mr-1" />
+                                            )}
+                                            Probar SOAP
+                                        </Button>
+                                    </div>
+                                </div>
+                                {pingResult && (
+                                    <div className={`rounded-md p-3 text-xs font-mono ${pingResult.ok ? 'bg-green-50 border border-green-200 text-green-800' : 'bg-red-50 border border-red-200 text-red-800'}`}>
+                                        <p className="font-semibold mb-1">
+                                            {pingResult.ok ? '✓ DIAN respondió correctamente' : '✗ Error en ping DIAN'}
+                                            {pingResult.latencyMs > 0 && (
+                                                <span className="ml-2 font-normal opacity-70">{pingResult.latencyMs} ms</span>
+                                            )}
+                                        </p>
+                                        {pingResult.error && <p>{pingResult.error}</p>}
+                                        {pingResult.respuestaDian && (
+                                            <pre className="mt-1 whitespace-pre-wrap break-all opacity-80">
+                                                {JSON.stringify(pingResult.respuestaDian, null, 2)}
+                                            </pre>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
                         </>
                     )}
                 </CardContent>
