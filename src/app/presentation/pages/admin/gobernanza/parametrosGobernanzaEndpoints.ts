@@ -109,6 +109,12 @@ export const ENDPOINTS: EndpointSpec[] = [
       { name: 'tenantGlobal', label: 'Tenant global', type: 'id', required: true },
       { name: 'contextoDefi', label: 'Contexto', type: 'context', required: true },
       { name: 'permisos', label: 'Permisos por vista/accion', type: 'permisos', required: true },
+      {
+        name: 'politicasRuntimeIds',
+        label: 'Políticas runtime (BYPASS / ALLOW / DENY)',
+        type: 'politicasRuntime',
+        required: false,
+      },
     ],
   },
   { id: 'tenant-listar-reglas', section: 'reglas', actor: 'ambos', method: 'GET', path: '/api/config/tenant/listar/reglas', title: 'Listar reglas tenant', description: 'Consulta de reglas creadas.', fields: [] },
@@ -124,6 +130,12 @@ export const ENDPOINTS: EndpointSpec[] = [
       { name: 'x-regla-id', label: 'x-regla-id', type: 'id', required: true, header: true },
       { name: 'contextoDefi', label: 'Contexto', type: 'context', required: true },
       { name: 'permisos', label: 'Permisos por vista/accion', type: 'permisos', required: true },
+      {
+        name: 'politicasRuntimeIds',
+        label: 'Políticas runtime (BYPASS / ALLOW / DENY)',
+        type: 'politicasRuntime',
+        required: false,
+      },
     ],
   },
   {
@@ -158,12 +170,18 @@ export const ENDPOINTS: EndpointSpec[] = [
     path: '/api/config/tenant/tipo/crear/dios/reglas/jerarquia/roles',
     title: 'Crear regla DIOS',
     description:
-      'Crea la regla de plataforma para el rol DIOS. Multi-tenant, usuarios por rama, recursos y acciones. Políticas runtime validadas por tenant (no parametrizadas en la regla).',
+      'Crea la regla de plataforma para el rol DIOS. Multi-tenant, usuarios por rama, recursos, acciones y políticas runtime vinculadas por id.',
     fields: [
       { name: 'tenantSuperAdmin', label: 'Tenant SuperAdmin', type: 'id', required: false },
       { name: 'dominioTenatGlobales', label: 'Dominio', type: 'dominioDinamico', required: false },
       { name: 'securityPlatform', label: 'Security platform', type: 'text', required: false },
       { name: 'contexto', label: 'Contexto', type: 'text', required: false },
+      {
+        name: 'politicasRuntimeIds',
+        label: 'Políticas runtime (BYPASS / ALLOW / DENY)',
+        type: 'politicasRuntime',
+        required: false,
+      },
     ],
   },
   {
@@ -174,12 +192,18 @@ export const ENDPOINTS: EndpointSpec[] = [
     path: '/api/config/tenant/tipo/actualizar/dios/reglas/jerarquia/roles',
     title: 'Actualizar regla DIOS',
     description:
-      'Sincroniza regla plataforma por alcance (tenant SA + usuarios opcionales). Políticas runtime validadas por tenant (no parametrizadas en la regla).',
+      'Sincroniza regla plataforma por alcance (tenant SA + usuarios opcionales) y actualiza políticas runtime vinculadas.',
     fields: [
       { name: 'tenantSuperAdmin', label: 'Tenant SuperAdmin', type: 'id', required: false },
       { name: 'dominioTenatGlobales', label: 'Dominio', type: 'dominioDinamico', required: false },
       { name: 'securityPlatform', label: 'Security platform', type: 'text', required: false },
       { name: 'contexto', label: 'Contexto', type: 'text', required: false },
+      {
+        name: 'politicasRuntimeIds',
+        label: 'Políticas runtime (BYPASS / ALLOW / DENY)',
+        type: 'politicasRuntime',
+        required: false,
+      },
     ],
   },
   {

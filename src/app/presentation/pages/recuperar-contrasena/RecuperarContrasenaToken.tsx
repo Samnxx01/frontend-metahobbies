@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useParams, useSearchParams, Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -36,6 +36,8 @@ export default function RecuperarContrasenaToken() {
 
     const [exito, setExito] = useState(false);
     const [loading, setLoading] = useState(false);
+    const [validandoToken, setValidandoToken] = useState(true);
+    const [tokenValido, setTokenValido] = useState(false);
     const [errorApi, setErrorApi] = useState<string | null>(null);
     const [verPass, setVerPass] = useState(false);
     const [verConf, setVerConf] = useState(false);
@@ -45,8 +47,45 @@ export default function RecuperarContrasenaToken() {
         defaultValues: { correo: '', password: '', confirmar: '' },
     });
 
+    useEffect(() => {
+        if (!tokenUrl) {
+            setValidandoToken(false);
+            setTokenValido(false);
+            return;
+        }
+
+        let cancelado = false;
+        const validar = async () => {
+            setValidandoToken(true);
+            setErrorApi(null);
+            try {
+                const res = await fetch('/api/recuperacion/seguridad/password/validar', {
+                    method: 'GET',
+                    headers: { fantasma: tokenUrl },
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) {
+                    throw new Error(data?.msg || 'El enlace expiró o no es válido.');
+                }
+                if (!cancelado) setTokenValido(true);
+            } catch (err: unknown) {
+                if (!cancelado) {
+                    setTokenValido(false);
+                    setErrorApi(String((err as Error)?.message || 'Enlace inválido o expirado.'));
+                }
+            } finally {
+                if (!cancelado) setValidandoToken(false);
+            }
+        };
+
+        void validar();
+        return () => {
+            cancelado = true;
+        };
+    }, [tokenUrl]);
+
     // Token inválido o ausente — mostrar aviso
-    if (!tokenUrl) {
+    if (!tokenUrl || (!validandoToken && !tokenValido)) {
         return (
             <div className="min-h-screen bg-background flex items-center justify-center px-4">
                 <div className="w-full max-w-sm text-center space-y-5">
@@ -58,14 +97,24 @@ export default function RecuperarContrasenaToken() {
                     <div className="space-y-2">
                         <h1 className="text-xl font-semibold text-foreground">Enlace inválido</h1>
                         <p className="text-sm text-muted-foreground">
-                            Este enlace de recuperación no es válido o ha expirado.
-                            Solicita uno nuevo desde la pantalla de recuperación.
+                            {errorApi || 'Este enlace de recuperación no es válido o ha expirado. Solicita uno nuevo desde la pantalla de recuperación.'}
                         </p>
                     </div>
                     <Button onClick={() => navigate('/recuperar-contrasena')} variant="outline" className="gap-2 text-sm">
                         <ArrowLeft className="w-4 h-4" />
                         Solicitar nuevo enlace
                     </Button>
+                </div>
+            </div>
+        );
+    }
+
+    if (validandoToken) {
+        return (
+            <div className="min-h-screen bg-background flex items-center justify-center px-4">
+                <div className="flex flex-col items-center gap-3 text-muted-foreground">
+                    <Loader2 className="w-8 h-8 animate-spin" />
+                    <p className="text-sm">Validando enlace de recuperación…</p>
                 </div>
             </div>
         );
@@ -109,7 +158,7 @@ export default function RecuperarContrasenaToken() {
                 },
                 body: JSON.stringify({ correo, password }),
             });
-            const data = await res.json();
+            const data = await res.json().catch(() => ({}));
             if (!res.ok) {
                 throw new Error(data.msg || 'Error al cambiar la contraseña.');
             }

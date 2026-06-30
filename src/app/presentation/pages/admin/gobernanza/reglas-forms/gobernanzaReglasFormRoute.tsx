@@ -1,6 +1,7 @@
 import React from 'react';
 import { useLocation } from 'react-router-dom';
 import ParametrosGobernanza from '../../ParametrosGobernanza';
+import { GOBERNANZA_TIPO_SECTION_REGLAS_SA } from '../gobernanzaActionIds';
 
 export type GobernanzaReglasParametrizadoPageProps = {
   preferredActionId?: string;
@@ -8,6 +9,10 @@ export type GobernanzaReglasParametrizadoPageProps = {
   moduloSlug?: string;
 };
 
+/**
+ * Vista de reglas alimentada por gobernanzaModuloConfigs.
+ * operacionesHub mantiene pestañas del hub y renderiza el formulario en el padre.
+ */
 export function GobernanzaReglasParametrizadoPage({
   preferredActionId,
   section = 'reglas',
@@ -25,6 +30,8 @@ export function GobernanzaReglasParametrizadoPage({
       preferredActionId={preferredActionId}
       shellVariant="compact"
       enableCardDesignEditor={false}
+      operacionesHub
+      tipoSection={GOBERNANZA_TIPO_SECTION_REGLAS_SA}
     />
   );
 }

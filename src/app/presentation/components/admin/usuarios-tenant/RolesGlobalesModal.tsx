@@ -15,6 +15,28 @@ import { apiFetch } from '@/app/services/api';
 import { toast } from 'react-toastify';
 import { encodePublicIdForPath, resolveEntityPublicId } from '@/app/utils/entityPublicId';
 
+const BOOTSTRAP_DIOS_TOAST_ID = 'bootstrap-dios-rol';
+const API_TIMEOUT_MS = 120_000;
+
+async function apiFetchWithTimeout<T>(
+    endpoint: string,
+    options: Parameters<typeof apiFetch>[1] = {},
+    timeoutMs = API_TIMEOUT_MS,
+): Promise<T> {
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(
+            () => reject(new Error('Tiempo de espera agotado. Verifica que server-mabs esté en marcha y MongoDB responda.')),
+            timeoutMs,
+        );
+    });
+    try {
+        return await Promise.race([apiFetch(endpoint, options), timeoutPromise]) as T;
+    } finally {
+        if (timeoutId) clearTimeout(timeoutId);
+    }
+}
+
 interface RolGlobal {
     iud?: string;
     _id?: string;
@@ -131,10 +153,10 @@ export const RolesGlobalesModal = ({
     const cargarRoles = async () => {
         setLoading(true);
         try {
-            const res: any = await apiFetch('/api/seguridad/roles/admin', { method: 'GET' });
+            const res: any = await apiFetchWithTimeout('/api/seguridad/roles/admin', { method: 'GET' });
             setRoles(Array.isArray(res?.roles) ? res.roles : []);
-        } catch {
-            toast.error('Error al cargar roles globales');
+        } catch (err: unknown) {
+            toast.error(String((err as Error)?.message || 'Error al cargar roles globales'));
         } finally {
             setLoading(false);
         }
@@ -149,13 +171,22 @@ export const RolesGlobalesModal = ({
         const nombre = nuevoRol.trim().toUpperCase();
         if (!nombre) { toast.error('El nombre del rol es obligatorio'); return; }
         setCreando(true);
+        const esBootstrapDios = nombre === 'DIOS';
+        if (esBootstrapDios) {
+            toast.info('Inicializando DIOS, catálogos NVL y tenant SA-0001… puede tardar hasta 2 minutos.', {
+                toastId: BOOTSTRAP_DIOS_TOAST_ID,
+                autoClose: false,
+            });
+        }
         try {
-            await apiFetch('/api/seguridad/roles/admin', { method: 'POST', body: { rol: nombre } });
+            await apiFetchWithTimeout('/api/seguridad/roles/admin', { method: 'POST', body: { rol: nombre } });
+            if (esBootstrapDios) toast.dismiss(BOOTSTRAP_DIOS_TOAST_ID);
             toast.success(`Rol "${nombre}" creado`);
             setNuevoRol('');
             await cargarRoles();
-        } catch (err: any) {
-            toast.error(String(err?.message || 'Error al crear rol'));
+        } catch (err: unknown) {
+            if (esBootstrapDios) toast.dismiss(BOOTSTRAP_DIOS_TOAST_ID);
+            toast.error(String((err as Error)?.message || 'Error al crear rol'));
         } finally {
             setCreando(false);
         }
@@ -206,6 +237,11 @@ export const RolesGlobalesModal = ({
                         {/* Crear nuevo rol */}
                         <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
                             <p className="text-sm font-semibold">Nuevo rol global</p>
+                            {nuevoRol.trim().toUpperCase() === 'DIOS' ? (
+                                <p className="text-xs text-muted-foreground">
+                                    La primera vez crea catálogos NVL, tenant SuperAdmin SA-0001 y counters jerárquicos (operación pesada).
+                                </p>
+                            ) : null}
                             <div className="flex gap-2">
                                 <Input
                                     placeholder="Ej: AUDITOR"

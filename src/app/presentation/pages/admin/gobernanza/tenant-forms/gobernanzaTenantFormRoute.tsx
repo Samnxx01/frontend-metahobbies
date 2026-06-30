@@ -1,24 +1,32 @@
 import React from 'react';
 import { useLocation } from 'react-router-dom';
 import ParametrosGobernanza from '../../ParametrosGobernanza';
+import {
+  GOBERNANZA_TIPO_SECTION_TENANT_SUPER_ADMIN,
+} from '../gobernanzaActionIds';
 
 export type GobernanzaTenantParametrizadoPageProps = {
   /** Acción del catálogo al abrir subruta (p. ej. tenant-listar-libres-superadmin). */
   preferredActionId?: string;
   section?: 'tenant' | 'permisos' | 'corporativo' | 'reglas';
   moduloSlug?: string;
+  tipoSection?: string | null;
 };
 
 /**
- * Vista tenant alimentada por gobernanzaModuloConfigs: formulario en la subruta publicada.
- * Sin query ?accion= — la acción se resuelve por menuPath + preferredActionId.
+ * Vista tenant alimentada por gobernanzaModuloConfigs.
+ * operacionesHub mantiene pestañas del hub y renderiza el formulario en el padre.
  */
 export function GobernanzaTenantParametrizadoPage({
   preferredActionId,
   section = 'tenant',
   moduloSlug = 'tenant',
+  tipoSection = null,
 }: GobernanzaTenantParametrizadoPageProps): React.ReactElement {
   const { pathname } = useLocation();
+  const tipoSectionResolved =
+    tipoSection
+    ?? (section === 'tenant' ? GOBERNANZA_TIPO_SECTION_TENANT_SUPER_ADMIN : null);
 
   return (
     <ParametrosGobernanza
@@ -30,6 +38,8 @@ export function GobernanzaTenantParametrizadoPage({
       preferredActionId={preferredActionId}
       shellVariant="compact"
       enableCardDesignEditor={false}
+      operacionesHub
+      tipoSection={tipoSectionResolved}
     />
   );
 }

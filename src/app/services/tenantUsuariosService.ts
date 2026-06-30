@@ -80,6 +80,8 @@ export interface TenantSuperAdminOption {
     codigoPadre?: string | null;
     secuenciaJerarquia?: number | null;
     estado: boolean | string;
+    /** Registro público sin JWT (colección tenantsupertenants). */
+    estadoPublico?: boolean;
     coporativo?: {
         razon_social?: string | null;
         nit_ruc_rtn?: string | null;
@@ -169,6 +171,72 @@ export interface TenantSuperTenantSinCorporativoItem {
     subTenantSuperAdmins?: TenantSuperTenantSinCorporativoItem[];
 }
 
+export interface CorporativoAsociadoJerarquia {
+    id: string;
+    razon_social?: string | null;
+    titulo?: string | null;
+    nit_ruc_rtn?: string | null;
+    label: string;
+}
+
+export interface JerarquiaSaCounterIndice {
+    tenantSuperAdminId: string;
+    codigoJerarquia?: string | null;
+    codigoPadre?: string | null;
+    secuenciaJerarquia?: number | null;
+    corporativoId?: string | null;
+    corporativoAsociado?: CorporativoAsociadoJerarquia | null;
+}
+
+export interface JerarquiaUsuarioNivelApiRow {
+    iud: string;
+    _id?: string;
+    id?: string;
+    nombre: string;
+    correo: string;
+    email?: string;
+    rol: string;
+    estado: boolean | string;
+    verificado?: boolean;
+    perfil?: TenantUsuario['perfil'];
+    nivel: 'SA' | 'TG' | 'TC';
+    contexto: string;
+    tenantSuperAdminId?: string | null;
+    tenantGlobalId?: string | null;
+    tenantCorporativoId?: string | null;
+    corporativoCounterId?: string | null;
+    corporativoAsociado?: CorporativoAsociadoJerarquia | null;
+}
+
+export interface JerarquiaEvaluacionUsuarios {
+    saIdsEnRama?: string[];
+    tgIdsEnRama?: string[];
+    corpIdsEnRama?: string[];
+    totalRolesEnRama?: number;
+    totalCandidatos?: number;
+    rechazados?: number;
+    saAncla?: string | null;
+    jwtScope?: { jwtSa?: string | null; jwtTg?: string | null; jwtTc?: string | null };
+}
+
+export interface JerarquiaEntidadesCounters {
+    sa: number;
+    tg: number;
+    tc: number;
+    total: number;
+    fuente: 'tenantjerarquiacounters';
+}
+
+export interface JerarquiaResumenCounters {
+    sa: number;
+    tg: number;
+    tc: number;
+    total: number;
+    fuente: 'tenantjerarquiacounters' | 'usuarios_jerarquia' | 'regis_usu_roles_counters_jwt';
+    /** Conteo de emisiones en counters (puede ser mayor que usuarios listados). */
+    entidadesEnCounters?: JerarquiaEntidadesCounters;
+}
+
 export interface JerarquiaResponse {
     scope: 'SUPER_ADMIN' | 'TENANT_GLOBAL' | 'CORPORATIVO' | null;
     /**
@@ -190,6 +258,17 @@ export interface JerarquiaResponse {
     tenantsGlobales: TenantGlobalNode[];
     superAdminTree?: SuperAdminNode[];
     publicChecks?: PublicChecks;
+    /** Índice SA materializado en tenantjerarquiacounters (alcance JWT). */
+    jerarquiaSaCounters?: JerarquiaSaCounterIndice[];
+    /** Conteo usuarios vs emisiones counters. */
+    resumenCounters?: JerarquiaResumenCounters;
+    /** Usuarios filtrados: RegisUsu + roles + tenantSuperAdmin + counters (scope JWT). */
+    usuariosPorNivel?: {
+        sa: JerarquiaUsuarioNivelApiRow[];
+        tg: JerarquiaUsuarioNivelApiRow[];
+        tc: JerarquiaUsuarioNivelApiRow[];
+    };
+    jerarquiaEvaluacion?: JerarquiaEvaluacionUsuarios;
 }
 
 export interface TenantGlobalRegistroItem {
@@ -325,18 +404,27 @@ export function resolverTenantSuperAdminIdDesdeJwtScope(
 }
 
 /**
- * Opciones visibles al crear SuperAdmin: ancla JWT estricta o ramas hijas (oculta SA raíz p. ej. SA-0001).
+ * Opciones visibles al crear SuperAdmin.
+ * - Sin JWT: solo tenants con estadoPublico true (lista del API, sin filtros de rama JWT).
+ * - Con JWT: confía en la lista del API (ancla + descendientes del scope).
  */
+export function esTenantSuperAdminRegistroPublico(tenant: TenantSuperAdminOption): boolean {
+    return tenant.estadoPublico === true;
+}
+
 export function filtrarTenantsSuperAdminDestinoRegistro(
     tenants: TenantSuperAdminOption[],
     opts: { token?: string | null; tenantScopeSaId?: string | null } = {},
 ): TenantSuperAdminOption[] {
     if (!tenants.length) return tenants;
 
+    if (!opts.token) {
+        return tenants.filter(esTenantSuperAdminRegistroPublico);
+    }
+
     const scopeId = normalizePublicIdForApi(opts.tenantScopeSaId);
     if (scopeId) {
-        const scoped = tenants.filter((t) => resolveEntityPublicId(t) === scopeId);
-        if (scoped.length > 0) return scoped;
+        return tenants;
     }
 
     const ramas = tenants.filter((t) => Boolean(String(t.codigoPadre ?? '').trim()));

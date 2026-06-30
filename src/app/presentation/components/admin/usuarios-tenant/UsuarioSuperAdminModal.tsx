@@ -76,6 +76,11 @@ const EMPTY_FORM: FormState = {
     canReferir: true,
 };
 
+const mensajeErrorApi = (err: unknown, fallback: string): string => {
+    const raw = String((err as Error)?.message || fallback).trim();
+    return raw.replace(/^\[\d{3}\]\s*/, '').trim() || fallback;
+};
+
 export const UsuarioSuperAdminModal = ({
     open,
     onClose,
@@ -222,7 +227,9 @@ export const UsuarioSuperAdminModal = ({
                 loadingPublicTenants
                     ? 'Espera a que carguen los tenants activos.'
                     : publicTenants.length === 0
-                        ? 'No hay tenants SuperAdmin activos disponibles.'
+                        ? !token
+                            ? 'No hay tenants SuperAdmin con registro público habilitado (estadoPublico).'
+                            : 'No hay tenants SuperAdmin activos disponibles.'
                         : 'Selecciona el tenant SuperAdmin (corporativo asociado) donde se creará el usuario.',
             );
             return;
@@ -232,19 +239,27 @@ export const UsuarioSuperAdminModal = ({
             payload.tenantSuperAdminId = tenantDestino;
         }
         try {
-            await onSubmit(payload);
+            const result = await onSubmit(payload);
+            const msg =
+                String(result?.msg || result?.message || '').trim() ||
+                'Usuario SuperAdmin creado correctamente.';
+            toast.success(msg);
             onClose();
-        } catch {
-            // error manejado en el hook
+        } catch (err) {
+            toast.error(mensajeErrorApi(err, 'No se pudo crear el usuario SuperAdmin.'));
         }
     };
 
     const handleSincronizarGlobalCanReferir = async (canReferir: boolean) => {
         if (!onSincronizarGlobalCanReferir) return;
         try {
-            await onSincronizarGlobalCanReferir(canReferir);
-        } catch {
-            // error manejado en el hook
+            const result = await onSincronizarGlobalCanReferir(canReferir);
+            const msg =
+                String(result?.msg || result?.message || '').trim() ||
+                'Preferencia de referidos sincronizada en todos los tenants.';
+            toast.success(msg);
+        } catch (err) {
+            toast.error(mensajeErrorApi(err, 'No se pudo sincronizar referidos globalmente.'));
         }
     };
 
@@ -328,15 +343,19 @@ export const UsuarioSuperAdminModal = ({
                                         </Select>
                                         {tenantSuperAdminIdFromScope ? (
                                             <p className="text-xs text-muted-foreground">
-                                                Solo el tenant SuperAdmin de tu sesión (ancla JWT).
+                                                Tu rama jerárquica: ancla JWT y tenants SA descendientes activos.
                                             </p>
                                         ) : tenantSuperAdminIdFromJwt ? (
                                             <p className="text-xs text-muted-foreground">
                                                 Se muestran las ramas hijas de tu jerarquía (sin SA raíz).
                                             </p>
+                                        ) : !token ? (
+                                            <p className="text-xs text-muted-foreground">
+                                                Registro público: solo tenants con estadoPublico habilitado. El rol se asocia al tenant seleccionado.
+                                            </p>
                                         ) : (
                                             <p className="text-xs text-muted-foreground">
-                                                Registro público bajo el tenant SuperAdmin activo (jerarquía materializada).
+                                                Registro bajo el tenant SuperAdmin activo (jerarquía materializada).
                                             </p>
                                         )}
                                     </>

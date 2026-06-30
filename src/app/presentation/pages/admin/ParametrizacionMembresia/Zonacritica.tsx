@@ -15,19 +15,20 @@ import {
     AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { Loader2, ShieldAlert, PowerOff, Trash2, AlertCircle, CheckCircle, RefreshCcw, Coins } from 'lucide-react';
-
-interface ParametrizacionPrecio {
-    _id: string;
-    nombreMembresia: string;
-    precioMembresia: number;
-    tipoPagos?: string;
-}
-
-interface Moneda {
-    _id: string;
-    monedas: string;
-    estadoMoneda: boolean;
-}
+import {
+    MEMBRESIA_PRECIO_LIST_URL,
+    MONEDAS_LIST_URL,
+    findEntityByPublicId,
+    membresiaPrecioDesactivarPath,
+    membresiaPrecioEliminarPath,
+    monedaEliminarPath,
+    normalizeMembresiaPrecioFromApi,
+    normalizeMonedaFromApi,
+    type MembresiaPrecioApiRow,
+    type MembresiaPrecioRow,
+    type MonedaApiRow,
+    type MonedaRow,
+} from './parametrizacionMembresiaApi';
 
 type MensajeTipo = 'success' | 'error';
 interface Mensaje { tipo: MensajeTipo; texto: string }
@@ -37,7 +38,7 @@ const normalizarPrecioDesdeCentavos = (valor: number | string | null | undefined
 
 export default function ZonaCritica() {
     // Precios de membresía
-    const [precios, setPrecios] = useState<ParametrizacionPrecio[]>([]);
+    const [precios, setPrecios] = useState<MembresiaPrecioRow[]>([]);
     const [loadingPrecios, setLoadingPrecios] = useState(false);
     const [idDesactivar, setIdDesactivar] = useState('');
     const [idEliminar, setIdEliminar] = useState('');
@@ -45,7 +46,7 @@ export default function ZonaCritica() {
     const [loadingEliminar, setLoadingEliminar] = useState(false);
 
     // Monedas
-    const [monedas, setMonedas] = useState<Moneda[]>([]);
+    const [monedas, setMonedas] = useState<MonedaRow[]>([]);
     const [loadingMonedas, setLoadingMonedas] = useState(false);
     const [idMonedaEliminar, setIdMonedaEliminar] = useState('');
     const [loadingEliminarMoneda, setLoadingEliminarMoneda] = useState(false);
@@ -60,9 +61,9 @@ export default function ZonaCritica() {
     const cargarPrecios = useCallback(async () => {
         setLoadingPrecios(true);
         try {
-            const res = await apiFetch('/api/membresia/seguridad/crear/parametrizacion/membresia', { method: 'GET' });
-            const lista: ParametrizacionPrecio[] = Array.isArray(res?.data) ? res.data : [];
-            setPrecios(lista);
+            const res = await apiFetch(MEMBRESIA_PRECIO_LIST_URL, { method: 'GET' });
+            const raw = Array.isArray(res?.data) ? res.data as MembresiaPrecioApiRow[] : [];
+            setPrecios(raw.map(normalizeMembresiaPrecioFromApi).filter((p): p is MembresiaPrecioRow => p !== null));
         } catch { /* silencioso */ }
         finally { setLoadingPrecios(false); }
     }, []);
@@ -70,8 +71,13 @@ export default function ZonaCritica() {
     const cargarMonedas = useCallback(async () => {
         setLoadingMonedas(true);
         try {
-            const res = await apiFetch('/api/monedas/seguridad/listar/monedas', { method: 'GET' });
-            if (res?.monedas) setMonedas(res.monedas);
+            const res = await apiFetch(MONEDAS_LIST_URL, { method: 'GET' });
+            if (res?.monedas) {
+                const rows = (res.monedas as MonedaApiRow[])
+                    .map(normalizeMonedaFromApi)
+                    .filter((m): m is MonedaRow => m !== null);
+                setMonedas(rows);
+            }
         } catch { /* silencioso */ }
         finally { setLoadingMonedas(false); }
     }, []);
@@ -85,10 +91,7 @@ export default function ZonaCritica() {
         if (!idDesactivar) return;
         setLoadingDesactivar(true);
         try {
-            await apiFetch(
-                `/api/membresia/seguridad/desactivar/parametrizacion/membresia/${idDesactivar}`,
-                { method: 'DELETE' }
-            );
+            await apiFetch(membresiaPrecioDesactivarPath(idDesactivar), { method: 'DELETE' });
             mostrarMensaje('success', 'Precio desactivado correctamente.');
             setIdDesactivar('');
             await cargarPrecios();
@@ -103,10 +106,7 @@ export default function ZonaCritica() {
         if (!idEliminar) return;
         setLoadingEliminar(true);
         try {
-            await apiFetch(
-                `/api/membresia/seguridad/eliminar/parametrizacion/membresia/${idEliminar}`,
-                { method: 'DELETE' }
-            );
+            await apiFetch(membresiaPrecioEliminarPath(idEliminar), { method: 'DELETE' });
             mostrarMensaje('success', 'Precio eliminado permanentemente.');
             setIdEliminar('');
             await cargarPrecios();
@@ -121,7 +121,7 @@ export default function ZonaCritica() {
         if (!idMonedaEliminar) return;
         setLoadingEliminarMoneda(true);
         try {
-            await apiFetch(`/api/seguridad/delete/${idMonedaEliminar}`, { method: 'DELETE' });
+            await apiFetch(monedaEliminarPath(idMonedaEliminar), { method: 'DELETE' });
             mostrarMensaje('success', 'Moneda eliminada correctamente.');
             setIdMonedaEliminar('');
             await cargarMonedas();
@@ -133,11 +133,13 @@ export default function ZonaCritica() {
     };
 
     const labelPrecio = (id: string) => {
-        const p = precios.find(x => x._id === id);
-        return p ? `${p.nombreMembresia} — $${Number(p.precioMembresia).toLocaleString('es-CO')}` : id;
+        const p = findEntityByPublicId(precios, id);
+        if (!p) return id;
+        const precio = normalizarPrecioDesdeCentavos(p.precioMembresia);
+        return `${p.nombreMembresia} — $${precio.toLocaleString('es-CO')}`;
     };
     const labelMoneda = (id: string) => {
-        const m = monedas.find(x => x._id === id);
+        const m = findEntityByPublicId(monedas, id);
         return m ? m.monedas : id;
     };
 
@@ -204,10 +206,10 @@ export default function ZonaCritica() {
                                     </div>
                                 ) : (
                                     precios.map(p => (
-                                        <SelectItem key={p._id} value={p._id}>
+                                        <SelectItem key={p.id} value={p.id}>
                                             <span className="font-medium">{p.nombreMembresia}</span>
                                             <span className="ml-2 text-muted-foreground text-[11px]">
-                                                ${Number(p.precioMembresia).toLocaleString('es-CO')}
+                                                ${normalizarPrecioDesdeCentavos(p.precioMembresia).toLocaleString('es-CO')}
                                                 {p.tipoPagos ? ` · ${p.tipoPagos}` : ''}
                                             </span>
                                         </SelectItem>
@@ -284,10 +286,10 @@ export default function ZonaCritica() {
                                     </div>
                                 ) : (
                                     precios.map(p => (
-                                        <SelectItem key={p._id} value={p._id}>
+                                        <SelectItem key={p.id} value={p.id}>
                                             <span className="font-medium">{p.nombreMembresia}</span>
                                             <span className="ml-2 text-muted-foreground text-[11px]">
-                                                ${Number(p.precioMembresia).toLocaleString('es-CO')}
+                                                ${normalizarPrecioDesdeCentavos(p.precioMembresia).toLocaleString('es-CO')}
                                                 {p.tipoPagos ? ` · ${p.tipoPagos}` : ''}
                                             </span>
                                         </SelectItem>
@@ -367,7 +369,7 @@ export default function ZonaCritica() {
                                     </div>
                                 ) : (
                                     monedas.map(m => (
-                                        <SelectItem key={m._id} value={m._id}>
+                                        <SelectItem key={m.id} value={m.id}>
                                             <span className="font-medium">{m.monedas}</span>
                                             <span className="ml-2 text-muted-foreground text-[11px]">
                                                 {m.estadoMoneda ? 'Activa' : 'Inactiva'}

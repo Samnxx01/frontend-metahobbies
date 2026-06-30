@@ -242,6 +242,13 @@ function paginaCompatibleConFormulario(pagina: string, formulario: string): bool
 
   }
 
+  if (
+    pagina === 'ParametrosGobernanza'
+    && (formulario === 'ReglasActualizarSaAlcancePanel' || formulario === 'ReglasActualizarGlobalForm')
+  ) {
+    return true;
+  }
+
   if (['ParametrosGobernanza', 'GobernanzaModuloPorRuta'].includes(formulario)) {
 
     return pagina === formulario || pagina === 'ParametrosGobernanza';

@@ -19,6 +19,8 @@ export type GobernanzaModuloParametrizarButtonProps = {
   moduloSlug: string;
   /** Preselecciona la ruta del path SPA al abrir el modal. */
   menuPathInicial?: string | null;
+  /** Tarjeta ya publicada en gobernanzaModuloConfigs (muestra «Actualizar menú»). */
+  esEdicion?: boolean;
   onMenuRefresh?: () => void | Promise<void>;
   className?: string;
   size?: 'default' | 'sm';
@@ -30,6 +32,7 @@ export type GobernanzaModuloParametrizarButtonProps = {
 export function GobernanzaModuloParametrizarButton({
   moduloSlug,
   menuPathInicial = null,
+  esEdicion = false,
   onMenuRefresh,
   className,
   size = 'default',
@@ -53,6 +56,9 @@ export function GobernanzaModuloParametrizarButton({
     || parametrizar.label.trim()
     || parametrizar.catalogoLocal?.label
     || moduloSlug;
+
+  const modoEdicion = esEdicion || parametrizar.esEdicionConfig;
+  const verboAccion = modoEdicion ? 'Actualizar' : 'Parametrizar';
 
   const sembrar = async () => {
     setSembrando(true);
@@ -80,7 +86,7 @@ export function GobernanzaModuloParametrizarButton({
         onClick={() => setOpen(true)}
       >
         <Settings2 className="h-4 w-4" />
-        Parametrizar menú
+        {modoEdicion ? 'Actualizar menú' : 'Parametrizar menú'}
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
@@ -88,10 +94,12 @@ export function GobernanzaModuloParametrizarButton({
           <DialogHeader className="border-b border-border/80 px-6 py-4">
             <DialogTitle className="flex items-center gap-2 text-lg">
               <Database className="h-5 w-5 text-primary" />
-              Parametrizar «{tituloModal}»
+              {verboAccion} «{tituloModal}»
             </DialogTitle>
             <DialogDescription className="text-left text-sm">
-              Define ruta, tipo, nombre, descripción y operaciones habilitadas.
+              {modoEdicion
+                ? 'Modifica ruta, tipo, nombre, descripción y operaciones habilitadas del módulo publicado.'
+                : 'Define ruta, tipo, nombre, descripción y operaciones habilitadas.'}
             </DialogDescription>
           </DialogHeader>
 

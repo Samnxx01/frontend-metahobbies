@@ -612,11 +612,10 @@ const debeAplicarFiltroHerenciaSuperAdmin = async (
 };
 
 const SECURITY_ROUTES_CACHE_TTL_MS = 30_000;
-let _securityRoutesCache: {
-    promise: Promise<RouteResponse | null>;
-    at: number;
-    useAuth: boolean;
-} | null = null;
+const _securityRoutesCacheByAuth = new Map<
+    boolean,
+    { promise: Promise<RouteResponse | null>; at: number }
+>();
 
 const _fetchAllSecurityRoutesRaw = async (useAuth: boolean): Promise<RouteResponse | null> => {
     try {
@@ -648,22 +647,19 @@ const _fetchAllSecurityRoutesRaw = async (useAuth: boolean): Promise<RouteRespon
 /** Catálogo admin/público con deduplicación de peticiones concurrentes (TTL 30s). */
 export const fetchAllSecurityRoutes = async (useAuth: boolean): Promise<RouteResponse | null> => {
     const now = Date.now();
-    if (
-        _securityRoutesCache &&
-        _securityRoutesCache.useAuth === useAuth &&
-        now - _securityRoutesCache.at < SECURITY_ROUTES_CACHE_TTL_MS
-    ) {
-        return _securityRoutesCache.promise;
+    const cached = _securityRoutesCacheByAuth.get(useAuth);
+    if (cached && now - cached.at < SECURITY_ROUTES_CACHE_TTL_MS) {
+        return cached.promise;
     }
 
     const promise = _fetchAllSecurityRoutesRaw(useAuth).catch((err) => {
-        if (_securityRoutesCache?.promise === promise) {
-            _securityRoutesCache = null;
+        if (_securityRoutesCacheByAuth.get(useAuth)?.promise === promise) {
+            _securityRoutesCacheByAuth.delete(useAuth);
         }
         throw err;
     });
 
-    _securityRoutesCache = { promise, at: now, useAuth };
+    _securityRoutesCacheByAuth.set(useAuth, { promise, at: now });
     return promise;
 };
 
@@ -969,6 +965,27 @@ const isStorefrontHybridRoute = (route: RouteCatalogRow): boolean => {
     return route.mostrarEnNavbarPublico === true || route.renderTag === 'publico-view';
 };
 
+const mergeRouteCatalogRow = (adminRow: RouteCatalogRow, publicRow: RouteCatalogRow): RouteCatalogRow => {
+    const merged: RouteCatalogRow = { ...adminRow, ...publicRow };
+    merged.mostrarEnSidebar = adminRow.mostrarEnSidebar === true || publicRow.mostrarEnSidebar === true;
+    merged.mostrarEnNavbarPublico =
+        adminRow.mostrarEnNavbarPublico === true || publicRow.mostrarEnNavbarPublico === true;
+    merged.mostrarEnMenuUsuario =
+        adminRow.mostrarEnMenuUsuario === true || publicRow.mostrarEnMenuUsuario === true;
+
+    const accessCodes = [
+        ...new Set([
+            ...resolveRouteAccessTypeCodes(adminRow),
+            ...resolveRouteAccessTypeCodes(publicRow),
+        ]),
+    ];
+    if (accessCodes.length > 0) {
+        merged.accessTypeCodes = accessCodes;
+    }
+
+    return merged;
+};
+
 const mergeRouteCatalogRows = (
     adminRows: RouteCatalogRow[] = [],
     publicRows: RouteCatalogRow[] = [],
@@ -978,7 +995,7 @@ const mergeRouteCatalogRows = (
         const key = normalizeRoutePath(String(route.path || ''));
         if (!key || key === '/') return;
         const prev = byPath.get(key);
-        byPath.set(key, prev ? { ...prev, ...route } : route);
+        byPath.set(key, prev ? mergeRouteCatalogRow(prev, route) : route);
     });
     return Array.from(byPath.values());
 };
@@ -1062,7 +1079,8 @@ export const getAuthorizedRoutes = async (): Promise<AuthorizedRoutes> => {
             const adminSource = adminCatalogRows.filter((r) => r.estadoRuta && isAdminLayout(r.layout));
             const hasHerenciaAdmin = herencia.idsPermitidos.size > 0 || herencia.pathsPermitidos.size > 0;
             const aplicarHerencia = await debeAplicarFiltroHerenciaSuperAdmin(actorTipo, hasHerenciaAdmin);
-            let adminFiltrado = aplicarHerencia
+            const filtrarPorHerencia = aplicarHerencia && hasHerenciaAdmin;
+            let adminFiltrado = filtrarPorHerencia
                 ? adminSource.filter((r) => {
                     const routeId = String(r._id || r.iud || "");
                     if (herencia.idsPermitidos.has(routeId)) return true;
@@ -1083,7 +1101,7 @@ export const getAuthorizedRoutes = async (): Promise<AuthorizedRoutes> => {
              * quedaría 0 rutas → React Router no registra /admin y cualquier URL muestra 404 real.
              * Rescate: catálogo admin completo (mismo criterio que si no hubiera herencia en API).
              */
-            if (aplicarHerencia && adminFiltrado.length === 0 && adminSource.length > 0) {
+            if (filtrarPorHerencia && adminFiltrado.length === 0 && adminSource.length > 0) {
                 console.warn(
                     '[MABS][getAuthorizedRoutes] Filtro por herencia dejó 0 rutas; usando catálogo admin completo como respaldo',
                     { actorTipo, hasHerenciaAdmin, herenciaIds: herencia.idsPermitidos.size, herenciaPaths: herencia.pathsPermitidos.size }
@@ -1237,128 +1255,40 @@ export const esUsuarioRolCorporativoAutenticado = (): boolean => {
     return false;
 };
 
-const mapMenuTagsToNavbarItems = (
-    tags: Array<{
-        estado?: boolean;
-        routePath?: string;
-        ruta?: { path?: string };
-        label?: string;
-        nombreTag?: string;
-        order?: number;
-    }>,
-): PublicNavItem[] =>
-    tags
-        .filter((t) => t?.estado !== false)
-        .map((t) => ({
-            path: normalizeRoutePath(String(t.routePath || t.ruta?.path || '/')),
-            label: String(t.label || t.nombreTag || '').trim(),
-            order: Number(t.order ?? 0),
-        }))
-        .filter((item) => Boolean(item.label && item.path))
-        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-
-const fetchMarcoMenuNavbarRoutes = async (menuTipo: 'SIDEBAR_MARCO' | 'USER_DROPDOWN'): Promise<PublicNavItem[]> => {
-    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api';
-    const menuResult = await apiFetch(
-        `${API_BASE_URL}/seguridad/rutas/menu-tags/resolver/actual?menuTipo=${menuTipo}`,
-        { method: 'GET', useAuth: true, logoutOn401: false },
-    );
-    if (!menuResult?.success || !Array.isArray(menuResult.data) || menuResult.data.length === 0) {
-        return [];
-    }
-    return mapMenuTagsToNavbarItems(menuResult.data);
-};
-
 /**
- * Rutas del navbar según tipo de sesión.
- * Con sesión: sidebar privado / marco; si no hay ítems privados, mantiene el navbar público híbrido.
+ * Rutas del navbar horizontal (público y privado usan la misma lógica de catálogo público).
  */
-export const getNavbarNavigationRoutes = async (isAuthenticated: boolean): Promise<PublicNavItem[]> => {
-    if (!isAuthenticated) {
-        return getPublicNavigationRoutes(false);
-    }
+export const getNavbarNavigationRoutes = async (_isAuthenticated: boolean = false): Promise<PublicNavItem[]> =>
+    getPublicNavigationRoutes();
 
-    if (esUsuarioRolCorporativoAutenticado()) {
-        try {
-            const marco = await fetchMarcoMenuNavbarRoutes('SIDEBAR_MARCO');
-            if (marco.length > 0) return marco;
-        } catch {
-            /* sin menú marco */
-        }
-        return getPublicNavigationRoutes(false);
-    }
+const isRouteVisibleInPublicNavbar = (route: RouteCatalogRow): boolean => {
+    if (!route.estadoRuta) return false;
 
-    return getPublicNavigationRoutes(true);
+    const accessTypes = resolveRouteAccessTypeCodes(route);
+    if (accessTypes.length === 0) return false;
+
+    const hasPublic = accessTypes.includes('PUBLIC');
+    const hasPrivate =
+        accessTypes.includes('PRIVATE') ||
+        accessTypes.includes('AUTH') ||
+        accessTypes.includes('ADMIN');
+    const isHybrid = hasPublic && hasPrivate;
+
+    if (!hasPublic || route.mostrarEnNavbarPublico !== true) return false;
+    if (route.mostrarEnSidebar === true && !isHybrid) return false;
+    return true;
 };
 
-// export const getPublicNavigationRoutes = async (): Promise<PublicNavItem[]> => {
-//     try {
-//         const result = await fetchAllSecurityRoutes(false);
-
-//         if (!result?.success || !result?.data) {
-//             return [];
-//         }
-
-//         return result.data
-//             .filter((route) =>
-//                 route.estadoRuta &&
-//                 normalizeLayout(route.layout) === "publiclayout" &&
-//                 route.mostrarEnNavbarPublico === true
-//             )
-//             .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-//             .map((route) => ({
-//                 path: normalizeRoutePath(route.path),
-//                 label: route.name,
-//                 order: route.order ?? 0
-//             }));
-//     } catch (error) {
-//         console.error("Error al obtener rutas de navegacion publica:", error);
-//         return [];
-//     }
-// };
-
-export const getPublicNavigationRoutes = async (
-    isAuthenticated: boolean = false
-): Promise<PublicNavItem[]> => {
+export const getPublicNavigationRoutes = async (): Promise<PublicNavItem[]> => {
     try {
-        if (isAuthenticated) {
-            try {
-                const marco = await fetchMarcoMenuNavbarRoutes('SIDEBAR_MARCO');
-                if (marco.length > 0) return marco;
-            } catch {
-                /* fallback catálogo sidebar + navbar público híbrido */
-            }
-        }
-
-        let catalogRows: RouteCatalogRow[] = await fetchMergedSecurityRouteCatalog(isAuthenticated);
+        const catalogRows = await fetchMergedSecurityRouteCatalog(false);
 
         if (!catalogRows.length) {
             return [];
         }
 
         return catalogRows
-            .filter((route) => {
-                if (!route.estadoRuta) return false;
-
-                const accessTypes = resolveRouteAccessTypeCodes(route);
-                if (accessTypes.length === 0) return false;
-
-                const hasPublic = accessTypes.includes('PUBLIC');
-                const hasPrivate = accessTypes.includes('PRIVATE') || accessTypes.includes('AUTH') || accessTypes.includes('ADMIN');
-                const isHybrid = hasPublic && hasPrivate;
-
-                if (isAuthenticated) {
-                    if (!hasPrivate) return false;
-                    if (route.mostrarEnSidebar !== true) return false;
-                    if (route.mostrarEnNavbarPublico === true && !isHybrid) return false;
-                    return true;
-                }
-
-                if (!hasPublic) return false;
-                if (route.mostrarEnNavbarPublico !== true) return false;
-                if (route.mostrarEnSidebar === true && !isHybrid) return false;
-                return true;
-            })
+            .filter(isRouteVisibleInPublicNavbar)
             .sort(compareGuestPublicNavbar)
             .map((route) => ({
                 path: normalizeRoutePath(route.path),
@@ -1373,7 +1303,7 @@ export const getPublicNavigationRoutes = async (
 
 export const getFooterPublicRoutes = async (): Promise<FooterNavItem[]> => {
     try {
-        const items = await getPublicNavigationRoutes(false);
+        const items = await getPublicNavigationRoutes();
         return items
             .filter((item) => normalizeRoutePath(item.path) !== '/')
             .map((item) => ({
@@ -1404,7 +1334,8 @@ export const getAdminSidebarRoutes = async (): Promise<AdminNavItem[]> => {
         const hasHerenciaAdmin = herencia.idsPermitidos.size > 0 || herencia.pathsPermitidos.size > 0;
         const aplicarHerencia = await debeAplicarFiltroHerenciaSuperAdmin(actorTipo, hasHerenciaAdmin);
         const isSuperadmin = actorTipo === 'SUPERADMIN';
-        const resultado = aplicarHerencia
+        const filtrarPorHerencia = aplicarHerencia && hasHerenciaAdmin;
+        const resultado = filtrarPorHerencia
             ? filterAdminRoutesByHerenciaConRescate(adminSource, herencia, true, 'getAdminSidebarRoutes')
             : isSuperadmin
                 ? adminSource
@@ -1467,7 +1398,8 @@ export const getAdminSidebarFallbackTree = async (actorTipo: AdminActorTipo): Pr
         const hasHerenciaAdmin = herencia.idsPermitidos.size > 0 || herencia.pathsPermitidos.size > 0;
         const aplicarHerencia = await debeAplicarFiltroHerenciaSuperAdmin(effectiveActorTipo, hasHerenciaAdmin);
         const isSuperAdminEff = effectiveActorTipo === 'SUPERADMIN';
-        const visibles = aplicarHerencia
+        const filtrarPorHerencia = aplicarHerencia && hasHerenciaAdmin;
+        const visibles = filtrarPorHerencia
             ? filterAdminRoutesByHerenciaConRescate(adminSource, herencia, true, 'getAdminSidebarFallbackTree')
             : isSuperAdminEff
                 ? adminSource
@@ -1533,7 +1465,7 @@ let _sidebarCache: { promise: Promise<AdminSidebarTreeContext>; at: number } | n
 
 export const invalidateSidebarCache = (): void => {
     _sidebarCache = null;
-    _securityRoutesCache = null;
+    _securityRoutesCacheByAuth.clear();
 };
 
 // Limpia todos los caches de sesión al hacer logout.
@@ -1545,7 +1477,7 @@ export const clearSessionCaches = (): void => {
     }
     clearHybridSpaPath();
     _sidebarCache = null;
-    _securityRoutesCache = null;
+    _securityRoutesCacheByAuth.clear();
     _saJerarquiaCorpSelectsCache = null;
     invalidateSplashLogoCache();
 };

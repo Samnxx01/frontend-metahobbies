@@ -34,6 +34,28 @@ export function resolverSaJerarquiaTieneCorporativoEnCounters(
   return saTieneCorporativoEnJerarquiaCounter(id, jerarquiaSaCounters);
 }
 
+/** Resuelve securityPlatform desde meta SA (API) o fallback a selects NVL config. */
+export function resolverSecurityPlatformDesdeTenantSa(
+  saId: string,
+  saMetas: Array<Pick<DiosReglaSaMeta, 'id' | 'securityPlatform' | 'nvlGeneracionTenantId'>> = [],
+  nvlOptions: Array<{ id: string; meta?: Record<string, string | number | undefined> }> = [],
+): boolean {
+  const id = String(saId || '').trim();
+  if (!id) return false;
+  const meta = saMetas.find((m) => String(m.id || '').trim() === id);
+  if (meta && typeof meta.securityPlatform === 'boolean') {
+    return meta.securityPlatform;
+  }
+  const nvlId = String(meta?.nvlGeneracionTenantId || '').trim();
+  if (nvlId) {
+    const opt = nvlOptions.find((o) => o.id === nvlId);
+    if (opt) {
+      return String(opt.meta?.securityPlatform || '').toLowerCase() === 'true';
+    }
+  }
+  return false;
+}
+
 /** Ramas SA visibles para parametrizar regla DIOS y si califican acceso full (sin corporativo en counters). */
 export function buildDiosReglaSaAccesoHelpRows(
   metas: DiosReglaSaMeta[] = [],

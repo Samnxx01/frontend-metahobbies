@@ -86,7 +86,7 @@ export async function validarTokenReferidoMembresia(
     }
 
     try {
-        await apiFetch('/api/membresia/seguridad/crear/parametrizacion/membresia', {
+        await apiFetch('/api/membresia/seguridad/listar/parametrizacion/membresia/referido', {
             method: 'GET',
             useAuth: false,
             logoutOn401: false,

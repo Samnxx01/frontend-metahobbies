@@ -22,7 +22,7 @@ import LoadingScreen from '@/app/presentation/components/common/LoadingScreen';
 import CambiarContrasenaProvisional from '@/app/presentation/pages/cambiar-contrasena/CambiarContrasenaProvisional';
 import ActivacionCuenta from '../presentation/pages/activar-cuenta/ActivaciónCuenta';
 import Perfil from '@/app/presentation/pages/perfil/Perfil';
-import RecuperarContrasena from '@/app/presentation/pages/recuperar-contrasena/RecuperarContrasena';
+import RecuperarContrasenaEntry from '@/app/presentation/pages/recuperar-contrasena/RecuperarContrasenaEntry';
 import RecuperarContrasenaToken from '@/app/presentation/pages/recuperar-contrasena/RecuperarContrasenaToken';
 import NotFound from '@/app/presentation/pages/not-found/NotFound';
 import Home from '@/app/presentation/pages/home/Home';
@@ -417,7 +417,8 @@ export default function LayoutRoutes(): ReactElement {
                 <Route path="membresia/*" element={<MembershipRoutes />} />
                 <Route path="cambiar-contrasena-provisional" element={<CambiarContrasenaProvisional />} />
                 <Route path="activar-cuenta" element={<ActivacionCuenta />} />
-                <Route path="recuperar-contrasena" element={<RecuperarContrasena />} />
+                <Route path="recuperar-contrasena" element={<RecuperarContrasenaEntry />} />
+                <Route path="public/render/recuperar-contrasena" element={<RecuperarContrasenaEntry />} />
                 <Route path="recuperar/:token" element={<RecuperarContrasenaToken />} />
                 {user && <Route path="perfil" element={<Perfil />} />}
             </Route>

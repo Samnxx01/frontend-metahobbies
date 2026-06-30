@@ -1,5 +1,24 @@
 import { apiFetch } from './api';
 
+export type PoliticaBypassMotorEventoItem = {
+  nombre: string;
+  etiqueta: string;
+  pipeline: 'PIPELINE_A' | 'PIPELINE_B';
+  pipelineLabel?: string;
+  alcance?: string;
+  label?: string;
+  dominio?: string;
+  descripcion?: string;
+  activo?: boolean;
+  orden?: number;
+};
+
+export type GuardarPoliticaBypassMotorEventoPayload = {
+  nombre: string;
+  etiqueta: string;
+  pipeline: 'PIPELINE_A' | 'PIPELINE_B';
+};
+
 export type PoliticaBypassAlcanceItem = {
   alcance: string;
   dominio: string;
@@ -144,4 +163,20 @@ export async function actualizarPoliticaBypassRoles(
   const item = (res as { alcance?: PoliticaBypassAlcanceItem })?.alcance;
   if (!item) throw new Error('No se pudo actualizar roles del alcance');
   return item;
+}
+
+export async function guardarPoliticaBypassMotorEvento(
+  payload: GuardarPoliticaBypassMotorEventoPayload,
+): Promise<PoliticaBypassMotorEventoItem> {
+  const res = await apiFetch(`${BASE}/motor-evento`, {
+    method: 'POST',
+    body: payload,
+  });
+  const item = (res as { item?: PoliticaBypassMotorEventoItem })?.item;
+  if (!item) throw new Error('No se pudo guardar el motor evento');
+  return item;
+}
+
+export async function eliminarPoliticaBypassMotorEvento(nombre: string): Promise<void> {
+  await apiFetch(`${BASE}/motor-evento/${encodeURIComponent(nombre)}`, { method: 'DELETE' });
 }

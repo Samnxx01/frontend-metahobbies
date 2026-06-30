@@ -7,8 +7,9 @@ import {
   endpointSpecToAccionPayload,
   endpointsPorSection,
   ENDPOINTS_BY_ID,
+  resolverMetodoHttpEndpoint,
 } from './gobernanzaEndpointCatalog';
-import type { GobernanzaModuloConfigApi } from './gobernanzaModuloApiTypes';
+import type { GobernanzaModuloConfigApi, GobernanzaModuloFiltrosVistaApi } from './gobernanzaModuloApiTypes';
 import type { GobernanzaAccionCatalogItem } from './gobernanzaModuloParametrizarOpciones';
 import { accionesCatalogDesdeConfig } from './gobernanzaModuloParametrizarOpciones';
 import type { EndpointSpec } from './parametrosGobernanzaTypes';
@@ -131,17 +132,26 @@ export function buildAccionesSeleccionInicial(
   accionesFormulario: Array<{ accionId: string; method: string }> = [],
   accionesPublicadas: Array<{ id?: string; method?: string }> = []
 ): Record<string, boolean> {
+  const publishedIds = new Set(
+    accionesPublicadas.map((a) => String(a.id || '').trim()).filter(Boolean)
+  );
   const savedMethods = new Set(
     accionesPublicadas.map((a) => String(a.method || '').trim().toUpperCase()).filter(Boolean)
   );
-  const tienePublicadas = savedMethods.size > 0;
+  const tienePublicadas = publishedIds.size > 0 || savedMethods.size > 0;
 
   return accionesFormulario.reduce<Record<string, boolean>>((acc, item) => {
     const id = String(item.accionId || '').trim();
     if (!id) return acc;
-    acc[id] = tienePublicadas
-      ? savedMethods.has(String(item.method || '').trim().toUpperCase())
-      : true;
+    if (!tienePublicadas) {
+      acc[id] = true;
+      return acc;
+    }
+    if (publishedIds.has(id)) {
+      acc[id] = true;
+      return acc;
+    }
+    acc[id] = savedMethods.has(String(item.method || '').trim().toUpperCase());
     return acc;
   }, {});
 }
@@ -235,7 +245,8 @@ export function accionesUpsertDesdeCatalogo(
     const id = String(rawId || '').trim();
     if (!id || seen.has(id)) continue;
     const item = metaById.get(id);
-    const method = String(item?.method || 'GET').trim().toUpperCase();
+    const endpointId = normalizarGobernanzaEndpointId(id) || id;
+    const method = resolverMetodoHttpEndpoint(endpointId, String(item?.method || 'GET'));
     const path = String(item?.path || '').trim();
     if (!path) continue;
     seen.add(id);
@@ -356,6 +367,48 @@ export function buildGobernanzaModuloUpsertPayload(
     orden: Number(campos?.orden ?? local?.orden ?? 0),
     acciones,
   };
+}
+
+/** Upsert mínimo: conserva menú/acciones del catálogo y solo actualiza filtrosVista. */
+export function buildGobernanzaModuloAutorizacionPayload(
+  config: GobernanzaModuloConfigApi,
+  filtrosVista: GobernanzaModuloFiltrosVistaApi
+): Record<string, unknown> | null {
+  const rutaId = String(config.rutaId || '').trim();
+  const menuPath = String(config.menuPath || config.rutaPath || config.frontPath || '').trim();
+  if (!rutaId && !menuPath) return null;
+
+  const catalog = accionesCatalogDesdeConfig(config);
+  const accionIds = catalog.map((a) => a.accionId);
+  const acciones =
+    accionIds.length > 0
+      ? accionesUpsertDesdeCatalogo(catalog, accionIds, [config])
+      : accionesUpsertDesdeEndpointIds(config.slug, config.endpointIds ?? []);
+
+  if (!acciones.length) return null;
+
+  const nombre = String(config.nombre || config.label || config.slug || '').trim();
+  if (!nombre) return null;
+
+  return buildGobernanzaModuloUpsertPayload(
+    config.slug,
+    {
+      rutaId: rutaId || undefined,
+      rutaPath: menuPath || undefined,
+      formularioComponent: config.formularioComponent ?? undefined,
+      tipoId: config.tipoId ?? undefined,
+      tipoSection: config.tipoSection ?? undefined,
+    },
+    {
+      nombre,
+      description: config.description,
+      menuPath,
+      section: config.section,
+      cardSlug: config.slug,
+      acciones,
+      filtrosVista,
+    }
+  );
 }
 
 export function buildGobernanzaModulosBulkSeed(

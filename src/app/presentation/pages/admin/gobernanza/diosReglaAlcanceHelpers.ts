@@ -14,6 +14,10 @@ export type DiosReglaAlcancePayload = {
 export type DiosReglaSaMeta = SaJerarquiaLabelMeta & {
   id: string;
   usuarioId?: string | null;
+  /** _id generacionglobalnvlrolesconfigs enlazado en tenantsupertenants.nvlGeneracionTenant */
+  nvlGeneracionTenantId?: string | null;
+  /** Desde generacionglobalnvlrolesconfigs.securityPlatform */
+  securityPlatform?: boolean;
   /** apisDominios.dominio del tenant SuperAdmin */
   dominioTenant?: string | null;
   apisDominiosId?: string | null;

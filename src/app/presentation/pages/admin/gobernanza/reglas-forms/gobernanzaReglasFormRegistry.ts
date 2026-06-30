@@ -3,6 +3,7 @@ export const GOBERNANZA_REGLAS_FORM_COMPONENTS = [
   'ReglasListarTenantForm',
   'ReglasCrearGlobalForm',
   'ReglasActualizarGlobalForm',
+  'ReglasActualizarSaAlcancePanel',
   'ReglasDesactivarGlobalForm',
   'ReglasEliminarGlobalForm',
   'ReglasCrearDiosForm',
@@ -22,6 +23,8 @@ export const ENDPOINT_ID_BY_REGLAS_COMPONENT: Record<string, string> = {
   ReglasListarTenantForm: 'tenant-listar-reglas',
   ReglasCrearGlobalForm: 'tenant-crear-global-reglas',
   ReglasActualizarGlobalForm: 'tenant-actualizar-global-reglas',
+  /** Alias publicado en menú parametrizado → mismo endpoint que ReglasActualizarGlobalForm. */
+  ReglasActualizarSaAlcancePanel: 'tenant-actualizar-global-reglas',
   ReglasDesactivarGlobalForm: 'tenant-desactivar-global-reglas',
   ReglasEliminarGlobalForm: 'tenant-eliminar-global-reglas',
   ReglasCrearDiosForm: 'tenant-crear-dios-reglas',
@@ -41,7 +44,7 @@ export function endpointIdDesdeComponenteReglas(formularioComponent?: string | n
 export function esComponenteReglasSubformulario(component: string | null | undefined): boolean {
   const name = String(component || '').trim();
   if (!name) return false;
-  return /^Reglas[A-Za-z0-9]+Form$/.test(name);
+  return /^Reglas[A-Za-z0-9]+Form$/.test(name) || name === 'ReglasActualizarSaAlcancePanel';
 }
 
 export function endpointIdsDesdeTipoFormulariosReglas(

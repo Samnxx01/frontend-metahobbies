@@ -63,6 +63,7 @@ import {
   Users,
   Wand2,
 } from 'lucide-react';
+import { NvlGlobalCrearHelpButton } from './gobernanza/NvlGlobalCrearHelpButton';
 
 // ─────────────────────────────────────────────────────────────────
 // TIPOS
@@ -2317,6 +2318,7 @@ const ParametrizacionCatologTenant: React.FC = () => {
             <div className="flex flex-wrap items-center gap-3">
               <MethodBadge method={selectedEndpoint.method} />
               <h1 className="text-2xl font-bold text-slate-900">{selectedEndpoint.title}</h1>
+              {selectedEndpoint.id === 'nvlg-crear' ? <NvlGlobalCrearHelpButton /> : null}
             </div>
           </div>
 

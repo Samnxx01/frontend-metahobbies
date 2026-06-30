@@ -1,6 +1,7 @@
 import React from 'react';
 import { useLocation } from 'react-router-dom';
 import ParametrosGobernanza from '../../ParametrosGobernanza';
+import { GOBERNANZA_TIPO_SECTION_PERMISOS_SA } from '../gobernanzaActionIds';
 
 export type GobernanzaPermisosParametrizadoPageProps = {
   /** Acción del catálogo al abrir subruta (p. ej. perm-listar-herencias). */
@@ -9,7 +10,7 @@ export type GobernanzaPermisosParametrizadoPageProps = {
 
 /**
  * Vista de permisos alimentada por gobernanzaModuloConfigs: formulario en la subruta publicada.
- * Sin query ?accion= — la acción se resuelve por menuPath + preferredActionId.
+ * operacionesHub carga las pestañas desde gobernanzaModuloConfigs (como PermisosGlobal).
  */
 export function GobernanzaPermisosParametrizadoPage({
   preferredActionId,
@@ -26,6 +27,8 @@ export function GobernanzaPermisosParametrizadoPage({
       preferredActionId={preferredActionId}
       shellVariant="compact"
       enableCardDesignEditor={false}
+      operacionesHub
+      tipoSection={GOBERNANZA_TIPO_SECTION_PERMISOS_SA}
     />
   );
 }

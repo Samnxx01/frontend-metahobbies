@@ -19,6 +19,7 @@ import {
   buildGobernanzaMenuTabsFromEndpoints,
 } from './gobernanzaModuloMenuUi';
 import { fetchGobernanzaModuloConfigs, fetchGobernanzaModuloOperativo } from './gobernanzaModuloService';
+import { filtrarConfigsConAlcancesParametrizados } from './gobernanzaModuloAlcance';
 import type { GobernanzaModuloConfigApi, GobernanzaModuloMenuAccion } from './gobernanzaModuloApiTypes';
 import type { EndpointSpec } from './parametrosGobernanzaTypes';
 import { ENDPOINTS_BY_ID } from './gobernanzaEndpointCatalog';
@@ -29,12 +30,6 @@ import {
   GOBERNANZA_GENERIC_ACTION_IDS,
 } from './gobernanzaActionIds';
 import { canonicalGobernanzaTipoSection } from './gobernanzaModuloTipoDefaults';
-import {
-  errorGobernanzaOperativo,
-  groupGobernanzaOperativo,
-  logGobernanzaOperativo,
-  warnGobernanzaOperativo,
-} from './gobernanzaModuloDebug';
 
 function apiModuloToConfig(api: GobernanzaModuloConfigApi): GobernanzaModuloConfig {
   return {
@@ -119,20 +114,7 @@ export function useGobernanzaModuloMenu({
   const [selectedActionId, setSelectedActionId] = useState('');
 
   const refreshMenu = useCallback(async () => {
-    logGobernanzaOperativo('refreshMenu:start', {
-      enabled,
-      sectionQuery,
-      slug,
-      sectionKey,
-      menuPath: menuPathNorm || null,
-    });
-
     if (!enabled || !sectionQuery) {
-      warnGobernanzaOperativo('refreshMenu:SKIP — API no llamado', {
-        motivo: !enabled ? 'enabled=false' : 'sectionQuery vacío',
-        enabled,
-        sectionQuery,
-      });
       setMenuLoading(false);
       setMenuAcciones(null);
       setMenuConfigApi(null);
@@ -143,9 +125,6 @@ export function useGobernanzaModuloMenu({
     setMenuLoading(true);
     setMenuError(null);
     try {
-      logGobernanzaOperativo('fetch GET operativo', {
-        url: `/operativo?section=${sectionQuery}${menuPathNorm ? `&menuPath=${menuPathNorm}` : ''}${operacionesHub ? '&hubOperaciones=1' : ''}${tipoSectionNorm ? `&tipoSection=${tipoSectionNorm}` : ''}`,
-      });
       const res = await fetchGobernanzaModuloOperativo({
         section: sectionQuery,
         menuPath: menuPathNorm || undefined,
@@ -153,64 +132,44 @@ export function useGobernanzaModuloMenu({
         tipoSection: tipoSectionNorm || undefined,
       });
       let acciones = Array.isArray(res.acciones) ? res.acciones : [];
-      let configs = Array.isArray(res.configs) ? res.configs : [];
-
-      const accionesParecenFallbackHub = () => {
-        if (!operacionesHub) return false;
-        if (!acciones.length) return true;
-        const pathKey = normalizarGobernanzaMenuPath(menuPathNorm)?.toLowerCase();
-        if (acciones.length === 1) {
-          const a = acciones[0];
-          const mp = normalizarGobernanzaMenuPath(a.menuPath || a.path || '').toLowerCase();
-          return (
-            GOBERNANZA_GENERIC_ACTION_IDS.has(a.id)
-            || GOBERNANZA_GENERIC_ACTION_IDS.has(String(a.title || '').trim())
-            || Boolean(pathKey && mp === pathKey)
-          );
-        }
-        return acciones.every((a) => GOBERNANZA_GENERIC_ACTION_IDS.has(a.id));
-      };
+      let configs = filtrarConfigsConAlcancesParametrizados(
+        Array.isArray(res.configs) ? res.configs : []
+      );
 
       if (operacionesHub) {
-        try {
-          const raw = await fetchGobernanzaModuloConfigs(sectionQuery);
-          const full = Array.isArray(raw.configs) ? raw.configs : [];
-          if (full.length) configs = full;
-        } catch (cfgErr) {
-          warnGobernanzaOperativo('GET configs (hub) falló — usando configs del operativo', cfgErr);
+        const completos = Array.isArray(res.configsCompletos) ? res.configsCompletos : [];
+        if (completos.length) {
+          configs = filtrarConfigsConAlcancesParametrizados(completos);
+        } else {
+          try {
+            const raw = await fetchGobernanzaModuloConfigs(sectionQuery, {
+              tipoSection: tipoSectionNorm || undefined,
+            });
+            const full = Array.isArray(raw.configs) ? raw.configs : [];
+            if (full.length) configs = filtrarConfigsConAlcancesParametrizados(full);
+          } catch {
+            // usa configs del GET operativo
+          }
         }
         const hubAcciones = buildAccionesHubDesdeConfigsClient(configs, menuPathNorm || undefined);
         if (hubAcciones.length) {
           acciones = hubAcciones;
-          logGobernanzaOperativo('acciones hub desde gobernanzaModuloConfigs', acciones);
-        } else if (accionesParecenFallbackHub()) {
-          warnGobernanzaOperativo('hub sin tarjetas — revisa section=permisos, menuPath y formularioComponent', {
-            menuPath: menuPathNorm,
-            configs: configs.map((c) => ({ slug: c.slug, menuPath: c.menuPath, formularioComponent: c.formularioComponent })),
-          });
         }
       } else if (!acciones.length && configs.length) {
         acciones = buildAccionesFromConfigsClient(configs);
-        logGobernanzaOperativo('acciones reconstruidas desde configs (cliente)', acciones);
       }
-
-      groupGobernanzaOperativo('respuesta GET operativo', () => {
-        logGobernanzaOperativo('ok', res.ok);
-        logGobernanzaOperativo('meta', res.meta);
-        logGobernanzaOperativo('configs.length', configs.length);
-        logGobernanzaOperativo('acciones.length (API)', acciones.length);
-        logGobernanzaOperativo('configs[0]', configs[0] ?? null);
-        logGobernanzaOperativo('acciones (API)', acciones);
-      });
 
       acciones = enriquecerAccionesDesdeConfigs(acciones, configs, menuPathNorm || undefined);
       acciones = normalizarGobernanzaMenuAcciones(acciones);
+      acciones = acciones.filter((a) => a.disponible !== false);
 
       if (!acciones.length && !configs.length) {
-        warnGobernanzaOperativo('operativo vacío — probando GET configs');
-        const raw = await fetchGobernanzaModuloConfigs(sectionQuery);
-        configs = Array.isArray(raw.configs) ? raw.configs : [];
-        logGobernanzaOperativo('GET configs', { count: configs.length, configs });
+        const raw = await fetchGobernanzaModuloConfigs(sectionQuery, {
+          tipoSection: tipoSectionNorm || undefined,
+        });
+        configs = filtrarConfigsConAlcancesParametrizados(
+          Array.isArray(raw.configs) ? raw.configs : []
+        );
         if (configs.length) {
           const baseAcciones = operacionesHub
             ? buildAccionesHubDesdeConfigsClient(configs, menuPathNorm || undefined)
@@ -221,7 +180,7 @@ export function useGobernanzaModuloMenu({
             menuPathNorm || undefined
           );
           acciones = normalizarGobernanzaMenuAcciones(acciones);
-          logGobernanzaOperativo('acciones desde configs fallback', acciones);
+          acciones = acciones.filter((a) => a.disponible !== false);
         }
       }
 
@@ -262,16 +221,7 @@ export function useGobernanzaModuloMenu({
           ?? null
       );
       setSaJerarquiaConCorporativo(Boolean(res.saJerarquiaConCorporativo));
-
-      logGobernanzaOperativo('refreshMenu:OK', {
-        configCount: configs.length || res.meta?.configCount || 0,
-        accionesCount: acciones.length,
-        accionIds: acciones.map((a) => a.id),
-        defaultActionId:
-          res.defaultActionId ?? res.modulo?.defaultActionId ?? acciones[0]?.id ?? null,
-      });
     } catch (err: unknown) {
-      errorGobernanzaOperativo('refreshMenu:ERROR', err);
       setMenuAcciones(null);
       setMenuConfigApi(null);
       setMenuConfigs([]);
@@ -349,15 +299,8 @@ export function useGobernanzaModuloMenu({
     const mapped = menuAcciones.map((item) => accionMenuToEndpointSpec(item, section));
     const result = mapped.filter((e): e is EndpointSpec => Boolean(e));
     if (menuAcciones.length && !result.length) {
-      const fallback = menuAcciones.map((item) => accionToEndpointSpecMinimo(item, section));
-      warnGobernanzaOperativo('endpoints: fallback mínimo (sin validación)', fallback);
-      return fallback;
+      return menuAcciones.map((item) => accionToEndpointSpecMinimo(item, section));
     }
-    logGobernanzaOperativo('endpoints para pestañas', {
-      menuAccionesCount: menuAcciones.length,
-      endpointsCount: result.length,
-      endpointIds: result.map((e) => e.id),
-    });
     return result;
   }, [menuAcciones, config.section]);
 

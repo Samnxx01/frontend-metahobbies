@@ -46,6 +46,7 @@ export type PoliticaRuntimeUsuarioOpcion = {
   correo: string;
   label: string;
   rol?: string;
+  tenantSuperAdminId?: string | null;
   tenantGlobalId?: string | null;
   tenantCorporativoId?: string | null;
 };
@@ -57,17 +58,30 @@ export type PoliticaRuntimeComportamiento =
   | 'NEUTRO'
   | 'REQUIERE_TECHO';
 
+export type PoliticaRuntimeComportamientoCatalogoItem = {
+  id?: string;
+  nombre: string;
+  etiqueta: string;
+  valor: string;
+  label: string;
+  motorSemantica?: string | null;
+  activo: boolean;
+  protegido: boolean;
+};
+
 export type PoliticaRuntimeCatalogoItem = {
+  id?: string;
   valor: string;
   label: string;
   descripcion: string;
   comportamiento: PoliticaRuntimeComportamiento | null;
+  motorSemantica: PoliticaRuntimeComportamiento | null;
   orden: number;
   activo: boolean;
   protegido: boolean;
 };
 
-export type PoliticaRuntimeCatalogoCategoria = 'TIPO' | 'EFECTO';
+export type PoliticaRuntimeCatalogoCategoria = 'TIPO' | 'EFECTO' | 'REFERENCIA' | 'COMPORTAMIENTO';
 
 export type PoliticaRuntimeAccionOpcion = {
   id: string;
@@ -85,25 +99,68 @@ export type PoliticaRuntimeRutaOpcion = {
   label: string;
 };
 
+export type PoliticaRuntimeBypassAlcanceOpcion = {
+  id?: string;
+  nombre: string;
+  etiqueta: string;
+  pipeline: 'PIPELINE_A' | 'PIPELINE_B';
+  pipelineLabel?: string;
+  alcance: string;
+  dominio: string;
+  label: string;
+  descripcion: string;
+  reglasDinamicas?: string[];
+  orden: number;
+};
+
+export type PoliticaRuntimeTenantScopeOpcion = {
+  id: string;
+  label: string;
+  codigoJerarquia?: string | null;
+  tenantSuperAdminId?: string | null;
+  tenantGlobalId?: string | null;
+  corporativoId?: string | null;
+};
+
+export type PoliticaRuntimeTenantsScopeOpciones = {
+  tenantSuperAdmins: PoliticaRuntimeTenantScopeOpcion[];
+  tenantGlobales: PoliticaRuntimeTenantScopeOpcion[];
+  tenantCorporativos: PoliticaRuntimeTenantScopeOpcion[];
+};
+
 export type PoliticaRuntimeOpciones = {
   tipos: string[];
   efectos: string[];
   catalogoTipos: PoliticaRuntimeCatalogoItem[];
   catalogoEfectos: PoliticaRuntimeCatalogoItem[];
-  roles: string[];
+  catalogoReferencias: PoliticaRuntimeCatalogoItem[];
+  catalogoComportamientos: PoliticaRuntimeComportamientoCatalogoItem[];
+  /** Semánticas que el motor interpreta (PERMITE, BLOQUEA, BYPASS, …). */
+  motorSemanticas?: string[];
   dominiosPolitica: string[];
   apisDominios: PoliticaRuntimeApisDominio[];
   acciones: PoliticaRuntimeAccionOpcion[];
   rutas: PoliticaRuntimeRutaOpcion[];
   usuarios: PoliticaRuntimeUsuarioOpcion[];
+  bypassAlcances: PoliticaRuntimeBypassAlcanceOpcion[];
+  tenantsScope?: PoliticaRuntimeTenantsScopeOpciones;
+  contexto?: {
+    tenantSuperAdminId?: string | null;
+    tenantGlobalId?: string | null;
+    tenantCorporativoId?: string | null;
+    apisDominiosId?: string | null;
+  };
 };
 
 export type GuardarCatalogoItemPayload = {
   categoria: PoliticaRuntimeCatalogoCategoria;
-  valor: string;
+  valor?: string;
+  nombre?: string;
   label?: string;
+  etiqueta?: string;
   descripcion?: string;
-  comportamiento?: PoliticaRuntimeComportamiento;
+  comportamiento?: string;
+  motorSemantica?: string;
   orden?: number;
   activo?: boolean;
 };
@@ -123,7 +180,6 @@ export type SimularPoliticaRuntimePayload = {
   tipo?: string;
   referencia?: string;
   alcance?: string;
-  rolNombre?: string;
   tenantSuperAdminId?: string;
   tenantGlobalId?: string;
   tenantCorporativoId?: string;

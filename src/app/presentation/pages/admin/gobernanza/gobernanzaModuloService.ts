@@ -13,12 +13,9 @@ import type {
   GobernanzaModuloTiposResponse,
   GobernanzaModuloTipoApi,
 } from './gobernanzaModuloApiTypes';
-import {
-  errorGobernanzaOperativo,
-  logGobernanzaOperativo,
-  warnGobernanzaOperativo,
-} from './gobernanzaModuloDebug';
 import { canonicalGobernanzaTipoSection } from './gobernanzaModuloTipoDefaults';
+import { fetchGobernanzaCached, gobernanzaApiCacheKey, invalidateGobernanzaApiCache } from './gobernanzaApiCache';
+import type { GobernanzaParametrizacionUi } from './gobernanzaParametrizacionUi';
 
 const CATALOGO_PATH = '/api/config/global/gobernanza/modulos/catalogo';
 const CONFIGS_PATH = '/api/config/global/gobernanza/modulos/configs';
@@ -33,6 +30,18 @@ const SINCRONIZAR_API_CONSUMO_PATH = '/api/config/global/gobernanza/modulos/sinc
 const TIPOS_PATH = '/api/config/global/gobernanza/modulos/tipos';
 const TIPOS_SECTIONS_PATH = '/api/config/global/gobernanza/modulos/tipos/sections';
 const TIPOS_UPSERT_PATH = '/api/config/global/gobernanza/modulos/tipos/upsert';
+
+let parametrizacionUiMemory: GobernanzaParametrizacionUi | null = null;
+
+export function seedGobernanzaParametrizacionUiCache(ui: GobernanzaParametrizacionUi | null | undefined): void {
+  if (ui && typeof ui === 'object') {
+    parametrizacionUiMemory = ui;
+  }
+}
+
+export function peekGobernanzaParametrizacionUiCache(): GobernanzaParametrizacionUi | null {
+  return parametrizacionUiMemory;
+}
 
 export async function fetchGobernanzaAccionesCatalogo(): Promise<AccionOption[]> {
   const res = await getAccionesCatalogo();
@@ -87,40 +96,48 @@ export async function fetchGobernanzaModuloOperativo(
   if (hubOperaciones) params.set('hubOperaciones', '1');
   if (tipoSection) params.set('tipoSection', tipoSection);
   const url = `${OPERATIVO_PATH}?${params.toString()}`;
-  logGobernanzaOperativo('apiFetch operativo →', url);
 
-  let payload: unknown;
-  try {
-    payload = await apiFetch(url, {
-      method: 'GET',
-      cache: 'no-store',
-      headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' },
-    });
-  } catch (err) {
-    errorGobernanzaOperativo('apiFetch operativo falló', err);
-    throw err;
-  }
-
-  logGobernanzaOperativo('apiFetch operativo ←', payload);
+  const payload = await fetchGobernanzaCached(
+    gobernanzaApiCacheKey({
+      operativo: true,
+      section,
+      menuPath: menuPath || null,
+      hubOperaciones,
+      tipoSection: tipoSection || null,
+    }),
+    async () =>
+      apiFetch(url, {
+        method: 'GET',
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' },
+      })
+  );
 
   if (!payload || (payload as { ok?: boolean }).ok === false) {
     const msg = (payload as { msg?: string })?.msg || 'No se pudo cargar gobernanzaModuloConfigs';
-    warnGobernanzaOperativo('operativo ok=false', { msg, payload });
     throw new Error(msg);
   }
 
-  return payload as GobernanzaModuloOperativoResponse;
+  const response = payload as GobernanzaModuloOperativoResponse;
+  seedGobernanzaParametrizacionUiCache(response.parametrizacionUi);
+  return response;
 }
 
 /** GET conjuntos UI (ocultar panel, reglas, jerarquía…) desde gobernanzaModuloConfigs. */
 export async function fetchGobernanzaParametrizacionUi(): Promise<
   import('./gobernanzaParametrizacionUi').GobernanzaParametrizacionUi
 > {
-  const payload = await apiFetch(PARAMETRIZACION_UI_PATH, {
-    method: 'GET',
-    cache: 'no-store',
-    headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' },
-  });
+  if (parametrizacionUiMemory) {
+    return parametrizacionUiMemory;
+  }
+
+  const payload = await fetchGobernanzaCached('parametrizacion-ui', async () =>
+    apiFetch(PARAMETRIZACION_UI_PATH, {
+      method: 'GET',
+      cache: 'no-store',
+      headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' },
+    })
+  );
 
   if (!payload || (payload as { ok?: boolean }).ok === false) {
     throw new Error((payload as { msg?: string })?.msg || 'No se pudo cargar parametrización UI');
@@ -131,20 +148,34 @@ export async function fetchGobernanzaParametrizacionUi(): Promise<
     throw new Error('Respuesta de parametrización UI inválida');
   }
 
+  seedGobernanzaParametrizacionUiCache(ui as GobernanzaParametrizacionUi);
   return ui as import('./gobernanzaParametrizacionUi').GobernanzaParametrizacionUi;
 }
 
 /** GET crudo de gobernanzaModuloConfigs por sección. */
 export async function fetchGobernanzaModuloConfigs(
-  section: string
+  section: string,
+  opts?: { tipoSection?: string | null }
 ): Promise<{ ok: boolean; configs: GobernanzaModuloOperativoResponse['configs'] }> {
-  const payload = await apiFetch(
-    `${CONFIGS_PATH}?section=${encodeURIComponent(section.trim())}`,
-    {
-      method: 'GET',
-      cache: 'no-store',
-      headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' },
-    }
+  const params = new URLSearchParams({ section: section.trim() });
+  const tipoSection = String(opts?.tipoSection || '').trim();
+  if (tipoSection) {
+    params.set('tipoSection', canonicalGobernanzaTipoSection(tipoSection));
+  }
+  const cacheKey = gobernanzaApiCacheKey({
+    configs: true,
+    section: section.trim(),
+    tipoSection: tipoSection || null,
+  });
+  const payload = await fetchGobernanzaCached(cacheKey, async () =>
+    apiFetch(
+      `${CONFIGS_PATH}?${params.toString()}`,
+      {
+        method: 'GET',
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' },
+      }
+    )
   );
 
   if (!payload || payload.ok === false) {
@@ -194,6 +225,9 @@ export async function fetchGobernanzaModuloTipos(
 }
 
 export type UpsertGobernanzaModuloTipoPayload = {
+  /** Id Mongo del tipo existente (actualiza por _id, no solo por codigo+section). */
+  id?: string;
+  tipoId?: string;
   section: string;
   nombre: string;
   codigo?: string;
@@ -242,6 +276,7 @@ export async function upsertGobernanzaModulo(
     throw new Error(payload?.msg || 'No se pudo guardar el módulo de gobernanza');
   }
 
+  invalidateGobernanzaApiCache();
   return payload;
 }
 
