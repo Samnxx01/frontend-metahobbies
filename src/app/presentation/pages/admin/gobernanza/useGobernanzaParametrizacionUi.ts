@@ -5,7 +5,7 @@ import {
   type GobernanzaParametrizacionUi,
   type GobernanzaParametrizacionUiSets,
 } from './gobernanzaParametrizacionUi';
-import { fetchGobernanzaParametrizacionUi } from './gobernanzaModuloService';
+import { fetchGobernanzaParametrizacionUi, peekGobernanzaParametrizacionUiCache } from './gobernanzaModuloService';
 
 export type UseGobernanzaParametrizacionUiOptions = {
   enabled?: boolean;
@@ -16,14 +16,23 @@ export type UseGobernanzaParametrizacionUiOptions = {
  */
 export function useGobernanzaParametrizacionUi(options: UseGobernanzaParametrizacionUiOptions = {}) {
   const enabled = options.enabled !== false;
-  const [loading, setLoading] = useState(enabled);
+  const [raw, setRaw] = useState<GobernanzaParametrizacionUi | null>(() =>
+    peekGobernanzaParametrizacionUiCache()
+  );
+  const [loading, setLoading] = useState(enabled && !peekGobernanzaParametrizacionUiCache());
   const [error, setError] = useState<string | null>(null);
-  const [raw, setRaw] = useState<GobernanzaParametrizacionUi | null>(null);
 
   const refresh = useCallback(async () => {
     if (!enabled) {
       setLoading(false);
       setRaw(null);
+      return;
+    }
+    const cached = peekGobernanzaParametrizacionUiCache();
+    if (cached) {
+      setRaw(cached);
+      setLoading(false);
+      setError(null);
       return;
     }
     setLoading(true);

@@ -405,7 +405,7 @@ export default function MembershipPayment(): React.ReactElement {
                     headers['x-guest-session-id'] = guestSessionHeader;
                 }
                 const json = await apiFetch(
-                    `/api/membresia/seguridad/crear/parametrizacion/membresia?ref=${encodeURIComponent(token)}`,
+                    `/api/membresia/seguridad/listar/parametrizacion/membresia/referido?ref=${encodeURIComponent(token)}`,
                     {
                         method: 'GET',
                         useAuth: false,

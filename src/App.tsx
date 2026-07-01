@@ -6,6 +6,7 @@ import { MembershipProvider } from './app/providers/MembershipProvider';
 import BrandingProvider from './app/providers/BrandingProvider';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import { Toaster } from './components/ui/sonner';
 
 function App(): React.ReactElement {
   return (
@@ -31,6 +32,7 @@ function App(): React.ReactElement {
         pauseOnHover
         theme="colored"
       />
+      <Toaster position="top-right" richColors closeButton />
     </AuthProvider>
   );
 }

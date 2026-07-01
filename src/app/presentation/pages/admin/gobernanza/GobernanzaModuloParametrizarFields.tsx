@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/select';
 import { GobernanzaModuloAccionesSelector } from './GobernanzaModuloAccionesSelector';
 import { GobernanzaModuloTipoCrearButton } from './GobernanzaModuloTipoCrearDialog';
+import { GobernanzaModuloSearchableSelect } from './GobernanzaModuloSearchableSelect';
 import { useGobernanzaModuloTiposSections } from './useGobernanzaModuloTiposSections';
 import type { useGobernanzaModuloParametrizar } from './useGobernanzaModuloParametrizar';
 
@@ -104,6 +105,46 @@ export function GobernanzaModuloParametrizarFields({
 
   const registradasCount = accionesPublicadas.filter((a) => a.id).length;
 
+  const rutasSelectOptions = useMemo(
+    () =>
+      rutas.map((r) => ({
+        value: r.id,
+        searchText: [r.name, r.path, r.component, r.id].filter(Boolean).join(' '),
+        label: (
+          <>
+            <span className="font-medium">{r.name || 'Sin nombre'}</span>
+            {r.path ? <span className="ml-1 text-muted-foreground">· {r.path}</span> : null}
+          </>
+        ),
+      })),
+    [rutas],
+  );
+
+  const tiposSelectOptions = useMemo(
+    () =>
+      tiposOpciones.map((o) => ({
+        value: o.value,
+        searchText: o.label,
+        label: o.label,
+      })),
+    [tiposOpciones],
+  );
+
+  const configsSelectOptions = useMemo(
+    () =>
+      configsOpciones.map((o) => ({
+        value: o.value,
+        searchText: [o.label, o.hint].filter(Boolean).join(' '),
+        label: (
+          <>
+            <span className="font-medium">{o.label}</span>
+            {o.hint ? <span className="ml-1 text-muted-foreground">· {o.hint}</span> : null}
+          </>
+        ),
+      })),
+    [configsOpciones],
+  );
+
   return (
     <div className="space-y-4">
       {cargandoInicial ? (
@@ -119,21 +160,16 @@ export function GobernanzaModuloParametrizarFields({
             <Label htmlFor="gm-ruta" className="text-xs text-muted-foreground">
               Ruta (rutaseguridads)
             </Label>
-            <Select value={rutaId} onValueChange={setRutaId} disabled={rutasLoading}>
-              <SelectTrigger id="gm-ruta" className="h-10">
-                <SelectValue placeholder={rutasLoading ? 'Cargando…' : 'Selecciona la ruta'} />
-              </SelectTrigger>
-              <SelectContent>
-                {rutas.map((r) => (
-                  <SelectItem key={r.id} value={r.id}>
-                    <span className="font-medium">{r.name || 'Sin nombre'}</span>
-                    {r.path ? (
-                      <span className="ml-1 text-muted-foreground">· {r.path}</span>
-                    ) : null}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <GobernanzaModuloSearchableSelect
+              id="gm-ruta"
+              value={rutaId}
+              onValueChange={setRutaId}
+              options={rutasSelectOptions}
+              disabled={rutasLoading}
+              placeholder={rutasLoading ? 'Cargando…' : 'Selecciona la ruta'}
+              searchPlaceholder="Buscar por nombre, path o componente…"
+              emptyMessage="No hay rutas que coincidan"
+            />
             {rutaSeleccionada?.path ? (
               <p className="truncate font-mono text-[11px] text-muted-foreground">{rutaSeleccionada.path}</p>
             ) : null}
@@ -203,22 +239,16 @@ export function GobernanzaModuloParametrizarFields({
                 }}
               />
             </div>
-            <Select
-              value={tipoId || undefined}
+            <GobernanzaModuloSearchableSelect
+              id="gm-tipo"
+              value={tipoId || ''}
               onValueChange={seleccionarTipoModulo}
+              options={tiposSelectOptions}
               disabled={tiposLoading || tiposOpciones.length === 0}
-            >
-              <SelectTrigger id="gm-tipo" className="h-10">
-                <SelectValue placeholder={tiposLoading ? 'Cargando…' : 'Selecciona el tipo'} />
-              </SelectTrigger>
-              <SelectContent>
-                {tiposOpciones.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              placeholder={tiposLoading ? 'Cargando…' : 'Selecciona el tipo'}
+              searchPlaceholder="Buscar tipo…"
+              emptyMessage="No hay tipos que coincidan"
+            />
             {tipoSeleccionado ? (
               <p className="text-[11px] text-muted-foreground">
                 {tipoSeleccionado.section ? (
@@ -265,30 +295,21 @@ export function GobernanzaModuloParametrizarFields({
                 className="h-10"
               />
             ) : (
-              <Select
-                value={configSlug || undefined}
+              <GobernanzaModuloSearchableSelect
+                id="gm-label"
+                value={configSlug || ''}
                 onValueChange={(v) => void seleccionarConfig(v)}
+                options={[
+                  ...configsSelectOptions,
+                  { value: CONFIG_NUEVO, label: '+ Nuevo módulo', searchText: 'nuevo modulo' },
+                ]}
                 disabled={cargandoConfigSeleccionada}
-              >
-                <SelectTrigger id="gm-label" className="h-10">
-                  <SelectValue
-                    placeholder={
-                      cargandoConfigSeleccionada ? 'Cargando módulo…' : 'Selecciona un módulo publicado'
-                    }
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {configsOpciones.map((o) => (
-                    <SelectItem key={o.value} value={o.value}>
-                      <span className="font-medium">{o.label}</span>
-                      {o.hint ? (
-                        <span className="ml-1 text-muted-foreground">· {o.hint}</span>
-                      ) : null}
-                    </SelectItem>
-                  ))}
-                  <SelectItem value={CONFIG_NUEVO}>+ Nuevo módulo</SelectItem>
-                </SelectContent>
-              </Select>
+                placeholder={
+                  cargandoConfigSeleccionada ? 'Cargando módulo…' : 'Selecciona un módulo publicado'
+                }
+                searchPlaceholder="Buscar módulo…"
+                emptyMessage="No hay módulos que coincidan"
+              />
             )}
             {configSlug && !esModoNuevo && label ? (
               <p className="text-[11px] text-muted-foreground">Nombre: {label}</p>

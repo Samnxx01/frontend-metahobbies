@@ -139,6 +139,7 @@ export default function InventarioSkuModal({
             ) : (
               <p className="text-xs text-muted-foreground">
                 Deja vacio para generarlo automaticamente o escribe tu codigo alfanumerico unico (8-14 caracteres).
+                Se imprime en Code 128 (alfanumerico) o EAN-13 (si son 13 digitos) para lectura con pistola laser.
               </p>
             )}
           </div>

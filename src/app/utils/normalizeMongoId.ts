@@ -48,3 +48,6 @@ export const normalizeMongoIdOrNull = (value: unknown): string | null => {
 /** ID público (iud UUID) o ObjectId para llamadas API de rutas. */
 export const resolveRouteApiId = (route?: { iud?: string; _id?: string } | null): string =>
   String(route?.iud || route?._id || '').trim();
+
+/** ID de entidad en respuestas API (prefiere iud ofuscado, fallback _id legacy). */
+export const resolveApiEntityId = (value: unknown): string => normalizeMongoId(value);

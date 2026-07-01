@@ -9,7 +9,7 @@
     --button-font-weight: 600;
     /* Derivados en build de DEFAULT_COLORES_APP (hexToHsl misma formula que aplicarPaletaEnApp). */
     --background: 339 81% 92%;           /* COLOR_BG #FBD9E5 */
-    --foreground: 222.2 84% 4.9%;
+    --foreground: 220 39% 16%;           /* COLOR_TEXT #1F2937 */
     --card: 34 67% 95%;                   /* COLOR_CHAMPAGNE #FBF4EB */
     --card-foreground: 222 84% 5%;        /* alineado con aplicarPaletaEnApp */
     --popover: 34 67% 95%;

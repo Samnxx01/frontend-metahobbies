@@ -10,6 +10,44 @@ export type DiosReglaSaAccesoHelpRow = {
   esJwt: boolean;
 };
 
+export type SaPosicionJerarquia = {
+  /** SA raíz primaria: codigoPadre null Y primera emisión global (min secuenciaJerarquia). */
+  esRaizPrimera: boolean;
+  /** SA hijo: tiene codigoPadre definido en tenantjerarquiacounters. */
+  esHijo: boolean;
+  codigoPadre: string | null;
+};
+
+/**
+ * Determina si el SA del JWT es la raíz primaria de la jerarquía o un SA hijo.
+ * Raíz primaria: codigoPadre null + secuenciaJerarquia mínima entre todas las raíces.
+ * Hijo: tiene codigoPadre definido.
+ */
+export function resolverSaJerarquiaPosicion(
+  jwtSaId: string,
+  jerarquiaSaCounters: SaJerarquiaCounterIndice[] = [],
+): SaPosicionJerarquia {
+  const id = String(jwtSaId || '').trim();
+  const vacia: SaPosicionJerarquia = { esRaizPrimera: false, esHijo: false, codigoPadre: null };
+  if (!id || !jerarquiaSaCounters.length) return vacia;
+
+  const row = jerarquiaSaCounters.find((r) => String(r.tenantSuperAdminId || '') === id);
+  if (!row) return vacia;
+
+  const codigoPadre = String(row.codigoPadre || '').trim() || null;
+  if (codigoPadre) return { esRaizPrimera: false, esHijo: true, codigoPadre };
+
+  const raices = jerarquiaSaCounters
+    .filter((r) => !String(r.codigoPadre || '').trim())
+    .sort(
+      (a, b) =>
+        (a.secuenciaJerarquia ?? Number.MAX_SAFE_INTEGER) -
+        (b.secuenciaJerarquia ?? Number.MAX_SAFE_INTEGER),
+    );
+  const esRaizPrimera = raices.length > 0 && String(raices[0].tenantSuperAdminId) === id;
+  return { esRaizPrimera, esHijo: false, codigoPadre: null };
+}
+
 /** Alguna fila counters del SA tiene corporativo (misma regla que el backend). */
 export function saTieneCorporativoEnJerarquiaCounter(
   saId: string,
@@ -32,6 +70,28 @@ export function resolverSaJerarquiaTieneCorporativoEnCounters(
   const id = String(jwtSaId || '').trim();
   if (!id || !jerarquiaSaCounters.length) return undefined;
   return saTieneCorporativoEnJerarquiaCounter(id, jerarquiaSaCounters);
+}
+
+/** Resuelve securityPlatform desde meta SA (API) o fallback a selects NVL config. */
+export function resolverSecurityPlatformDesdeTenantSa(
+  saId: string,
+  saMetas: Array<Pick<DiosReglaSaMeta, 'id' | 'securityPlatform' | 'nvlGeneracionTenantId'>> = [],
+  nvlOptions: Array<{ id: string; meta?: Record<string, string | number | undefined> }> = [],
+): boolean {
+  const id = String(saId || '').trim();
+  if (!id) return false;
+  const meta = saMetas.find((m) => String(m.id || '').trim() === id);
+  if (meta && typeof meta.securityPlatform === 'boolean') {
+    return meta.securityPlatform;
+  }
+  const nvlId = String(meta?.nvlGeneracionTenantId || '').trim();
+  if (nvlId) {
+    const opt = nvlOptions.find((o) => o.id === nvlId);
+    if (opt) {
+      return String(opt.meta?.securityPlatform || '').toLowerCase() === 'true';
+    }
+  }
+  return false;
 }
 
 /** Ramas SA visibles para parametrizar regla DIOS y si califican acceso full (sin corporativo en counters). */

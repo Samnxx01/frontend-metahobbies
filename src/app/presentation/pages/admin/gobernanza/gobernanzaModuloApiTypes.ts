@@ -113,6 +113,8 @@ export type GobernanzaModuloMenuResponse = {
 export type GobernanzaModuloOperativoResponse = GobernanzaModuloMenuResponse & {
   section: string;
   configs: GobernanzaModuloConfigApi[];
+  /** Lista sin filtrar hub; solo cuando hubOperaciones=1. */
+  configsCompletos?: GobernanzaModuloConfigApi[];
   parametrizacionUi?: import('./gobernanzaParametrizacionUi').GobernanzaParametrizacionUi;
   meta?: {
     section?: string;
@@ -241,6 +243,11 @@ export type GobernanzaModuloFiltrosOpcionesResponse = {
       requiereParametrizacionTenantSuperAdmin?: boolean;
       tenantGlobalJerarquiaOk?: boolean;
       totalTenantGlobalEnRama?: number;
+      totalUsuariosRama?: number;
+      diagnosticoRamaUsuarios?: {
+        documentosRegisCandidatos?: number;
+        rechazadosPorFiltro?: number;
+      } | null;
     };
   };
 };

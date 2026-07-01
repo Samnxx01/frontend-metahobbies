@@ -31,6 +31,24 @@ export function esAccionIdCatalogoValido(accionId: string): boolean {
   return !HTTP_VERBS.has(id.toUpperCase());
 }
 
+/** Método HTTP canónico desde catálogo ENDPOINTS (p. ej. PUT para actualizar). */
+export function resolverMetodoHttpEndpoint(accionId: string, fallback = 'GET'): string {
+  const id = String(accionId || '').trim();
+  const spec = ENDPOINTS_BY_ID[id];
+  if (spec?.method) return String(spec.method).trim().toUpperCase();
+  return String(fallback || 'GET').trim().toUpperCase();
+}
+
+/** Infiere verbos HTTP según título o path del módulo (crear → POST, actualizar → PUT). */
+export function metodosHttpPreferidosDesdeTexto(text = ''): string[] | null {
+  const t = String(text || '').toLowerCase();
+  if (/actualizar|editar|modificar|update/.test(t)) return ['PUT', 'PATCH'];
+  if (/crear|alta|nuevo|create/.test(t)) return ['POST'];
+  if (/listar|visualizar|consultar/.test(t)) return ['GET'];
+  if (/desactivar|eliminar|borrar|delete/.test(t)) return ['DELETE'];
+  return null;
+}
+
 export function shortLabelDesdeEndpoint(e: EndpointSpec): string {
   if (e.primary) return String(e.primary);
   const method = String(e.method || '').toUpperCase();

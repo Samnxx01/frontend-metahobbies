@@ -94,6 +94,33 @@ export function filtrarIndiceSaSubarbol(
   return indice.filter((r) => allowed.has(r.tenantSuperAdminId));
 }
 
+/**
+ * Emisión raíz del SA en counters: sin `codigoPadre` (rama libre / sin padre en jerarquía).
+ * Alineado a emisiones «sin corporativo» en tenantJerarquiaCounter.
+ */
+export function saEsRaizSinCodigoPadreEnCounters(
+  saId: string,
+  indice: SaJerarquiaCounterIndice[] = [],
+): boolean {
+  const id = String(saId || '').trim();
+  if (!id) return false;
+  const row = indice.find((r) => String(r.tenantSuperAdminId) === id);
+  if (!row) return true;
+  return !String(row.codigoPadre || '').trim();
+}
+
+/**
+ * Visibilidad de tenant globales según posición del SA en tenantjerarquiacounters
+ * (raíz sin codigoPadre → subárbol propio; con padre → rama acotada).
+ */
+export function saTieneVisibilidadTotalJerarquiaTenantGlobales(
+  saId: string,
+  indice: SaJerarquiaCounterIndice[] = [],
+  _saJerarquiaTieneCorporativoEnCounters?: boolean,
+): boolean {
+  return saEsRaizSinCodigoPadreEnCounters(saId, indice);
+}
+
 /** Filtra metadatos SA del GET selects al subárbol del ancla (codigoPadre en counters). */
 export function filtrarSaJerarquiaMetaPorSubarbol<T extends { id?: string }>(
   metas: T[],

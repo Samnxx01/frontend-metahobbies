@@ -20,7 +20,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
+import { isOpaqueDocumentId, normalizePublicIdForApi } from '@/app/utils/entityPublicId';
 import {
   actualizarPoliticaRuntime,
   actualizarPoliticaRuntimePorId,
@@ -35,21 +38,32 @@ import {
   type PoliticaRuntimeApisDominio,
   type PoliticaRuntimeCatalogoCategoria,
   type PoliticaRuntimeCatalogoItem,
-  type PoliticaRuntimeComportamiento,
+  type PoliticaRuntimeComportamientoCatalogoItem,
   type PoliticaRuntimeDecision,
   type PoliticaRuntimeOpciones,
+  type PoliticaRuntimeBypassAlcanceOpcion,
 } from '@/app/services/politicasRuntimeService';
+import {
+  eliminarPoliticaBypassMotorEvento,
+  fetchCatalogoPipeline,
+  guardarPoliticaBypassPipeline,
+  guardarPoliticaBypassMotorEvento,
+  type PoliticaBypassPipelineItem,
+  type PoliticaBypassPipeline,
+} from '@/app/services/politicaBypassService';
+import {
+  fetchCatalogoMotorEventosSg,
+  guardarCatalogoMotorEventoSg,
+  actualizarCatalogoMotorEventoSg,
+  eliminarCatalogoMotorEventoSg,
+  type CatalogoMotorEventoSgItem,
+  type GuardarMotorEventoSgPayload,
+} from '@/app/services/catalogoSegmentadoService';
 type PoliticasRuntimePanelProps = {
   className?: string;
 };
 
 const NUEVA_POLITICA_VALUE = '__new__';
-const REFERENCIA_SELECT_ALL = '__SELECT_ALL_REF__';
-const REFERENCIA_SELECT_CLEAR = '__CLEAR_REF__';
-const APIS_DOMINIO_SELECT_ALL = '__SELECT_ALL_APIS__';
-const APIS_DOMINIO_SELECT_CLEAR = '__CLEAR_APIS__';
-const ROL_SELECT_ALL = '__SELECT_ALL_ROL__';
-const ROL_SELECT_CLEAR = '__CLEAR_ROL__';
 const CATALOGO_POLITICAS = 'POLITICAS_RUNTIME';
 const CATALOGO_TIPOS = 'TIPOS';
 const CATALOGO_EFECTOS = 'EFECTOS';
@@ -57,24 +71,45 @@ const CATALOGO_DOMINIOS = 'DOMINIOS';
 const CATALOGO_APIS_DOMINIOS = 'APIS_DOMINIOS';
 const politicaId = (politica: PoliticaRuntime | null | undefined) => String(politica?.iud || politica?._id || '').trim();
 
-const labelApisDominio = (item: PoliticaRuntimeApisDominio): string => {
-  const base = item.etiquetas || item.dominio || item.id;
-  const bypass = item.bypassDominios?.length ? ` · ${item.bypassDominios.join(', ')}` : '';
-  return `${base}${bypass}`;
-};
-
 const parseListaCsv = (value: string): string[] => (
   value.split(/[,;\s]+/).map((v) => v.trim().toUpperCase()).filter(Boolean)
 );
+
+const normalizarIdApiOpcional = (id: unknown): string | undefined => {
+  const norm = normalizePublicIdForApi(id);
+  return isOpaqueDocumentId(norm) ? norm : undefined;
+};
+
+const normalizarIdsApi = (ids: string[]): string[] => (
+  [...new Set(ids.map((id) => normalizePublicIdForApi(id)).filter((id) => isOpaqueDocumentId(id)))]
+);
+
+const resolverIdCatalogo = (
+  items: Array<{ id?: string; valor: string }>,
+  valor: string,
+): string | undefined => {
+  const normValor = valor.trim().toUpperCase();
+  const item = items.find((i) => i.valor === normValor);
+  return normalizarIdApiOpcional(item?.id);
+};
+
+const sanitizarMetadata = (meta: Record<string, unknown>): Record<string, unknown> => {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(meta)) {
+    if (value === undefined || value === null) continue;
+    out[key] = value;
+  }
+  return out;
+};
 
 const scopeApisDominiosIds = (politica: PoliticaRuntime | null | undefined): string[] => {
   const scope = (politica?.scope ?? {}) as { apisDominiosIds?: string[]; apisDominios?: string };
   const desdeLista = Array.isArray(scope.apisDominiosIds)
     ? scope.apisDominiosIds.map((id) => String(id).trim()).filter(Boolean)
     : [];
-  if (desdeLista.length) return desdeLista;
+  if (desdeLista.length) return normalizarIdsApi(desdeLista);
   const uno = String(scope.apisDominios ?? '').trim();
-  return uno ? [uno] : [];
+  return uno ? normalizarIdsApi([uno]) : [];
 };
 
 const referenciaDePolitica = (politica: PoliticaRuntime | null | undefined): string[] => {
@@ -85,9 +120,61 @@ const referenciaDePolitica = (politica: PoliticaRuntime | null | undefined): str
   return (lista as string[]).map((v) => String(v).trim().toUpperCase()).filter(Boolean);
 };
 
-const COMPORTAMIENTOS: PoliticaRuntimeComportamiento[] = ['PERMITE', 'BLOQUEA', 'BYPASS', 'NEUTRO', 'REQUIERE_TECHO'];
+const scopeEntityId = (scope: Record<string, unknown> | null | undefined, key: string): string => {
+  const raw = scope?.[key];
+  if (raw == null || raw === '') return '';
+  return normalizarIdApiOpcional(
+    typeof raw === 'object' && raw !== null && '_id' in raw
+      ? (raw as { _id?: unknown })._id
+      : raw,
+  ) || '';
+};
+
+const idsFromMetadata = (meta: Record<string, unknown>, key: string): string[] => {
+  const raw = meta[key];
+  if (!Array.isArray(raw)) return [];
+  return normalizarIdsApi(raw.map((id) => String(id)));
+};
+
+const idsFromChecked = (map: Record<string, boolean>): string[] => (
+  Object.entries(map).filter(([, checked]) => checked).map(([id]) => id)
+);
+
+const checkedFromIds = (ids: string[]): Record<string, boolean> => (
+  ids.reduce<Record<string, boolean>>((acc, id) => {
+    acc[id] = true;
+    return acc;
+  }, {})
+);
+
+const resolverScopeTipo = (
+  usuarioIds: string[],
+  tenantCorporativoIds: string[],
+  tenantGlobalIds: string[],
+): string => {
+  if (usuarioIds.length) return 'USUARIO';
+  if (tenantCorporativoIds.length) return 'TENANT_CORPORATIVO';
+  if (tenantGlobalIds.length) return 'TENANT_GLOBAL';
+  return 'TENANT_SUPER_ADMIN';
+};
+
 const TIPO_ACCION = 'ACCION';
 const TIPO_BYPASS = 'BYPASS';
+
+type MotorEventoDraft = {
+  nombre: string;
+  etiqueta: string;
+  pipeline: PoliticaBypassPipeline;
+  esNuevo: boolean;
+};
+
+type PipelineDraft = {
+  nombre: string;
+  label: string;
+  referencia: string;
+  descripcion: string;
+  orden: string;
+};
 
 const esPoliticaBypassLike = (tipoValor: string, codigoValor: string): boolean => {
   const tipoNorm = tipoValor.trim().toUpperCase();
@@ -95,47 +182,33 @@ const esPoliticaBypassLike = (tipoValor: string, codigoValor: string): boolean =
   return tipoNorm === TIPO_BYPASS || tipoNorm.includes('BYPASS') || codigoNorm.startsWith('BYPASS_');
 };
 
-/** Referencia de para qué sirve cada política BYPASS en el sistema. */
-const BYPASS_FUNCIONALIDADES: { alcance: string; titulo: string; descripcion: string }[] = [
-  {
-    alcance: 'HERENCIA_RUTAS',
-    titulo: 'Herencia de rutas (SuperAdmin)',
-    descripcion: 'SuperAdmin sin corporativo materializado puede ignorar la herencia de vistas/acciones. DIOS siempre bypass.',
-  },
-  {
-    alcance: 'HYBRID_RUTAS',
-    titulo: 'Rutas HYBRID',
-    descripcion: 'SuperAdmin sin tenant global/corporativo en JWT no exige herencia tenant al consumir APIs HYBRID del SPA.',
-  },
-  {
-    alcance: 'UI_GESTION_RUTAS',
-    titulo: 'UI gestión de rutas',
-    descripcion: 'Toolbar y acciones del formulario en la pantalla de gestión de rutas (ignora acciones parametrizadas del formulario).',
-  },
-  {
-    alcance: 'DOMINIOS_APIS',
-    titulo: 'Gestión de dominios APIs',
-    descripcion: 'Autoriza a SuperAdmin sin corporativo crear dominios APIs dentro de su jerarquía.',
-  },
-  {
-    alcance: 'REFERIDOS',
-    titulo: 'Referidos y membresía',
-    descripcion:
-      'BYPASS: exime membresía y validaciones legacy. Políticas con referencia REFERIDOS y efecto PERMITE/BLOQUEA (catálogo) controlan la API de generar enlaces por rol.',
-  },
-  {
-    alcance: 'COMISIONES_PADRE',
-    titulo: 'Comisiones (rol padre)',
-    descripcion: 'En triggers de comisiones: el padre con rol bypass activa contador pendiente sin cadena jerárquica completa.',
-  },
-];
+/** Misma heurística que el backend para COMPORTAMIENTO legacy sin motorSemantica persistida. */
+const inferirMotorSemanticaComportamiento = (nombre: string, etiqueta = ''): string | null => {
+  const blob = `${nombre || ''} ${etiqueta || ''}`.trim().toUpperCase();
+  if (!blob) return null;
+  if (blob.includes('BYPASS')) return 'BYPASS';
+  if (blob.includes('REQUIERE_TECHO') || (blob.includes('TECHO') && !blob.includes('BYPASS'))) return 'REQUIERE_TECHO';
+  if (blob.includes('BLOQUEA') || blob.includes('DENY') || blob.includes('DENIEGA')) return 'BLOQUEA';
+  if (blob.includes('PERMITE') || blob.includes('ALLOW')) return 'PERMITE';
+  if (blob.includes('NEUTRO')) return 'NEUTRO';
+  return null;
+};
+
+const resolverMotorSemanticaComportamientoUi = (
+  item: PoliticaRuntimeComportamientoCatalogoItem,
+): string | null => {
+  const directa = String(item.motorSemantica || '').trim().toUpperCase();
+  if (directa) return directa;
+  return inferirMotorSemanticaComportamiento(item.nombre || item.valor, item.etiqueta || item.label);
+};
 
 type CatalogoItemDraft = {
   categoria: PoliticaRuntimeCatalogoCategoria;
   valor: string;
   label: string;
   descripcion: string;
-  comportamiento?: PoliticaRuntimeComportamiento;
+  comportamiento?: string;
+  motorSemantica?: string;
   orden?: number;
   activo?: boolean;
   esNuevo: boolean;
@@ -152,14 +225,39 @@ const draftVacio = (categoria: PoliticaRuntimeCatalogoCategoria): CatalogoItemDr
 const siguienteOrdenCatalogo = (
   categoria: PoliticaRuntimeCatalogoCategoria,
   tipos: PoliticaRuntimeCatalogoItem[],
-  efectos: PoliticaRuntimeCatalogoItem[]
+  efectos: PoliticaRuntimeCatalogoItem[],
+  referencias: PoliticaRuntimeCatalogoItem[] = [],
+  comportamientos: PoliticaRuntimeComportamientoCatalogoItem[] = [],
 ): number => {
-  const lista = categoria === 'TIPO' ? tipos : efectos;
+  const lista = categoria === 'TIPO'
+    ? tipos
+    : categoria === 'EFECTO'
+      ? efectos
+      : categoria === 'REFERENCIA'
+        ? referencias
+        : comportamientos;
   const max = lista.reduce((acc, item) => {
+    if (!('orden' in item)) return acc;
     const n = Number(item.orden);
     return Number.isFinite(n) ? Math.max(acc, n) : acc;
   }, 0);
-  return max + 1;
+  return max > 0 ? max + 1 : lista.length + 1;
+};
+
+const tabDeCategoria = (
+  categoria: PoliticaRuntimeCatalogoCategoria,
+): 'TIPOS' | 'EFECTOS' | 'REFERENCIA' | 'COMPORTAMIENTO' => {
+  if (categoria === 'TIPO') return 'TIPOS';
+  if (categoria === 'EFECTO') return 'EFECTOS';
+  if (categoria === 'REFERENCIA') return 'REFERENCIA';
+  return 'COMPORTAMIENTO';
+};
+
+const labelCategoriaCatalogo = (categoria: PoliticaRuntimeCatalogoCategoria): string => {
+  if (categoria === 'TIPO') return 'tipo';
+  if (categoria === 'EFECTO') return 'efecto';
+  if (categoria === 'REFERENCIA') return 'referencia / dominio';
+  return 'comportamiento';
 };
 
 export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps): React.ReactElement {
@@ -171,8 +269,23 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
   const [codigo, setCodigo] = useState('');
   const [tipo, setTipo] = useState('');
   const [efecto, setEfecto] = useState('');
-  const [rolNombre, setRolNombre] = useState('');
-  const [roles, setRoles] = useState('');
+  const [dominio, setDominio] = useState('');
+  const [scopeSaIds, setScopeSaIds] = useState<string[]>([]);
+  const [scopeTgIds, setScopeTgIds] = useState<string[]>([]);
+  const [scopeTcIds, setScopeTcIds] = useState<string[]>([]);
+  const [scopeUsuarioIds, setScopeUsuarioIds] = useState<string[]>([]);
+  const [scopeParamOpen, setScopeParamOpen] = useState(false);
+  const [scopeDraftSa, setScopeDraftSa] = useState<Record<string, boolean>>({});
+  const [scopeDraftTg, setScopeDraftTg] = useState<Record<string, boolean>>({});
+  const [scopeDraftTc, setScopeDraftTc] = useState<Record<string, boolean>>({});
+  const [scopeDraftUsuarios, setScopeDraftUsuarios] = useState<Record<string, boolean>>({});
+  const [catalogoTipoEfectoOpen, setCatalogoTipoEfectoOpen] = useState(false);
+  const [catalogoTipoEfectoTab, setCatalogoTipoEfectoTab] = useState<
+    'TIPOS' | 'EFECTOS' | 'REFERENCIA' | 'COMPORTAMIENTO' | 'MOTOR_EVENTO' | 'PIPELINES'
+  >('TIPOS');
+  const [catalogoMotorEventosSg, setCatalogoMotorEventosSg] = useState<CatalogoMotorEventoSgItem[]>([]);
+  const [catalogoPipelineItems, setCatalogoPipelineItems] = useState<PoliticaBypassPipelineItem[]>([]);
+  const [motorEventoSgDraft, setMotorEventoSgDraft] = useState<(GuardarMotorEventoSgPayload & { esNuevo: boolean }) | null>(null);
   const [referencia, setReferencia] = useState('');
   const [motorEvento, setMotorEvento] = useState('');
   const [apisDominiosIds, setApisDominiosIds] = useState<string[]>([]);
@@ -181,9 +294,6 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
   const [recursoFormulario, setRecursoFormulario] = useState('');
   const [filtroRuta, setFiltroRuta] = useState('');
   const [filtroAccion, setFiltroAccion] = useState('');
-  const [referenciaSelectKey, setReferenciaSelectKey] = useState(0);
-  const [apisDominioSelectKey, setApisDominioSelectKey] = useState(0);
-  const [rolSelectKey, setRolSelectKey] = useState(0);
   const [decision, setDecision] = useState<PoliticaRuntimeDecision | null>(null);
   const [catalogosOpen, setCatalogosOpen] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
@@ -191,6 +301,8 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
   const [catalogoActivo, setCatalogoActivo] = useState(CATALOGO_POLITICAS);
   const [politicaEditId, setPoliticaEditId] = useState('');
   const [itemDraft, setItemDraft] = useState<CatalogoItemDraft | null>(null);
+  const [motorEventoDraft, setMotorEventoDraft] = useState<MotorEventoDraft | null>(null);
+  const [pipelineDraft, setPipelineDraft] = useState<PipelineDraft | null>(null);
   const [guardandoItem, setGuardandoItem] = useState(false);
 
   const cargar = useCallback(async () => {
@@ -206,6 +318,24 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
       toast.error(e instanceof Error ? e.message : 'No se pudo cargar políticas runtime');
     } finally {
       setLoading(false);
+    }
+  }, []);
+
+  const cargarMotorEventosSg = useCallback(async () => {
+    try {
+      const items = await fetchCatalogoMotorEventosSg();
+      setCatalogoMotorEventosSg(items);
+    } catch {
+      // silencioso: la colección puede estar vacía en entornos nuevos
+    }
+  }, []);
+
+  const cargarCatalogoPipeline = useCallback(async () => {
+    try {
+      const items = await fetchCatalogoPipeline();
+      setCatalogoPipelineItems(items);
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo cargar el catÃ¡logo de pipelines');
     }
   }, []);
 
@@ -252,11 +382,110 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
     [opcionesRuntime?.catalogoEfectos]
   );
 
-  const rolesOptions = useMemo(
-    () => (opcionesRuntime?.roles ?? [])
-      .filter(Boolean)
-      .sort(),
-    [opcionesRuntime?.roles]
+  const catalogoReferenciasBD = useMemo(
+    () => opcionesRuntime?.catalogoReferencias ?? [],
+    [opcionesRuntime?.catalogoReferencias],
+  );
+
+  const catalogoComportamientosBD = useMemo(
+    () => opcionesRuntime?.catalogoComportamientos ?? [],
+    [opcionesRuntime?.catalogoComportamientos],
+  );
+
+  const motorSemanticasOpciones = useMemo(
+    () => opcionesRuntime?.motorSemanticas ?? [],
+    [opcionesRuntime?.motorSemanticas],
+  );
+
+  const tenantsScope = useMemo(
+    () => opcionesRuntime?.tenantsScope ?? { tenantSuperAdmins: [], tenantGlobales: [], tenantCorporativos: [] },
+    [opcionesRuntime?.tenantsScope],
+  );
+
+  const tenantGlobalesFiltradosDraft = useMemo(() => {
+    const saSelected = idsFromChecked(scopeDraftSa);
+    const all = tenantsScope.tenantGlobales;
+    if (!saSelected.length) return all;
+    return all.filter(
+      (t) => !t.tenantSuperAdminId || saSelected.includes(t.tenantSuperAdminId),
+    );
+  }, [tenantsScope.tenantGlobales, scopeDraftSa]);
+
+  const tenantCorporativosFiltradosDraft = useMemo(() => {
+    const tgSelected = idsFromChecked(scopeDraftTg);
+    const all = tenantsScope.tenantCorporativos;
+    if (!tgSelected.length) return all;
+    return all.filter(
+      (t) => !t.tenantGlobalId || tgSelected.includes(t.tenantGlobalId),
+    );
+  }, [tenantsScope.tenantCorporativos, scopeDraftTg]);
+
+  const usuariosOpciones = useMemo(
+    () => opcionesRuntime?.usuarios ?? [],
+    [opcionesRuntime?.usuarios],
+  );
+
+  const usuariosFiltradosScopeDraft = useMemo(() => {
+    const saSet = new Set(idsFromChecked(scopeDraftSa));
+    const tgSet = new Set(idsFromChecked(scopeDraftTg));
+    const tcSet = new Set(idsFromChecked(scopeDraftTc));
+    const tgIdsRamaSa = new Set(
+      tenantsScope.tenantGlobales
+        .filter((t) => !saSet.size || (t.tenantSuperAdminId && saSet.has(String(t.tenantSuperAdminId))))
+        .map((t) => String(t.id)),
+    );
+    const tcIdsRamaSa = new Set(
+      tenantsScope.tenantCorporativos
+        .filter((t) => !saSet.size || (t.tenantGlobalId && tgIdsRamaSa.has(String(t.tenantGlobalId))))
+        .map((t) => String(t.id)),
+    );
+    const tcIdsRamaTg = new Set(
+      tenantsScope.tenantCorporativos
+        .filter((t) => !tgSet.size || (t.tenantGlobalId && tgSet.has(String(t.tenantGlobalId))))
+        .map((t) => String(t.id)),
+    );
+
+    return usuariosOpciones.filter((u) => {
+      const uSa = u.tenantSuperAdminId ? String(u.tenantSuperAdminId) : '';
+      const uTg = u.tenantGlobalId ? String(u.tenantGlobalId) : '';
+      const uTc = u.tenantCorporativoId ? String(u.tenantCorporativoId) : '';
+
+      if (tcSet.size) {
+        return Boolean(uTc && tcSet.has(uTc));
+      }
+      if (tgSet.size) {
+        if (uTg && tgSet.has(uTg)) return true;
+        if (uTc && tcIdsRamaTg.has(uTc)) return true;
+        return false;
+      }
+      if (saSet.size) {
+        if (uSa && saSet.has(uSa)) return true;
+        if (uTg && tgIdsRamaSa.has(uTg)) return true;
+        if (uTc && tcIdsRamaSa.has(uTc)) return true;
+        return false;
+      }
+      return true;
+    });
+  }, [usuariosOpciones, scopeDraftSa, scopeDraftTg, scopeDraftTc, tenantsScope.tenantGlobales, tenantsScope.tenantCorporativos]);
+
+  const scopeResumenSa = useMemo(
+    () => scopeSaIds.map((id) => tenantsScope.tenantSuperAdmins.find((t) => t.id === id)?.label || id),
+    [scopeSaIds, tenantsScope.tenantSuperAdmins],
+  );
+
+  const scopeResumenTg = useMemo(
+    () => scopeTgIds.map((id) => tenantsScope.tenantGlobales.find((t) => t.id === id)?.label || id),
+    [scopeTgIds, tenantsScope.tenantGlobales],
+  );
+
+  const scopeResumenTc = useMemo(
+    () => scopeTcIds.map((id) => tenantsScope.tenantCorporativos.find((t) => t.id === id)?.label || id),
+    [scopeTcIds, tenantsScope.tenantCorporativos],
+  );
+
+  const scopeResumenUsuarios = useMemo(
+    () => scopeUsuarioIds.map((id) => usuariosOpciones.find((u) => u.id === id)?.label || id),
+    [scopeUsuarioIds, usuariosOpciones],
   );
 
   const apisDominiosCatalogo = useMemo(
@@ -269,32 +498,195 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
     [apisDominiosIds, apisDominiosCatalogo]
   );
 
-  const apisDominiosDisponibles = useMemo(
-    () => apisDominiosCatalogo.filter((d) => !apisDominiosIds.includes(d.id)),
-    [apisDominiosCatalogo, apisDominiosIds]
-  );
-
-  /** Referencias disponibles: unión de bypassDominios de los apisDominios elegidos + catálogo política. */
-  const referenciaOptions = useMemo(() => {
-    const desdeApis = apisDominiosSeleccionados.flatMap((d) => d.bypassDominios ?? []);
-    const desdeCatalogo = opcionesRuntime?.dominiosPolitica ?? [];
-    return [...new Set([...desdeApis, ...desdeCatalogo].map((v) => String(v).trim().toUpperCase()).filter(Boolean))].sort();
-  }, [apisDominiosSeleccionados, opcionesRuntime?.dominiosPolitica]);
+  const bypassDominiosSeleccionados = useMemo(() => {
+    const unicos = new Set<string>();
+    for (const item of apisDominiosSeleccionados) {
+      for (const dominioBypass of item.bypassDominios ?? []) {
+        unicos.add(dominioBypass);
+      }
+    }
+    return Array.from(unicos);
+  }, [apisDominiosSeleccionados]);
 
   const referenciaSeleccionadas = useMemo(
     () => parseListaCsv(referencia),
     [referencia]
   );
 
-  const referenciaDisponibles = useMemo(
-    () => referenciaOptions.filter((option) => !referenciaSeleccionadas.includes(option)),
-    [referenciaOptions, referenciaSeleccionadas]
+  /** Referencias disponibles: catálogo + bypass de apisdominios + entradas manuales ya guardadas. */
+  const referenciaOptions = useMemo(() => {
+    const desdeApis = apisDominiosSeleccionados.flatMap((d) => d.bypassDominios ?? []);
+    const desdeCatalogo = opcionesRuntime?.dominiosPolitica ?? [];
+    return [...new Set([
+      ...desdeApis,
+      ...desdeCatalogo,
+      ...referenciaSeleccionadas,
+    ].map((v) => String(v).trim().toUpperCase()).filter(Boolean))].sort();
+  }, [apisDominiosSeleccionados, opcionesRuntime?.dominiosPolitica, referenciaSeleccionadas]);
+
+  const bypassAlcancesOpciones = useMemo(
+    () => opcionesRuntime?.bypassAlcances ?? [],
+    [opcionesRuntime?.bypassAlcances],
   );
 
-  const rolesSeleccionados = useMemo(
-    () => roles.split(/[,;\s]+/).map((r) => r.trim().toUpperCase()).filter(Boolean),
-    [roles]
-  );
+  const pipelineOpciones = useMemo(() => (
+    (opcionesRuntime?.bypassPipelines ?? [])
+      .map((pipeline) => ({
+        nombre: String(pipeline.nombre || '').trim().toUpperCase(),
+        label: String(pipeline.label || pipeline.nombre || '').trim(),
+        referencia: String(pipeline.referencia || '').trim().toUpperCase(),
+        descripcion: String(pipeline.descripcion || '').trim(),
+        orden: Number(pipeline.orden ?? 0),
+      }))
+      .filter((pipeline) => pipeline.nombre)
+      .sort((a, b) => a.orden - b.orden || a.label.localeCompare(b.label))
+  ), [opcionesRuntime?.bypassPipelines]);
+
+  const normalizarPipelineMotorEvento = useCallback((value?: string | null): PoliticaBypassPipeline => {
+    const key = String(value || '').trim().toUpperCase();
+    if (key && pipelineOpciones.some((pipeline) => pipeline.nombre === key)) return key;
+    return pipelineOpciones[0]?.nombre || key;
+  }, [pipelineOpciones]);
+
+  const etiquetaPipeline = useCallback((value?: string | null): string => {
+    const key = normalizarPipelineMotorEvento(value);
+    return pipelineOpciones.find((pipeline) => pipeline.nombre === key)?.label || key;
+  }, [normalizarPipelineMotorEvento, pipelineOpciones]);
+
+  const motorEventosPorPipeline = useMemo(() => {
+    const grupos = new Map<PoliticaBypassPipeline, PoliticaRuntimeBypassAlcanceOpcion[]>(
+      pipelineOpciones.map((pipeline) => [pipeline.nombre, []])
+    );
+    for (const item of bypassAlcancesOpciones) {
+      const pipeline = normalizarPipelineMotorEvento(item.pipeline);
+      if (!grupos.has(pipeline)) grupos.set(pipeline, []);
+      grupos.get(pipeline)!.push(item);
+    }
+    return grupos;
+  }, [bypassAlcancesOpciones, normalizarPipelineMotorEvento, pipelineOpciones]);
+
+  const motorEventoPlaceholder = useMemo(() => {
+    const ejemplos = bypassAlcancesOpciones.slice(0, 2).map((item) => item.etiqueta || item.nombre);
+    return ejemplos.length ? `Ej: ${ejemplos.join(', ')}` : 'Selecciona motor evento por etiqueta';
+  }, [bypassAlcancesOpciones]);
+
+  const etiquetaMotorEvento = useCallback((nombre: string): string => {
+    const key = nombre.trim().toUpperCase();
+    const item = bypassAlcancesOpciones.find((i) => (i.nombre || i.alcance) === key);
+    return item?.etiqueta || item?.label || key;
+  }, [bypassAlcancesOpciones]);
+
+  const sugerirReferenciaDesdeMotorEvento = useCallback((nombreMotor: string): void => {
+    const key = nombreMotor.trim().toUpperCase();
+    const motor = bypassAlcancesOpciones.find((i) => (i.nombre || i.alcance) === key);
+    if (!motor?.dominio) return;
+    const candidato = catalogoReferenciasBD.find(
+      (r) => r.valor === motor.dominio
+        || r.valor.startsWith(`${motor.dominio}_`)
+        || r.valor.includes(motor.dominio),
+    );
+    if (candidato) {
+      setDominio(candidato.valor);
+      setReferencia(candidato.valor);
+    }
+  }, [bypassAlcancesOpciones, catalogoReferenciasBD]);
+
+  const seleccionarMotorEvento = useCallback((nombre: string): void => {
+    const key = nombre.trim().toUpperCase();
+    setMotorEvento(key);
+    sugerirReferenciaDesdeMotorEvento(key);
+  }, [sugerirReferenciaDesdeMotorEvento]);
+
+  const aplicarApisDominioPorDefecto = useCallback((): void => {
+    const ctxId = normalizarIdApiOpcional(opcionesRuntime?.contexto?.apisDominiosId);
+    if (ctxId) {
+      setApisDominiosIds((prev) => (prev.length ? prev : [ctxId]));
+      return;
+    }
+    if (apisDominiosCatalogo.length === 1) {
+      const unico = normalizarIdApiOpcional(apisDominiosCatalogo[0].id);
+      if (unico) {
+        setApisDominiosIds((prev) => (prev.length ? prev : [unico]));
+      }
+    }
+  }, [opcionesRuntime?.contexto?.apisDominiosId, apisDominiosCatalogo]);
+
+  const aplicarScopeDesdePolitica = (politica: PoliticaRuntime | null | undefined): void => {
+    const scope = (politica?.scope ?? {}) as Record<string, unknown>;
+    const meta = (politica?.condiciones?.metadata ?? {}) as Record<string, unknown>;
+    const sa = idsFromMetadata(meta, 'tenantSuperAdminIds');
+    const tg = idsFromMetadata(meta, 'tenantGlobalIds');
+    const tc = idsFromMetadata(meta, 'tenantCorporativoIds');
+    const usuarios = idsFromMetadata(meta, 'usuarioIds');
+    const usuarioScope = scopeEntityId(scope, 'usuarioId');
+    setScopeSaIds(sa.length ? sa : [scopeEntityId(scope, 'tenantSuperAdmin')].filter(Boolean));
+    setScopeTgIds(tg.length ? tg : [scopeEntityId(scope, 'tenantGlobal')].filter(Boolean));
+    setScopeTcIds(tc.length ? tc : [scopeEntityId(scope, 'tenantCorporativo')].filter(Boolean));
+    setScopeUsuarioIds(
+      usuarios.length ? usuarios : (usuarioScope ? [usuarioScope] : []),
+    );
+  };
+
+  const aplicarScopeJwtPorDefecto = (): void => {
+    const ctx = opcionesRuntime?.contexto;
+    const sa = String(ctx?.tenantSuperAdminId || '').trim();
+    const tg = String(ctx?.tenantGlobalId || '').trim();
+    const tc = String(ctx?.tenantCorporativoId || '').trim();
+    setScopeSaIds((prev) => (prev.length ? prev : (sa ? [sa] : [])));
+    setScopeTgIds((prev) => (prev.length ? prev : (tg ? [tg] : [])));
+    setScopeTcIds((prev) => (prev.length ? prev : (tc ? [tc] : [])));
+    aplicarApisDominioPorDefecto();
+  };
+
+  const abrirScopeParam = (): void => {
+    setScopeDraftSa(checkedFromIds(scopeSaIds));
+    setScopeDraftTg(checkedFromIds(scopeTgIds));
+    setScopeDraftTc(checkedFromIds(scopeTcIds));
+    setScopeDraftUsuarios(checkedFromIds(scopeUsuarioIds));
+    setScopeParamOpen(true);
+  };
+
+  const toggleScopeDraft = (
+    setter: React.Dispatch<React.SetStateAction<Record<string, boolean>>>,
+    id: string,
+    checked: boolean,
+  ): void => {
+    setter((prev) => ({ ...prev, [id]: checked }));
+  };
+
+  const marcarTodosScopeDraft = (
+    ids: string[],
+    setter: React.Dispatch<React.SetStateAction<Record<string, boolean>>>,
+  ): void => {
+    setter(checkedFromIds(ids));
+  };
+
+  const limpiarScopeDraft = (
+    setter: React.Dispatch<React.SetStateAction<Record<string, boolean>>>,
+  ): void => {
+    setter({});
+  };
+
+  const aplicarScopeParam = (): void => {
+    const nextSa = idsFromChecked(scopeDraftSa);
+    const nextTg = idsFromChecked(scopeDraftTg);
+    const nextTc = idsFromChecked(scopeDraftTc);
+    const usuariosValidos = new Set(usuariosFiltradosScopeDraft.map((u) => u.id));
+    const nextUsuarios = idsFromChecked(scopeDraftUsuarios).filter((id) => usuariosValidos.has(id));
+    setScopeSaIds(nextSa);
+    setScopeTgIds(nextTg);
+    setScopeTcIds(nextTc);
+    setScopeUsuarioIds(nextUsuarios);
+    setScopeParamOpen(false);
+  };
+
+  const abrirCatalogoTipoEfecto = (
+    tab: 'TIPOS' | 'EFECTOS' | 'REFERENCIA' | 'COMPORTAMIENTO' | 'MOTOR_EVENTO' = 'TIPOS',
+  ): void => {
+    setMotorEventoDraft(null);
+    setCatalogoTipoEfectoTab(tab);
+    setCatalogoTipoEfectoOpen(true);
+  };
 
   const rutasCatalogo = useMemo(
     () => opcionesRuntime?.rutas ?? [],
@@ -343,73 +735,33 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
   };
 
   const agregarApisDominio = (id: string) => {
-    const normalizado = id.trim();
+    const normalizado = normalizarIdApiOpcional(id);
     if (!normalizado || apisDominiosIds.includes(normalizado)) return;
     setApisDominiosIds((prev) => [...prev, normalizado]);
   };
 
-  const seleccionarTodosApisDominios = () => {
-    if (!apisDominiosCatalogo.length) return;
-    setApisDominiosIds(apisDominiosCatalogo.map((d) => d.id));
+  const onReferenciaChange = (value: string): void => {
+    const normalizado = value.trim().toUpperCase();
+    setDominio(normalizado);
+    setReferencia(normalizado);
   };
 
-  const limpiarApisDominios = () => {
+  const toggleApisDominio = (id: string, checked: boolean): void => {
+    const normalizado = normalizarIdApiOpcional(id);
+    if (!normalizado) return;
+    setApisDominiosIds((prev) => (
+      checked
+        ? (prev.includes(normalizado) ? prev : [...prev, normalizado])
+        : prev.filter((item) => item !== normalizado)
+    ));
+  };
+
+  const marcarTodosApisDominios = (): void => {
+    setApisDominiosIds(apisDominiosCatalogo.map((item) => item.id));
+  };
+
+  const limpiarApisDominios = (): void => {
     setApisDominiosIds([]);
-  };
-
-  const onApisDominioSelectChange = (value: string) => {
-    if (value === APIS_DOMINIO_SELECT_ALL) {
-      seleccionarTodosApisDominios();
-    } else if (value === APIS_DOMINIO_SELECT_CLEAR) {
-      limpiarApisDominios();
-    } else {
-      agregarApisDominio(value);
-    }
-    setApisDominioSelectKey((k) => k + 1);
-  };
-
-  const todosApisDominiosSeleccionados = apisDominiosCatalogo.length > 0
-    && apisDominiosCatalogo.every((d) => apisDominiosIds.includes(d.id));
-
-  const quitarApisDominio = (id: string) => {
-    setApisDominiosIds((prev) => prev.filter((item) => item !== id));
-  };
-
-  const seleccionarTodasReferencias = () => {
-    if (!referenciaOptions.length) return;
-    setReferencia(referenciaOptions.join(', '));
-  };
-
-  const limpiarReferencias = () => {
-    setReferencia('');
-  };
-
-  const onReferenciaSelectChange = (value: string) => {
-    if (value === REFERENCIA_SELECT_ALL) {
-      seleccionarTodasReferencias();
-    } else if (value === REFERENCIA_SELECT_CLEAR) {
-      limpiarReferencias();
-    } else {
-      agregarReferencia(value);
-    }
-    setReferenciaSelectKey((k) => k + 1);
-  };
-
-  const todasReferenciasSeleccionadas = referenciaOptions.length > 0
-    && referenciaOptions.every((r) => referenciaSeleccionadas.includes(r));
-
-  const quitarReferencia = (value: string) => {
-    setReferencia(referenciaSeleccionadas.filter((item) => item !== value).join(', '));
-  };
-
-  const abrirCatalogoApisDominios = () => {
-    setCatalogoActivo(CATALOGO_APIS_DOMINIOS);
-    setCatalogosOpen(true);
-  };
-
-  const abrirCatalogoReferencia = () => {
-    setCatalogoActivo(CATALOGO_DOMINIOS);
-    setCatalogosOpen(true);
   };
 
   const aplicarApisDominioDesdeCatalogo = (id: string) => {
@@ -417,43 +769,11 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
     setCatalogosOpen(false);
   };
 
-  const rolesDisponibles = useMemo(
-    () => rolesOptions.filter((option) => !rolesSeleccionados.includes(option)),
-    [rolesOptions, rolesSeleccionados]
-  );
-
-  const agregarRol = (value: string) => {
-    const normalizado = value.trim().toUpperCase();
-    if (!normalizado || rolesSeleccionados.includes(normalizado)) return;
-    setRoles([...rolesSeleccionados, normalizado].join(', '));
-  };
-
-  const quitarRol = (value: string) => {
-    setRoles(rolesSeleccionados.filter((rol) => rol !== value).join(', '));
-  };
-
-  const seleccionarTodosRoles = () => {
-    if (!rolesOptions.length) return;
-    setRoles(rolesOptions.join(', '));
-  };
-
-  const limpiarRoles = () => {
-    setRoles('');
-  };
-
-  const onRolSelectChange = (value: string) => {
-    if (value === ROL_SELECT_ALL) {
-      seleccionarTodosRoles();
-    } else if (value === ROL_SELECT_CLEAR) {
-      limpiarRoles();
-    } else {
-      agregarRol(value);
-    }
-    setRolSelectKey((k) => k + 1);
-  };
-
-  const todosRolesSeleccionados = rolesOptions.length > 0
-    && rolesOptions.every((r) => rolesSeleccionados.includes(r));
+  useEffect(() => {
+    if (!formOpen || !creandoNueva) return;
+    aplicarScopeJwtPorDefecto();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formOpen, creandoNueva, opcionesRuntime?.contexto?.tenantSuperAdminId]);
 
   useEffect(() => {
     if (creandoNueva || !politicaSeleccionada || codigo === NUEVA_POLITICA_VALUE) return;
@@ -461,7 +781,9 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
     setCodigo(politicaSeleccionada.codigo || codigo);
     setTipo(politicaSeleccionada.tipo || tipo);
     setEfecto(politicaSeleccionada.efecto || efecto);
-    setRoles((politicaSeleccionada.condiciones?.roles ?? []).join(', '));
+    const refsSel = referenciaDePolitica(politicaSeleccionada);
+    setDominio(politicaSeleccionada.dominio || refsSel[0] || dominio);
+    aplicarScopeDesdePolitica(politicaSeleccionada);
     setReferencia(referenciaDePolitica(politicaSeleccionada).join(', '));
     setApisDominiosIds(scopeApisDominiosIds(politicaSeleccionada));
     cargarMetadataAccion(politicaSeleccionada);
@@ -476,8 +798,11 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
     setCodigo('');
     setTipo('');
     setEfecto('');
-    setRolNombre('');
-    setRoles('');
+    setDominio('');
+    setScopeSaIds([]);
+    setScopeTgIds([]);
+    setScopeTcIds([]);
+    setScopeUsuarioIds([]);
     setReferencia('');
     setApisDominiosIds([]);
     setAccionIds([]);
@@ -506,8 +831,8 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
       ...(Array.isArray(meta.accionIds) ? meta.accionIds : []),
       ...(meta.accionId ? [meta.accionId] : []),
     ].map((id) => String(id).trim()).filter(Boolean);
-    setAccionIds(Array.from(new Set(ids)));
-    setRecursoRutaId(meta.rutaId ? String(meta.rutaId) : '');
+    setAccionIds(normalizarIdsApi(Array.from(new Set(ids))));
+    setRecursoRutaId(normalizarIdApiOpcional(meta.rutaId) || '');
     setRecursoFormulario(meta.formularioComponent ? String(meta.formularioComponent) : '');
   };
 
@@ -517,8 +842,9 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
     setCodigo(politica.codigo || '');
     setTipo(politica.tipo || '');
     setEfecto(politica.efecto || '');
-    setRolNombre((politica.condiciones?.roles ?? [])[0] || '');
-    setRoles((politica.condiciones?.roles ?? []).join(', '));
+    const refs = referenciaDePolitica(politica);
+    setDominio(politica.dominio || refs[0] || '');
+    aplicarScopeDesdePolitica(politica);
     setReferencia(referenciaDePolitica(politica).join(', '));
     setApisDominiosIds(scopeApisDominiosIds(politica));
     cargarMetadataAccion(politica);
@@ -529,7 +855,9 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
   };
 
   const toggleAccion = (id: string) => {
-    setAccionIds((prev) => (prev.includes(id) ? prev.filter((a) => a !== id) : [...prev, id]));
+    const normalizado = normalizarIdApiOpcional(id);
+    if (!normalizado) return;
+    setAccionIds((prev) => (prev.includes(normalizado) ? prev.filter((a) => a !== normalizado) : [...prev, normalizado]));
   };
 
   const seleccionarRuta = (rutaId: string) => {
@@ -553,12 +881,33 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
     setSimulando(true);
     try {
       const referenciaLista = parseListaCsv(referencia);
-      const referenciaSim = referenciaLista[0] || '';
+      const dominioNorm = dominio.trim().toUpperCase() || referenciaLista[0] || '';
+      const referenciaSim = dominioNorm || referenciaLista[0] || '';
       const usarReferencia = referenciaSim && !esPoliticaBypassLike(tipo, codigo);
+      const simSa = scopeSaIds[0] || undefined;
+      const simTg = scopeTgIds[0] || undefined;
+      const simTc = scopeTcIds[0] || undefined;
+      const simUsuario = scopeUsuarioIds[0] || undefined;
       const result = await simularPoliticaRuntime(
         usarReferencia
-          ? { referencia: referenciaSim, tipo: tipo || undefined, rolNombre }
-          : { codigo, tipo, rolNombre },
+          ? {
+              referencia: referenciaSim,
+              dominio: dominioNorm || undefined,
+              tipo: tipo || undefined,
+              tenantSuperAdminId: simSa,
+              tenantGlobalId: simTg,
+              tenantCorporativoId: simTc,
+              usuarioId: simUsuario,
+            }
+          : {
+              codigo,
+              tipo,
+              dominio: dominioNorm || undefined,
+              tenantSuperAdminId: simSa,
+              tenantGlobalId: simTg,
+              tenantCorporativoId: simTc,
+              usuarioId: simUsuario,
+            },
       );
       setDecision(result);
     } catch (e: unknown) {
@@ -575,43 +924,111 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
       if (!codigoNormalizado) throw new Error('Código requerido para crear o editar la política');
       if (!tipo) throw new Error('Selecciona un tipo de política');
       if (!efecto) throw new Error('Selecciona un efecto');
-      const referenciaLista = parseListaCsv(referencia);
-      if (!referenciaLista.length) throw new Error('Selecciona al menos una referencia');
+      const dominioNorm = dominio.trim().toUpperCase();
+      if (!dominioNorm) throw new Error('Selecciona una referencia del catálogo');
+      const referenciaLista = [dominioNorm, ...parseListaCsv(referencia).filter((r) => r !== dominioNorm)];
       if (!apisDominiosIds.length) throw new Error('Selecciona al menos un dominio (apisdominios)');
+      if (!scopeSaIds.length) {
+        throw new Error('Parametriza al menos un tenant SuperAdmin en el alcance');
+      }
+      const scopeSaNorm = normalizarIdsApi(scopeSaIds);
+      const scopeTgNorm = normalizarIdsApi(scopeTgIds);
+      const scopeTcNorm = normalizarIdsApi(scopeTcIds);
+      const scopeUsuariosNorm = normalizarIdsApi(scopeUsuarioIds);
+      const apisDominiosNorm = normalizarIdsApi(apisDominiosIds);
+      if (!scopeSaNorm.length) {
+        throw new Error('Los IDs de tenant SA no son válidos. Recarga opciones y parametriza el alcance de nuevo.');
+      }
+      if (!apisDominiosNorm.length) {
+        throw new Error('Los IDs de apisdominios no son válidos. Recarga opciones y selecciona de nuevo.');
+      }
+      const accionIdsNorm = normalizarIdsApi(accionIds);
+      const rutaIdNorm = normalizarIdApiOpcional(recursoRutaId);
+      const efectoItem = catalogoEfectosBD.find((i) => i.valor === efecto);
+      const motorNorm = esPoliticaBypassLike(tipo, codigoNormalizado)
+        ? (motorEvento.trim() || String((politicaSeleccionada?.condiciones?.metadata as { motorEvento?: string })?.motorEvento || '')).toUpperCase()
+        : '';
+      const motorItemSeleccionado = motorNorm
+        ? bypassAlcancesOpciones.find((i) => (i.nombre || i.alcance) === motorNorm)
+        : undefined;
+      if (esPoliticaBypassLike(tipo, codigoNormalizado) && motorNorm && !motorItemSeleccionado) {
+        throw new Error('El motor evento seleccionado no existe en el catalogo parametrizado');
+      }
+      const pipelineMotorSeleccionado = motorItemSeleccionado?.pipeline
+        ? normalizarPipelineMotorEvento(motorItemSeleccionado.pipeline)
+        : '';
+      const selectsDinamicosIds = {
+        tipoCatalogoId: resolverIdCatalogo(catalogoTiposBD, tipo),
+        efectoCatalogoId: resolverIdCatalogo(catalogoEfectosBD, efecto),
+        referenciaCatalogoId: resolverIdCatalogo(catalogoReferenciasBD, dominioNorm),
+        motorEventoId: motorNorm
+          ? normalizarIdApiOpcional(
+            motorItemSeleccionado?.id,
+          )
+          : undefined,
+        comportamientoCatalogoId: efectoItem?.comportamiento
+          ? resolverIdCatalogo(
+            catalogoComportamientosBD.map((c) => ({ id: c.id, valor: c.valor })),
+            efectoItem.comportamiento,
+          )
+          : undefined,
+        apisDominiosIds: apisDominiosNorm,
+      };
+      const saScope = scopeSaNorm[0];
+      const tgScope = scopeTgNorm[0] || '';
+      const tcScope = scopeTcNorm[0] || '';
+      const usuarioScope = scopeUsuariosNorm[0] || '';
+      const metaPrev = (politicaSeleccionada?.condiciones?.metadata ?? {}) as Record<string, unknown>;
+      const alcanceMeta = {
+        tenantSuperAdminIds: scopeSaNorm,
+        tenantGlobalIds: scopeTgNorm,
+        tenantCorporativoIds: scopeTcNorm,
+        usuarioIds: scopeUsuariosNorm,
+        ...selectsDinamicosIds,
+      };
       const condiciones: PoliticaRuntime['condiciones'] = {
-        roles: parseListaCsv(roles),
         referencia: referenciaLista,
         bypassDominios: referenciaLista,
+        roles: [],
       };
       if (tipo === TIPO_ACCION) {
-        condiciones.metadata = {
-          accionIds,
-          rutaId: recursoRutaId.trim() || undefined,
+        condiciones.metadata = sanitizarMetadata({
+          ...metaPrev,
+          ...alcanceMeta,
+          accionIds: accionIdsNorm,
+          rutaId: rutaIdNorm,
           formularioComponent: recursoFormulario.trim() || undefined,
-        };
-      }
-      if (esPoliticaBypassLike(tipo, codigoNormalizado)) {
+        });
+      } else if (esPoliticaBypassLike(tipo, codigoNormalizado)) {
         const alcanceDesdeCodigo = codigoNormalizado.startsWith('BYPASS_')
           ? codigoNormalizado.slice('BYPASS_'.length)
           : codigoNormalizado;
-        const metaPrev = (politicaSeleccionada?.condiciones?.metadata ?? {}) as Record<string, unknown>;
-        const motor = (motorEvento.trim() || String(metaPrev.motorEvento || '')).toUpperCase() || alcanceDesdeCodigo;
-        condiciones.metadata = {
+        const motor = motorNorm || alcanceDesdeCodigo;
+        condiciones.metadata = sanitizarMetadata({
           ...metaPrev,
+          ...alcanceMeta,
           alcance: motor,
           motorEvento: motor,
-        };
+          pipeline: pipelineMotorSeleccionado || undefined,
+          pipelineLabel: pipelineMotorSeleccionado ? etiquetaPipeline(pipelineMotorSeleccionado) : undefined,
+        });
+      } else {
+        condiciones.metadata = sanitizarMetadata({ ...metaPrev, ...alcanceMeta });
       }
       const payload = {
         codigo: codigoNormalizado,
         tipo,
         efecto,
-        dominio: referenciaLista[0],
+        dominio: dominioNorm,
         condiciones,
         scope: {
-          tipo: 'TENANT_SUPER_ADMIN',
-          apisDominiosIds: apisDominiosIds,
-          apisDominios: apisDominiosIds[0] || undefined,
+          tipo: resolverScopeTipo(scopeUsuariosNorm, scopeTcNorm, scopeTgNorm),
+          tenantSuperAdmin: saScope,
+          tenantGlobal: tgScope || undefined,
+          tenantCorporativo: tcScope || undefined,
+          usuarioId: usuarioScope || undefined,
+          apisDominiosIds: apisDominiosNorm,
+          apisDominios: apisDominiosNorm[0] || undefined,
         },
       };
       const esCreacion = creandoNueva || !politicaEditId;
@@ -654,72 +1071,197 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
     setItemDraft({
       ...draftVacio(categoria),
       valor: valorInicial.trim().toUpperCase(),
-      orden: siguienteOrdenCatalogo(categoria, catalogoTiposBD, catalogoEfectosBD),
+      ...(categoria !== 'COMPORTAMIENTO' ? {
+        orden: siguienteOrdenCatalogo(
+          categoria,
+          catalogoTiposBD,
+          catalogoEfectosBD,
+          catalogoReferenciasBD,
+          catalogoComportamientosBD,
+        ),
+      } : {}),
       activo: true,
     });
+    setCatalogoTipoEfectoTab(tabDeCategoria(categoria));
+    setCatalogoTipoEfectoOpen(true);
   };
 
-  const editarTipoDesdeFormulario = () => {
-    if (!tipo) {
-      toast.error('Selecciona un tipo para editar');
-      return;
-    }
-    const item = catalogoTiposBD.find((i) => i.valor === tipo);
-    if (!item) {
-      toast.error('Ese tipo no está en el catálogo. Créalo con el botón +');
-      return;
-    }
-    editarItem('TIPO', item);
-  };
-
-  const editarEfectoDesdeFormulario = () => {
-    if (!efecto) {
-      toast.error('Selecciona un efecto para editar');
-      return;
-    }
-    const item = catalogoEfectosBD.find((i) => i.valor === efecto);
-    if (!item) {
-      toast.error('Ese efecto no está en el catálogo. Créalo con el botón +');
-      return;
-    }
-    editarItem('EFECTO', item);
-  };
-
-  const tipoEnCatalogo = useMemo(
-    () => Boolean(tipo && catalogoTiposBD.some((i) => i.valor === tipo)),
-    [tipo, catalogoTiposBD]
-  );
-
-  const efectoEnCatalogo = useMemo(
-    () => Boolean(efecto && catalogoEfectosBD.some((i) => i.valor === efecto)),
-    [efecto, catalogoEfectosBD]
-  );
-
-  const editarItem = (categoria: PoliticaRuntimeCatalogoCategoria, item: PoliticaRuntimeCatalogoItem) => {
+  const editarItem = (
+    categoria: PoliticaRuntimeCatalogoCategoria,
+    item: PoliticaRuntimeCatalogoItem | PoliticaRuntimeComportamientoCatalogoItem,
+  ) => {
+    const compItem = categoria === 'COMPORTAMIENTO'
+      ? (item as PoliticaRuntimeComportamientoCatalogoItem)
+      : null;
+    const motorResuelto = compItem ? resolverMotorSemanticaComportamientoUi(compItem) : null;
     setItemDraft({
       categoria,
-      valor: item.valor,
-      label: item.label || '',
-      descripcion: item.descripcion || '',
-      ...(item.comportamiento ? { comportamiento: item.comportamiento as PoliticaRuntimeComportamiento } : {}),
-      ...(item.orden != null ? { orden: item.orden } : {}),
+      valor: 'nombre' in item ? item.nombre : item.valor,
+      label: 'etiqueta' in item ? item.etiqueta : (item.label || ''),
+      descripcion: 'descripcion' in item ? (item.descripcion || '') : '',
+      ...('comportamiento' in item && item.comportamiento ? { comportamiento: item.comportamiento } : {}),
+      ...(motorResuelto ? { motorSemantica: motorResuelto } : {}),
+      ...('orden' in item && item.orden != null ? { orden: item.orden } : {}),
       ...(item.activo != null ? { activo: item.activo } : {}),
       esNuevo: false,
     });
+    setCatalogoTipoEfectoTab(tabDeCategoria(categoria));
+    setCatalogoTipoEfectoOpen(true);
+  };
+
+  const metaCatalogoTab = (): {
+    categoria: PoliticaRuntimeCatalogoCategoria;
+    items: PoliticaRuntimeCatalogoItem[] | PoliticaRuntimeComportamientoCatalogoItem[];
+    label: string;
+  } | null => {
+    if (catalogoTipoEfectoTab === 'TIPOS') {
+      return { categoria: 'TIPO', items: catalogoTiposBD, label: 'tipo' };
+    }
+    if (catalogoTipoEfectoTab === 'EFECTOS') {
+      return { categoria: 'EFECTO', items: catalogoEfectosBD, label: 'efecto' };
+    }
+    if (catalogoTipoEfectoTab === 'REFERENCIA') {
+      return { categoria: 'REFERENCIA', items: catalogoReferenciasBD, label: 'referencia' };
+    }
+    if (catalogoTipoEfectoTab === 'COMPORTAMIENTO') {
+      return { categoria: 'COMPORTAMIENTO', items: catalogoComportamientosBD, label: 'comportamiento' };
+    }
+    return null;
+  };
+
+  const renderCatalogoLista = (): React.ReactElement | null => {
+    const meta = metaCatalogoTab();
+    if (!meta) return null;
+    const { categoria, items, label } = meta;
+    return (
+      <div className="space-y-2">
+        <p className="text-[11px] text-muted-foreground">
+          Colección <code className="rounded bg-muted px-1 text-xs">politicasruntimecatalogo</code> · categoría{' '}
+          <code className="rounded bg-muted px-1 text-xs">{categoria}</code>
+          {categoria === 'REFERENCIA' ? ' → se usa como dominio de la política.' : ''}
+          {categoria === 'COMPORTAMIENTO' ? ' → nombre, etiqueta y semántica del motor (EFECTO enlaza aquí).' : ''}
+          {categoria !== 'REFERENCIA' && categoria !== 'COMPORTAMIENTO' ? '.' : ''}
+        </p>
+        <div className="flex justify-end">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => iniciarNuevoItem(categoria)}
+          >
+            <Plus className="mr-1 h-3 w-3" />
+            Nuevo {label}
+          </Button>
+        </div>
+        <ScrollArea className="h-64 rounded border p-2">
+          <div className="space-y-2">
+            {items.length === 0 ? (
+              <p className="text-xs text-muted-foreground">Sin registros. Crea el primero con «Nuevo {label}».</p>
+            ) : null}
+            {items.map((item) => {
+              const itemKey = 'nombre' in item ? item.nombre : item.valor;
+              const compItem = categoria === 'COMPORTAMIENTO'
+                ? (item as PoliticaRuntimeComportamientoCatalogoItem)
+                : null;
+              const catalogItem = categoria !== 'COMPORTAMIENTO'
+                ? (item as PoliticaRuntimeCatalogoItem)
+                : null;
+              return (
+              <div key={itemKey} className="flex items-center justify-between gap-2 rounded border p-2 text-xs">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {compItem ? (
+                      <>
+                        <Badge variant="outline">{compItem.nombre}</Badge>
+                        <span className="text-muted-foreground">{compItem.etiqueta}</span>
+                        {(() => {
+                          const motor = resolverMotorSemanticaComportamientoUi(compItem);
+                          if (!motor) {
+                            return <Badge variant="destructive">sin motor</Badge>;
+                          }
+                          const inferido = !String(compItem.motorSemantica || '').trim();
+                          return (
+                            <Badge variant={inferido ? 'outline' : 'secondary'} title={inferido ? 'Inferido desde nombre/etiqueta' : undefined}>
+                              {motor}{inferido ? ' · auto' : ''}
+                            </Badge>
+                          );
+                        })()}
+                      </>
+                    ) : (
+                      <>
+                        <Badge variant="outline">{catalogItem?.valor}</Badge>
+                        {categoria === 'EFECTO' ? (
+                          <Badge variant="secondary">{catalogItem?.comportamiento || '—'}</Badge>
+                        ) : null}
+                        {catalogItem && !catalogItem.activo ? <Badge variant="secondary">inactivo</Badge> : null}
+                        {catalogItem?.protegido ? <Badge variant="secondary">sistema</Badge> : null}
+                      </>
+                    )}
+                  </div>
+                  {catalogItem && (catalogItem.label || catalogItem.descripcion) ? (
+                    <p className="mt-1 text-muted-foreground">
+                      {catalogItem.label}{catalogItem.descripcion ? ` · ${catalogItem.descripcion}` : ''}
+                    </p>
+                  ) : null}
+                </div>
+                <div className="flex items-center gap-1">
+                  <Button type="button" size="sm" variant="outline" onClick={() => editarItem(categoria, item)}>
+                    <Pencil className="mr-1 h-3 w-3" />
+                    Editar
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="destructive"
+                    disabled={(catalogItem?.protegido ?? compItem?.protegido) || guardandoItem}
+                    onClick={() => void eliminarItem(categoria, itemKey)}
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
+                </div>
+              </div>
+            );
+            })}
+          </div>
+        </ScrollArea>
+      </div>
+    );
   };
 
   const guardarItem = async () => {
     if (!itemDraft) return;
-    const valorNormalizado = itemDraft.valor.trim().toUpperCase();
-    if (!valorNormalizado) {
-      toast.error('El valor es obligatorio');
+    const nombreNormalizado = itemDraft.valor.trim().toUpperCase();
+    if (!nombreNormalizado) {
+      toast.error(itemDraft.categoria === 'COMPORTAMIENTO' ? 'El nombre es obligatorio' : 'El valor es obligatorio');
       return;
     }
     setGuardandoItem(true);
     try {
+      if (itemDraft.categoria === 'COMPORTAMIENTO') {
+        const etiqueta = itemDraft.label.trim();
+        if (!etiqueta) {
+          toast.error('La etiqueta es obligatoria');
+          return;
+        }
+        const motorInferido =
+          itemDraft.motorSemantica?.trim().toUpperCase()
+          || inferirMotorSemanticaComportamiento(nombreNormalizado, etiqueta)
+          || '';
+        await guardarPoliticaRuntimeCatalogoItem({
+          categoria: 'COMPORTAMIENTO',
+          nombre: nombreNormalizado,
+          etiqueta,
+          ...(motorInferido ? { motorSemantica: motorInferido } : {}),
+        });
+        toast.success(itemDraft.esNuevo ? 'Comportamiento guardado' : 'Comportamiento actualizado');
+        setItemDraft(null);
+        await recargarOpcionesCatalogo();
+        return;
+      }
+
       const payload: GuardarCatalogoItemPayload = {
         categoria: itemDraft.categoria,
-        valor: valorNormalizado,
+        valor: nombreNormalizado,
       };
       if (itemDraft.label.trim()) payload.label = itemDraft.label.trim();
       if (itemDraft.descripcion.trim()) payload.descripcion = itemDraft.descripcion.trim();
@@ -762,13 +1304,627 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
     }
   };
 
-  const renderItemForm = (): React.ReactElement | null => {
-    if (!itemDraft) return null;
-    const esEfecto = itemDraft.categoria === 'EFECTO';
+  const iniciarNuevoMotorEvento = () => {
+    setMotorEventoDraft({
+      nombre: '',
+      etiqueta: '',
+      pipeline: pipelineOpciones[0]?.nombre || '',
+      esNuevo: true,
+    });
+    setItemDraft(null);
+    setCatalogoTipoEfectoTab('MOTOR_EVENTO');
+    setCatalogoTipoEfectoOpen(true);
+  };
+
+  const editarMotorEvento = (item: PoliticaRuntimeBypassAlcanceOpcion) => {
+    setMotorEventoDraft({
+      nombre: item.nombre || item.alcance,
+      etiqueta: item.etiqueta || item.label,
+      pipeline: normalizarPipelineMotorEvento(item.pipeline),
+      esNuevo: false,
+    });
+    setItemDraft(null);
+    setCatalogoTipoEfectoTab('MOTOR_EVENTO');
+    setCatalogoTipoEfectoOpen(true);
+  };
+
+  const iniciarNuevoPipeline = () => {
+    setPipelineDraft({
+      nombre: '',
+      label: '',
+      referencia: '',
+      descripcion: '',
+      orden: '',
+    });
+  };
+
+  const seleccionarReferenciaPipeline = (referenciaValor: string) => {
+    if (!pipelineDraft) return;
+    const valor = referenciaValor.trim().toUpperCase();
+    const item = catalogoReferenciasBD.find((ref) => ref.valor === valor);
+    setPipelineDraft({
+      ...pipelineDraft,
+      referencia: valor,
+      label: item?.label || valor,
+      descripcion: pipelineDraft.descripcion || item?.descripcion || '',
+    });
+  };
+
+  const guardarPipelineItem = async () => {
+    if (!pipelineDraft) return;
+    const nombre = pipelineDraft.nombre.trim().toUpperCase();
+    const label = pipelineDraft.label.trim();
+    if (!nombre) {
+      toast.error('El nombre del pipeline es obligatorio');
+      return;
+    }
+    if (!label) {
+      toast.error('La etiqueta del pipeline es obligatoria');
+      return;
+    }
+    setGuardandoItem(true);
+    try {
+      const pipeline = await guardarPoliticaBypassPipeline({
+        nombre,
+        label,
+        referencia: pipelineDraft.referencia.trim().toUpperCase() || undefined,
+        descripcion: pipelineDraft.descripcion.trim() || undefined,
+        orden: pipelineDraft.orden.trim() ? Number(pipelineDraft.orden) : undefined,
+      });
+      toast.success('Pipeline guardado');
+      setPipelineDraft(null);
+      setMotorEventoDraft((draft) => draft ? { ...draft, pipeline: pipeline.nombre } : draft);
+      await Promise.all([recargarOpcionesCatalogo(), cargarCatalogoPipeline()]);
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo guardar el pipeline');
+    } finally {
+      setGuardandoItem(false);
+    }
+  };
+
+  const guardarMotorEventoItem = async () => {
+    if (!motorEventoDraft) return;
+    const nombre = motorEventoDraft.nombre.trim().toUpperCase();
+    const etiqueta = motorEventoDraft.etiqueta.trim();
+    if (!nombre) {
+      toast.error('El nombre es obligatorio');
+      return;
+    }
+    if (!etiqueta) {
+      toast.error('La etiqueta es obligatoria');
+      return;
+    }
+    setGuardandoItem(true);
+    try {
+      await guardarPoliticaBypassMotorEvento({
+        nombre,
+        etiqueta,
+        pipeline: motorEventoDraft.pipeline,
+      });
+      toast.success(motorEventoDraft.esNuevo ? 'Motor evento guardado' : 'Motor evento actualizado');
+      setMotorEventoDraft(null);
+      await recargarOpcionesCatalogo();
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo guardar el motor evento');
+    } finally {
+      setGuardandoItem(false);
+    }
+  };
+
+  const eliminarMotorEventoItem = async (nombre: string) => {
+    setGuardandoItem(true);
+    try {
+      await eliminarPoliticaBypassMotorEvento(nombre);
+      toast.success('Motor evento eliminado');
+      await recargarOpcionesCatalogo();
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo eliminar el motor evento');
+    } finally {
+      setGuardandoItem(false);
+    }
+  };
+
+  // ─── CRUD Motor Eventos Sg (colección catalogomotoreventos) ────────────────
+  const iniciarNuevoMotorEventoSg = () => {
+    setMotorEventoSgDraft({ codigo: '', label: '', descripcion: '', pipeline: '', semantica: 'NEUTRO', activo: true, esNuevo: true });
+    setCatalogoTipoEfectoTab('PIPELINES');
+    setCatalogoTipoEfectoOpen(true);
+  };
+
+  const editarMotorEventoSg = (item: CatalogoMotorEventoSgItem) => {
+    setMotorEventoSgDraft({
+      codigo: item.codigo,
+      label: item.label,
+      descripcion: item.descripcion,
+      pipeline: item.pipeline ?? '',
+      semantica: item.semantica ?? 'NEUTRO',
+      activo: item.activo,
+      esNuevo: false,
+    });
+  };
+
+  const guardarMotorEventoSgItem = async () => {
+    if (!motorEventoSgDraft) return;
+    const codigo = motorEventoSgDraft.codigo.trim().toUpperCase();
+    if (!codigo) { toast.error('El código es obligatorio'); return; }
+    setGuardandoItem(true);
+    try {
+      if (motorEventoSgDraft.esNuevo) {
+        await guardarCatalogoMotorEventoSg({ ...motorEventoSgDraft, codigo });
+      } else {
+        const { esNuevo: _, codigo: _c, ...rest } = motorEventoSgDraft;
+        await actualizarCatalogoMotorEventoSg(codigo, rest);
+      }
+      toast.success(motorEventoSgDraft.esNuevo ? 'Motor evento guardado' : 'Motor evento actualizado');
+      setMotorEventoSgDraft(null);
+      await cargarMotorEventosSg();
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo guardar el motor evento');
+    } finally {
+      setGuardandoItem(false);
+    }
+  };
+
+  const eliminarMotorEventoSgItem = async (codigo: string) => {
+    setGuardandoItem(true);
+    try {
+      await eliminarCatalogoMotorEventoSg(codigo);
+      toast.success('Motor evento eliminado');
+      await cargarMotorEventosSg();
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo eliminar el motor evento');
+    } finally {
+      setGuardandoItem(false);
+    }
+  };
+
+  const SEMANTICAS = ['PERMITE', 'BLOQUEA', 'BYPASS', 'NEUTRO', 'REQUIERE_TECHO'] as const;
+
+  const renderPipelinesLista = (): React.ReactElement => {
+    return (
+      <div className="space-y-2">
+        <p className="text-[11px] text-muted-foreground">
+          Coleccion <code className="rounded bg-muted px-1 text-xs">catologoPipeline</code> - opciones visibles para el selector de pipeline en motor evento.
+        </p>
+        <div className="flex justify-end">
+          <Button type="button" size="sm" variant="outline" onClick={iniciarNuevoPipeline}>
+            <Plus className="mr-1 h-3 w-3" />
+            Nuevo pipeline
+          </Button>
+        </div>
+        <ScrollArea className="h-64 rounded border p-2">
+          <div className="space-y-2">
+            {catalogoPipelineItems.length === 0 ? (
+              <p className="text-xs text-muted-foreground">Sin registros. Crea el primero con Nuevo pipeline.</p>
+            ) : null}
+            {catalogoPipelineItems.map((item) => (
+              <div key={item.nombre} className="rounded border p-2 text-xs">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <Badge variant="outline">{item.nombre}</Badge>
+                  <span className="text-muted-foreground">{item.label}</span>
+                  {item.referencia ? <Badge variant="secondary">{item.referencia}</Badge> : null}
+                  {item.activo === false ? <Badge variant="secondary">inactivo</Badge> : null}
+                  {Number.isFinite(Number(item.orden)) ? <Badge variant="secondary">orden {item.orden}</Badge> : null}
+                </div>
+                {item.descripcion ? (
+                  <p className="mt-1 text-muted-foreground">{item.descripcion}</p>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        </ScrollArea>
+      </div>
+    );
+
+    const grupos = Array.from(
+      catalogoMotorEventosSg.reduce((map, item) => {
+        const key = item.pipeline || 'SIN_PIPELINE';
+        if (!map.has(key)) map.set(key, []);
+        map.get(key)!.push(item);
+        return map;
+      }, new Map<string, CatalogoMotorEventoSgItem[]>()),
+    );
+    return (
+      <div className="space-y-2">
+        <p className="text-[11px] text-muted-foreground">
+          Colección <code className="rounded bg-muted px-1 text-xs">catalogomotoreventos</code> · pipelines y motores de evento creados.
+        </p>
+        {motorEventoSgDraft ? (
+          <div className="space-y-3 rounded-md border border-primary/40 bg-muted/30 p-3">
+            <p className="text-xs font-medium">{motorEventoSgDraft.esNuevo ? 'Nuevo' : 'Editar'} motor evento</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1">
+                <Label className="text-xs">Código *</Label>
+                <Input
+                  value={motorEventoSgDraft.codigo}
+                  disabled={!motorEventoSgDraft.esNuevo}
+                  placeholder="EJ: REFERIDOS"
+                  onChange={(e) => setMotorEventoSgDraft({ ...motorEventoSgDraft, codigo: e.target.value.toUpperCase() })}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Etiqueta</Label>
+                <Input
+                  value={motorEventoSgDraft.label ?? ''}
+                  placeholder="Referidos y membresía"
+                  onChange={(e) => setMotorEventoSgDraft({ ...motorEventoSgDraft, label: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Pipeline</Label>
+                <Input
+                  value={motorEventoSgDraft.pipeline ?? ''}
+                  placeholder="EJ: PIPELINE_A"
+                  onChange={(e) => setMotorEventoSgDraft({ ...motorEventoSgDraft, pipeline: e.target.value.toUpperCase() })}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Semántica</Label>
+                <Select
+                  value={motorEventoSgDraft.semantica ?? 'NEUTRO'}
+                  onValueChange={(v) => setMotorEventoSgDraft({ ...motorEventoSgDraft, semantica: v })}
+                >
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {SEMANTICAS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1 sm:col-span-2">
+                <Label className="text-xs">Descripción</Label>
+                <Input
+                  value={motorEventoSgDraft.descripcion ?? ''}
+                  placeholder="Para qué sirve este motor"
+                  onChange={(e) => setMotorEventoSgDraft({ ...motorEventoSgDraft, descripcion: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button type="button" size="sm" disabled={guardandoItem} onClick={() => void guardarMotorEventoSgItem()}>
+                {guardandoItem ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                Guardar
+              </Button>
+              <Button type="button" size="sm" variant="outline" onClick={() => setMotorEventoSgDraft(null)}>Cancelar</Button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex justify-end">
+            <Button type="button" size="sm" variant="outline" onClick={iniciarNuevoMotorEventoSg}>
+              <Plus className="mr-1 h-3 w-3" />
+              Nuevo motor evento
+            </Button>
+          </div>
+        )}
+        <ScrollArea className="h-64 rounded border p-2">
+          <div className="space-y-4">
+            {grupos.length === 0 ? (
+              <p className="text-xs text-muted-foreground">Sin registros. Crea el primero con «Nuevo motor evento».</p>
+            ) : null}
+            {grupos.map(([pipeline, items]) => (
+              <div key={pipeline} className="space-y-2">
+                <p className="text-xs font-semibold text-muted-foreground">{pipeline}</p>
+                {items.map((item) => (
+                  <div key={item.codigo} className="flex items-center justify-between gap-2 rounded border p-2 text-xs">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <Badge variant="outline">{item.codigo}</Badge>
+                        {item.semantica ? <Badge variant="secondary">{item.semantica}</Badge> : null}
+                        {!item.activo ? <Badge variant="secondary">inactivo</Badge> : null}
+                        {item.protegido ? <Badge variant="secondary">sistema</Badge> : null}
+                      </div>
+                      {item.label || item.descripcion ? (
+                        <p className="mt-1 text-muted-foreground">{item.label}{item.descripcion ? ` · ${item.descripcion}` : ''}</p>
+                      ) : null}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Button type="button" size="sm" variant="outline" onClick={() => editarMotorEventoSg(item)}>
+                        <Pencil className="mr-1 h-3 w-3" />Editar
+                      </Button>
+                      <Button
+                        type="button" size="sm" variant="destructive"
+                        disabled={item.protegido || guardandoItem}
+                        onClick={() => void eliminarMotorEventoSgItem(item.codigo)}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        </ScrollArea>
+      </div>
+    );
+  };
+
+  const renderMotorEventoLista = (): React.ReactElement => (
+    <div className="space-y-2">
+      <p className="text-[11px] text-muted-foreground">
+        Colección <code className="rounded bg-muted px-1 text-xs">politicabypassalcances</code> · identifica
+        funcionalidades por pipeline configurado.
+      </p>
+      <div className="flex justify-end">
+        <Button type="button" size="sm" variant="outline" onClick={iniciarNuevoMotorEvento}>
+          <Plus className="mr-1 h-3 w-3" />
+          Nuevo motor evento
+        </Button>
+      </div>
+      <ScrollArea className="h-64 rounded border p-2">
+        <div className="space-y-4">
+          {pipelineOpciones.map((pipeline) => (
+            <div key={pipeline.nombre} className="space-y-2">
+              <p className="text-xs font-medium">{pipeline.label}</p>
+              {(motorEventosPorPipeline.get(pipeline.nombre) ?? []).length === 0 ? (
+                <p className="text-xs text-muted-foreground">Sin registros en este pipeline.</p>
+              ) : (
+                (motorEventosPorPipeline.get(pipeline.nombre) ?? []).map((item) => (
+                  <div
+                    key={item.nombre || item.alcance}
+                    className="flex items-center justify-between gap-2 rounded border p-2 text-xs"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <Badge variant="outline">{item.nombre || item.alcance}</Badge>
+                        <span className="text-muted-foreground">{item.etiqueta || item.label}</span>
+                      </div>
+                      {item.descripcion ? (
+                        <p className="mt-1 text-muted-foreground">{item.descripcion}</p>
+                      ) : null}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Button type="button" size="sm" variant="outline" onClick={() => editarMotorEvento(item)}>
+                        <Pencil className="mr-1 h-3 w-3" />
+                        Editar
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="destructive"
+                        disabled={guardandoItem}
+                        onClick={() => void eliminarMotorEventoItem(item.nombre || item.alcance)}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          ))}
+        </div>
+      </ScrollArea>
+    </div>
+  );
+
+  const renderMotorEventoForm = (): React.ReactElement | null => {
+    if (!motorEventoDraft) return null;
     return (
       <div className="space-y-3 rounded-md border border-primary/40 bg-muted/30 p-3">
         <p className="text-xs font-medium">
-          {itemDraft.esNuevo ? 'Nuevo' : 'Editar'} {esEfecto ? 'efecto' : 'tipo'} en catálogo
+          {motorEventoDraft.esNuevo ? 'Nuevo' : 'Editar'} motor evento
+        </p>
+        <p className="text-[11px] text-muted-foreground">
+          Nombre = código que guarda la política en <code>metadata.motorEvento</code>.
+          Etiqueta = texto visible al parametrizar bypass.
+        </p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-1">
+            <Label className="text-xs">Nombre</Label>
+            <Input
+              value={motorEventoDraft.nombre}
+              disabled={!motorEventoDraft.esNuevo}
+              placeholder="EJ: REFERIDOS"
+              onChange={(e) => setMotorEventoDraft({ ...motorEventoDraft, nombre: e.target.value.toUpperCase() })}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Etiqueta</Label>
+            <Input
+              value={motorEventoDraft.etiqueta}
+              placeholder="Referidos y membresía"
+              onChange={(e) => setMotorEventoDraft({ ...motorEventoDraft, etiqueta: e.target.value })}
+            />
+          </div>
+          <div className="space-y-1 sm:col-span-2">
+            <div className="flex items-center justify-between gap-2">
+              <Label className="text-xs">Pipeline</Label>
+              <Button type="button" size="sm" variant="outline" onClick={iniciarNuevoPipeline}>
+                <Plus className="mr-1 h-3 w-3" />
+                Nuevo pipeline
+              </Button>
+            </div>
+            <Select
+              value={motorEventoDraft.pipeline}
+              onValueChange={(v) => setMotorEventoDraft({
+                ...motorEventoDraft,
+                pipeline: normalizarPipelineMotorEvento(v),
+              })}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {pipelineOpciones.map((pipeline) => (
+                  <SelectItem key={pipeline.nombre} value={pipeline.nombre}>{pipeline.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <Button type="button" size="sm" disabled={guardandoItem} onClick={() => void guardarMotorEventoItem()}>
+            {guardandoItem ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+            Guardar
+          </Button>
+          <Button type="button" size="sm" variant="outline" onClick={() => setMotorEventoDraft(null)}>
+            Cancelar
+          </Button>
+        </div>
+      </div>
+    );
+  };
+
+  const renderPipelineDialog = (): React.ReactElement => (
+    <Dialog open={Boolean(pipelineDraft)} onOpenChange={(open) => { if (!open) setPipelineDraft(null); }}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Nuevo pipeline</DialogTitle>
+          <DialogDescription>
+            Crea la opciÃ³n visible en el selector de pipeline para motor evento.
+          </DialogDescription>
+        </DialogHeader>
+        {pipelineDraft ? (
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Nombre</Label>
+              <Input
+                value={pipelineDraft.nombre}
+                placeholder="EJ: PIPELINE_JERARQUIA"
+                onChange={(e) => setPipelineDraft({ ...pipelineDraft, nombre: e.target.value.toUpperCase() })}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Referencia</Label>
+              <Select
+                value={pipelineDraft.referencia || undefined}
+                onValueChange={seleccionarReferenciaPipeline}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecciona una referencia" />
+                </SelectTrigger>
+                <SelectContent>
+                  {catalogoReferenciasBD.filter((item) => item.activo !== false).length === 0 ? (
+                    <SelectItem value="__sin_referencias_pipeline__" disabled>
+                      Sin referencias creadas
+                    </SelectItem>
+                  ) : null}
+                  {catalogoReferenciasBD.filter((item) => item.activo !== false).map((item) => (
+                    <SelectItem key={item.valor} value={item.valor}>
+                      {item.label || item.valor}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Etiqueta del select</Label>
+              <Input
+                value={pipelineDraft.label}
+                placeholder="Se completa desde la referencia"
+                onChange={(e) => setPipelineDraft({ ...pipelineDraft, label: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">DescripciÃ³n</Label>
+              <Input
+                value={pipelineDraft.descripcion}
+                placeholder="Uso del pipeline"
+                onChange={(e) => setPipelineDraft({ ...pipelineDraft, descripcion: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Orden</Label>
+              <Input
+                value={pipelineDraft.orden}
+                inputMode="numeric"
+                placeholder="10"
+                onChange={(e) => setPipelineDraft({ ...pipelineDraft, orden: e.target.value.replace(/\D/g, '') })}
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button type="button" size="sm" disabled={guardandoItem} onClick={() => void guardarPipelineItem()}>
+                {guardandoItem ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                Guardar
+              </Button>
+              <Button type="button" size="sm" variant="outline" onClick={() => setPipelineDraft(null)}>
+                Cancelar
+              </Button>
+            </div>
+          </div>
+        ) : null}
+      </DialogContent>
+    </Dialog>
+  );
+
+  const renderItemForm = (): React.ReactElement | null => {
+    if (!itemDraft) return null;
+
+    if (itemDraft.categoria === 'COMPORTAMIENTO') {
+      return (
+        <div className="space-y-3 rounded-md border border-primary/40 bg-muted/30 p-3">
+          <p className="text-xs font-medium">
+            {itemDraft.esNuevo ? 'Nuevo' : 'Editar'} comportamiento en catálogo
+          </p>
+          <p className="text-[11px] text-muted-foreground">
+            Nombre y etiqueta visibles. La semántica del motor define cómo se evalúa en reglas y motores (dinámico desde catálogo).
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1">
+              <Label className="text-xs">Nombre</Label>
+              <Input
+                value={itemDraft.valor}
+                disabled={!itemDraft.esNuevo}
+                placeholder="EJ: BYPASS_REFERIDOS_VENTAS"
+                onChange={(e) => setItemDraft({ ...itemDraft, valor: e.target.value.toUpperCase() })}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Etiqueta</Label>
+              <Input
+                value={itemDraft.label}
+                placeholder="Nombre visible"
+                onChange={(e) => setItemDraft({ ...itemDraft, label: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1 sm:col-span-2">
+              <Label className="text-xs">Semántica del motor *</Label>
+              <Select
+                value={itemDraft.motorSemantica || ''}
+                onValueChange={(v) => setItemDraft({ ...itemDraft, motorSemantica: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="PERMITE · BLOQUEA · BYPASS · …" />
+                </SelectTrigger>
+                <SelectContent>
+                  {motorSemanticasOpciones.map((sem) => (
+                    <SelectItem key={sem} value={sem}>
+                      {sem}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[10px] text-muted-foreground">
+                Si el nombre contiene BYPASS, ALLOW, DENY, etc., la semántica se infiere al guardar. Puedes forzarla con el selector.
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button type="button" size="sm" disabled={guardandoItem} onClick={() => void guardarItem()}>
+              {guardandoItem ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+              Guardar
+            </Button>
+            <Button type="button" size="sm" variant="outline" onClick={() => setItemDraft(null)}>
+              Cancelar
+            </Button>
+          </div>
+        </div>
+      );
+    }
+
+    const esEfecto = itemDraft.categoria === 'EFECTO';
+    const esReferencia = itemDraft.categoria === 'REFERENCIA';
+    const tituloCategoria = labelCategoriaCatalogo(itemDraft.categoria);
+    const placeholderValor = esEfecto
+      ? 'EJ: ALLOW_SOLO_LECTURA'
+      : esReferencia
+        ? 'EJ: VENTAS'
+        : 'EJ: ACCION';
+    const comportamientosActivos = catalogoComportamientosBD.filter((c) => c.activo !== false);
+    return (
+      <div className="space-y-3 rounded-md border border-primary/40 bg-muted/30 p-3">
+        <p className="text-xs font-medium">
+          {itemDraft.esNuevo ? 'Nuevo' : 'Editar'} {tituloCategoria} en catálogo
         </p>
         <p className="text-[11px] text-muted-foreground">
           Solo guarda este ítem de catálogo con los campos que completes abajo. No crea políticas runtime;
@@ -780,7 +1936,7 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
             <Input
               value={itemDraft.valor}
               disabled={!itemDraft.esNuevo}
-              placeholder={esEfecto ? 'EJ: ALLOW_SOLO_LECTURA' : 'EJ: ACCION'}
+              placeholder={placeholderValor}
               onChange={(e) => setItemDraft({ ...itemDraft, valor: e.target.value.toUpperCase() })}
             />
           </div>
@@ -805,17 +1961,24 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
               <Label className="text-xs">Comportamiento</Label>
               <Select
                 value={itemDraft.comportamiento || ''}
-                onValueChange={(v) => setItemDraft({ ...itemDraft, comportamiento: v as PoliticaRuntimeComportamiento })}
+                onValueChange={(v) => setItemDraft({ ...itemDraft, comportamiento: v })}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Comportamiento" />
+                  <SelectValue placeholder="Selecciona comportamiento" />
                 </SelectTrigger>
                 <SelectContent>
-                  {COMPORTAMIENTOS.map((c) => (
-                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                  {comportamientosActivos.map((c) => (
+                    <SelectItem key={c.nombre} value={c.nombre}>
+                      {c.etiqueta || c.nombre}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              {comportamientosActivos.length === 0 ? (
+                <p className="text-[11px] text-destructive">
+                  No hay comportamientos en catálogo. Créalos en la pestaña «Comportamiento» primero.
+                </p>
+              ) : null}
             </div>
           ) : null}
           <div className="space-y-1">
@@ -838,7 +2001,13 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
               Orden
               {itemDraft.esNuevo ? (
                 <span className="ml-1 font-normal text-muted-foreground">
-                  (secuencia {itemDraft.categoria === 'TIPO' ? 'tipos' : 'efectos'})
+                  (secuencia {
+                    itemDraft.categoria === 'TIPO'
+                      ? 'tipos'
+                      : itemDraft.categoria === 'EFECTO'
+                        ? 'efectos'
+                        : 'referencias'
+                  })
                 </span>
               ) : null}
             </Label>
@@ -848,7 +2017,13 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
               value={itemDraft.orden == null ? '' : String(itemDraft.orden)}
               placeholder={
                 itemDraft.esNuevo
-                  ? String(siguienteOrdenCatalogo(itemDraft.categoria, catalogoTiposBD, catalogoEfectosBD))
+                  ? String(siguienteOrdenCatalogo(
+                    itemDraft.categoria,
+                    catalogoTiposBD,
+                    catalogoEfectosBD,
+                    catalogoReferenciasBD,
+                    catalogoComportamientosBD,
+                  ))
                   : 'Opcional'
               }
               onChange={(e) => {
@@ -863,7 +2038,7 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
         </div>
         {esEfecto ? (
           <p className="text-[11px] text-muted-foreground">
-            «Comportamiento» define qué hace el motor: BLOQUEA niega; PERMITE/BYPASS/NEUTRO dejan pasar; REQUIERE_TECHO exige techo.
+            «Comportamiento» se carga dinámicamente desde el catálogo (nombre + etiqueta).
           </p>
         ) : null}
         <div className="flex gap-2">
@@ -888,13 +2063,17 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
             <h2 className="text-lg font-semibold text-foreground">Motor de políticas runtime</h2>
           </div>
           <p className="max-w-2xl text-sm text-muted-foreground">
-            Parametriza políticas por dominio del tenant y scope tenantSA del JWT.
+            Parametriza políticas por dominio y scope tenant (SA / TG / TC) del JWT.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button type="button" variant="outline" size="sm" onClick={() => setCatalogosOpen(true)}>
             <BookOpen className="mr-2 h-4 w-4" />
             Catálogos
+          </Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => abrirCatalogoTipoEfecto('TIPOS')}>
+            <Pencil className="mr-2 h-4 w-4" />
+            Tipos y efectos
           </Button>
           <Button
             type="button"
@@ -969,46 +2148,24 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
                   <CardTitle className="text-sm">Registros de tipos</CardTitle>
-                  <Button type="button" size="sm" variant="outline" onClick={() => iniciarNuevoItem('TIPO')}>
-                    <Plus className="mr-1 h-3 w-3" />
-                    Nuevo tipo
+                  <Button type="button" size="sm" variant="outline" onClick={() => abrirCatalogoTipoEfecto('TIPOS')}>
+                    <BookOpen className="mr-1 h-3 w-3" />
+                    Administrar tipos
                   </Button>
                 </CardHeader>
                 <CardContent className="space-y-2">
                   {catalogoTiposBD.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">Sin registros en BD. Usa «Nuevo tipo».</p>
+                    <p className="text-xs text-muted-foreground">Sin registros en BD. Abre el administrador de tipos.</p>
                   ) : null}
-                  {catalogoTiposBD.map((item) => (
+                  {catalogoTiposBD.slice(0, 8).map((item) => (
                     <div key={item.valor} className="flex items-center justify-between gap-2 rounded border p-2 text-xs">
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <Badge variant="outline">{item.valor}</Badge>
-                          {!item.activo ? <Badge variant="secondary">inactivo</Badge> : null}
-                          {item.protegido ? <Badge variant="secondary">sistema</Badge> : null}
-                        </div>
-                        {item.label || item.descripcion ? (
-                          <p className="mt-1 text-muted-foreground">{item.label}{item.descripcion ? ` · ${item.descripcion}` : ''}</p>
-                        ) : null}
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Button type="button" size="sm" variant="outline" onClick={() => editarItem('TIPO', item)}>
-                          <Pencil className="mr-1 h-3 w-3" />
-                          Editar
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="destructive"
-                          disabled={item.protegido || guardandoItem}
-                          title={item.protegido ? 'Valor del sistema: no se puede eliminar' : 'Eliminar'}
-                          onClick={() => void eliminarItem('TIPO', item.valor)}
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
-                      </div>
+                      <Badge variant="outline">{item.valor}</Badge>
+                      <span className="truncate text-muted-foreground">{item.label || item.descripcion || '—'}</span>
                     </div>
                   ))}
-                  {itemDraft?.categoria === 'TIPO' ? renderItemForm() : null}
+                  {catalogoTiposBD.length > 8 ? (
+                    <p className="text-[11px] text-muted-foreground">+{catalogoTiposBD.length - 8} más en el administrador.</p>
+                  ) : null}
                 </CardContent>
               </Card>
             ) : null}
@@ -1017,47 +2174,24 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
                   <CardTitle className="text-sm">Registros de efectos</CardTitle>
-                  <Button type="button" size="sm" variant="outline" onClick={() => iniciarNuevoItem('EFECTO')}>
-                    <Plus className="mr-1 h-3 w-3" />
-                    Nuevo efecto
+                  <Button type="button" size="sm" variant="outline" onClick={() => abrirCatalogoTipoEfecto('EFECTOS')}>
+                    <BookOpen className="mr-1 h-3 w-3" />
+                    Administrar efectos
                   </Button>
                 </CardHeader>
                 <CardContent className="space-y-2">
                   {catalogoEfectosBD.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">Sin registros en BD. Usa «Nuevo efecto».</p>
+                    <p className="text-xs text-muted-foreground">Sin registros en BD. Abre el administrador de efectos.</p>
                   ) : null}
-                  {catalogoEfectosBD.map((item) => (
+                  {catalogoEfectosBD.slice(0, 8).map((item) => (
                     <div key={item.valor} className="flex items-center justify-between gap-2 rounded border p-2 text-xs">
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <Badge variant="outline">{item.valor}</Badge>
-                          <Badge variant="secondary">{item.comportamiento || 'PERMITE'}</Badge>
-                          {!item.activo ? <Badge variant="secondary">inactivo</Badge> : null}
-                          {item.protegido ? <Badge variant="secondary">sistema</Badge> : null}
-                        </div>
-                        {item.label || item.descripcion ? (
-                          <p className="mt-1 text-muted-foreground">{item.label}{item.descripcion ? ` · ${item.descripcion}` : ''}</p>
-                        ) : null}
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Button type="button" size="sm" variant="outline" onClick={() => editarItem('EFECTO', item)}>
-                          <Pencil className="mr-1 h-3 w-3" />
-                          Editar
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="destructive"
-                          disabled={item.protegido || guardandoItem}
-                          title={item.protegido ? 'Valor del sistema: no se puede eliminar' : 'Eliminar'}
-                          onClick={() => void eliminarItem('EFECTO', item.valor)}
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
-                      </div>
+                      <Badge variant="outline">{item.valor}</Badge>
+                      <span className="truncate text-muted-foreground">{item.label || item.comportamiento || '—'}</span>
                     </div>
                   ))}
-                  {itemDraft?.categoria === 'EFECTO' ? renderItemForm() : null}
+                  {catalogoEfectosBD.length > 8 ? (
+                    <p className="text-[11px] text-muted-foreground">+{catalogoEfectosBD.length - 8} más en el administrador.</p>
+                  ) : null}
                 </CardContent>
               </Card>
             ) : null}
@@ -1111,17 +2245,14 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
         open={formOpen}
         onOpenChange={(open) => {
           setFormOpen(open);
-          if (!open) {
-            setCreandoNueva(false);
-            setItemDraft(null);
-          }
+          if (!open) setCreandoNueva(false);
         }}
       >
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
           <DialogHeader>
             <DialogTitle>{creandoNueva || !politicaEditId ? 'Nueva política runtime' : 'Editar política runtime'}</DialogTitle>
             <DialogDescription>
-              Guarda políticas acotadas al tenantSA del JWT y evalúa sin modificar datos.
+              Guarda políticas acotadas al scope tenant (SA / TG / TC) del JWT y evalúa sin modificar datos.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 md:grid-cols-3">
@@ -1167,32 +2298,7 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
             ) : null}
           </div>
           <div className="space-y-2">
-            <div className="flex items-center justify-between gap-2">
-              <Label>Tipo</Label>
-              <div className="flex gap-1">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="h-7 px-2"
-                  title="Crear tipo en catálogo"
-                  onClick={() => iniciarNuevoItem('TIPO')}
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="h-7 px-2"
-                  title="Editar tipo seleccionado"
-                  disabled={!tipoEnCatalogo}
-                  onClick={editarTipoDesdeFormulario}
-                >
-                  <Pencil className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-            </div>
+            <Label>Tipo</Label>
             <Select value={tipo} onValueChange={setTipo}>
               <SelectTrigger>
                 <SelectValue placeholder="Tipo de política" />
@@ -1207,32 +2313,7 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
             </Select>
           </div>
           <div className="space-y-2">
-            <div className="flex items-center justify-between gap-2">
-              <Label>Efecto</Label>
-              <div className="flex gap-1">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="h-7 px-2"
-                  title="Crear efecto en catálogo"
-                  onClick={() => iniciarNuevoItem('EFECTO')}
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="h-7 px-2"
-                  title="Editar efecto seleccionado"
-                  disabled={!efectoEnCatalogo}
-                  onClick={editarEfectoDesdeFormulario}
-                >
-                  <Pencil className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-            </div>
+            <Label>Efecto</Label>
             <Select value={efecto} onValueChange={setEfecto}>
               <SelectTrigger>
                 <SelectValue placeholder="Efecto" />
@@ -1246,180 +2327,87 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
               </SelectContent>
             </Select>
           </div>
-          {itemDraft && formOpen ? (
-            <div className="md:col-span-3">{renderItemForm()}</div>
-          ) : null}
           <div className="space-y-2">
-            <Label>Rol para simular</Label>
-            <Select value={rolNombre} onValueChange={setRolNombre}>
+            <Label>Referencia</Label>
+            <Select value={dominio || undefined} onValueChange={onReferenciaChange}>
               <SelectTrigger>
-                <SelectValue placeholder="Rol" />
+                <SelectValue placeholder="Referencia (catálogo)" />
               </SelectTrigger>
-              <SelectContent>
-                {rolesOptions.map((option) => (
-                  <SelectItem key={option} value={option}>{option}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <div className="flex items-center justify-between gap-2">
-              <Label>Roles permitidos</Label>
-              <div className="flex gap-1">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="h-7 px-2 text-xs"
-                  disabled={!rolesOptions.length || todosRolesSeleccionados}
-                  onClick={seleccionarTodosRoles}
-                >
-                  Todos
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="h-7 px-2 text-xs"
-                  disabled={!rolesSeleccionados.length}
-                  onClick={limpiarRoles}
-                >
-                  Ninguno
-                </Button>
-              </div>
-            </div>
-            <Select
-              key={`rol-picker-${rolSelectKey}`}
-              onValueChange={onRolSelectChange}
-              disabled={!rolesOptions.length}
-            >
-              <SelectTrigger>
-                <SelectValue
-                  placeholder={
-                    !rolesOptions.length
-                      ? 'Sin roles en catálogo'
-                      : todosRolesSeleccionados
-                        ? 'Todos los roles seleccionados'
-                        : rolesSeleccionados.length
-                          ? `${rolesSeleccionados.length} rol(es) — agregar otro`
-                          : 'Uno, varios o todos los roles'
-                  }
-                />
-              </SelectTrigger>
-              <SelectContent>
-                {!todosRolesSeleccionados ? (
-                  <SelectItem value={ROL_SELECT_ALL}>
-                    Seleccionar todos ({rolesOptions.length})
+              <SelectContent className="z-[200] max-h-72">
+                {catalogoReferenciasBD.filter((i) => i.activo !== false).length === 0 ? (
+                  <SelectItem value="__sin_referencias__" disabled>
+                    Sin referencias — créalas en Tipos y efectos → Referencia
                   </SelectItem>
                 ) : null}
-                {rolesSeleccionados.length > 0 ? (
-                  <SelectItem value={ROL_SELECT_CLEAR}>Limpiar selección</SelectItem>
-                ) : null}
-                {rolesDisponibles.map((option) => (
-                  <SelectItem key={option} value={option}>{option}</SelectItem>
+                {catalogoReferenciasBD.filter((i) => i.activo !== false).map((item) => (
+                  <SelectItem key={item.valor} value={item.valor}>
+                    {item.label ? `${item.label} (${item.valor})` : item.valor}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            {rolesSeleccionados.length > 0 ? (
-              <div className="flex flex-wrap gap-1.5">
-                {rolesSeleccionados.map((rol) => (
-                  <Badge key={rol} variant="secondary" className="gap-1 pr-1">
-                    <span className="max-w-[220px] truncate">{rol}</span>
-                    <button
-                      type="button"
-                      className="rounded-full p-0.5 hover:bg-muted"
-                      aria-label={`Quitar ${rol}`}
-                      onClick={() => quitarRol(rol)}
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </Badge>
-                ))}
-              </div>
-            ) : (
-              <p className="text-[11px] text-muted-foreground">Selecciona uno o varios roles.</p>
-            )}
+            <p className="text-[11px] text-muted-foreground">
+              Dominio de negocio. Se envía en <code className="rounded bg-muted px-1 text-xs">dominio</code> y{' '}
+              <code className="rounded bg-muted px-1 text-xs">condiciones.referencia</code>.
+              Catálogo: Tipos y efectos → Referencia.
+            </p>
           </div>
-          <div className="space-y-2 md:col-span-3">
-            <div className="flex items-center justify-between gap-2">
-              <Label>Dominios (colección apisdominios)</Label>
+          <div className="space-y-2 md:col-span-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <Label>Dominio (apisdominios)</Label>
               <div className="flex gap-1">
                 <Button
                   type="button"
                   size="sm"
-                  variant="outline"
-                  className="h-7 px-2"
-                  title="Ver catálogo apisdominios"
-                  onClick={abrirCatalogoApisDominios}
-                >
-                  <BookOpen className="h-3.5 w-3.5" />
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="h-7 px-2 text-xs"
-                  disabled={!apisDominiosCatalogo.length || todosApisDominiosSeleccionados}
-                  onClick={seleccionarTodosApisDominios}
+                  variant="ghost"
+                  className="h-6 px-2 text-[10px]"
+                  onClick={marcarTodosApisDominios}
+                  disabled={!apisDominiosCatalogo.length}
                 >
                   Todos
                 </Button>
                 <Button
                   type="button"
                   size="sm"
-                  variant="outline"
-                  className="h-7 px-2 text-xs"
-                  disabled={!apisDominiosIds.length}
+                  variant="ghost"
+                  className="h-6 px-2 text-[10px]"
                   onClick={limpiarApisDominios}
+                  disabled={!apisDominiosIds.length}
                 >
                   Ninguno
                 </Button>
               </div>
             </div>
-            <Select
-              key={`apis-dominio-picker-${apisDominioSelectKey}`}
-              onValueChange={onApisDominioSelectChange}
-              disabled={!apisDominiosCatalogo.length}
-            >
-              <SelectTrigger>
-                <SelectValue
-                  placeholder={
-                    !apisDominiosCatalogo.length
-                      ? 'Sin registros apisdominios en GET /opciones'
-                      : todosApisDominiosSeleccionados
-                        ? 'Todos los dominios seleccionados'
-                        : apisDominiosIds.length
-                          ? `${apisDominiosIds.length} dominio(s) — agregar otro`
-                          : 'Uno o varios registros de apisdominios'
-                  }
-                />
-              </SelectTrigger>
-              <SelectContent>
-                {!todosApisDominiosSeleccionados ? (
-                  <SelectItem value={APIS_DOMINIO_SELECT_ALL}>
-                    Seleccionar todos ({apisDominiosCatalogo.length})
-                  </SelectItem>
+            <ScrollArea className="h-32 rounded-md border p-2">
+              <div className="space-y-2">
+                {apisDominiosCatalogo.length === 0 ? (
+                  <p className="text-[11px] text-muted-foreground">
+                    Sin apisdominios — configura en Catálogos
+                  </p>
                 ) : null}
-                {apisDominiosIds.length > 0 ? (
-                  <SelectItem value={APIS_DOMINIO_SELECT_CLEAR}>Limpiar selección</SelectItem>
-                ) : null}
-                {apisDominiosDisponibles.map((dominio) => (
-                  <SelectItem key={dominio.id} value={dominio.id}>
-                    {labelApisDominio(dominio)}
-                  </SelectItem>
+                {apisDominiosCatalogo.map((item) => (
+                  <label key={item.id} className="flex cursor-pointer items-start gap-2 text-xs">
+                    <Checkbox
+                      checked={apisDominiosIds.includes(item.id)}
+                      onCheckedChange={(checked) => toggleApisDominio(item.id, checked === true)}
+                    />
+                    <span>
+                      {item.etiquetas ? `${item.etiquetas} · ` : ''}{item.dominio || item.id}
+                    </span>
+                  </label>
                 ))}
-              </SelectContent>
-            </Select>
-            {apisDominiosSeleccionados.length > 0 ? (
+              </div>
+            </ScrollArea>
+            {apisDominiosIds.length > 0 ? (
               <div className="flex flex-wrap gap-1.5">
-                {apisDominiosSeleccionados.map((dominio) => (
-                  <Badge key={dominio.id} variant="secondary" className="gap-1 pr-1">
-                    <span className="max-w-[280px] truncate">{labelApisDominio(dominio)}</span>
+                {apisDominiosSeleccionados.map((item) => (
+                  <Badge key={item.id} variant="secondary" className="gap-1 pr-1">
+                    <span>{item.etiquetas || item.dominio || item.id}</span>
                     <button
                       type="button"
                       className="rounded-full p-0.5 hover:bg-muted"
-                      aria-label="Quitar dominio apisdominios"
-                      onClick={() => quitarApisDominio(dominio.id)}
+                      aria-label="Quitar dominio"
+                      onClick={() => toggleApisDominio(item.id, false)}
                     >
                       <X className="h-3 w-3" />
                     </button>
@@ -1427,125 +2415,132 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
                 ))}
               </div>
             ) : (
-              <p className="text-[11px] text-muted-foreground">
-                Elige uno o varios registros de la colección <code>apisdominios</code> (scope de la política).
+              <p className="text-[11px] text-destructive">
+                Obligatorio para guardar. Vincula la política al dominio API del tenant (JWT).
               </p>
             )}
+            {bypassDominiosSeleccionados.length > 0 ? (
+              <p className="text-[11px] text-muted-foreground">
+                Bypass dominios: {bypassDominiosSeleccionados.join(', ')}
+              </p>
+            ) : null}
           </div>
           <div className="space-y-2 md:col-span-3">
-            <div className="flex items-center justify-between gap-2">
-              <Label>Referencia (condiciones.referencia)</Label>
-              <div className="flex gap-1">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="h-7 px-2"
-                  title="Catálogo de referencias"
-                  onClick={abrirCatalogoReferencia}
-                >
-                  <BookOpen className="h-3.5 w-3.5" />
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="h-7 px-2 text-xs"
-                  disabled={!referenciaOptions.length || todasReferenciasSeleccionadas}
-                  onClick={seleccionarTodasReferencias}
-                >
-                  Todos
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="h-7 px-2 text-xs"
-                  disabled={!referenciaSeleccionadas.length}
-                  onClick={limpiarReferencias}
-                >
-                  Ninguno
-                </Button>
-              </div>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <Label>Alcance tenant (scope)</Label>
+              <Button type="button" size="sm" variant="outline" onClick={abrirScopeParam}>
+                Parametrizar alcance
+              </Button>
             </div>
-            <Select
-              key={`referencia-picker-${referenciaSelectKey}`}
-              onValueChange={onReferenciaSelectChange}
-              disabled={!referenciaOptions.length}
-            >
-              <SelectTrigger>
-                <SelectValue
-                  placeholder={
-                    !referenciaOptions.length
-                      ? 'Selecciona dominios apisdominios para cargar referencias'
-                      : todasReferenciasSeleccionadas
-                        ? 'Todas las referencias seleccionadas'
-                        : referenciaSeleccionadas.length
-                          ? `${referenciaSeleccionadas.length} referencia(s) — agregar otra`
-                          : 'Una, varias o todas las referencias'
-                  }
-                />
-              </SelectTrigger>
-              <SelectContent>
-                {!todasReferenciasSeleccionadas ? (
-                  <SelectItem value={REFERENCIA_SELECT_ALL}>
-                    Seleccionar todas ({referenciaOptions.length})
-                  </SelectItem>
-                ) : null}
-                {referenciaSeleccionadas.length > 0 ? (
-                  <SelectItem value={REFERENCIA_SELECT_CLEAR}>Limpiar selección</SelectItem>
-                ) : null}
-                {referenciaDisponibles.map((option) => (
-                  <SelectItem key={option} value={option}>{option}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {referenciaSeleccionadas.length > 0 ? (
-              <div className="flex flex-wrap gap-1.5">
-                {referenciaSeleccionadas.map((item) => (
-                  <Badge key={item} variant="secondary" className="gap-1 pr-1">
-                    <span className="max-w-[220px] truncate">{item}</span>
-                    <button
-                      type="button"
-                      className="rounded-full p-0.5 hover:bg-muted"
-                      aria-label={`Quitar referencia ${item}`}
-                      onClick={() => quitarReferencia(item)}
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </Badge>
-                ))}
-              </div>
-            ) : (
-              <p className="text-[11px] text-muted-foreground">
-                Vacío = ninguna. Las opciones salen de los <code>bypassDominios</code> de los apisdominios elegidos.
+            <p className="text-[11px] text-muted-foreground">
+              Selecciona tenants SA / TG / TC y, opcionalmente, usuarios concretos. Los arrays se guardan en{' '}
+              <code className="rounded bg-muted px-1 text-xs">condiciones.metadata</code> y el primer ID canónico en{' '}
+              <code className="rounded bg-muted px-1 text-xs">scope</code>.
+            </p>
+            <div className="rounded-md border bg-muted/20 p-3 text-xs space-y-2">
+              <p>
+                <span className="font-medium">SA ({scopeSaIds.length}):</span>{' '}
+                {scopeResumenSa.length ? scopeResumenSa.join(' · ') : '—'}
               </p>
-            )}
+              <p>
+                <span className="font-medium">TG ({scopeTgIds.length}):</span>{' '}
+                {scopeResumenTg.length ? scopeResumenTg.join(' · ') : '—'}
+              </p>
+              <p>
+                <span className="font-medium">TC ({scopeTcIds.length}):</span>{' '}
+                {scopeResumenTc.length ? scopeResumenTc.join(' · ') : '—'}
+              </p>
+              <p>
+                <span className="font-medium">Usuarios ({scopeUsuarioIds.length}):</span>{' '}
+                {scopeResumenUsuarios.length ? scopeResumenUsuarios.join(' · ') : 'Todos en tenants marcados'}
+              </p>
+            </div>
           </div>
           {esPoliticaBypassLike(tipo, codigo) ? (
             <div className="space-y-3 rounded-md border border-amber-500/30 bg-amber-500/5 p-3 md:col-span-3">
-              <p className="text-xs font-medium text-foreground">Bypass dinámico (motor global.js y JWT)</p>
+              <p className="text-xs font-medium text-foreground">Bypass dinamico por motor evento y JWT</p>
               <div className="space-y-1">
-                <Label className="text-xs">Motor evento (metadata.motorEvento)</Label>
-                <Input
-                  value={motorEvento}
-                  placeholder="Ej: COMISIONES_PADRE, REFERIDOS, HERENCIA_RUTAS"
-                  onChange={(e) => setMotorEvento(e.target.value.toUpperCase())}
-                />
+                <Label className="text-xs">Motor evento (por etiqueta)</Label>
+                <Select
+                  value={motorEvento || undefined}
+                  onValueChange={seleccionarMotorEvento}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={motorEventoPlaceholder}>
+                      {motorEvento ? etiquetaMotorEvento(motorEvento) : null}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent className="z-[200] max-h-72">
+                    {bypassAlcancesOpciones.map((item) => {
+                      const nombre = item.nombre || item.alcance;
+                      const pipeline = normalizarPipelineMotorEvento(item.pipeline);
+                      const etiqueta = item.etiqueta || item.label || nombre;
+                      return (
+                        <SelectItem key={nombre} value={nombre}>
+                          [{etiquetaPipeline(pipeline)}] {etiqueta}
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
                 <p className="text-[11px] text-muted-foreground">
-                  El motor <code>global.js</code> y el JWT consultan políticas activas por este evento,
-                  <code>metadata.alcance</code>, <code>bypassDominios</code> o código. Sin tocar código al crear nuevas políticas.
+                  Elige un evento de la lista (ej. «Referidos y membresía»), no el título del pipeline.
+                  También puedes pulsar una tarjeta de abajo. Se guarda el nombre en <code>metadata.motorEvento</code>.
                 </p>
+                {motorEvento ? (
+                  <p className="text-[11px] text-foreground">
+                    Seleccionado: <span className="font-mono">{motorEvento}</span>
+                    {' · '}
+                    {etiquetaMotorEvento(motorEvento)}
+                  </p>
+                ) : null}
               </div>
-              <ul className="grid gap-2 sm:grid-cols-2">
-                {BYPASS_FUNCIONALIDADES.map((item) => (
-                  <li key={item.alcance} className="rounded border border-border/60 bg-background/60 p-2 text-[11px]">
-                    <span className="font-mono font-medium">{item.alcance}</span>
-                    <span className="text-muted-foreground"> — {item.titulo}</span>
-                    <p className="mt-1 text-muted-foreground">{item.descripcion}</p>
-                  </li>
-                ))}
-              </ul>
+              {bypassAlcancesOpciones.length ? (
+                <div className="space-y-3">
+                  {pipelineOpciones.map((pipeline) => (
+                    <div key={pipeline.nombre} className="space-y-2">
+                      <p className="text-[11px] font-medium">{pipeline.label}</p>
+                      <ul className="grid gap-2 sm:grid-cols-2">
+                        {(motorEventosPorPipeline.get(pipeline.nombre) ?? []).map((item) => {
+                          const nombre = item.nombre || item.alcance;
+                          const activo = motorEvento === nombre;
+                          return (
+                          <li
+                            key={nombre}
+                            role="button"
+                            tabIndex={0}
+                            className={cn(
+                              'rounded border border-border/60 bg-background/60 p-2 text-[11px] cursor-pointer transition-colors hover:border-primary/50 hover:bg-primary/5',
+                              activo && 'border-primary bg-primary/10 ring-1 ring-primary/30',
+                            )}
+                            onClick={() => seleccionarMotorEvento(nombre)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                seleccionarMotorEvento(nombre);
+                              }
+                            }}
+                          >
+                            <span className="font-mono font-medium">{nombre}</span>
+                            <span className="text-muted-foreground"> — {item.etiqueta || item.label}</span>
+                            {activo ? (
+                              <span className="ml-1 text-primary">· seleccionado</span>
+                            ) : null}
+                            {item.descripcion ? (
+                              <p className="mt-1 text-muted-foreground">{item.descripcion}</p>
+                            ) : null}
+                          </li>
+                        );
+                        })}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-[11px] text-muted-foreground">
+                  Catálogo de motor eventos no disponible. Créalos en «Tipos y efectos» → Motor evento.
+                </p>
+              )}
             </div>
           ) : null}
           {tipo === TIPO_ACCION ? (
@@ -1698,6 +2693,280 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
               </p>
             </div>
           ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={scopeParamOpen} onOpenChange={setScopeParamOpen}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Parametrizar alcance</DialogTitle>
+            <DialogDescription>
+              Marca uno o varios tenants SA, TG y TC. Luego elige usuarios dentro de ese alcance (opcional).
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <Label className="text-xs">Tenant SuperAdmin (SA)</Label>
+                <div className="flex gap-1">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="h-6 px-2 text-[10px]"
+                    onClick={() => marcarTodosScopeDraft(
+                      tenantsScope.tenantSuperAdmins.map((t) => t.id),
+                      setScopeDraftSa,
+                    )}
+                  >
+                    Todos
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="h-6 px-2 text-[10px]"
+                    onClick={() => limpiarScopeDraft(setScopeDraftSa)}
+                  >
+                    Ninguno
+                  </Button>
+                </div>
+              </div>
+              <ScrollArea className="h-44 rounded border p-2">
+                <div className="space-y-2">
+                  {tenantsScope.tenantSuperAdmins.map((t) => (
+                    <label key={t.id} className="flex cursor-pointer items-start gap-2 text-xs">
+                      <Checkbox
+                        checked={Boolean(scopeDraftSa[t.id])}
+                        onCheckedChange={(checked) => toggleScopeDraft(setScopeDraftSa, t.id, checked === true)}
+                      />
+                      <span>{t.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </ScrollArea>
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <Label className="text-xs">Tenant global (TG)</Label>
+                <div className="flex gap-1">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="h-6 px-2 text-[10px]"
+                    onClick={() => marcarTodosScopeDraft(
+                      tenantGlobalesFiltradosDraft.map((t) => t.id),
+                      setScopeDraftTg,
+                    )}
+                  >
+                    Todos
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="h-6 px-2 text-[10px]"
+                    onClick={() => limpiarScopeDraft(setScopeDraftTg)}
+                  >
+                    Ninguno
+                  </Button>
+                </div>
+              </div>
+              <ScrollArea className="h-44 rounded border p-2">
+                <div className="space-y-2">
+                  {tenantGlobalesFiltradosDraft.map((t) => (
+                    <label key={t.id} className="flex cursor-pointer items-start gap-2 text-xs">
+                      <Checkbox
+                        checked={Boolean(scopeDraftTg[t.id])}
+                        onCheckedChange={(checked) => toggleScopeDraft(setScopeDraftTg, t.id, checked === true)}
+                      />
+                      <span>{t.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </ScrollArea>
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <Label className="text-xs">Tenant corporativo (TC)</Label>
+                <div className="flex gap-1">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="h-6 px-2 text-[10px]"
+                    onClick={() => marcarTodosScopeDraft(
+                      tenantCorporativosFiltradosDraft.map((t) => t.id),
+                      setScopeDraftTc,
+                    )}
+                  >
+                    Todos
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="h-6 px-2 text-[10px]"
+                    onClick={() => limpiarScopeDraft(setScopeDraftTc)}
+                  >
+                    Ninguno
+                  </Button>
+                </div>
+              </div>
+              <ScrollArea className="h-44 rounded border p-2">
+                <div className="space-y-2">
+                  {tenantCorporativosFiltradosDraft.map((t) => (
+                    <label key={t.id} className="flex cursor-pointer items-start gap-2 text-xs">
+                      <Checkbox
+                        checked={Boolean(scopeDraftTc[t.id])}
+                        onCheckedChange={(checked) => toggleScopeDraft(setScopeDraftTc, t.id, checked === true)}
+                      />
+                      <span className="line-clamp-2">{t.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </ScrollArea>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <Label className="text-xs">Usuarios en alcance</Label>
+              <div className="flex gap-1">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="h-6 px-2 text-[10px]"
+                  disabled={!usuariosFiltradosScopeDraft.length}
+                  onClick={() => marcarTodosScopeDraft(
+                    usuariosFiltradosScopeDraft.map((u) => u.id),
+                    setScopeDraftUsuarios,
+                  )}
+                >
+                  Todos
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="h-6 px-2 text-[10px]"
+                  onClick={() => limpiarScopeDraft(setScopeDraftUsuarios)}
+                >
+                  Ninguno
+                </Button>
+              </div>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              Si no marcas usuarios, la política aplica a todos los del alcance tenant seleccionado.
+            </p>
+            <ScrollArea className="h-48 rounded border p-2">
+              <div className="space-y-2">
+                {usuariosFiltradosScopeDraft.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">Sin usuarios para el alcance marcado.</p>
+                ) : null}
+                {usuariosFiltradosScopeDraft.map((u) => (
+                  <label key={u.id} className="flex cursor-pointer items-start gap-2 text-xs">
+                    <Checkbox
+                      checked={Boolean(scopeDraftUsuarios[u.id])}
+                      onCheckedChange={(checked) => toggleScopeDraft(setScopeDraftUsuarios, u.id, checked === true)}
+                    />
+                    <span>
+                      {u.label}
+                      {u.rol ? <span className="text-muted-foreground"> · {u.rol}</span> : null}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </ScrollArea>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => setScopeParamOpen(false)}>
+              Cancelar
+            </Button>
+            <Button type="button" onClick={aplicarScopeParam}>
+              <Save className="mr-2 h-4 w-4" />
+              Aplicar alcance
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={catalogoTipoEfectoOpen}
+        onOpenChange={(open) => {
+          setCatalogoTipoEfectoOpen(open);
+          if (!open) {
+            setItemDraft(null);
+            setMotorEventoDraft(null);
+            setMotorEventoSgDraft(null);
+            setPipelineDraft(null);
+          }
+        }}
+      >
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Catálogo tipos y efectos</DialogTitle>
+            <DialogDescription>
+              Administra tipos, efectos, comportamientos, motor eventos y referencias para las políticas runtime.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant={catalogoTipoEfectoTab === 'TIPOS' ? 'default' : 'outline'}
+              onClick={() => { setCatalogoTipoEfectoTab('TIPOS'); setItemDraft(null); setMotorEventoDraft(null); setMotorEventoSgDraft(null); }}
+            >
+              Tipos
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={catalogoTipoEfectoTab === 'EFECTOS' ? 'default' : 'outline'}
+              onClick={() => { setCatalogoTipoEfectoTab('EFECTOS'); setItemDraft(null); setMotorEventoDraft(null); setMotorEventoSgDraft(null); }}
+            >
+              Efectos
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={catalogoTipoEfectoTab === 'COMPORTAMIENTO' ? 'default' : 'outline'}
+              onClick={() => { setCatalogoTipoEfectoTab('COMPORTAMIENTO'); setItemDraft(null); setMotorEventoDraft(null); setMotorEventoSgDraft(null); }}
+            >
+              Comportamiento
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={catalogoTipoEfectoTab === 'MOTOR_EVENTO' ? 'default' : 'outline'}
+              onClick={() => { setCatalogoTipoEfectoTab('MOTOR_EVENTO'); setItemDraft(null); setMotorEventoDraft(null); setMotorEventoSgDraft(null); }}
+            >
+              Motor evento
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={catalogoTipoEfectoTab === 'REFERENCIA' ? 'default' : 'outline'}
+              onClick={() => { setCatalogoTipoEfectoTab('REFERENCIA'); setItemDraft(null); setMotorEventoDraft(null); setMotorEventoSgDraft(null); }}
+            >
+              Referencia
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={catalogoTipoEfectoTab === 'PIPELINES' ? 'default' : 'outline'}
+              onClick={() => { setCatalogoTipoEfectoTab('PIPELINES'); setItemDraft(null); setMotorEventoDraft(null); setMotorEventoSgDraft(null); void cargarCatalogoPipeline(); }}
+            >
+              Pipelines
+            </Button>
+          </div>
+          {catalogoTipoEfectoTab === 'PIPELINES'
+            ? renderPipelinesLista()
+            : catalogoTipoEfectoTab === 'MOTOR_EVENTO'
+              ? (motorEventoDraft ? renderMotorEventoForm() : renderMotorEventoLista())
+              : (itemDraft ? renderItemForm() : renderCatalogoLista())}
+          {renderPipelineDialog()}
         </DialogContent>
       </Dialog>
 

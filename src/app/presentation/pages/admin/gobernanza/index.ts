@@ -119,6 +119,7 @@ export type {
   GobernanzaEndpointActionInventoryItem,
 } from './gobernanzaEndpointCapabilities';
 export {
+  buildTenantGlobalesListaFromSelectsJerarquia,
   expandTenantGlobalDescendants,
   filtrarTenantGlobalesPorJerarquiaSuperAdmin,
 } from './tenantGlobalJerarquiaHelpers';
@@ -126,6 +127,8 @@ export {
   filtrarIndiceSaSubarbol,
   filtrarSaJerarquiaMetaPorSubarbol,
   filtrarSaJerarquiaMetaRamaDescendiente,
+  saEsRaizSinCodigoPadreEnCounters,
+  saTieneVisibilidadTotalJerarquiaTenantGlobales,
 } from './saJerarquiaCounterFilter';
 export {
   formatSaJerarquiaOptionLabel,

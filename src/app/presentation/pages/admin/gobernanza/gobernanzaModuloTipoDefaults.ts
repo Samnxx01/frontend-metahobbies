@@ -1,5 +1,5 @@
 import { GOBERNANZA_MODULOS_CATALOGO } from './gobernanzaModulosCatalog';
-import { GOBERNANZA_TIPO_SECTION_TENANT_SUPER_ADMIN, GOBERNANZA_TIPO_SECTION_TENANT_GLOBAL } from './gobernanzaTipoSectionConstants';
+import { GOBERNANZA_TIPO_SECTION_TENANT_SUPER_ADMIN, GOBERNANZA_TIPO_SECTION_TENANT_GLOBAL, GOBERNANZA_TIPO_SECTION_EMPRESAS } from './gobernanzaTipoSectionConstants';
 import { GOBERNANZA_PERMISOS_FORM_COMPONENTS } from './permisos-forms/gobernanzaPermisosFormRegistry';
 import { GOBERNANZA_REGLAS_FORM_COMPONENTS } from './reglas-forms/gobernanzaReglasFormRegistry';
 import type { EndpointSection } from './parametrosGobernanzaTypes';
@@ -35,6 +35,7 @@ export const HUB_COMPONENT_SECTION: Record<string, EndpointSection | 'gobernanza
   ParametrosGobernanza: GOBERNANZA_TIPO_SECTION_TENANT_SUPER_ADMIN,
   TenantSuperAdmin: GOBERNANZA_TIPO_SECTION_TENANT_SUPER_ADMIN,
   TenantGlobal: GOBERNANZA_TIPO_SECTION_TENANT_GLOBAL,
+  ParametrizacionCorporativa: GOBERNANZA_TIPO_SECTION_EMPRESAS,
 };
 
 /** Código sugerido al crear tipo desde un hub conocido. */

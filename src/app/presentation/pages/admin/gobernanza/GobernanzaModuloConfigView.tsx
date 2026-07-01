@@ -6,7 +6,6 @@ import {
   Filter,
   Link2,
   Loader2,
-  Pencil,
   RefreshCw,
   Settings2,
   Trash2,
@@ -27,14 +26,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import { Textarea } from '@/components/ui/textarea';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { useGobernanzaModulosCatalogo, type GobernanzaModuloGridItem } from './useGobernanzaModulosCatalogo';
 import {
   GOBERNANZA_INVENTARIO_CARD,
@@ -44,33 +35,33 @@ import {
   GOBERNANZA_INVENTARIO_BTN_HEADER,
   GOBERNANZA_INVENTARIO_BTN_CARD,
 } from './gobernanzaInventarioLayout';
-import { useGobernanzaModuloRutasOpciones } from './useGobernanzaModuloRutasOpciones';
 import {
   upsertGobernanzaModulo,
   desactivarGobernanzaModulo,
   sembrarGobernanzaModulosCatalogo,
   sincronizarGobernanzaApiConsumo,
   fetchGobernanzaModuloFiltrosOpciones,
-  fetchGobernanzaModuloFormularioDetalle,
-  fetchGobernanzaModuloMenu,
+  fetchGobernanzaModuloConfigs,
 } from './gobernanzaModuloService';
 import {
-  accionesCatalogoModuloPorSlug,
-  accionesUpsertDesdeEndpointIds,
-  buildAccionesSeleccionDesdeModuloConfig,
-  buildGobernanzaModuloUpsertPayload,
-  filtrarAccionesFormularioSeleccionadas,
+  buildGobernanzaModuloAutorizacionPayload,
 } from './gobernanzaModuloSeedPayload';
-import { GobernanzaModuloAccionesSelector } from './GobernanzaModuloAccionesSelector';
+import { accionesCatalogDesdeConfig } from './gobernanzaModuloParametrizarOpciones';
 import { GobernanzaModuloParametrizarButton } from './GobernanzaModuloParametrizarButton';
 import { getGobernanzaModuloCatalogoLocal, normalizeGobernanzaModuloSlug } from './gobernanzaModulosCatalog';
+import { METHOD_STYLE } from './parametrosGobernanzaSectionUi';
 import type {
   GobernanzaFiltroTenantGlobalOpcion,
   GobernanzaFiltroTenantSuperAdminOpcion,
   GobernanzaFiltroUsuarioOpcion,
-  GobernanzaFormularioDetalleApi,
+  GobernanzaModuloConfigApi,
   GobernanzaModuloFiltrosVistaApi,
 } from './gobernanzaModuloApiTypes';
+import {
+  contarAlcancesParametrizados,
+  tieneAlcancesParametrizados,
+} from './gobernanzaModuloAlcance';
+import { isOpaqueDocumentId, normalizePublicIdForApi } from '@/app/utils/entityPublicId';
 
 export type GobernanzaModuloConfigViewProps = {
   className?: string;
@@ -86,6 +77,22 @@ function resolveParametrizarMenuPath(item: Pick<GobernanzaModuloGridItem, 'menuP
   return item.menuPath?.trim() || item.path?.trim() || null;
 }
 
+function puedeAutorizarModuloConfig(item: GobernanzaModuloGridItem): boolean {
+  return Boolean(item.registradoEnBd && item.rutaId);
+}
+
+function tituloAutorizarModulo(item: GobernanzaModuloGridItem): string {
+  if (!item.registradoEnBd || !item.rutaId) {
+    return item.registradoEnBd
+      ? 'Actualiza el menú antes de autorizar.'
+      : 'Publica el menú con «Parametrizar menú» antes de autorizar.';
+  }
+  if (!tieneAlcancesParametrizados(item.filtrosVista)) {
+    return 'Asigna alcance de visualización (tenant SA, TG o usuarios).';
+  }
+  return 'Actualizar alcance de visualización sobre el módulo publicado';
+}
+
 /** Solo módulos persistidos en gobernanzaModuloConfigs pueden desactivarse. */
 function puedeEliminarModuloConfig(item: GobernanzaModuloGridItem): boolean {
   return Boolean(item.moduloId || item.registradoEnBd);
@@ -98,9 +105,17 @@ function tituloEliminarModulo(item: GobernanzaModuloGridItem): string {
   return 'Módulo solo en catálogo local. Publica con Parametrizar menú o Importar catálogo.';
 }
 
+function normalizarIdFiltro(id: string | null | undefined): string {
+  const norm = normalizePublicIdForApi(id);
+  return isOpaqueDocumentId(norm) ? norm : '';
+}
+
 function toCheckedMap(ids: string[]): Record<string, boolean> {
   const m: Record<string, boolean> = {};
-  for (const id of ids) if (id) m[id] = true;
+  for (const id of ids) {
+    const norm = normalizarIdFiltro(id);
+    if (norm) m[norm] = true;
+  }
   return m;
 }
 
@@ -157,20 +172,14 @@ export function GobernanzaModuloConfigView({ className }: GobernanzaModuloConfig
   const [sincronizando, setSincronizando] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogSlug, setDialogSlug] = useState('tenant');
-  const [dialogLabel, setDialogLabel] = useState('');
-  const [dialogDescription, setDialogDescription] = useState('');
-  const [dialogRutaId, setDialogRutaId] = useState<string>('');
-  const [formularioDetalle, setFormularioDetalle] = useState<GobernanzaFormularioDetalleApi | null>(null);
-  const [formularioError, setFormularioError] = useState<string | null>(null);
-  const [cargandoFormulario, setCargandoFormulario] = useState(false);
-  const [accionesPublicadas, setAccionesPublicadas] = useState<Array<{ id: string; method: string }>>([]);
-  const [cargandoAccionesModulo, setCargandoAccionesModulo] = useState(false);
+  const [dialogConfig, setDialogConfig] = useState<GobernanzaModuloConfigApi | null>(null);
+  const [cargandoDialogConfig, setCargandoDialogConfig] = useState(false);
+  const [dialogConfigError, setDialogConfigError] = useState<string | null>(null);
 
-  const accionesCatalogo = useMemo(
-    () => accionesCatalogoModuloPorSlug(dialogSlug),
-    [dialogSlug]
+  const accionesCatalogoPublicadas = useMemo(
+    () => accionesCatalogDesdeConfig(dialogConfig),
+    [dialogConfig]
   );
-  const [accionesSeleccionadas, setAccionesSeleccionadas] = useState<Record<string, boolean>>({});
 
   const [filtrosLoading, setFiltrosLoading] = useState(false);
   const [tenantSuperAdmins, setTenantSuperAdmins] = useState<GobernanzaFiltroTenantSuperAdminOpcion[]>([]);
@@ -181,17 +190,12 @@ export function GobernanzaModuloConfigView({ className }: GobernanzaModuloConfig
   const [selectedUsuarioIds, setSelectedUsuarioIds] = useState<Record<string, boolean>>({});
   const [needleUsuario, setNeedleUsuario] = useState('');
 
-  const {
-    rutas: rutasOpciones,
-    sugerida,
-    ayuda: ayudaRutas,
-    loading: rutasLoading,
-    error: rutasError,
-    refresh: refreshRutas,
-  } = useGobernanzaModuloRutasOpciones(dialogSlug, dialogOpen);
-
   const refreshRamasFiltros = useCallback(async (saIds: string[]) => {
-    const valid = [...new Set(saIds.filter((id) => /^[0-9a-fA-F]{24}$/.test(id)))];
+    const valid = [
+      ...new Set(
+        saIds.map((id) => normalizarIdFiltro(id)).filter(Boolean),
+      ),
+    ];
     if (!valid.length) {
       setTenantGlobales([]);
       setUsuarios([]);
@@ -203,7 +207,14 @@ export function GobernanzaModuloConfigView({ className }: GobernanzaModuloConfig
         valid.map((id) => fetchGobernanzaModuloFiltrosOpciones(id)),
       );
       setTenantGlobales(mergeTenantGlobales(responses.map((r) => r?.tenantGlobales ?? [])));
-      setUsuarios(mergeUsuarios(responses.map((r) => r?.usuarios ?? [])));
+      const mergedUsuarios = mergeUsuarios(responses.map((r) => r?.usuarios ?? []));
+      setUsuarios(mergedUsuarios);
+      if (mergedUsuarios.length === 0) {
+        const diag = responses[responses.length - 1]?.meta?.diagnosticoRamaUsuarios;
+        toast.info(
+          `Sin usuarios en rama para el SA seleccionado${diag?.documentosRegisCandidatos != null ? ` · candidatos Regis: ${diag.documentosRegisCandidatos}` : ''}.`,
+        );
+      }
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Error al cargar filtros');
     } finally {
@@ -223,114 +234,6 @@ export function GobernanzaModuloConfigView({ className }: GobernanzaModuloConfig
     }
   }, []);
 
-  useEffect(() => {
-    if (!dialogOpen) return;
-    if (dialogRutaId && rutasOpciones.some((r) => r.id === dialogRutaId)) return;
-    if (sugerida?.id) {
-      setDialogRutaId(sugerida.id);
-      return;
-    }
-    const vinculada = rutasOpciones.find((r) => r.vinculadoSlug === dialogSlug);
-    if (vinculada?.id) setDialogRutaId(vinculada.id);
-    else if (rutasOpciones[0]?.id) setDialogRutaId(rutasOpciones[0].id);
-  }, [dialogOpen, dialogSlug, dialogRutaId, sugerida, rutasOpciones]);
-
-  useEffect(() => {
-    if (!dialogOpen || !dialogRutaId) {
-      setFormularioDetalle(null);
-      setFormularioError(null);
-      return;
-    }
-    let active = true;
-    setCargandoFormulario(true);
-    setFormularioError(null);
-    void fetchGobernanzaModuloFormularioDetalle(dialogRutaId)
-      .then((detalle) => {
-        if (!active) return;
-        if (!detalle?.component) {
-          throw new Error('El formulario no tiene componente asignado en rutasSeguridad.');
-        }
-        setFormularioDetalle(detalle);
-      })
-      .catch((err: unknown) => {
-        if (!active) return;
-        setFormularioDetalle(null);
-        setFormularioError(err instanceof Error ? err.message : 'No se pudo cargar el formulario');
-      })
-      .finally(() => {
-        if (active) setCargandoFormulario(false);
-      });
-    return () => { active = false; };
-  }, [dialogOpen, dialogRutaId]);
-
-  useEffect(() => {
-    if (!dialogOpen || !dialogSlug) return;
-    let active = true;
-    setCargandoAccionesModulo(true);
-    void fetchGobernanzaModuloMenu(dialogSlug)
-      .then((res) => {
-        if (!active) return;
-        const items = Array.isArray(res.acciones) ? res.acciones : [];
-        setAccionesPublicadas(
-          items
-            .map((a) => ({
-              id: String(a.id || ''),
-              method: String(a.method || '').toUpperCase(),
-            }))
-            .filter((a) => a.id)
-        );
-      })
-      .catch(() => {
-        if (active) setAccionesPublicadas([]);
-      })
-      .finally(() => {
-        if (active) setCargandoAccionesModulo(false);
-      });
-    return () => { active = false; };
-  }, [dialogOpen, dialogSlug]);
-
-  useEffect(() => {
-    if (!dialogOpen || !accionesCatalogo.length) {
-      setAccionesSeleccionadas({});
-      return;
-    }
-    setAccionesSeleccionadas(
-      buildAccionesSeleccionDesdeModuloConfig(accionesCatalogo, accionesPublicadas)
-    );
-  }, [dialogOpen, accionesCatalogo, accionesPublicadas]);
-
-  const accionesElegidas = useMemo(
-    () => filtrarAccionesFormularioSeleccionadas(accionesCatalogo, accionesSeleccionadas),
-    [accionesCatalogo, accionesSeleccionadas]
-  );
-
-  const accionesPayloadPreview = useMemo(
-    () => accionesUpsertDesdeEndpointIds(dialogSlug, accionesElegidas.map((a) => a.accionId)),
-    [dialogSlug, accionesElegidas]
-  );
-
-  const abrirPublicar = (item: GobernanzaModuloGridItem) => {
-    const fv: GobernanzaModuloFiltrosVistaApi = item.filtrosVista ?? {
-      tenantSuperAdminIds: [],
-      tenantGlobalIds: [],
-      usuarioIds: [],
-    };
-    setDialogSlug(item.slug);
-    setDialogLabel(item.title);
-    setDialogDescription(item.description);
-    setDialogRutaId(item.rutaId ?? '');
-    setSelectedSaIds(toCheckedMap(fv.tenantSuperAdminIds));
-    setSelectedTgIds(toCheckedMap(fv.tenantGlobalIds));
-    setSelectedUsuarioIds(toCheckedMap(fv.usuarioIds));
-    setDialogOpen(true);
-    void loadFiltrosCatalogo().then(() => {
-      if (fv.tenantSuperAdminIds.length) void refreshRamasFiltros(fv.tenantSuperAdminIds);
-    });
-  };
-
-  const rutaSeleccionada = rutasOpciones.find((r) => r.id === dialogRutaId);
-  const pathDinamico = rutaSeleccionada?.path ?? '';
-
   const saIdsMarcados = useMemo(() => idsFromChecked(selectedSaIds), [selectedSaIds]);
 
   useEffect(() => {
@@ -346,71 +249,86 @@ export function GobernanzaModuloConfigView({ className }: GobernanzaModuloConfig
   }, [usuarios, needleUsuario]);
 
   const toggleSa = (id: string, checked: boolean) => {
+    const norm = normalizarIdFiltro(id);
+    if (!norm) return;
     setSelectedSaIds((prev) => {
-      const next = { ...prev, [id]: checked };
+      const next = { ...prev, [norm]: checked };
+      if (!checked) delete next[norm];
       return next;
     });
   };
 
-  const publicarModulo = async () => {
-    const nombre = dialogLabel.trim();
-    if (!nombre) {
-      toast.error('El nombre del módulo es obligatorio.');
+  const abrirAutorizar = (item: GobernanzaModuloGridItem) => {
+    if (!puedeAutorizarModuloConfig(item)) {
+      toast.warning('Publica el menú con «Parametrizar menú» antes de autorizar.');
       return;
     }
-    if (!dialogRutaId || !pathDinamico) {
-      toast.error('Selecciona una ruta de rutasSeguridad.');
+    const fv: GobernanzaModuloFiltrosVistaApi = item.filtrosVista ?? {
+      tenantSuperAdminIds: [],
+      tenantGlobalIds: [],
+      usuarioIds: [],
+    };
+    setDialogSlug(item.slug);
+    setDialogConfig(null);
+    setDialogConfigError(null);
+    setSelectedSaIds(toCheckedMap(fv.tenantSuperAdminIds));
+    setSelectedTgIds(toCheckedMap(fv.tenantGlobalIds));
+    setSelectedUsuarioIds(toCheckedMap(fv.usuarioIds));
+    setDialogOpen(true);
+    setCargandoDialogConfig(true);
+    void loadFiltrosCatalogo().then(() => {
+      if (fv.tenantSuperAdminIds.length) void refreshRamasFiltros(fv.tenantSuperAdminIds);
+    });
+    void fetchGobernanzaModuloConfigs(item.section)
+      .then(({ configs }) => {
+        const cfg =
+          configs.find((c) => c.slug === item.slug)
+          ?? configs.find((c) => String(c.rutaId || '') === String(item.rutaId || ''))
+          ?? null;
+        if (!cfg?.rutaId) {
+          setDialogConfigError('No se encontró el módulo en gobernanzaModuloConfigs.');
+          return;
+        }
+        setDialogConfig(cfg);
+      })
+      .catch((err: unknown) => {
+        setDialogConfigError(err instanceof Error ? err.message : 'Error al cargar catálogo');
+      })
+      .finally(() => {
+        setCargandoDialogConfig(false);
+      });
+  };
+
+  const guardarAutorizacion = async () => {
+    if (!dialogConfig) {
+      toast.error(dialogConfigError || 'El módulo no está publicado en gobernanzaModuloConfigs.');
       return;
     }
-    if (!formularioDetalle?.component) {
-      toast.error(formularioError || 'El formulario debe tener componente en rutasSeguridad.');
+    const filtrosVista: GobernanzaModuloFiltrosVistaApi = {
+      tenantSuperAdminIds: idsFromChecked(selectedSaIds),
+      tenantGlobalIds: idsFromChecked(selectedTgIds),
+      usuarioIds: idsFromChecked(selectedUsuarioIds),
+    };
+    if (!tieneAlcancesParametrizados(filtrosVista)) {
+      toast.warning(
+        'Parametriza al menos un alcance (tenant SA, tenant global o usuario) antes de autorizar.'
+      );
       return;
     }
-    if (!accionesElegidas.length) {
-      toast.error('Selecciona al menos una acción a parametrizar.');
-      return;
-    }
-    const accionesPayload = accionesUpsertDesdeEndpointIds(
-      dialogSlug,
-      accionesElegidas.map((a) => a.accionId)
-    );
-    if (!accionesPayload.length) {
-      toast.error('Las acciones seleccionadas no tienen endpoint en el catálogo de gobernanza.');
-      return;
-    }
-    const body = buildGobernanzaModuloUpsertPayload(
-      dialogSlug,
-      {
-        rutaId: dialogRutaId,
-        rutaPath: pathDinamico,
-        formularioId: formularioDetalle.id,
-        formularioNombre: formularioDetalle.name,
-        formularioComponent: formularioDetalle.component,
-      },
-      {
-        label: nombre,
-        description: dialogDescription.trim(),
-        menuPath: pathDinamico,
-        acciones: accionesPayload,
-        filtrosVista: {
-          tenantSuperAdminIds: idsFromChecked(selectedSaIds),
-          tenantGlobalIds: idsFromChecked(selectedTgIds),
-          usuarioIds: idsFromChecked(selectedUsuarioIds),
-        },
-      },
-    );
+    const body = buildGobernanzaModuloAutorizacionPayload(dialogConfig, filtrosVista);
     if (!body) {
-      toast.error('No se pudo armar el payload del módulo.');
+      toast.error('El módulo no tiene formulario ni acciones publicadas. Use «Parametrizar menú».');
       return;
     }
+    const nombre = String(dialogConfig.nombre || dialogConfig.label || dialogSlug).trim();
     setBusySlug(dialogSlug);
     try {
       await upsertGobernanzaModulo(body);
-      toast.success(`Módulo «${nombre}» guardado en gobernanzaModuloConfigs.`);
+      toast.success(`Alcance de «${nombre}» guardado en gobernanzaModuloConfigs.`);
       setDialogOpen(false);
       await refresh();
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : 'Error al publicar');
+      toast.error(err instanceof Error ? err.message : 'Error al guardar autorización');
     } finally {
       setBusySlug(null);
     }
@@ -480,6 +398,14 @@ export function GobernanzaModuloConfigView({ className }: GobernanzaModuloConfig
     }
   };
 
+  const alcancesSeleccionados = useMemo(
+    () =>
+      idsFromChecked(selectedSaIds).length
+      + idsFromChecked(selectedTgIds).length
+      + idsFromChecked(selectedUsuarioIds).length,
+    [selectedSaIds, selectedTgIds, selectedUsuarioIds]
+  );
+
   return (
     <div className={className ?? 'space-y-4'}>
       <Card className="border-border shadow-sm">
@@ -536,9 +462,9 @@ export function GobernanzaModuloConfigView({ className }: GobernanzaModuloConfig
               className={GOBERNANZA_INVENTARIO_BTN_HEADER}
               disabled={loading}
               onClick={() => {
-                const first = grid[0];
-                if (first) abrirPublicar(first);
-                else setDialogOpen(true);
+                const first = grid.find((m) => puedeAutorizarModuloConfig(m));
+                if (first) abrirAutorizar(first);
+                else toast.warning('No hay módulos publicados para autorizar. Use «Parametrizar menú».');
               }}
             >
               <Link2 className="h-4 w-4" />
@@ -564,10 +490,7 @@ export function GobernanzaModuloConfigView({ className }: GobernanzaModuloConfig
               grid.map((item) => {
                 const Icon = item.icon ?? Building2;
                 const busy = busySlug === item.slug;
-                const filtrosCount =
-                  (item.filtrosVista?.tenantSuperAdminIds?.length ?? 0) +
-                  (item.filtrosVista?.tenantGlobalIds?.length ?? 0) +
-                  (item.filtrosVista?.usuarioIds?.length ?? 0);
+                const filtrosCount = contarAlcancesParametrizados(item.filtrosVista);
                 return (
                   <div key={`${item.slug}-${item.menuPath ?? item.path}`} className={GOBERNANZA_INVENTARIO_CARD}>
                     <div className="mb-3 flex items-center justify-between gap-3">
@@ -593,11 +516,16 @@ export function GobernanzaModuloConfigView({ className }: GobernanzaModuloConfig
                         <Filter className="h-3 w-3" />
                         {filtrosCount} filtro(s) parametrizados
                       </p>
+                    ) : item.registradoEnBd ? (
+                      <p className="mt-2 text-[11px] text-amber-700 dark:text-amber-400">
+                        Sin alcances parametrizados: el menú dinámico no se renderiza hasta autorizar.
+                      </p>
                     ) : null}
                     <div className={GOBERNANZA_INVENTARIO_CARD_FOOTER}>
                       <GobernanzaModuloParametrizarButton
                         moduloSlug={resolveParametrizarSlug(item)}
                         menuPathInicial={resolveParametrizarMenuPath(item)}
+                        esEdicion={Boolean(item.registradoEnBd)}
                         onMenuRefresh={() => void refresh()}
                         size="sm"
                         className={GOBERNANZA_INVENTARIO_BTN_CARD}
@@ -607,29 +535,15 @@ export function GobernanzaModuloConfigView({ className }: GobernanzaModuloConfig
                         variant="outline"
                         size="sm"
                         className={GOBERNANZA_INVENTARIO_BTN_CARD}
-                        disabled={busy}
-                        onClick={() => abrirPublicar(item)}
+                        disabled={busy || !puedeAutorizarModuloConfig(item)}
+                        title={tituloAutorizarModulo(item)}
+                        onClick={() => abrirAutorizar(item)}
                       >
                         <Link2 className="h-3.5 w-3.5" />
                         Autorizar
                       </Button>
                       {esDios ? (
                         <>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className={GOBERNANZA_INVENTARIO_BTN_CARD}
-                            disabled={busy}
-                            onClick={() => abrirPublicar(item)}
-                          >
-                            {busy ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            ) : (
-                              <Pencil className="h-3.5 w-3.5" />
-                            )}
-                            Actualizar
-                          </Button>
                           <Button
                             type="button"
                             variant="destructive"
@@ -660,118 +574,84 @@ export function GobernanzaModuloConfigView({ className }: GobernanzaModuloConfig
         open={dialogOpen}
         onOpenChange={(open) => {
           setDialogOpen(open);
-          if (open) {
-            void refreshRutas();
-            void loadFiltrosCatalogo();
+          if (open) void loadFiltrosCatalogo();
+          if (!open) {
+            setDialogConfig(null);
+            setDialogConfigError(null);
           }
         }}
       >
         <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Publicar módulo «{dialogSlug}»</DialogTitle>
+            <DialogTitle>Autorización de formulario «{dialogSlug}»</DialogTitle>
             <DialogDescription>
-              Guarda nombre, descripción, path de menú y filtros de visualización en
-              gobernanzaModuloConfigs.
+              Asigna alcance (tenantSuperAdmin, tenant global y usuarios) sobre el módulo ya
+              publicado en gobernanzaModuloConfigs. El menú y las operaciones se editan con
+              «Parametrizar menú».
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-6 py-2">
-            <section className="space-y-4">
-              <h3 className="text-sm font-semibold text-foreground">Datos del módulo</h3>
-              <div className="space-y-2">
-                <Label htmlFor="gobernanza-modulo-nombre">Nombre del módulo</Label>
-                <Input
-                  id="gobernanza-modulo-nombre"
-                  value={dialogLabel}
-                  onChange={(e) => setDialogLabel(e.target.value)}
-                  placeholder="Ej. Gobernanza Tenant"
-                  disabled={Boolean(busySlug)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="gobernanza-modulo-descripcion">Descripción</Label>
-                <Textarea
-                  id="gobernanza-modulo-descripcion"
-                  rows={2}
-                  value={dialogDescription}
-                  onChange={(e) => setDialogDescription(e.target.value)}
-                  placeholder="Texto visible en la tarjeta"
-                  disabled={Boolean(busySlug)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="gobernanza-ruta-select">Formulario</Label>
-                <Select
-                  value={dialogRutaId || undefined}
-                  disabled={rutasLoading || rutasOpciones.length === 0}
-                  onValueChange={setDialogRutaId}
-                >
-                  <SelectTrigger id="gobernanza-ruta-select">
-                    {rutasLoading ? (
-                      <span className="flex items-center gap-2 text-muted-foreground">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Cargando formularios…
-                      </span>
+            <section className="space-y-3">
+              <h3 className="text-sm font-semibold text-foreground">Módulo en catálogo</h3>
+              {cargandoDialogConfig ? (
+                <p className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Cargando gobernanzaModuloConfigs…
+                </p>
+              ) : dialogConfigError ? (
+                <p className="text-xs text-destructive">{dialogConfigError}</p>
+              ) : dialogConfig ? (
+                <div className="space-y-3 rounded-xl border border-border/80 bg-muted/20 p-4 text-xs">
+                  <div>
+                    <p className="font-semibold text-foreground">
+                      {dialogConfig.nombre || dialogConfig.label}
+                    </p>
+                    {dialogConfig.description ? (
+                      <p className="mt-1 text-muted-foreground">{dialogConfig.description}</p>
+                    ) : null}
+                  </div>
+                  <div className="space-y-1 text-muted-foreground">
+                    <p>
+                      <span className="font-medium text-foreground">Path:</span>{' '}
+                      {dialogConfig.menuPath || dialogConfig.rutaPath || dialogConfig.frontPath}
+                    </p>
+                    {dialogConfig.formularioComponent ? (
+                      <p>
+                        <span className="font-medium text-foreground">Componente:</span>{' '}
+                        {dialogConfig.formularioComponent}
+                      </p>
+                    ) : null}
+                  </div>
+                  <div>
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-foreground">
+                      Operaciones habilitadas
+                    </p>
+                    {accionesCatalogoPublicadas.length === 0 ? (
+                      <p className="text-muted-foreground">
+                        Sin acciones publicadas. Parametrice el menú antes de autorizar.
+                      </p>
                     ) : (
-                      <SelectValue placeholder="Selecciona un formulario" />
+                      <ul className="space-y-1.5">
+                        {accionesCatalogoPublicadas.map((a) => {
+                          const method = String(a.method || 'GET').toUpperCase();
+                          const style = METHOD_STYLE[method] ?? METHOD_STYLE.GET;
+                          return (
+                            <li key={a.accionId} className="flex items-center gap-2">
+                              <span
+                                className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${style}`}
+                              >
+                                {method}
+                              </span>
+                              <span className="text-foreground">{a.title || a.accionId}</span>
+                            </li>
+                          );
+                        })}
+                      </ul>
                     )}
-                  </SelectTrigger>
-                  <SelectContent>
-                    {rutasOpciones.map((r) => {
-                      const extra =
-                        r.vinculadoSlug && r.vinculadoSlug !== dialogSlug
-                          ? ` · «${r.vinculadoSlug}»`
-                          : r.sugerida
-                            ? ' · sugerida'
-                            : '';
-                      const tipoNodo = r.tipoNodoNombre || r.tipoNodoCodigo || 'Formulario';
-                      const label = `${r.name || 'Sin nombre'} · ${tipoNodo}`;
-                      return (
-                        <SelectItem key={r.id} value={r.id}>
-                          {label}
-                          {extra}
-                        </SelectItem>
-                      );
-                    })}
-                  </SelectContent>
-                </Select>
-                {cargandoFormulario ? (
-                  <p className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                    Cargando acciones del formulario…
-                  </p>
-                ) : formularioError ? (
-                  <p className="text-xs text-destructive">{formularioError}</p>
-                ) : null}
-                {rutasError ? <p className="text-xs text-destructive">{rutasError}</p> : null}
-                {ayudaRutas ? <p className="text-xs text-amber-800">{ayudaRutas}</p> : null}
-              </div>
-
-              <GobernanzaModuloAccionesSelector
-                acciones={accionesCatalogo}
-                seleccion={accionesSeleccionadas}
-                onSeleccionChange={setAccionesSeleccionadas}
-                loading={cargandoAccionesModulo}
-                refreshLoading={cargandoAccionesModulo}
-                onRefresh={() => {
-                  if (!dialogOpen || !dialogSlug) return;
-                  setCargandoAccionesModulo(true);
-                  void fetchGobernanzaModuloMenu(dialogSlug)
-                    .then((res) => {
-                      const items = Array.isArray(res.acciones) ? res.acciones : [];
-                      setAccionesPublicadas(
-                        items
-                          .map((a) => ({
-                            id: String(a.id || ''),
-                            method: String(a.method || '').toUpperCase(),
-                          }))
-                          .filter((a) => a.id)
-                      );
-                    })
-                    .catch(() => setAccionesPublicadas([]))
-                    .finally(() => setCargandoAccionesModulo(false));
-                }}
-              />
+                  </div>
+                </div>
+              ) : null}
             </section>
 
             <Separator />
@@ -783,7 +663,7 @@ export function GobernanzaModuloConfigView({ className }: GobernanzaModuloConfig
               </div>
               <p className="text-xs text-muted-foreground">
                 Elige tenantSuperAdmin, tenantGlobal y usuarios asociados para acotar quién verá este
-                módulo en filtros operativos.
+                módulo. Sin al menos un alcance parametrizado, el menú dinámico no se renderiza.
               </p>
 
               {filtrosLoading && !tenantSuperAdmins.length ? (
@@ -798,18 +678,22 @@ export function GobernanzaModuloConfigView({ className }: GobernanzaModuloConfig
                   <Label className="text-xs">Tenant Super Admin</Label>
                   <ScrollArea className="h-28 rounded-md border border-border p-2">
                     <div className="space-y-2 pr-2">
-                      {tenantSuperAdmins.map((sa) => (
+                      {tenantSuperAdmins.map((sa) => {
+                        const saId = normalizarIdFiltro(sa.iud);
+                        if (!saId) return null;
+                        return (
                         <label
-                          key={sa.iud}
+                          key={saId}
                           className="flex cursor-pointer items-start gap-2 text-xs"
                         >
                           <Checkbox
-                            checked={Boolean(selectedSaIds[sa.iud])}
-                            onCheckedChange={(c) => toggleSa(sa.iud, c === true)}
+                            checked={Boolean(selectedSaIds[saId])}
+                            onCheckedChange={(c) => toggleSa(saId, c === true)}
                           />
                           <span>{sa.label}</span>
                         </label>
-                      ))}
+                        );
+                      })}
                     </div>
                   </ScrollArea>
                 </div>
@@ -817,6 +701,12 @@ export function GobernanzaModuloConfigView({ className }: GobernanzaModuloConfig
 
               {saIdsMarcados.length > 0 ? (
                 <>
+                  {filtrosLoading ? (
+                    <p className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      Cargando tenant global y usuarios de la rama…
+                    </p>
+                  ) : null}
                   <div className="space-y-2">
                     <Label className="text-xs">Tenant Global</Label>
                     <ScrollArea className="h-28 rounded-md border border-border p-2">
@@ -904,14 +794,13 @@ export function GobernanzaModuloConfigView({ className }: GobernanzaModuloConfig
               type="button"
               disabled={
                 Boolean(busySlug)
-                || !dialogRutaId
-                || rutasLoading
-                || !dialogLabel.trim()
-                || !formularioDetalle?.component
-                || accionesElegidas.length === 0
-                || accionesPayloadPreview.length === 0
+                || cargandoDialogConfig
+                || !dialogConfig
+                || Boolean(dialogConfigError)
+                || accionesCatalogoPublicadas.length === 0
+                || alcancesSeleccionados === 0
               }
-              onClick={() => void publicarModulo()}
+              onClick={() => void guardarAutorizacion()}
             >
               {busySlug ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               Guardar

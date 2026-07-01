@@ -1,9 +1,9 @@
+import { useEffect, useState } from 'react';
 import { adminEntityId } from '@/app/utils/adminEntityId';
 import { toast } from 'react-toastify';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -13,10 +13,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Save, RefreshCw, Route, ListTree, GitMerge } from 'lucide-react';
+import { Save, RefreshCw, Route } from 'lucide-react';
 import {
   BrandingConfig,
-  guardarBrandingPrivado,
+  guardarBrandingPrivadoConRespuesta,
   obtenerBrandingPrivado,
   type BrandingScopeParams,
 } from '@/app/services/brandingWidget';
@@ -186,14 +186,9 @@ export default function ParametrizacionRedirects({
     return Array.from(new Set([...base, ...routePaths])).sort((a, b) => a.localeCompare(b));
   };
 
-  const loadWhitelistFromSecurityRoutes = (): void => {
-    setForm((prev) => ({ ...prev, allowedPathsJson: JSON.stringify(routePaths, null, 2) }));
-    toast.info('Se cargaron los paths de rutasSeguridad en la whitelist.');
-  };
-
   // Fusiona los paths actualmente configurados en los 6 campos de redirect con la whitelist existente.
   // Elimina el drift entre lo que está configurado y lo que está permitido.
-  const syncWhitelistFromConfiguredRedirects = (): void => {
+  const buildAllowedPathsForSave = (): string[] => {
     const configuredPaths = REDIRECT_FIELDS
       .map((field) => String(form[field.key].path || '').trim())
       .filter((path) => path.startsWith('/') && path !== '/');
@@ -202,9 +197,7 @@ export default function ParametrizacionRedirects({
       try { return parseAllowedPaths(form.allowedPathsJson); } catch { return []; }
     })();
 
-    const merged = Array.from(new Set([...existingPaths, ...configuredPaths])).sort((a, b) => a.localeCompare(b));
-    setForm((prev) => ({ ...prev, allowedPathsJson: JSON.stringify(merged, null, 2) }));
-    toast.info(`Whitelist sincronizada: ${configuredPaths.length} paths de redirects incluidos.`);
+    return Array.from(new Set([...existingPaths, ...configuredPaths])).sort((a, b) => a.localeCompare(b));
   };
 
   const updateField = (
@@ -223,7 +216,7 @@ export default function ParametrizacionRedirects({
 
     try {
       setSaving(true);
-      const allowedPaths = parseAllowedPaths(form.allowedPathsJson);
+      const allowedPaths = buildAllowedPathsForSave();
 
       // Ningún redirect puede apuntar a "/" (raíz), ya que rompe el flujo de navegación
       const invalidField = REDIRECT_FIELDS.find((field) => form[field.key].path.trim() === '/');
@@ -247,13 +240,19 @@ export default function ParametrizacionRedirects({
         },
       };
 
-      const saved = await guardarBrandingPrivado(payload, getBrandingScopeParams());
-      setBranding(saved || payload);
-      hydrateForm(saved || payload);
-      toast.success('Redirects gobernados actualizados.');
+      const result = await guardarBrandingPrivadoConRespuesta(payload, getBrandingScopeParams());
+      if (!result.branding) {
+        throw new Error('El backend no retorno la configuracion guardada.');
+      }
+
+      setBranding(result.branding);
+      hydrateForm(result.branding);
+      const txEstado = String(result.transaccion?.estado || 'commit').toUpperCase();
+      const txSession = result.transaccion?.conSession ? 'con session' : 'sin session reportada';
+      toast.success(`${result.msg || 'Redirects gobernados actualizados.'} Transaccion ${txEstado} (${txSession}).`);
     } catch (error) {
       console.error(error);
-      toast.error(error instanceof Error ? error.message : 'No se pudo guardar la configuracion.');
+      toast.error(`Transaccion fallida: ${error instanceof Error ? error.message : 'No se pudo guardar la configuracion.'}`);
     } finally {
       setSaving(false);
     }
@@ -367,42 +366,6 @@ export default function ParametrizacionRedirects({
               </div>
             </div>
           ))}
-        </div>
-
-        <div className="space-y-2">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <Label>Whitelist de rutas permitidas (JSON)</Label>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={syncWhitelistFromConfiguredRedirects}
-                disabled={REDIRECT_FIELDS.every((f) => !String(form[f.key].path || '').trim())}
-              >
-                <GitMerge className="h-4 w-4 mr-2" />
-                Sincronizar desde redirects
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={loadWhitelistFromSecurityRoutes}
-                disabled={routePaths.length === 0}
-              >
-                <ListTree className="h-4 w-4 mr-2" />
-                Cargar paths de rutasSeguridad
-              </Button>
-            </div>
-          </div>
-          <Textarea
-            rows={compact ? 6 : 8}
-            value={form.allowedPathsJson}
-            onChange={(e) => setForm((prev) => ({ ...prev, allowedPathsJson: e.target.value }))}
-          />
-          <p className="text-xs text-muted-foreground">
-            El helper solo aceptara rutas internas incluidas aqui. Si un destino sale de esta whitelist, se usa fallback seguro.
-          </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">

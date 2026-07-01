@@ -1,6 +1,7 @@
 import { useLocation } from 'react-router-dom';
 
 import ParametrosGobernanza from './ParametrosGobernanza';
+import { GOBERNANZA_TIPO_SECTION_PERMISOS_SA } from './gobernanza/gobernanzaActionIds';
 
 /**
  * Hub de operaciones permisos (tenant SA): menú desde gobernanzaModuloConfigs.
@@ -19,6 +20,7 @@ export default function PermisosGlobal() {
       enableCardDesignEditor={false}
       menuPath={pathname}
       operacionesHub
+      tipoSection={GOBERNANZA_TIPO_SECTION_PERMISOS_SA}
     />
   );
 }

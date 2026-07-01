@@ -12,6 +12,7 @@ export type ModuleRouteMatchKind = 'exact' | 'fuzzy' | 'none';
 export function resolveModuleCatalogToPathRow<T extends InventarioPathRow>(
   modulePath: string,
   rows: T[],
+  opts?: { tab?: string },
 ): { row: T | null; kind: ModuleRouteMatchKind } {
   const byPath = new Map(rows.map((r) => [normalizePathKey(r.path), r]));
   const k = normalizePathKey(modulePath);
@@ -29,7 +30,29 @@ export function resolveModuleCatalogToPathRow<T extends InventarioPathRow>(
     return rk.includes(`/${last}/`) || rk.includes(`/${last}`);
   });
 
-  if (candidates.length === 0) return { row: null, kind: 'none' };
+  if (candidates.length === 0) {
+    const tab = String(opts?.tab || '').trim().toLowerCase();
+    if (tab) {
+      const tabSeg = tab.replace(/-/g, '');
+      const tabCandidates = rows.filter((r) => {
+        const rk = normalizePathKey(r.path);
+        const name = normalizePathKey(String(r.name || ''));
+        return (
+          rk.includes(`/${tab}/`)
+          || rk.includes(`/${tab}`)
+          || rk.includes(tabSeg)
+          || name.includes(tab.replace(/-/g, ' '))
+          || name.includes(tab)
+        );
+      });
+      if (tabCandidates.length === 1) return { row: tabCandidates[0]!, kind: 'fuzzy' };
+      if (tabCandidates.length > 1) {
+        tabCandidates.sort((a, b) => normalizePathKey(a.path).length - normalizePathKey(b.path).length);
+        return { row: tabCandidates[0]!, kind: 'fuzzy' };
+      }
+    }
+    return { row: null, kind: 'none' };
+  }
   if (candidates.length === 1) return { row: candidates[0], kind: 'fuzzy' };
 
   const scored = candidates.map((r) => {

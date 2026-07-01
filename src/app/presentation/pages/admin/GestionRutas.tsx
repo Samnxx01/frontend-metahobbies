@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { invalidateSidebarCache } from '@/app/services/routeService';
 import {
@@ -80,8 +79,6 @@ import {
 import { ChevronDown, ChevronRight, Edit, Loader2, RefreshCw, Trash2 } from 'lucide-react';
 import { apiFetch, persistHybridSpaPath } from '@/app/services/api';
 import { getJerarquiaUsuarios, type JerarquiaResponse } from '@/app/services/tenantUsuariosService';
-import { PoliticaBypassPanel } from '@/app/presentation/pages/admin/PoliticaBypassPanel';
-import { GOBERNANZA_ADMIN_BASE } from '@/app/presentation/pages/admin/gobernanza/gobernanzaModulosCatalog';
 import { GestionRutasUsuariosOrganigrama } from '@/app/presentation/pages/admin/components/GestionRutasUsuariosOrganigrama';
 import { OrganigramaLegendaInfoButton } from '@/app/presentation/components/admin/usuarios-tenant/JerarquiaOrganigrama';
 import {
@@ -180,7 +177,6 @@ export default function GestionRutas(): React.ReactElement {
   const [loading, setLoading] = useState<boolean>(true);
   const [toolbarPolicy, setToolbarPolicy] = useState<GestionRutasToolbarPolicy | null>(null);
   const [toolbarDraft, setToolbarDraft] = useState<GestionRutasToolbarDraft | null>(null);
-  const [showBypassPanel, setShowBypassPanel] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [isTreeModalOpen, setIsTreeModalOpen] = useState<boolean>(false);
   const [isNodeTypeModalOpen, setIsNodeTypeModalOpen] = useState<boolean>(false);
@@ -1577,7 +1573,11 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
     const markIncluded = (nodes: RouteTreeNode[]): boolean => {
       let anyIncluded = false;
       for (const node of nodes) {
-        const matchesName = !isNameFiltering || String(node.name || '').toLowerCase().includes(normalizedFilter);
+        const matchesName = !isNameFiltering || [
+          node.name,
+          (node as any).path,
+          (node as any).component,
+        ].some((v) => String(v || '').toLowerCase().includes(normalizedFilter));
         const matchesType = !isTypeFiltering || routeMatchesTypeFilter(node as Route, normalizedTypeFilter);
         const selfMatches = matchesName && matchesType;
         const childrenIncluded = node.children.length > 0 && markIncluded(node.children);
@@ -1619,7 +1619,11 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
     const markIncluded = (nodes: RouteTreeNode[]): boolean => {
       let anyIncluded = false;
       for (const node of nodes) {
-        const matchesName = !isNameFiltering || String(node.name || '').toLowerCase().includes(normalizedFilter);
+        const matchesName = !isNameFiltering || [
+          node.name,
+          (node as any).path,
+          (node as any).component,
+        ].some((v) => String(v || '').toLowerCase().includes(normalizedFilter));
         const matchesType = !isTypeFiltering || routeMatchesTypeFilter(node as Route, normalizedTypeFilter);
         const selfMatches = matchesName && matchesType;
         const childrenIncluded = node.children.length > 0 && markIncluded(node.children);
@@ -2989,27 +2993,11 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
           </div>
         </CardHeader>
         <CardContent>
-          <div className="mb-4 flex flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setShowBypassPanel((v) => !v)}
-            >
-              {showBypassPanel ? 'Ocultar' : 'Ver'} políticas de bypass (tu sesión)
-            </Button>
-            <Button type="button" variant="ghost" size="sm" asChild>
-              <Link to={`${GOBERNANZA_ADMIN_BASE}/politica-bypass`}>Panel completo en gobernanza</Link>
-            </Button>
-          </div>
-          {showBypassPanel ? (
-            <PoliticaBypassPanel compact className="mb-4 rounded-lg border border-border bg-muted/30 p-4" />
-          ) : null}
           <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center">
             <Input
               value={nameFilter}
               onChange={(e) => setNameFilter(e.target.value)}
-              placeholder="Filtrar por nombre..."
+              placeholder="Filtrar por nombre, path o componente..."
               className="max-w-sm"
             />
             <Select value={nodeTypeFilter} onValueChange={setNodeTypeFilter}>
@@ -3600,15 +3588,6 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
                     La ruta se genera automaticamente segun la jerarquia.
                   </p>
                 )}
-              </div>
-              <div className="space-y-2 md:col-span-2 rounded-md border border-dashed p-3 bg-muted/30">
-                <p className="text-sm font-medium">Guia de jerarquia</p>
-                <p className="text-xs text-muted-foreground">
-                  Suite: crea la raiz del flujo. Modulo: depende de una suite. Formulario: depende de un modulo dentro de la suite seleccionada. Subformulario: depende de un formulario existente.
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Suite y Modulo no manejan componente. Formulario y Subformulario si deben enviar componente y ese valor se guarda en backend.
-                </p>
               </div>
               {!isSuiteType && !isModuloType && (
                 <div className="space-y-2 md:col-span-2">

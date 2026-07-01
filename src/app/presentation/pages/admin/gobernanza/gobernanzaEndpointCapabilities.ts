@@ -33,7 +33,7 @@ export type GobernanzaEndpointCapabilities = {
   scopeDisponible: boolean;
   /** Puede invocar la API (botón Ejecutar habilitado en modal). */
   canExecuteApi: boolean;
-  /** Modo solo lectura forzado (reglas DIOS + jerarquía con corporativo). */
+  /** Reglas DIOS: solo lectura desactivado; alcance lo valida backend (counters + configs NVL). */
   diosSoloLectura: boolean;
   /** Puede cambiar tokens visuales de la tarjeta (diseño local). */
   canEditCardDesign: boolean;
@@ -83,12 +83,8 @@ function diosReglasDisponibleModal(endpoint: EndpointSpec, ctx: GobernanzaCapabi
   return base && esJwtSoloTenantSuperAdmin(ctx);
 }
 
-function modoSoloLecturaReglasDios(endpoint: EndpointSpec, ctx: GobernanzaCapabilityContext): boolean {
-  return (
-    diosReglasEndpointIds(ctx).has(endpoint.id) &&
-    esJwtSoloTenantSuperAdmin(ctx) &&
-    !scopeJwtSaSinCorporativoEnCounters(ctx)
-  );
+function modoSoloLecturaReglasDios(_endpoint: EndpointSpec, _ctx: GobernanzaCapabilityContext): boolean {
+  return false;
 }
 
 /**

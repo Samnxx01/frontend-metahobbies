@@ -2,7 +2,7 @@ import React from 'react';
 import { Button } from '@/components/ui/button';
 import { Loader2, RefreshCw, Save, Users } from 'lucide-react';
 import { MARCO_AFILIADO_CODIGO } from '../constants/catalog-filters';
-import { MarcoPermisosApiReferenciaModal } from './MarcoPermisosApiReferenciaModal';
+import { MarcoPermisosAyudaModal } from './MarcoPermisosAyudaModal';
 import { MarcoRolSelector } from './MarcoRolSelector';
 import type { MarcoPermisosAfiliado, RolMarcoParametrizable } from '../types/marco.types';
 
@@ -59,7 +59,7 @@ export function MarcoPermisosPageHeader({
         />
       </div>
       <div className="flex flex-wrap gap-2">
-        <MarcoPermisosApiReferenciaModal
+        <MarcoPermisosAyudaModal
           marcoActivo={marcoActivo}
           vistasCount={vistasCount}
           accionesCount={accionesCount}

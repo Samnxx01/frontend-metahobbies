@@ -22,7 +22,7 @@ export function GobernanzaModuloMenuTabs({
   loading,
   className,
 }: GobernanzaModuloMenuTabsProps): React.ReactElement | null {
-  if (loading) {
+  if (loading && !tabs.length) {
     return (
       <div
         className={cn(
@@ -40,19 +40,27 @@ export function GobernanzaModuloMenuTabs({
   if (!tabs.length) return null;
 
   return (
-    <TabsList className={cn('justify-start', className)}>
-      {tabs.map((tab) => (
-        <TabsTrigger
-          key={tab.value}
-          value={tab.value}
-          disabled={tab.disabled}
-          aria-current={activeActionId === tab.value ? 'page' : undefined}
-          title={tab.disabled ? 'No disponible con tu sesión actual' : tab.label}
-          onClick={() => onActionChange(tab.value)}
-        >
-          {tab.label}
-        </TabsTrigger>
-      ))}
-    </TabsList>
+    <div className={cn('space-y-2', className)}>
+      {loading ? (
+        <p className="flex items-center gap-2 text-xs text-muted-foreground" role="status">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          Actualizando menú…
+        </p>
+      ) : null}
+      <TabsList className="justify-start">
+        {tabs.map((tab) => (
+          <TabsTrigger
+            key={tab.value}
+            value={tab.value}
+            disabled={tab.disabled || loading}
+            aria-current={activeActionId === tab.value ? 'page' : undefined}
+            title={tab.disabled ? 'No disponible con tu sesión actual' : tab.label}
+            onClick={() => onActionChange(tab.value)}
+          >
+            {tab.label}
+          </TabsTrigger>
+        ))}
+      </TabsList>
+    </div>
   );
 }

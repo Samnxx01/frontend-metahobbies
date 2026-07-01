@@ -1,6 +1,7 @@
 import type {
   CorpNode,
   JerarquiaResponse,
+  JerarquiaUsuarioNivelApiRow,
   SuperAdminNode,
   TenantGlobalNode,
   TenantSuperTenantSinCorporativoItem,
@@ -207,6 +208,9 @@ export type JerarquiaUsuariosListaMeta = {
   /** SA del JWT con fila SA+corporativo en tenantJerarquiaCounter. */
   saConJerarquiaCorporativa: boolean;
   mensajeAlcance: string;
+  resumenCounters?: JerarquiaResponse['resumenCounters'];
+  jerarquiaSaCounters?: JerarquiaResponse['jerarquiaSaCounters'];
+  jerarquiaEvaluacion?: JerarquiaResponse['jerarquiaEvaluacion'];
 };
 
 /**
@@ -246,6 +250,239 @@ export function buildJerarquiaUsuariosListaParaModal(
       vistaDios,
       saConJerarquiaCorporativa,
       mensajeAlcance,
+      resumenCounters: jerarquia?.resumenCounters,
+      jerarquiaSaCounters: jerarquia?.jerarquiaSaCounters,
+      jerarquiaEvaluacion: jerarquia?.jerarquiaEvaluacion,
+    },
+  };
+}
+
+export type NivelJerarquiaTenant = 'SA' | 'TG' | 'TC';
+
+export type UsuarioJerarquiaNivelRow = UsuarioListaJerarquiaRow & {
+  nivel: NivelJerarquiaTenant;
+  contexto: string;
+  corporativoAsociado?: {
+    id: string;
+    razon_social?: string | null;
+    titulo?: string | null;
+    nit_ruc_rtn?: string | null;
+    label: string;
+  } | null;
+};
+
+function rowConNivel(
+  u: TenantUsuario,
+  nivel: NivelJerarquiaTenant,
+  contexto: string,
+): UsuarioJerarquiaNivelRow | null {
+  if (!u?.iud) return null;
+  const id = String(u.iud).trim();
+  if (!id) return null;
+  return {
+    iud: id,
+    _id: id,
+    id,
+    nombre: nombreDesdeUsuario(u),
+    correo: String(u.correo ?? ''),
+    email: String(u.correo ?? ''),
+    rol: String(u.rol ?? '-'),
+    estado: u.estado ?? true,
+    verificado: u.verificado,
+    perfil: u.perfil ?? undefined,
+    nivel,
+    contexto,
+  };
+}
+
+function agregarPorNivel(
+  map: Map<string, UsuarioJerarquiaNivelRow>,
+  u: TenantUsuario | undefined | null,
+  nivel: NivelJerarquiaTenant,
+  contexto: string,
+): void {
+  const row = rowConNivel(u, nivel, contexto);
+  if (!row || map.has(row.iud)) return;
+  map.set(row.iud, row);
+}
+
+function recorrerCorporativoPorNivel(
+  corp: CorpNode,
+  tc: Map<string, UsuarioJerarquiaNivelRow>,
+): void {
+  const label =
+    corp.tenantCorporativo?.razon_social ||
+    corp.tenantCorporativo?.titulo ||
+    'Tenant corporativo';
+  (corp.usuarios ?? []).forEach((u) => agregarPorNivel(tc, u, 'TC', label));
+  (corp.clientes ?? []).forEach((u) => agregarPorNivel(tc, u, 'TC', `${label} · cliente`));
+  (corp.hijos ?? []).forEach((h) => recorrerCorporativoPorNivel(h, tc));
+}
+
+function recorrerTenantGlobalPorNivel(
+  nodo: TenantGlobalNode,
+  sa: Map<string, UsuarioJerarquiaNivelRow>,
+  tg: Map<string, UsuarioJerarquiaNivelRow>,
+  tc: Map<string, UsuarioJerarquiaNivelRow>,
+): void {
+  const tgLabel =
+    nodo.tenantGlobal?.razon_social ||
+    nodo.tenantGlobal?.titulo ||
+    nodo.tenantGlobal?.codigoJerarquia ||
+    'Tenant global';
+  const saLabel = nodo.tenantSuperAdmin?.corporativoPerfil?.razon_social
+    ? `Rama SA · ${nodo.tenantSuperAdmin.corporativoPerfil.razon_social}`
+    : `Rama SA · ${tgLabel}`;
+
+  (nodo.usuarios ?? []).forEach((u) => agregarPorNivel(tg, u, 'TG', tgLabel));
+  (nodo.usuariosTenantSuperAdmin ?? []).forEach((u) => agregarPorNivel(sa, u, 'SA', saLabel));
+  (nodo.corporativos ?? []).forEach((c) => recorrerCorporativoPorNivel(c, tc));
+  (nodo.subTenantGlobales ?? []).forEach((sub) => recorrerTenantGlobalPorNivel(sub, sa, tg, tc));
+}
+
+function recorrerSuperAdminTreePorNivel(
+  nodos: SuperAdminNode[] | undefined,
+  sa: Map<string, UsuarioJerarquiaNivelRow>,
+  tg: Map<string, UsuarioJerarquiaNivelRow>,
+  tc: Map<string, UsuarioJerarquiaNivelRow>,
+): void {
+  if (!Array.isArray(nodos)) return;
+  for (const sn of nodos) {
+    const saLabel = sn.superAdmin?.nombre || 'Super Admin';
+    (sn.usuarios ?? []).forEach((u) => agregarPorNivel(sa, u, 'SA', saLabel));
+    (sn.tenantsGlobales ?? []).forEach((tg) => recorrerTenantGlobalPorNivel(tg, sa, tg, tc));
+    recorrerSuperAdminTreePorNivel(sn.subSuperAdmins, sa, tg, tc);
+  }
+}
+
+function recorrerSaSinCorporativoPorNivel(
+  items: TenantSuperTenantSinCorporativoItem[] | undefined,
+  sa: Map<string, UsuarioJerarquiaNivelRow>,
+): void {
+  if (!Array.isArray(items)) return;
+  for (const item of items) {
+    const label =
+      item.corporativoPerfil?.razon_social ||
+      item.corporativoPerfil?.titulo ||
+      item.codigoJerarquia ||
+      'Tenant SuperAdmin';
+    const up = item.usuarioPrincipal;
+    if (up?.iud) {
+      agregarPorNivel(
+        sa,
+        {
+          iud: String(up.iud),
+          correo: up.correo ?? '',
+          estado: true,
+          verificado: false,
+          tiempoSesion: null,
+          rol: 'SUPER_ADMIN',
+          createdAt: '',
+          perfil: null,
+        },
+        'SA',
+        label,
+      );
+    }
+    recorrerSaSinCorporativoPorNivel(item.subTenantSuperAdmins, sa);
+  }
+}
+
+const sortRows = (rows: UsuarioJerarquiaNivelRow[]) =>
+  [...rows].sort((a, b) =>
+    a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' }),
+  );
+
+/** Usuarios del organigrama agrupados por nivel SA / TG / TC (alcance JWT). */
+export function buildUsuariosSaTgTcDesdeJerarquia(
+  jerarquia: JerarquiaResponse | null | undefined,
+): {
+  sa: UsuarioJerarquiaNivelRow[];
+  tg: UsuarioJerarquiaNivelRow[];
+  tc: UsuarioJerarquiaNivelRow[];
+  meta: JerarquiaUsuariosListaMeta;
+} {
+  const normalizarFilaApi = (row: JerarquiaUsuarioNivelApiRow): UsuarioJerarquiaNivelRow => {
+    const iud = String(row?.iud || '').trim();
+    return {
+      iud,
+      _id: iud,
+      id: iud,
+      nombre: String(row?.nombre ?? '-'),
+      correo: String(row?.correo ?? ''),
+      email: String(row?.correo ?? ''),
+      rol: String(row?.rol ?? '-'),
+      estado: row?.estado ?? true,
+      verificado: row?.verificado,
+      perfil: row?.perfil ?? undefined,
+      nivel: row?.nivel ?? 'SA',
+      contexto: String(row?.contexto ?? '-'),
+      corporativoAsociado: row?.corporativoAsociado ?? null,
+    };
+  };
+
+  if (jerarquia?.usuariosPorNivel) {
+    const { meta } = buildJerarquiaUsuariosListaParaModal(jerarquia);
+    const saRows = sortRows((jerarquia.usuariosPorNivel.sa ?? []).map(normalizarFilaApi));
+    const tgRows = sortRows((jerarquia.usuariosPorNivel.tg ?? []).map(normalizarFilaApi));
+    const tcRows = sortRows((jerarquia.usuariosPorNivel.tc ?? []).map(normalizarFilaApi));
+    const usuariosUnicos = new Set([...saRows, ...tgRows, ...tcRows].map((u) => u.iud));
+    return {
+      sa: saRows,
+      tg: tgRows,
+      tc: tcRows,
+      meta: {
+        ...meta,
+        resumenCounters: jerarquia.resumenCounters ?? {
+          sa: saRows.length,
+          tg: tgRows.length,
+          tc: tcRows.length,
+          total: usuariosUnicos.size,
+          fuente: 'regis_usu_roles_counters_jwt',
+          entidadesEnCounters: undefined,
+        },
+        jerarquiaEvaluacion: jerarquia.jerarquiaEvaluacion,
+      },
+    };
+  }
+
+  const sa = new Map<string, UsuarioJerarquiaNivelRow>();
+  const tg = new Map<string, UsuarioJerarquiaNivelRow>();
+  const tc = new Map<string, UsuarioJerarquiaNivelRow>();
+
+  if (jerarquia) {
+    (jerarquia.superAdmins ?? []).forEach((u) =>
+      agregarPorNivel(sa, u, 'SA', 'Super Admin'),
+    );
+    (jerarquia.tenantsGlobales ?? []).forEach((n) =>
+      recorrerTenantGlobalPorNivel(n, sa, tg, tc),
+    );
+    recorrerSuperAdminTreePorNivel(jerarquia.superAdminTree, sa, tg, tc);
+    recorrerSaSinCorporativoPorNivel(jerarquia.tenantSuperTenantsSinCorporativoEnCounter, sa);
+  }
+
+  const saRows = sortRows(Array.from(sa.values()));
+  const tgRows = sortRows(Array.from(tg.values()));
+  const tcRows = sortRows(Array.from(tc.values()));
+  const usuariosUnicos = new Set([...sa.keys(), ...tg.keys(), ...tc.keys()]);
+
+  const { meta } = buildJerarquiaUsuariosListaParaModal(jerarquia);
+
+  return {
+    sa: saRows,
+    tg: tgRows,
+    tc: tcRows,
+    meta: {
+      ...meta,
+      /** Badges del modal: usuarios visibles (no suma de entidades SA+TG+TC en counters). */
+      resumenCounters: {
+        sa: saRows.length,
+        tg: tgRows.length,
+        tc: tcRows.length,
+        total: usuariosUnicos.size,
+        fuente: 'usuarios_jerarquia',
+        entidadesEnCounters: jerarquia?.resumenCounters?.entidadesEnCounters,
+      },
     },
   };
 }

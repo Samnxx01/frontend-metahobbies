@@ -81,6 +81,20 @@ const tenantSuperAdminIdQuery = (tenantSuperAdminId?: string): string => {
     : '';
 };
 
+const formulariosAutorizacionOpcionesQuery = (
+  tenantSuperAdminId?: string,
+  opts?: { soloCatalogo?: boolean },
+): string => {
+  const params = new URLSearchParams();
+  const ancla = normalizePublicIdForApi(tenantSuperAdminId);
+  if (ancla && isOpaqueDocumentId(ancla)) {
+    params.set('tenantSuperAdminId', ancla);
+  }
+  if (opts?.soloCatalogo) params.set('soloCatalogo', '1');
+  const qs = params.toString();
+  return qs ? `?${qs}` : '';
+};
+
 const tarjetasConfigQuery = (tenantSuperAdminId?: string): string =>
   tenantSuperAdminIdQuery(tenantSuperAdminId);
 
@@ -1142,7 +1156,10 @@ const inventarioService = {
     return (resp?.data ?? []) as InventarioLibroFiscalCatalogoHijo[];
   },
 
-  async obtenerFormulariosAutorizacionOpciones(tenantSuperAdminId?: string): Promise<{
+  async obtenerFormulariosAutorizacionOpciones(
+    tenantSuperAdminId?: string,
+    opts?: { soloCatalogo?: boolean },
+  ): Promise<{
     formularios: InventarioFormularioRutaOpcion[];
     tenantGlobales: InventarioTenantGlobalOpcion[];
     tenantSuperAdmins: InventarioTenantSuperAdminOpcion[];
@@ -1190,7 +1207,7 @@ const inventarioService = {
       } | null;
     };
   }> {
-    const q = tenantSuperAdminIdQuery(tenantSuperAdminId);
+    const q = formulariosAutorizacionOpcionesQuery(tenantSuperAdminId, opts);
     const resp = await apiFetch(`/api/inventario/config/formularios-autorizacion/opciones${q}`, { method: 'GET' });
     const data = resp?.data ?? {};
     return {
@@ -1230,6 +1247,25 @@ const inventarioService = {
       { method: 'DELETE' },
     );
     return (resp?.data ?? { id, eliminada: true }) as { id: string; eliminada: boolean };
+  },
+
+  async guardarParametrizacionTarjeta(body: {
+    rutaIds: string[];
+    tenantSuperAdminId: string;
+    tarjetaConfig: {
+      tab?: string | null;
+      moduloPath?: string | null;
+      tituloModulo?: string | null;
+      descripcionModulo?: string | null;
+      iconKey?: string | null;
+      orden?: number;
+    };
+  }): Promise<{ upserted: number }> {
+    const resp = await apiFetch('/api/inventario/config/tarjetas/parametrizacion', {
+      method: 'PUT',
+      body,
+    });
+    return (resp?.data ?? { upserted: 0 }) as { upserted: number };
   },
 
   async aplicarFormulariosAutorizacion(body: {

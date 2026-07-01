@@ -12,6 +12,10 @@ import {
   normalizarGobernanzaTipoId,
 } from './gobernanzaActionIds';
 import { gobernanzaEntityId, normalizarGobernanzaRefId } from './gobernanzaEntityId';
+import {
+  metodosHttpPreferidosDesdeTexto,
+  resolverMetodoHttpEndpoint,
+} from './gobernanzaEndpointCatalog';
 import { endpointIdDesdeComponente } from './permisos-forms/gobernanzaPermisosFormRegistry';
 import { endpointIdDesdeComponenteReglas } from './reglas-forms/gobernanzaReglasFormRegistry';
 import { endpointIdDesdeComponenteTenant } from './tenant-forms/gobernanzaTenantFormRegistry';
@@ -43,6 +47,29 @@ export type GobernanzaAccionCatalogItem = {
   description?: string;
   actor?: string;
 };
+
+export function enriquecerMetodoAccionCatalogo(
+  item: GobernanzaAccionCatalogItem
+): GobernanzaAccionCatalogItem {
+  const endpointId = normalizarGobernanzaEndpointId(item.accionId) || item.accionId;
+  const method = resolverMetodoHttpEndpoint(endpointId, item.method);
+  return method === item.method ? item : { ...item, method };
+}
+
+/** Filtra operaciones sugeridas según título/path (actualizar → PUT, crear → POST). */
+export function filtrarAccionesPorContextoOperativo(
+  items: GobernanzaAccionCatalogItem[] = [],
+  context: { label?: string; path?: string } = {}
+): GobernanzaAccionCatalogItem[] {
+  const text = `${context.label || ''} ${context.path || ''}`.trim();
+  const preferidos = metodosHttpPreferidosDesdeTexto(text);
+  if (!preferidos?.length) return items;
+
+  const prefSet = new Set(preferidos);
+  const enriched = items.map(enriquecerMetodoAccionCatalogo);
+  const matched = enriched.filter((a) => prefSet.has(a.method));
+  return matched.length ? matched : items;
+}
 
 function resolverHttpMethodAccion(rawMethod = '', etiquetas = ''): string {
   for (const candidate of [rawMethod, etiquetas]) {
@@ -259,7 +286,10 @@ export function accionesCatalogDesdeConfig(
       const refPersistida = normalizarGobernanzaRefId(accionRefRaw);
       return {
         accionId: refPersistida || normalizarGobernanzaEndpointId(a.id),
-        method: String(a.method || 'GET').trim().toUpperCase(),
+        method: resolverMetodoHttpEndpoint(
+          normalizarGobernanzaEndpointId(a.id) || refPersistida,
+          String(a.method || 'GET').trim().toUpperCase()
+        ),
         title: String(a.title || a.shortLabel || a.id || '').trim(),
         ...(a.path ? { path: String(a.path).trim() } : {}),
         ...(a.shortLabel ? { shortLabel: String(a.shortLabel).trim() } : {}),
@@ -274,7 +304,7 @@ export function accionesCatalogDesdeConfig(
       const accionId = normalizarGobernanzaEndpointId(id);
       return {
         accionId,
-        method: 'GET',
+        method: resolverMetodoHttpEndpoint(accionId, 'GET'),
         title: accionId,
       };
     })
@@ -303,7 +333,7 @@ export function accionesCatalogDesdeTipos(
       seen.add(accionId);
       out.push({
         accionId,
-        method: 'GET',
+        method: resolverMetodoHttpEndpoint(accionId, 'GET'),
         title: String(f.titulo || f.descripcion || accionId).trim() || accionId,
       });
     }
@@ -333,7 +363,7 @@ export function buildAccionesPublicablesParametrizar(
   const desdeConfigs = configs.flatMap((cfg) => accionesCatalogDesdeConfig(cfg));
   const registradasRuta = accionesCatalogDesdeConfig(configPorRuta);
   const merged = mergeAccionesCatalogo(catalogoAcciones, desdeConfigs, registradasRuta);
-  return enriquecerAccionesDesdeConfigs(merged, configs);
+  return enriquecerAccionesDesdeConfigs(merged, configs).map(enriquecerMetodoAccionCatalogo);
 }
 
 function pathPorMetodoEnConfigs(

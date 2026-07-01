@@ -22,7 +22,7 @@ import LoadingScreen from '@/app/presentation/components/common/LoadingScreen';
 import CambiarContrasenaProvisional from '@/app/presentation/pages/cambiar-contrasena/CambiarContrasenaProvisional';
 import ActivacionCuenta from '../presentation/pages/activar-cuenta/ActivaciónCuenta';
 import Perfil from '@/app/presentation/pages/perfil/Perfil';
-import RecuperarContrasena from '@/app/presentation/pages/recuperar-contrasena/RecuperarContrasena';
+import RecuperarContrasenaEntry from '@/app/presentation/pages/recuperar-contrasena/RecuperarContrasenaEntry';
 import RecuperarContrasenaToken from '@/app/presentation/pages/recuperar-contrasena/RecuperarContrasenaToken';
 import NotFound from '@/app/presentation/pages/not-found/NotFound';
 import Home from '@/app/presentation/pages/home/Home';
@@ -30,6 +30,7 @@ import Carrito from '@/app/presentation/pages/carrito/Carrito';
 import Checkout from '@/app/presentation/pages/checkout/Checkout';
 import DetalleProducto from '@/app/presentation/pages/producto/DetalleProducto';
 import DynamicRouteFallback from '@/app/presentation/pages/admin/DynamicRouteFallback';
+import EstadoSistema from '@/app/presentation/pages/admin/EstadoSistema';
 
 // —— Dynamic component map via Vite glob —————————————————————
 // Escanea TODOS los .tsx de pages/ y components/admin/ automáticamente.
@@ -170,6 +171,31 @@ interface AuthorizedRoutes {
 
 // ── Hybrid layout ──────────────────────────────────────────────────────────────
 // Rutas híbridas de panel (/admin/* sin flag de tienda): AdminLayout con sesión.
+const flattenRouteConfigs = (routes: RouteConfig[] = []): Array<{ path: string; component: string }> => {
+    const flat: Array<{ path: string; component: string }> = [];
+    const walk = (items: RouteConfig[] = [], parentPath = ''): void => {
+        items.forEach((route) => {
+            const rawPath = String(route.path || '').trim();
+            const fullPath = parentPath
+                ? `${parentPath.replace(/\/$/, '')}/${rawPath.replace(/^\//, '')}`
+                : rawPath;
+            if (fullPath) {
+                flat.push({
+                    path: fullPath.startsWith('/admin/')
+                        ? fullPath
+                        : `/admin/${fullPath.replace(/^\/admin\/?/i, '').replace(/^\//, '')}`,
+                    component: String(route.component || ''),
+                });
+            }
+            if (Array.isArray(route.children) && route.children.length > 0) {
+                walk(route.children, fullPath);
+            }
+        });
+    };
+    walk(routes);
+    return flat;
+};
+
 function HybridLayout(): ReactElement {
     const { isAuthenticated, loading } = useAuth();
     const location = useLocation();
@@ -315,6 +341,18 @@ export default function LayoutRoutes(): ReactElement {
     }, [user]);
 
     if (routeLoadError) {
+        // Estado-sistema siempre debe ser accesible aunque el backend esté caído
+        if (location.pathname.includes('estado-sistema')) {
+            return (
+                <Routes>
+                    <Route element={<PublicLayout />}>
+                        <Route path="public/render/estado-sistema" element={<EstadoSistema />} />
+                    </Route>
+                    <Route path="*" element={<Navigate to="/public/render/estado-sistema" replace />} />
+                </Routes>
+            );
+        }
+
         const is403 = routeLoadError.status === 403;
         const is401 = routeLoadError.status === 401;
         return (
@@ -355,6 +393,13 @@ export default function LayoutRoutes(): ReactElement {
 
     const hybridStorefrontRoutes = authorizedRoutes.hybridStorefrontRoutes ?? [];
     const hybridAdminShellRoutes = authorizedRoutes.hybridAdminShellRoutes ?? [];
+    const adminRoutesFlat = flattenRouteConfigs(authorizedRoutes.adminRoutes ?? []);
+    const menuTagRoutesFlat = flattenRouteConfigs(menuTagRoutes);
+    const currentAdminPath = location.pathname.replace(/\/+$/, '') || '/';
+    const currentAdminRouteRegistrada = [...adminRoutesFlat, ...menuTagRoutesFlat].some((route) => {
+        const routePath = route.path.replace(/\/+$/, '') || '/';
+        return routePath === currentAdminPath;
+    });
 
     const renderFallbackElement = (route: RouteConfig): ReactElement => (
         <DynamicRouteFallback routePath={route.path} componentName={route.component} />
@@ -417,7 +462,8 @@ export default function LayoutRoutes(): ReactElement {
                 <Route path="membresia/*" element={<MembershipRoutes />} />
                 <Route path="cambiar-contrasena-provisional" element={<CambiarContrasenaProvisional />} />
                 <Route path="activar-cuenta" element={<ActivacionCuenta />} />
-                <Route path="recuperar-contrasena" element={<RecuperarContrasena />} />
+                <Route path="recuperar-contrasena" element={<RecuperarContrasenaEntry />} />
+                <Route path="public/render/recuperar-contrasena" element={<RecuperarContrasenaEntry />} />
                 <Route path="recuperar/:token" element={<RecuperarContrasenaToken />} />
                 {user && <Route path="perfil" element={<Perfil />} />}
             </Route>

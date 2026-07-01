@@ -8,24 +8,19 @@ import { Separator } from '@/components/ui/separator';
 import {
     Loader2, Coins, RefreshCcw, CheckCircle2, XCircle, AlertCircle, CheckCircle,
 } from 'lucide-react';
-
-interface Moneda {
-    _id: string;
-    monedas: string;
-    estadoMoneda: boolean;
-    activosInventory?: boolean;
-    activoWompi?: boolean;
-    usuarioId?: {
-        nombre_cliente: string;
-        correo: string;
-    };
-}
+import {
+    MONEDAS_LIST_URL,
+    monedaActualizarPath,
+    normalizeMonedaFromApi,
+    type MonedaApiRow,
+    type MonedaRow,
+} from './parametrizacionMembresiaApi';
 
 type MensajeTipo = 'success' | 'error';
 interface Mensaje { tipo: MensajeTipo; texto: string }
 
 export default function GestionMonedas() {
-    const [monedas, setMonedas] = useState<Moneda[]>([]);
+    const [monedas, setMonedas] = useState<MonedaRow[]>([]);
     const [loadingLista, setLoadingLista] = useState(false);
     const [loadingCrear, setLoadingCrear] = useState(false);
     const [loadingToggle, setLoadingToggle] = useState<string | null>(null);
@@ -41,8 +36,13 @@ export default function GestionMonedas() {
     const listarMonedas = useCallback(async () => {
         setLoadingLista(true);
         try {
-            const data = await apiFetch('/api/monedas/seguridad/listar/monedas', { method: 'GET' });
-            if (data?.monedas) setMonedas(data.monedas);
+            const data = await apiFetch(MONEDAS_LIST_URL, { method: 'GET' });
+            if (data?.monedas) {
+                const rows = (data.monedas as MonedaApiRow[])
+                    .map(normalizeMonedaFromApi)
+                    .filter((m): m is MonedaRow => m !== null);
+                setMonedas(rows);
+            }
         } catch (err: any) {
             mostrarMensaje('error', err.message || 'Error al listar monedas.');
         } finally {
@@ -73,12 +73,12 @@ export default function GestionMonedas() {
     ) => {
         setLoadingToggle(`${id}-${campo}`);
         try {
-            await apiFetch(`/api/monedas/seguridad/actualizar/${id}`, {
+            await apiFetch(monedaActualizarPath(id), {
                 method: 'PUT',
                 body: { [campo]: !estadoActual },
             });
             setMonedas(prev =>
-                prev.map(m => m._id === id ? { ...m, [campo]: !estadoActual } : m)
+                prev.map(m => m.id === id ? { ...m, [campo]: !estadoActual } : m)
             );
             mostrarMensaje('success', `Moneda ${!estadoActual ? 'activada' : 'desactivada'} correctamente.`);
         } catch (err: any) {
@@ -198,7 +198,7 @@ export default function GestionMonedas() {
 
                         {monedas.map(moneda => (
                             <div
-                                key={moneda._id}
+                                key={moneda.id}
                                 className={`
                                     flex items-center justify-between px-4 py-3 rounded-xl border transition-all
                                     ${moneda.estadoMoneda
@@ -237,34 +237,34 @@ export default function GestionMonedas() {
                                 <div className="flex items-center gap-4">
                                     <div className="flex items-center gap-2">
                                         <span className="text-[11px] text-muted-foreground">Sistema</span>
-                                        {loadingToggle === `${moneda._id}-estadoMoneda` ? (
+                                        {loadingToggle === `${moneda.id}-estadoMoneda` ? (
                                             <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
                                         ) : (
                                             <Switch
                                                 checked={moneda.estadoMoneda}
-                                                onCheckedChange={() => toggleEstado(moneda._id, 'estadoMoneda', moneda.estadoMoneda)}
+                                                onCheckedChange={() => toggleEstado(moneda.id, 'estadoMoneda', moneda.estadoMoneda)}
                                             />
                                         )}
                                     </div>
                                     <div className="flex items-center gap-2">
                                         <span className="text-[11px] text-muted-foreground">Inventario</span>
-                                        {loadingToggle === `${moneda._id}-activosInventory` ? (
+                                        {loadingToggle === `${moneda.id}-activosInventory` ? (
                                             <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
                                         ) : (
                                             <Switch
                                                 checked={moneda.activosInventory === true}
-                                                onCheckedChange={() => toggleEstado(moneda._id, 'activosInventory', moneda.activosInventory === true)}
+                                                onCheckedChange={() => toggleEstado(moneda.id, 'activosInventory', moneda.activosInventory === true)}
                                             />
                                         )}
                                     </div>
                                     <div className="flex items-center gap-2">
                                         <span className="text-[11px] text-muted-foreground">Wompi</span>
-                                        {loadingToggle === `${moneda._id}-activoWompi` ? (
+                                        {loadingToggle === `${moneda.id}-activoWompi` ? (
                                             <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
                                         ) : (
                                             <Switch
                                                 checked={moneda.activoWompi === true}
-                                                onCheckedChange={() => toggleEstado(moneda._id, 'activoWompi', moneda.activoWompi === true)}
+                                                onCheckedChange={() => toggleEstado(moneda.id, 'activoWompi', moneda.activoWompi === true)}
                                             />
                                         )}
                                     </div>

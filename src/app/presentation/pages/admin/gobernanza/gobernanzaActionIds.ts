@@ -7,6 +7,7 @@ import { endpointIdDesdeComponenteTenant } from './tenant-forms/gobernanzaTenant
 import type { GobernanzaModuloMenuAccion } from './gobernanzaModuloApiTypes';
 
 export {
+  GOBERNANZA_TIPO_SECTION_PERMISOS_SA,
   GOBERNANZA_TIPO_SECTION_REGLAS_SA,
   GOBERNANZA_TIPO_SECTION_TENANT_SUPER_ADMIN,
   GOBERNANZA_TIPO_SECTION_TENANT_GLOBAL,
@@ -32,10 +33,16 @@ export function normalizarGobernanzaMenuPath(value: unknown): string {
   return normalizarGobernanzaTextId(value).replace(/\/+$/, '');
 }
 
-/** Hub contenedor de operaciones permisos (PermisosGlobal / …/permisos). */
+/** Hub contenedor de operaciones permisos (PermisosGlobal / …/permisos, …/herencia-sa). */
 export function esRutaHubGobernanzaPermisos(menuPath?: string | null): boolean {
   const path = normalizarGobernanzaMenuPath(menuPath)?.toLowerCase();
-  return Boolean(path && /\/gobernanza\/parametros\/[^/]+\/permisos$/.test(path));
+  return Boolean(
+    path
+    && (
+      /\/gobernanza\/parametros\/[^/]+\/permisos$/.test(path)
+      || /\/herencia-sa$/.test(path)
+    )
+  );
 }
 
 /** Hub contenedor de operaciones reglas (ReglasTenant / …/reglas, …/reglas-sa). */
@@ -68,6 +75,28 @@ export function esRutaHubGobernanzaTenantGlobal(menuPath?: string | null): boole
       || /\/gobernanza\/parametros\/tenant-global$/.test(path)
     )
   );
+}
+
+/**
+ * Ruta del hub contenedor para GET operativo (subformularios publicados bajo el hub).
+ * Si la URL actual es una hoja, sube al padre cuando este es hub conocido.
+ */
+export function resolverMenuPathHubOperaciones(menuPath?: string | null): string {
+  const path = normalizarGobernanzaMenuPath(menuPath);
+  if (!path) return '';
+
+  const esHub = (p: string) =>
+    esRutaHubGobernanzaPermisos(p)
+    || esRutaHubGobernanzaReglas(p)
+    || esRutaHubGobernanzaTenant(p)
+    || esRutaHubGobernanzaTenantGlobal(p);
+
+  if (esHub(path)) return path;
+
+  const parent = path.replace(/\/[^/]+$/, '');
+  if (parent && esHub(parent)) return parent;
+
+  return path;
 }
 
 export function esGobernanzaEndpointIdCatalogo(id: string): boolean {

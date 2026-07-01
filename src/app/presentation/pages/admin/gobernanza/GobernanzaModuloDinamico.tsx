@@ -13,7 +13,6 @@ import { GobernanzaModuloParametrizarButton } from './GobernanzaModuloParametriz
 import { validarGobernanzaModuloInline } from './gobernanzaModuloFormularioGuard';
 import { buildGobernanzaMenuTabsFromEndpoints } from './gobernanzaModuloMenuUi';
 import type { ParametrosGobernanzaModuloMenuState } from './useParametrosGobernanzaModuloMenu';
-import { logGobernanzaOperativo, warnGobernanzaOperativo } from './gobernanzaModuloDebug';
 
 export type GobernanzaModuloDinamicoVariant = 'config' | 'operational';
 
@@ -167,20 +166,6 @@ function GobernanzaModuloOperational({
       && menuDesdeApi
       && (menuAcciones?.length === 0 || menuAcciones === null);
     const apiSinConfigs = menuDesdeApi && menuConfigCount === 0;
-    warnGobernanzaOperativo('UI: Sin acciones parametrizadas (diagnóstico)', {
-      menuLoading,
-      menuError,
-      menuDesdeApi,
-      menuConfigCount,
-      menuAccionesCount: menuAcciones?.length ?? null,
-      menuAccionesNull: menuAcciones === null,
-      endpointsCount: endpoints.length,
-      endpointIds: endpoints.map((e) => e.id),
-      configSlug: config.slug,
-      configSection: config.section,
-      sinPublicarEnBd,
-      apiSinConfigs,
-    });
     return (
       <Alert>
         <AlertTriangle className="h-4 w-4" />

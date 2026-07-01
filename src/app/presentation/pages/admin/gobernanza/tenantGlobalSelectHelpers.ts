@@ -90,10 +90,10 @@ export function buildTenantGlobalSelectsFromApi(data: Record<string, unknown>): 
     nvlGeneracionTenant: (Array.isArray(data.nivelesGlobales) ? data.nivelesGlobales : [])
       .map((row: unknown) => {
         const r = (typeof row === 'object' && row != null ? row : {}) as Record<string, unknown>;
-        const configId = String(r?.configNvlGlobalId || '').trim();
-        const catalogId = String(r?.nvlGeneracionGlobalId || r?._id || r?.id || '').trim();
-        const id = configId || catalogId || resolveSelectRowId(row);
+        const id = resolveSelectRowId(row);
         if (!id) return null;
+        const configId = id;
+        const catalogId = String(r?.nvlGeneracionGlobalId || r?._id || '').trim();
         const nvl = String(r?.nvl ?? '').trim();
         const generationTenant = String(r?.generation_tenant || '').trim();
         const secuencia = Number(r?.secuencia ?? r?.orden ?? 0);

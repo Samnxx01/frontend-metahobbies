@@ -8,3 +8,9 @@ export const GOBERNANZA_TIPO_SECTION_TENANT_GLOBAL = 'tenant-global';
 
 /** Formularios publicados bajo ReglasTenant (Reglas SA). */
 export const GOBERNANZA_TIPO_SECTION_REGLAS_SA = 'reglas';
+
+/** Formularios publicados bajo PermisosGlobal (permisos SA). */
+export const GOBERNANZA_TIPO_SECTION_PERMISOS_SA = 'permisos';
+
+/** Formularios del hub ParametrizacionCorporativa (perfil, logos, documentos…). */
+export const GOBERNANZA_TIPO_SECTION_EMPRESAS = 'empresas';

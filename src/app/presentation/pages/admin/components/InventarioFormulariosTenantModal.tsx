@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link2, Loader2 } from 'lucide-react';
+import { LayoutGrid, Loader2, ShieldCheck } from 'lucide-react';
 import { toast } from 'react-toastify';
 import inventarioService from '@/app/services/inventarioService';
 import type {
@@ -75,14 +75,23 @@ type InventarioFormulariosTenantModalProps = {
   modules?: InventarioConfigModule[];
   /** Tras un PUT exitoso (al menos una ruta actualizada); p. ej. refrescar paths en ConfigInventario. */
   onFormulariosAutorizacionApplied?: () => void;
-  /** Apertura controlada desde ConfigInventario (tarjeta concreta). */
+  /** Modal: modulo de inventario + formularios (parametrizacion menu). */
+  openParametrizacion?: boolean;
+  onOpenParametrizacionChange?: (open: boolean) => void;
+  /** Modal: tenant SA, tenant global y usuarios autorizados. */
+  openAutorizacion?: boolean;
+  onOpenAutorizacionChange?: (open: boolean) => void;
+  /** @deprecated Usar openAutorizacion */
   open?: boolean;
+  /** @deprecated Usar onOpenAutorizacionChange */
   onOpenChange?: (open: boolean) => void;
   /** Al abrir, preselecciona este modulo del catalogo (path). */
   focusModulePath?: string | null;
   /** Datos de la tarjeta parametrizada (ruta, SA, modulo) para precargar el modal. */
   focusTarjeta?: InventarioAutorizacionFocusTarjeta | null;
-  /** Si false, no muestra el boton disparador (solo control externo). */
+  /** Alcance tenantSuperAdmin heredado del formulario padre (p. ej. ConfigInventario / JWT). */
+  alcanceTenantSuperAdminId?: string | null;
+  /** Si false, no muestra los botones disparadores (solo control externo). */
   showTrigger?: boolean;
 };
 
@@ -189,6 +198,26 @@ function mergeJerarquiaSaListas(listas: InventarioJerarquiaSaCounterIndice[][]):
   );
 }
 
+/** Todos los tenantSuperAdmin visibles en la rama (counters + arbol). */
+function extraerSaIdsRamaDesdeOpciones(
+  saArbolRama: InventarioTenantSuperAdminOpcion[],
+  jerarquiaSaCounters: InventarioJerarquiaSaCounterIndice[],
+  anclaId?: string | null,
+): string[] {
+  const ids = new Set<string>();
+  jerarquiaSaCounters.forEach((row) => {
+    const id = normalizarIdApi(row.tenantSuperAdminId);
+    if (id) ids.add(id);
+  });
+  saArbolRama.forEach((t) => {
+    const id = normalizarIdApi(t.iud);
+    if (id) ids.add(id);
+  });
+  if (ids.size) return [...ids];
+  const ancla = normalizarIdApi(anclaId ?? null);
+  return ancla ? [ancla] : [];
+}
+
 function toCheckedMap(ids: string[]): Record<string, boolean> {
   return ids.reduce<Record<string, boolean>>((acc, id) => {
     const norm = normalizarIdApi(id);
@@ -207,6 +236,49 @@ function usuarioIdsDesdeFormulariosConfig(rows: FormRow[]): string[] {
     });
   });
   return [...set];
+}
+
+function resolverRutaIdDesdeTarjetaConfig(tarjeta: InventarioConfigTarjeta, formRows: FormRow[]): string | null {
+  const rid = normalizarIdApi(tarjeta.rutaId);
+  if (rid) {
+    if (formRows.some((row) => normalizarIdApi(row.id) === rid)) return rid;
+    return rid;
+  }
+  const pathKey = normalizePathKey(tarjeta.path || '');
+  if (!pathKey) return null;
+  const byPath = formRows.find((row) => normalizePathKey(row.path) === pathKey);
+  return byPath ? normalizarIdApi(byPath.id) : null;
+}
+
+function tarjetaConfigMatchesNeedle(tarjeta: InventarioConfigTarjeta, needle: string): boolean {
+  const raw = needle.trim();
+  if (!raw) return true;
+  const hay = stripDiacritics(
+    `${tarjeta.titulo} ${tarjeta.descripcion} ${tarjeta.path} ${tarjeta.moduloPath || ''} ${tarjeta.tab || ''} ${tarjeta.id} ${tarjeta.tenantSuperAdminId || ''}`.toLowerCase(),
+  );
+  const tokens = stripDiacritics(raw.toLowerCase())
+    .split(/\s+/)
+    .filter(Boolean);
+  return tokens.every((token) => hay.includes(token));
+}
+
+function buildTarjetaConfigPayload(
+  tarjeta: InventarioConfigTarjeta | null | undefined,
+): {
+  tab?: string | null;
+  moduloPath?: string | null;
+  tituloModulo?: string | null;
+  descripcionModulo?: string | null;
+  iconKey?: string | null;
+} | undefined {
+  if (!tarjeta) return undefined;
+  return {
+    tab: tarjeta.tab ?? null,
+    moduloPath: tarjeta.moduloPath ?? null,
+    tituloModulo: tarjeta.titulo,
+    descripcionModulo: tarjeta.descripcion || null,
+    iconKey: tarjeta.iconKey ?? null,
+  };
 }
 
 function resolveFocusedRouteRow(
@@ -290,20 +362,38 @@ function usuarioPerteneceAlgunaSaMarcada(
 export default function InventarioFormulariosTenantModal({
   modules = [],
   onFormulariosAutorizacionApplied,
-  open: openControlled,
-  onOpenChange,
+  openParametrizacion: openParamControlled,
+  onOpenParametrizacionChange,
+  openAutorizacion: openAuthControlled,
+  onOpenAutorizacionChange,
+  open: openLegacy,
+  onOpenChange: onOpenChangeLegacy,
   focusModulePath = null,
   focusTarjeta = null,
+  alcanceTenantSuperAdminId = null,
   showTrigger = true,
 }: InventarioFormulariosTenantModalProps): React.ReactElement {
-  const [openInternal, setOpenInternal] = useState(false);
-  const open = openControlled ?? openInternal;
-  const setOpen = useCallback(
+  const [openParamInternal, setOpenParamInternal] = useState(false);
+  const [openAuthInternal, setOpenAuthInternal] = useState(false);
+  const openParametrizacion = openParamControlled ?? openParamInternal;
+  const openAutorizacion = openAuthControlled ?? openLegacy ?? openAuthInternal;
+  const modalAbierto = openParametrizacion || openAutorizacion;
+
+  const setOpenParametrizacion = useCallback(
     (next: boolean) => {
-      if (onOpenChange) onOpenChange(next);
-      else setOpenInternal(next);
+      onOpenParametrizacionChange?.(next);
+      if (openParamControlled === undefined) setOpenParamInternal(next);
     },
-    [onOpenChange],
+    [onOpenParametrizacionChange, openParamControlled],
+  );
+
+  const setOpenAutorizacion = useCallback(
+    (next: boolean) => {
+      onOpenAutorizacionChange?.(next);
+      onOpenChangeLegacy?.(next);
+      if (openAuthControlled === undefined && openLegacy === undefined) setOpenAuthInternal(next);
+    },
+    [onOpenAutorizacionChange, onOpenChangeLegacy, openAuthControlled, openLegacy],
   );
   const [needleRutas, setNeedleRutas] = useState('');
   /** Filtro solo para la lista de TenantSuperAdmin (seleccion de rama). */
@@ -324,7 +414,12 @@ export default function InventarioFormulariosTenantModal({
   const [seleccionSaId, setSeleccionSaId] = useState('');
   /** DIOS: puede marcar varios SA; al guardar se aplica la misma autorizacion a cada uno. */
   const [selectedSaIds, setSelectedSaIds] = useState<Record<string, boolean>>({});
+  /** Tenant global de la rama marcados para delimitar alcance de usuarios. */
+  const [selectedTenantGlobales, setSelectedTenantGlobales] = useState<Record<string, boolean>>({});
   const [tarjetasConfig, setTarjetasConfig] = useState<InventarioConfigTarjeta[]>([]);
+  /** Tarjeta elegida en inventarioconfigtarjetas para alcance + ruta en autorizacion. */
+  const [selectedTarjetaConfigId, setSelectedTarjetaConfigId] = useState<string | null>(null);
+  const [needleTarjetasConfig, setNeedleTarjetasConfig] = useState('');
   const [esDios, setEsDios] = useState(false);
   const [meta, setMeta] = useState<{
     alcance?: string;
@@ -371,7 +466,7 @@ export default function InventarioFormulariosTenantModal({
 
   const moduleRouteMatches = useMemo(() => {
     return modules.map((module) => {
-      const { row, kind } = resolveModuleRouteRow(module.path, rows);
+      const { row, kind } = resolveModuleRouteRow(module.path, rows, { tab: module.tab });
       return {
         ...module,
         route: row,
@@ -417,7 +512,13 @@ export default function InventarioFormulariosTenantModal({
 
   const moduloParametrizarTieneRuta = !modules.length || Boolean(moduloParametrizarMatch?.route);
 
+  const tarjetaSeleccionadaAutorizacion = useMemo(() => {
+    if (!selectedTarjetaConfigId) return null;
+    return tarjetasConfig.find((t) => t.id === selectedTarjetaConfigId) ?? null;
+  }, [selectedTarjetaConfigId, tarjetasConfig]);
+
   const tarjetaModuloActiva = useMemo(() => {
+    if (tarjetaSeleccionadaAutorizacion) return tarjetaSeleccionadaAutorizacion;
     if (focusTarjeta?.tarjetaId) {
       const byId = tarjetasConfig.find((t) => t.id === focusTarjeta.tarjetaId);
       if (byId) return byId;
@@ -432,7 +533,7 @@ export default function InventarioFormulariosTenantModal({
       )
       ?? null
     );
-  }, [tarjetasConfig, moduloParametrizarPath, moduloParametrizarInfo, focusTarjeta?.tarjetaId]);
+  }, [tarjetasConfig, moduloParametrizarPath, moduloParametrizarInfo, focusTarjeta?.tarjetaId, tarjetaSeleccionadaAutorizacion]);
 
   const refreshTarjetasConfig = useCallback(async (saQuery?: string) => {
     const saParam = saQuery && esIdApiValido(saQuery) ? normalizePublicIdForApi(saQuery) : undefined;
@@ -481,6 +582,15 @@ export default function InventarioFormulariosTenantModal({
       setUsuarios(mergedUsuarios);
       setSaArbolRama(mergedSaArbol);
       setJerarquiaSaCounters(mergedJerarquia);
+      setSelectedTenantGlobales((prev) => {
+        const next: Record<string, boolean> = {};
+        mergedTg.forEach((tg) => {
+          const id = normalizarIdApi(tg.iud);
+          if (!id) return;
+          next[id] = prev[id] ?? true;
+        });
+        return next;
+      });
       setSelectedUsuarios((prev) => {
         const mergedIds = new Set(mergedUsuarios.map((u) => u.iud));
         const next: Record<string, boolean> = {};
@@ -522,11 +632,64 @@ export default function InventarioFormulariosTenantModal({
     }
   }, []);
 
+  const aplicarAlcanceDesdeTarjetaConfig = useCallback(
+    async (tarjeta: InventarioConfigTarjeta) => {
+      setSelectedTarjetaConfigId(tarjeta.id);
+
+      const saId = normalizarIdApi(tarjeta.tenantSuperAdminId);
+      if (saId) {
+        const preview = await inventarioService.obtenerFormulariosAutorizacionOpciones(saId);
+        const branchSaIds = extraerSaIdsRamaDesdeOpciones(
+          preview.saArbolRama || [],
+          preview.jerarquiaSaCounters || [],
+          saId,
+        );
+        const saTargets = branchSaIds.length ? branchSaIds : [saId];
+        setSelectedSaIds(Object.fromEntries(saTargets.map((id) => [id, true])));
+        setSeleccionSaId(saId);
+        await refreshRamasSeleccionadas(saTargets);
+        await refreshTarjetasConfig(saId);
+      }
+
+      const rutaId = resolverRutaIdDesdeTarjetaConfig(tarjeta, rows);
+      if (rutaId) {
+        setSelectedRutas({ [rutaId]: true });
+        setRutaContextoId(rutaId);
+        const row = rows.find((r) => normalizarIdApi(r.id) === rutaId);
+        if (row) {
+          const usuarioIds = usuarioIdsDesdeFormulariosConfig([row]);
+          if (usuarioIds.length) {
+            setSelectedUsuarios((prev) => {
+              const next = { ...prev };
+              usuarioIds.forEach((uid) => {
+                next[uid] = true;
+              });
+              return next;
+            });
+          }
+        }
+      }
+
+      if (tarjeta.moduloPath) {
+        const mod = modules.find(
+          (m) => normalizePathKey(m.path) === normalizePathKey(tarjeta.moduloPath || ''),
+        );
+        if (mod) setModuloParametrizarPath(mod.path);
+      } else if (tarjeta.path) {
+        const mod = modules.find((m) => normalizePathKey(m.path) === normalizePathKey(tarjeta.path));
+        if (mod) setModuloParametrizarPath(mod.path);
+      }
+    },
+    [rows, modules, refreshRamasSeleccionadas, refreshTarjetasConfig],
+  );
+
   /** Carga catalogo de formularios y lista de SA (no pisa la seleccion multiple). */
   const loadCatalogo = useCallback(async () => {
     setLoading(true);
     try {
-      const saTarjeta = normalizarIdApi(focusTarjeta?.tenantSuperAdminId ?? null);
+      const saTarjeta = normalizarIdApi(
+        focusTarjeta?.tenantSuperAdminId ?? alcanceTenantSuperAdminId ?? null,
+      );
       const data = await inventarioService.obtenerFormulariosAutorizacionOpciones(saTarjeta || undefined);
       const formRows: FormRow[] = (data.formularios || []).map((f) => ({
         id: f.id,
@@ -563,7 +726,15 @@ export default function InventarioFormulariosTenantModal({
 
       const anclaMeta = data.meta?.tenantSuperAdminAnclaId ? String(data.meta.tenantSuperAdminAnclaId) : '';
       const ancla = saTarjeta || anclaMeta;
-      if (ancla) {
+      const branchSaIds = extraerSaIdsRamaDesdeOpciones(
+        data.saArbolRama || [],
+        data.jerarquiaSaCounters || [],
+        ancla,
+      );
+      if (branchSaIds.length > 0) {
+        setSelectedSaIds(Object.fromEntries(branchSaIds.map((id) => [id, true])));
+        setSeleccionSaId(ancla || branchSaIds[0]);
+      } else if (ancla) {
         setSeleccionSaId(ancla);
         setSelectedSaIds({ [ancla]: true });
       } else {
@@ -571,10 +742,21 @@ export default function InventarioFormulariosTenantModal({
         setSelectedSaIds({});
       }
 
-      await refreshTarjetasConfig(ancla || undefined);
+      await refreshTarjetasConfig(ancla || branchSaIds[0] || undefined);
 
-      if (ancla) {
-        await refreshRamasSeleccionadas([ancla]);
+      const focusTarjetaId = normalizarIdApi(focusTarjeta?.tarjetaId);
+      if (focusTarjetaId) {
+        setSelectedTarjetaConfigId(focusTarjetaId);
+      }
+
+      if (branchSaIds.length > 0) {
+        await refreshRamasSeleccionadas(branchSaIds);
+      } else if (ancla) {
+        setTenantGlobales(data.tenantGlobales || []);
+        setUsuarios(data.usuarios || []);
+        setSelectedTenantGlobales(
+          toCheckedMap((data.tenantGlobales || []).map((t) => t.iud)),
+        );
         if (usuariosParametrizados.length) {
           setSelectedUsuarios((prev) => {
             const next = { ...prev };
@@ -587,6 +769,9 @@ export default function InventarioFormulariosTenantModal({
       } else {
         setTenantGlobales(data.tenantGlobales || []);
         setUsuarios(data.usuarios || []);
+        setSelectedTenantGlobales(
+          toCheckedMap((data.tenantGlobales || []).map((t) => t.iud)),
+        );
       }
 
       if (!data.policy?.esDios) {
@@ -598,10 +783,10 @@ export default function InventarioFormulariosTenantModal({
     } finally {
       setLoading(false);
     }
-  }, [focusModulePath, focusTarjeta, modules, refreshTarjetasConfig, refreshRamasSeleccionadas]);
+  }, [focusModulePath, focusTarjeta, alcanceTenantSuperAdminId, modules, refreshTarjetasConfig, refreshRamasSeleccionadas]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!modalAbierto) return;
     setNeedleRutas('');
     setSeleccionSaId('');
     setSelectedSaIds({});
@@ -611,10 +796,13 @@ export default function InventarioFormulariosTenantModal({
     setNeedleSa('');
     setNeedleTenantGlobal('');
     setNeedleUsuario('');
+    setNeedleTarjetasConfig('');
+    setSelectedTarjetaConfigId(null);
+    setSelectedTenantGlobales({});
     const catalogMatch = resolveCatalogPathForFocus(focusTarjeta, focusModulePath, modules);
     setModuloParametrizarPath(catalogMatch);
     void loadCatalogo();
-  }, [open, loadCatalogo, focusModulePath, focusTarjeta, modules]);
+  }, [modalAbierto, loadCatalogo, focusModulePath, focusTarjeta, modules]);
 
   const usarSaMultiSelect = esDios && tenantSuperAdmins.length > 0;
 
@@ -622,6 +810,39 @@ export default function InventarioFormulariosTenantModal({
     () => Object.entries(selectedSaIds).filter(([, v]) => v).map(([k]) => k),
     [selectedSaIds],
   );
+
+  const filteredTarjetasConfigAuth = useMemo(() => {
+    const saSet = new Set(saIdsMarcados.map((id) => normalizarIdApi(id)).filter(Boolean));
+    return tarjetasConfig.filter((tarjeta) => {
+      if (saSet.size) {
+        const saTarjeta = normalizarIdApi(tarjeta.tenantSuperAdminId);
+        if (saTarjeta && !saSet.has(saTarjeta)) return false;
+      }
+      return tarjetaConfigMatchesNeedle(tarjeta, needleTarjetasConfig);
+    });
+  }, [tarjetasConfig, saIdsMarcados, needleTarjetasConfig]);
+
+  useEffect(() => {
+    if (!openAutorizacion) return;
+    const saQuery = saIdsMarcados[0] || seleccionSaId || undefined;
+    void refreshTarjetasConfig(saQuery);
+  }, [openAutorizacion, saIdsMarcados, seleccionSaId, refreshTarjetasConfig]);
+
+  useEffect(() => {
+    if (!openAutorizacion || !tarjetasConfig.length) return;
+    const focusId = normalizarIdApi(focusTarjeta?.tarjetaId);
+    if (!focusId) return;
+    const tarjeta = tarjetasConfig.find((t) => normalizarIdApi(t.id) === focusId);
+    if (!tarjeta) return;
+    if (selectedTarjetaConfigId === tarjeta.id) return;
+    void aplicarAlcanceDesdeTarjetaConfig(tarjeta);
+  }, [
+    openAutorizacion,
+    tarjetasConfig,
+    focusTarjeta?.tarjetaId,
+    selectedTarjetaConfigId,
+    aplicarAlcanceDesdeTarjetaConfig,
+  ]);
 
   const resolverSaIdsParaGuardar = (): string[] => {
     const normList = (ids: string[]) =>
@@ -684,6 +905,7 @@ export default function InventarioFormulariosTenantModal({
       if (checked) setSeleccionSaId(id);
       else if (seleccionSaId === id) setSeleccionSaId(marcados[marcados.length - 1] || '');
       void refreshRamasSeleccionadas(marcados);
+      void refreshTarjetasConfig(marcados[marcados.length - 1] || undefined);
       return next;
     });
   };
@@ -723,10 +945,60 @@ export default function InventarioFormulariosTenantModal({
     void refreshRamasSeleccionadas([]);
   };
 
+  const usuariosEnAlcanceMarcado = useMemo(() => {
+    const saSet = new Set(saIdsMarcados.map((id) => normalizarIdApi(id)).filter(Boolean));
+    const tgMarcados = Object.entries(selectedTenantGlobales)
+      .filter(([, v]) => v)
+      .map(([k]) => normalizarIdApi(k))
+      .filter(Boolean);
+    const tgSet = new Set(tgMarcados);
+    const hayTgEnRama = tenantGlobales.length > 0;
+
+    return usuarios.filter((u) => {
+      const uSa = normalizarIdApi(u.tenantSuperAdmin);
+      const uTg = normalizarIdApi(u.tenantGlobal);
+      if (saSet.size && uSa && !saSet.has(uSa)) return false;
+      if (hayTgEnRama && tgSet.size > 0 && uTg && !tgSet.has(uTg)) return false;
+      return true;
+    });
+  }, [usuarios, saIdsMarcados, selectedTenantGlobales, tenantGlobales.length]);
+
   const filteredUsuarios = useMemo(
-    () => usuarios.filter((u) => matchesUsuarioNombreCorreo(u, needleUsuario)),
-    [usuarios, needleUsuario],
+    () => usuariosEnAlcanceMarcado.filter((u) => matchesUsuarioNombreCorreo(u, needleUsuario)),
+    [usuariosEnAlcanceMarcado, needleUsuario],
   );
+
+  const rutaIdsMarcados = useMemo(
+    () => Object.entries(selectedRutas).filter(([, v]) => v).map(([k]) => k),
+    [selectedRutas],
+  );
+
+  const resolverAlcanceDesdeFormulario = useCallback((): string[] => {
+    const fromFocus = normalizarIdApi(focusTarjeta?.tenantSuperAdminId ?? null);
+    const fromProp = normalizarIdApi(alcanceTenantSuperAdminId ?? null);
+    const fromMeta = normalizarIdApi(
+      meta?.tenantSuperAdminAnclaId || meta?.jwtTenantSuperAdminCanonicoId || '',
+    );
+    const id = fromFocus || fromProp || fromMeta;
+    return id ? [id] : [];
+  }, [
+    focusTarjeta?.tenantSuperAdminId,
+    alcanceTenantSuperAdminId,
+    meta?.tenantSuperAdminAnclaId,
+    meta?.jwtTenantSuperAdminCanonicoId,
+  ]);
+
+  const alcanceParametrizacionIds = useMemo(
+    () => resolverAlcanceDesdeFormulario(),
+    [resolverAlcanceDesdeFormulario],
+  );
+
+  const alcanceParametrizacionLabel = useMemo(() => {
+    const id = alcanceParametrizacionIds[0];
+    if (!id) return null;
+    const sa = tenantSuperAdmins.find((t) => normalizarIdApi(t.iud) === id);
+    return sa?.label || `TenantSuperAdmin …${id.slice(-8)}`;
+  }, [alcanceParametrizacionIds, tenantSuperAdmins]);
 
   const mostrarSelectorSa =
     tenantSuperAdmins.length > 0 &&
@@ -736,6 +1008,9 @@ export default function InventarioFormulariosTenantModal({
       meta?.inventarioFormulariosModoAlcance === 'dios_param_jwt' ||
       meta?.inventarioFormulariosModoAlcance === 'dios_param_propietario' ||
       meta?.inventarioFormulariosModoAlcance === 'dios_multi_sa');
+
+  const mostrarSelectorSaEnAutorizacion =
+    mostrarSelectorSa && alcanceParametrizacionIds.length === 0;
 
   const toggleRuta = (id: string, checked: boolean): void => {
     setSelectedRutas((prev) => ({ ...prev, [id]: checked }));
@@ -760,6 +1035,34 @@ export default function InventarioFormulariosTenantModal({
 
   const toggleUsuario = (id: string, checked: boolean): void => {
     setSelectedUsuarios((prev) => ({ ...prev, [id]: checked }));
+  };
+
+  const toggleTenantGlobal = (id: string, checked: boolean): void => {
+    setSelectedTenantGlobales((prev) => ({ ...prev, [id]: checked }));
+  };
+
+  const selectAllTenantGlobalVisible = (checked: boolean): void => {
+    const next: Record<string, boolean> = { ...selectedTenantGlobales };
+    filteredTenantGlobales.forEach((t) => {
+      next[t.iud] = checked;
+    });
+    setSelectedTenantGlobales(next);
+  };
+
+  const selectAllSaArbolVisible = (checked: boolean): void => {
+    const ids = saArbolRama.map((t) => normalizarIdApi(t.iud)).filter(Boolean);
+    if (!ids.length) return;
+    setSelectedSaIds((prev) => {
+      const next = { ...prev };
+      ids.forEach((id) => {
+        next[id] = checked;
+      });
+      const marcados = Object.entries(next)
+        .filter(([, v]) => v)
+        .map(([k]) => k);
+      void refreshRamasSeleccionadas(marcados);
+      return next;
+    });
   };
 
   const selectAllRutasVisible = (checked: boolean): void => {
@@ -802,25 +1105,10 @@ export default function InventarioFormulariosTenantModal({
     };
   };
 
-  const guardar = async (): Promise<void> => {
-    if (!esDios) {
-      toast.error('Se requiere rol DIOS para guardar formulariosConfig.');
-      return;
-    }
-    const payload = buildPayload();
-    if (modules.length > 0 && !moduloParametrizarPath) {
-      toast.warning('Marca que modulo de inventario vas a parametrizar (referencia arriba a la izquierda).');
-      return;
-    }
-    if (!payload.rutas.length) {
-      toast.warning('Selecciona al menos un formulario o subformulario.');
-      return;
-    }
-    if (!payload.usuarioIds.length) {
-      toast.warning('Selecciona al menos un usuario autorizado (rol con tenantSuperAdmin en jerarquia corporativa).');
-      return;
-    }
-
+  const ejecutarGuardado = async (
+    payload: InventarioFormulariosTenantSavePayload,
+    opts: { cerrarAutorizacion?: boolean; cerrarParametrizacion?: boolean } = {},
+  ): Promise<void> => {
     const saIdsGuardar = resolverSaIdsParaGuardar();
     if (esDios && !saIdsGuardar.length) {
       toast.warning(
@@ -850,14 +1138,16 @@ export default function InventarioFormulariosTenantModal({
       const moduloSeleccionado = modules.find(
         (m) => normalizePathKey(m.path) === normalizePathKey(moduloParametrizarPath || ''),
       );
-      const tarjetaConfigBody = moduloSeleccionado
-        ? {
-            tab: moduloSeleccionado.tab || null,
-            moduloPath: moduloSeleccionado.path,
-            tituloModulo: moduloSeleccionado.title,
-            descripcionModulo: moduloSeleccionado.description || null,
-          }
-        : undefined;
+      const tarjetaConfigBody =
+        buildTarjetaConfigPayload(tarjetaSeleccionadaAutorizacion || tarjetaModuloActiva)
+        ?? (moduloSeleccionado
+          ? {
+              tab: moduloSeleccionado.tab || null,
+              moduloPath: moduloSeleccionado.path,
+              tituloModulo: moduloSeleccionado.title,
+              descripcionModulo: moduloSeleccionado.description || null,
+            }
+          : undefined);
 
       let totalActualizadas = 0;
       const todosFallos: Array<{ rutaId: string; ok: boolean; error?: string }> = [];
@@ -892,7 +1182,9 @@ export default function InventarioFormulariosTenantModal({
         toast.success(
           saTargets.length > 1
             ? `Actualizadas ${totalActualizadas} ruta(s) en ${saTargets.length} tenant(s) SuperAdmin.`
-            : `Actualizadas ${totalActualizadas} ruta(s) via inventario.`,
+            : tarjetaConfigBody && !opts.cerrarAutorizacion
+              ? `Parametrizacion de menu guardada (${totalActualizadas} ruta(s)).`
+              : `Actualizadas ${totalActualizadas} ruta(s) via inventario.`,
         );
       }
       if (fallos.length) {
@@ -902,7 +1194,10 @@ export default function InventarioFormulariosTenantModal({
         onFormulariosAutorizacionApplied?.();
         await refreshTarjetasConfig(seleccionSaId || saIdsGuardar[0]);
       }
-      if (fallos.length === 0 && totalActualizadas > 0) setOpen(false);
+      if (fallos.length === 0 && totalActualizadas > 0) {
+        if (opts.cerrarAutorizacion) setOpenAutorizacion(false);
+        if (opts.cerrarParametrizacion) setOpenParametrizacion(false);
+      }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al guardar';
       toast.error(msg);
@@ -911,261 +1206,469 @@ export default function InventarioFormulariosTenantModal({
     }
   };
 
-  return (
-    <>
-      {showTrigger ? (
-        <Button type="button" variant="outline" size="sm" className="shrink-0 gap-2" onClick={() => setOpen(true)}>
-          <Link2 className="h-4 w-4" />
-          Autorizacion formularios
-        </Button>
+  const puedeGuardarParametrizacion = Boolean(
+    esDios
+    && !loading
+    && !saving
+    && (!modules.length || moduloParametrizarPath)
+    && rutaIdsMarcados.length > 0
+    && alcanceParametrizacionIds.length > 0,
+  );
+
+  const guardarParametrizacion = async (): Promise<void> => {
+    if (!esDios) {
+      toast.error('Se requiere rol DIOS para guardar parametrizacion de menu.');
+      return;
+    }
+    if (modules.length > 0 && !moduloParametrizarPath) {
+      toast.warning('Marca que modulo de inventario vas a parametrizar.');
+      return;
+    }
+    const rutaIds = rutaIdsMarcados;
+    if (!rutaIds.length) {
+      toast.warning('Selecciona al menos un formulario o subformulario.');
+      return;
+    }
+
+    const saIdsGuardar = alcanceParametrizacionIds;
+    if (!saIdsGuardar.length) {
+      toast.warning(
+        'Sin alcance tenantSuperAdmin desde ConfigInventario. Abre el modal desde una tarjeta o con sesion que tenga ancla en el JWT.',
+      );
+      return;
+    }
+
+    const moduloSeleccionado = modules.find(
+      (m) => normalizePathKey(m.path) === normalizePathKey(moduloParametrizarPath || ''),
+    );
+    const tarjetaConfig = moduloSeleccionado
+      ? {
+          tab: moduloSeleccionado.tab || null,
+          moduloPath: moduloSeleccionado.path,
+          tituloModulo: moduloSeleccionado.title,
+          descripcionModulo: moduloSeleccionado.description || null,
+        }
+      : tarjetaSeleccionadaAutorizacion
+        ? buildTarjetaConfigPayload(tarjetaSeleccionadaAutorizacion)
+        : undefined;
+
+    if (!tarjetaConfig?.moduloPath && !tarjetaConfig?.tituloModulo) {
+      toast.warning('No se pudo construir la metadata del modulo para la tarjeta.');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      let totalUpserted = 0;
+      for (const saId of saIdsGuardar) {
+        const { upserted } = await inventarioService.guardarParametrizacionTarjeta({
+          rutaIds,
+          tenantSuperAdminId: saId,
+          tarjetaConfig,
+        });
+        totalUpserted += upserted;
+      }
+      if (totalUpserted > 0) {
+        toast.success(
+          `Parametrizacion guardada en inventarioconfigtarjetas (${totalUpserted} tarjeta(s)). Ahora abre Autorizacion de formulario para asignar usuarios.`,
+        );
+        onFormulariosAutorizacionApplied?.();
+        await refreshTarjetasConfig(saIdsGuardar[0]);
+      } else {
+        toast.info('Sin cambios en inventarioconfigtarjetas.');
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Error al guardar parametrizacion';
+      toast.error(msg);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const guardar = async (): Promise<void> => {
+    if (!esDios) {
+      toast.error('Se requiere rol DIOS para guardar formulariosConfig.');
+      return;
+    }
+    const payload = buildPayload();
+    if (!payload.rutas.length && tarjetaSeleccionadaAutorizacion) {
+      const rutaIdTarjeta = resolverRutaIdDesdeTarjetaConfig(tarjetaSeleccionadaAutorizacion, rows);
+      if (rutaIdTarjeta) {
+        const row = rows.find((r) => normalizarIdApi(r.id) === rutaIdTarjeta);
+        payload.rutas = [{
+          rutaId: rutaIdTarjeta,
+          path: row?.path || tarjetaSeleccionadaAutorizacion.path || '',
+          name: row?.name || tarjetaSeleccionadaAutorizacion.titulo || '',
+          tipoNodo: row?.tipoNodo || '',
+        }];
+      }
+    }
+    if (
+      modules.length > 0
+      && !moduloParametrizarPath
+      && !selectedTarjetaConfigId
+      && !tarjetaSeleccionadaAutorizacion
+    ) {
+      toast.warning('Marca que modulo de inventario vas a parametrizar o elige una tarjeta guardada.');
+      return;
+    }
+    if (!payload.rutas.length) {
+      toast.warning('Selecciona al menos un formulario o subformulario.');
+      return;
+    }
+    if (!payload.usuarioIds.length) {
+      toast.warning('Selecciona al menos un usuario autorizado (rol con tenantSuperAdmin en jerarquia corporativa).');
+      return;
+    }
+
+    await ejecutarGuardado(payload, { cerrarAutorizacion: true });
+  };
+
+  const panelParametrizacionMenu = (
+    <div className="flex min-h-0 flex-col gap-2">
+      {alcanceParametrizacionLabel ? (
+        <Alert className="shrink-0 border-border bg-muted/30 py-2">
+          <AlertTitle className="text-xs font-medium">Alcance (desde ConfigInventario)</AlertTitle>
+          <AlertDescription className="text-[11px] leading-relaxed">
+            <span className="font-medium text-foreground">{alcanceParametrizacionLabel}</span>
+            <span className="mt-0.5 block font-mono text-[10px] text-muted-foreground">
+              {alcanceParametrizacionIds[0]}
+            </span>
+          </AlertDescription>
+        </Alert>
+      ) : esDios ? (
+        <Alert className="shrink-0 border-amber-500/50 bg-amber-50/80 py-2 text-amber-950 dark:bg-amber-950/20 dark:text-amber-100">
+          <AlertTitle className="text-xs font-medium">Sin alcance en sesion</AlertTitle>
+          <AlertDescription className="text-[11px] leading-relaxed">
+            Abre Parametrizacion menu desde una tarjeta de ConfigInventario o con un JWT que incluya tenantSuperAdmin.
+          </AlertDescription>
+        </Alert>
       ) : null}
 
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="flex max-h-[92vh] w-[min(96vw,56rem)] max-w-4xl flex-col gap-0 overflow-hidden p-0">
-          <DialogHeader className="shrink-0 border-b border-border px-6 py-4">
-            <DialogTitle>Formularios, subformularios y autorizados</DialogTitle>
-            <DialogDescription>
-              Datos desde{' '}
-              <code className="rounded bg-muted px-1 text-xs">GET /api/inventario/config/formularios-autorizacion/opciones</code>{' '}
-              (<code className="rounded bg-muted px-1 text-xs">?tenantSuperAdminId=</code> opcional para elegir rama SA). Guardar
-              con{' '}
-              <code className="rounded bg-muted px-1 text-xs">PUT /api/inventario/config/formularios-autorizacion</code> (rol DIOS)
-              incluyendo <code className="rounded bg-muted px-1 text-xs">tenantSuperAdminId</code> en el cuerpo cuando aplica.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
-            <div className="grid gap-4 md:grid-cols-2 md:items-start">
-            <div className="flex min-h-0 flex-col gap-2">
-              {modules.length > 0 ? (
-                <div className="rounded-md border border-border bg-muted/30 p-2">
-                  <p className="mb-1 text-[11px] font-medium text-foreground">
-                    1. Modulo de inventario a parametrizar (obligatorio para guardar)
-                  </p>
-                  <p className="mb-2 text-[10px] text-muted-foreground">
-                    Marca un solo modulo: define el contexto del menu. Luego elige la(s) fila(s) reales en el listado de abajo y
-                    los usuarios a la derecha.
-                  </p>
-                  <div className="max-h-[min(220px,40vh)] space-y-1.5 overflow-y-auto pr-1">
-                    {moduleRouteMatches.map((item, idx) => {
-                      const estadoEtiqueta =
-                        item.matchKind === 'exact'
-                          ? 'Ruta exacta'
-                          : item.matchKind === 'fuzzy'
-                            ? 'Ruta sugerida'
-                            : 'Sin coincidencia en listado';
-                      const estadoClass =
-                        item.matchKind === 'none'
-                          ? 'text-amber-700 dark:text-amber-300'
-                          : item.matchKind === 'fuzzy'
-                            ? 'text-sky-700 dark:text-sky-300'
-                            : 'text-emerald-700 dark:text-emerald-400';
-                      const mid = `modulo-param-${idx}`;
-                      const marcado = moduloParametrizarPath === item.path;
-                      return (
-                        <div
-                          key={item.path}
-                          className={`rounded border px-2 py-1.5 text-[10px] ${
-                            marcado ? 'border-primary bg-primary/5 ring-1 ring-primary/25' : 'border-border/60 bg-background/50'
-                          }`}
-                        >
-                          <div className="flex items-start gap-2">
-                            <Checkbox
-                              checked={marcado}
-                              onCheckedChange={(v) => toggleModuloParametrizar(item.path, v === true)}
-                              className="mt-0.5"
-                              id={mid}
-                            />
-                            <div className="min-w-0 flex-1">
-                              <label htmlFor={mid} className="cursor-pointer">
-                                <span className="font-medium text-foreground">{item.title}</span>
-                                <span className="mt-0.5 block break-all font-mono text-muted-foreground">{item.path}</span>
-                              </label>
-                              {item.route ? (
-                                <span className="mt-0.5 block break-all font-mono text-[10px] text-muted-foreground">
-                                  Posible fila en listado: {item.route.path}
-                                </span>
-                              ) : (
-                                <span className="mt-0.5 block text-[10px] text-amber-700 dark:text-amber-300">
-                                  Pendiente: parametriza primero la ruta/path desde ConfigInventario.
-                                </span>
-                              )}
-                            </div>
-                            <span className={`shrink-0 font-medium ${estadoClass}`}>{estadoEtiqueta}</span>
-                          </div>
-                        </div>
-                      );
-                    })}
+      {modules.length > 0 ? (
+        <div className="rounded-md border border-border bg-muted/30 p-2">
+          <p className="mb-1 text-[11px] font-medium text-foreground">
+            1. Modulo de inventario a parametrizar (obligatorio para guardar)
+          </p>
+          <p className="mb-2 text-[10px] text-muted-foreground">
+            Marca un solo modulo: define el contexto del menu. Luego elige la(s) fila(s) reales en el listado de abajo.
+          </p>
+          <div className="max-h-[min(220px,40vh)] space-y-1.5 overflow-y-auto pr-1">
+            {moduleRouteMatches.map((item, idx) => {
+              const estadoEtiqueta =
+                item.matchKind === 'exact'
+                  ? 'Ruta exacta'
+                  : item.matchKind === 'fuzzy'
+                    ? 'Ruta sugerida'
+                    : 'Sin coincidencia en listado';
+              const estadoClass =
+                item.matchKind === 'none'
+                  ? 'text-amber-700 dark:text-amber-300'
+                  : item.matchKind === 'fuzzy'
+                    ? 'text-sky-700 dark:text-sky-300'
+                    : 'text-emerald-700 dark:text-emerald-400';
+              const mid = `modulo-param-${idx}`;
+              const marcado = moduloParametrizarPath === item.path;
+              return (
+                <div
+                  key={item.path}
+                  className={`rounded border px-2 py-1.5 text-[10px] ${
+                    marcado ? 'border-primary bg-primary/5 ring-1 ring-primary/25' : 'border-border/60 bg-background/50'
+                  }`}
+                >
+                  <div className="flex items-start gap-2">
+                    <Checkbox
+                      checked={marcado}
+                      onCheckedChange={(v) => toggleModuloParametrizar(item.path, v === true)}
+                      className="mt-0.5"
+                      id={mid}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <label htmlFor={mid} className="cursor-pointer">
+                        <span className="font-medium text-foreground">{item.title}</span>
+                        <span className="mt-0.5 block break-all font-mono text-muted-foreground">{item.path}</span>
+                      </label>
+                      {item.route ? (
+                        <span className="mt-0.5 block break-all font-mono text-[10px] text-muted-foreground">
+                          Posible fila en listado: {item.route.path}
+                        </span>
+                      ) : (
+                        <span className="mt-0.5 block text-[10px] text-amber-700 dark:text-amber-300">
+                          Sin coincidencia automatica: busca y marca el formulario correcto en el listado de abajo.
+                        </span>
+                      )}
+                    </div>
+                    <span className={`shrink-0 font-medium ${estadoClass}`}>{estadoEtiqueta}</span>
                   </div>
                 </div>
-              ) : null}
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
 
-              <div className="flex flex-wrap items-end justify-between gap-2">
-                <Label htmlFor="filtro-formularios-inventario" className="text-sm font-medium">
-                  2. Formularios inventario (name y path)
-                </Label>
-                <Button type="button" variant="ghost" size="sm" className="h-8 text-xs" onClick={() => selectAllRutasVisible(true)}>
-                  Marcar visibles
-                </Button>
-              </div>
-              <Input
-                id="filtro-formularios-inventario"
-                name="filtro-formularios-inventario"
-                autoComplete="off"
-                value={needleRutas}
-                onChange={(e) => setNeedleRutas(e.target.value)}
-                placeholder="Name, path, tipo de nodo o id (varias palabras)..."
-                disabled={loading}
-              />
-              <p className="text-[11px] text-muted-foreground">
-                El panel derecho muestra la <span className="font-medium">ultima</span> ruta que marques aqui, junto con el modulo
-                elegido arriba.
-              </p>
-              <p className="text-[11px] text-muted-foreground">
-                {needleRutas.trim()
-                  ? `${filteredRutas.length} visibles con filtro · ${rows.length} en catalogo`
-                  : `${rows.length} registro(s) en catalogo`}
-                {meta?.totalRutasActivas != null ? ` · ${meta.totalRutasActivas} rutas activas totales` : ''}
-                {meta?.totalFormulariosSubformularios != null
-                  ? ` · ${meta.totalFormulariosSubformularios} candidato(s) formulario/subformulario`
-                  : ''}
-                {meta?.origenResolucion ? ` · Origen: ${meta.origenResolucion}` : ''}
-                {meta?.alcance === 'todos_formularios'
-                  ? '. Alcance: todos los candidatos (heuristica inventario sin filas).'
-                  : meta?.alcance === 'inventario'
-                    ? '. Alcance: heuristica inventario.'
-                    : meta?.alcance === 'sin_datos'
-                      ? '. Sin candidatos en BD.'
-                      : ''}
-              </p>
-              <ScrollArea key={needleRutas} className="h-[min(320px,38vh)] rounded-md border border-border">
-                <div className="space-y-0 p-3">
-                  {loading ? (
-                    <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Cargando...
-                    </div>
-                  ) : filteredRutas.length === 0 ? (
-                    <p className="py-6 text-center text-sm text-muted-foreground">
-                      {rows.length === 0 ? 'Sin formularios de inventario en catalogo.' : 'Sin coincidencias con el filtro.'}
-                    </p>
-                  ) : (
-                    filteredRutas.map((row) => {
-                      const esContexto = rutaContextoId === row.id;
-                      return (
-                        <div
-                          key={row.id}
-                          className={`flex flex-col gap-1 border-b border-border/60 py-2 last:border-0 ${
-                            esContexto ? 'rounded-md bg-primary/5 px-1 ring-1 ring-primary/25' : ''
-                          }`}
-                        >
-                          <div className="flex items-start gap-2">
-                            <Checkbox
-                              checked={Boolean(selectedRutas[row.id])}
-                              onCheckedChange={(v) => toggleRuta(row.id, v === true)}
-                              className="mt-1"
-                              id={`ruta-${row.id}`}
-                            />
-                            <label htmlFor={`ruta-${row.id}`} className="min-w-0 flex-1 cursor-pointer text-sm">
-                              <span className="font-medium text-foreground">{row.name}</span>
-                              <span className="ml-2 rounded bg-muted px-1.5 text-[10px] uppercase text-muted-foreground">
-                                {row.tipoNodo}
-                              </span>
-                              <span className="mt-0.5 block break-all font-mono text-xs text-muted-foreground">{row.path}</span>
-                            </label>
-                          </div>
-                          <div className="flex justify-end pl-7">
-                            <button
-                              type="button"
-                              className="text-[10px] font-medium text-primary underline-offset-2 hover:underline"
-                              onClick={() => {
-                                setSelectedRutas({ [row.id]: true });
-                                setRutaContextoId(row.id);
-                              }}
-                            >
-                              Usar solo esta ruta en el guardado
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-              </ScrollArea>
-              {meta?.ayuda ? (
-                <Alert variant="default" className="border-amber-500/50 bg-amber-50/80 text-amber-950 dark:bg-amber-950/20 dark:text-amber-100">
-                  <AlertTitle className="text-sm">Como asociar rutas</AlertTitle>
-                  <AlertDescription className="text-xs leading-relaxed">{meta.ayuda}</AlertDescription>
-                </Alert>
-              ) : null}
+      {modules.length > 0 && !moduloParametrizarPath ? (
+        <Alert className="shrink-0 border-amber-500/50 bg-amber-50/80 py-2 text-amber-950 dark:bg-amber-950/20 dark:text-amber-100">
+          <AlertTitle className="text-xs font-medium">Falta elegir modulo</AlertTitle>
+          <AlertDescription className="text-[11px] leading-relaxed">
+            Marca un modulo arriba para poder guardar la parametrizacion del menu.
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
+      {modules.length > 0 && moduloParametrizarPath && !moduloParametrizarTieneRuta ? (
+        <Alert className="shrink-0 border-amber-500/50 bg-amber-50/80 py-2 text-amber-950 dark:bg-amber-950/20 dark:text-amber-100">
+          <AlertTitle className="text-xs font-medium">Sin coincidencia automatica de ruta</AlertTitle>
+          <AlertDescription className="text-[11px] leading-relaxed">
+            El path del catalogo no coincide con ninguna fila del listado. Usa el buscador de abajo, marca el
+            formulario real y guarda la parametrizacion; despues asigna usuarios en Autorizacion de formulario.
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
+      {moduloParametrizarInfo ? (
+        <Alert className="shrink-0 border-border bg-muted/30 py-2">
+          <AlertTitle className="text-xs font-medium">Modulo marcado para parametrizar</AlertTitle>
+          <AlertDescription className="space-y-1 text-[11px] leading-relaxed">
+            <span className="font-medium text-foreground">{moduloParametrizarInfo.title}</span>
+            <span className="block break-all font-mono text-[10px] text-muted-foreground">{moduloParametrizarInfo.path}</span>
+            {tarjetaModuloActiva ? (
+              <span className="block text-[10px] text-emerald-700 dark:text-emerald-400">
+                Tarjeta en menu: registrada (id {tarjetaModuloActiva.id.slice(-8)}).
+              </span>
+            ) : (
+              <span className="block text-[10px] text-amber-800 dark:text-amber-300">
+                Sin tarjeta en menu: guarda parametrizacion aqui; luego autoriza usuarios en Autorizacion de formulario.
+              </span>
+            )}
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <Label htmlFor="filtro-formularios-inventario" className="text-sm font-medium">
+          2. Formularios inventario (name y path)
+        </Label>
+        <Button type="button" variant="ghost" size="sm" className="h-8 text-xs" onClick={() => selectAllRutasVisible(true)}>
+          Marcar visibles
+        </Button>
+      </div>
+      <Input
+        id="filtro-formularios-inventario"
+        name="filtro-formularios-inventario"
+        autoComplete="off"
+        value={needleRutas}
+        onChange={(e) => setNeedleRutas(e.target.value)}
+        placeholder="Name, path, tipo de nodo o id (varias palabras)..."
+        disabled={loading}
+      />
+      <p className="text-[11px] text-muted-foreground">
+        {needleRutas.trim()
+          ? `${filteredRutas.length} visibles con filtro · ${rows.length} en catalogo`
+          : `${rows.length} registro(s) en catalogo`}
+        {meta?.totalRutasActivas != null ? ` · ${meta.totalRutasActivas} rutas activas totales` : ''}
+        {meta?.totalFormulariosSubformularios != null
+          ? ` · ${meta.totalFormulariosSubformularios} candidato(s) formulario/subformulario`
+          : ''}
+        {meta?.origenResolucion ? ` · Origen: ${meta.origenResolucion}` : ''}
+      </p>
+      <ScrollArea key={needleRutas} className="h-[min(360px,45vh)] rounded-md border border-border">
+        <div className="space-y-0 p-3">
+          {loading ? (
+            <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Cargando...
             </div>
-
-            <div className="flex min-h-0 flex-col gap-3 md:max-h-[calc(92vh-11rem)]">
-              {modules.length > 0 && !moduloParametrizarPath ? (
-                <Alert className="shrink-0 border-amber-500/50 bg-amber-50/80 py-2 text-amber-950 dark:bg-amber-950/20 dark:text-amber-100">
-                  <AlertTitle className="text-xs font-medium">Falta elegir modulo</AlertTitle>
-                  <AlertDescription className="text-[11px] leading-relaxed">
-                    Marca un modulo en el recuadro &quot;1. Modulo de inventario a parametrizar&quot; (arriba a la izquierda) para
-                    poder guardar.
-                  </AlertDescription>
-                </Alert>
-              ) : null}
-
-              {modules.length > 0 && moduloParametrizarPath && !moduloParametrizarTieneRuta ? (
-                <Alert className="shrink-0 border-amber-500/50 bg-amber-50/80 py-2 text-amber-950 dark:bg-amber-950/20 dark:text-amber-100">
-                  <AlertTitle className="text-xs font-medium">Ruta no parametrizada</AlertTitle>
-                  <AlertDescription className="text-[11px] leading-relaxed">
-                    Este módulo existe en el catálogo, pero no tiene un path relacionado en rutas. No se renderiza el formulario
-                    hasta que lo parametrices desde ConfigInventario.
-                  </AlertDescription>
-                </Alert>
-              ) : null}
-
-              {moduloParametrizarInfo ? (
-                <Alert className="shrink-0 border-border bg-muted/30 py-2">
-                  <AlertTitle className="text-xs font-medium">Modulo marcado para parametrizar</AlertTitle>
-                  <AlertDescription className="space-y-1 text-[11px] leading-relaxed">
-                    <span className="font-medium text-foreground">{moduloParametrizarInfo.title}</span>
-                    <span className="block break-all font-mono text-[10px] text-muted-foreground">{moduloParametrizarInfo.path}</span>
-                    {tarjetaModuloActiva ? (
-                      <span className="block text-[10px] text-emerald-700 dark:text-emerald-400">
-                        Tarjeta en menu: registrada (id {tarjetaModuloActiva.id.slice(-8)}).
+          ) : filteredRutas.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              {rows.length === 0 ? 'Sin formularios de inventario en catalogo.' : 'Sin coincidencias con el filtro.'}
+            </p>
+          ) : (
+            filteredRutas.map((row) => {
+              const esContexto = rutaContextoId === row.id;
+              return (
+                <div
+                  key={row.id}
+                  className={`flex flex-col gap-1 border-b border-border/60 py-2 last:border-0 ${
+                    esContexto ? 'rounded-md bg-primary/5 px-1 ring-1 ring-primary/25' : ''
+                  }`}
+                >
+                  <div className="flex items-start gap-2">
+                    <Checkbox
+                      checked={Boolean(selectedRutas[row.id])}
+                      onCheckedChange={(v) => toggleRuta(row.id, v === true)}
+                      className="mt-1"
+                      id={`ruta-${row.id}`}
+                    />
+                    <label htmlFor={`ruta-${row.id}`} className="min-w-0 flex-1 cursor-pointer text-sm">
+                      <span className="font-medium text-foreground">{row.name}</span>
+                      <span className="ml-2 rounded bg-muted px-1.5 text-[10px] uppercase text-muted-foreground">
+                        {row.tipoNodo}
                       </span>
-                    ) : (
-                      <span className="block text-[10px] text-amber-800 dark:text-amber-300">
-                        Sin tarjeta en menu: use Guardar autorizaciones para crearla.
-                      </span>
-                    )}
-                  </AlertDescription>
-                </Alert>
-              ) : null}
+                      <span className="mt-0.5 block break-all font-mono text-xs text-muted-foreground">{row.path}</span>
+                    </label>
+                  </div>
+                  <div className="flex justify-end pl-7">
+                    <button
+                      type="button"
+                      className="text-[10px] font-medium text-primary underline-offset-2 hover:underline"
+                      onClick={() => {
+                        setSelectedRutas({ [row.id]: true });
+                        setRutaContextoId(row.id);
+                      }}
+                    >
+                      Usar solo esta ruta en el guardado
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </ScrollArea>
+      {meta?.ayuda ? (
+        <Alert variant="default" className="border-amber-500/50 bg-amber-50/80 text-amber-950 dark:bg-amber-950/20 dark:text-amber-100">
+          <AlertTitle className="text-sm">Como asociar rutas</AlertTitle>
+          <AlertDescription className="text-xs leading-relaxed">{meta.ayuda}</AlertDescription>
+        </Alert>
+      ) : null}
+    </div>
+  );
 
-              {rutaContextoRow ? (
-                <Alert className="shrink-0 border-primary/40 bg-primary/5 py-2">
-                  <AlertTitle className="text-xs font-medium">Ruta activa en el listado (ultima marcada)</AlertTitle>
-                  <AlertDescription className="space-y-1 text-[11px] leading-relaxed">
-                    <span className="font-medium text-foreground">{rutaContextoRow.name}</span>
-                    {tituloCatalogoParaContexto && !moduloParametrizarInfo ? (
-                      <span className="block text-[10px] text-muted-foreground">
-                        Modulo de menu relacionado:{' '}
-                        <span className="font-medium text-foreground">{tituloCatalogoParaContexto}</span>
-                      </span>
+  const panelAutorizacionFormulario = (
+    <div className="flex min-h-0 flex-col gap-3">
+      <div className="shrink-0 space-y-2 rounded-md border border-border bg-muted/20 p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <Label className="text-xs font-medium text-foreground">
+            Parametrizacion guardada (inventarioconfigtarjetas)
+          </Label>
+          <span className="text-[10px] text-muted-foreground">
+            {filteredTarjetasConfigAuth.length} tarjeta(s)
+            {saIdsMarcados.length ? ` · filtradas por ${saIdsMarcados.length} SA` : ''}
+          </span>
+        </div>
+        <p className="text-[10px] leading-relaxed text-muted-foreground">
+          Elige una tarjeta para aplicar alcance (tenant SuperAdmin), la ruta configurada y el contexto de menu.
+          Tambien puedes parametrizar desde <span className="font-medium">Parametrizacion menu</span>.
+        </p>
+        <Input
+          value={needleTarjetasConfig}
+          onChange={(e) => setNeedleTarjetasConfig(e.target.value)}
+          placeholder="Filtrar por titulo, path, modulo, tab o id..."
+          disabled={loading}
+          className="h-8 text-xs"
+        />
+        <ScrollArea className="h-[min(200px,28vh)] rounded-md border border-border bg-background">
+          <div className="space-y-0 p-2">
+            {loading && !tarjetasConfig.length ? (
+              <div className="flex items-center gap-2 py-6 text-xs text-muted-foreground">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                Cargando tarjetas...
+              </div>
+            ) : filteredTarjetasConfigAuth.length === 0 ? (
+              <p className="py-6 text-center text-xs text-muted-foreground">
+                {tarjetasConfig.length === 0
+                  ? 'Sin tarjetas en inventarioconfigtarjetas. Guarda primero en Parametrizacion menu.'
+                  : 'Sin tarjetas con el filtro o el SA marcado.'}
+              </p>
+            ) : (
+              filteredTarjetasConfigAuth.map((tarjeta) => {
+                const activa = selectedTarjetaConfigId === tarjeta.id;
+                const saLabel = tarjeta.tenantSuperAdminId
+                  ? tenantSuperAdmins.find((t) => normalizarIdApi(t.iud) === normalizarIdApi(tarjeta.tenantSuperAdminId))
+                      ?.label
+                    || `SA …${String(tarjeta.tenantSuperAdminId).slice(-8)}`
+                  : 'Global';
+                const rutaId = resolverRutaIdDesdeTarjetaConfig(tarjeta, rows);
+                const rutaRow = rutaId ? rows.find((r) => normalizarIdApi(r.id) === rutaId) : null;
+                return (
+                  <button
+                    key={tarjeta.id}
+                    type="button"
+                    onClick={() => void aplicarAlcanceDesdeTarjetaConfig(tarjeta)}
+                    className={`mb-1.5 w-full rounded-md border px-2 py-2 text-left text-[11px] transition-colors last:mb-0 ${
+                      activa
+                        ? 'border-primary bg-primary/10 ring-1 ring-primary/30'
+                        : 'border-border/60 bg-background hover:bg-muted/40'
+                    }`}
+                  >
+                    <span className="block font-medium text-foreground">{tarjeta.titulo}</span>
+                    {tarjeta.descripcion ? (
+                      <span className="mt-0.5 block text-[10px] text-muted-foreground">{tarjeta.descripcion}</span>
                     ) : null}
-                    <span className="block break-all font-mono text-[10px] text-muted-foreground">{rutaContextoRow.path}</span>
-                    <span className="mt-1 block text-[10px] text-muted-foreground">
-                      Marca usuarios abajo y Guardar para aplicar{' '}
-                      <code className="rounded bg-muted px-0.5">formulariosConfig</code> a esta ruta y a las demas que tengas
-                      marcadas en el listado.
+                    <span className="mt-1 block break-all font-mono text-[10px] text-muted-foreground">
+                      {tarjeta.path}
                     </span>
-                  </AlertDescription>
-                </Alert>
-              ) : (
-                <p className="shrink-0 rounded-md border border-dashed border-border bg-muted/20 px-2 py-1.5 text-[10px] text-muted-foreground">
-                  Marca al menos un formulario en el listado de la izquierda: aqui veras el path de la ultima fila marcada.
-                </p>
-              )}
+                    <span className="mt-1 block text-[10px] text-muted-foreground">
+                      Alcance: {saLabel}
+                      {tarjeta.tab ? ` · tab ${tarjeta.tab}` : ''}
+                      {rutaRow ? ` · ruta ${rutaRow.name}` : rutaId ? '' : ' · ruta no encontrada en catalogo'}
+                    </span>
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </ScrollArea>
+        {tarjetaSeleccionadaAutorizacion ? (
+          <p className="text-[10px] text-emerald-700 dark:text-emerald-400">
+            Tarjeta activa: {tarjetaSeleccionadaAutorizacion.titulo} (id …{tarjetaSeleccionadaAutorizacion.id.slice(-8)})
+          </p>
+        ) : null}
+      </div>
 
-              {meta?.requiereParametrizacionTenantSuperAdmin ? (
+      {!rutaIdsMarcados.length ? (
+        <Alert className="shrink-0 border-amber-500/50 bg-amber-50/80 py-2 text-amber-950 dark:bg-amber-950/20 dark:text-amber-100">
+          <AlertTitle className="text-xs font-medium">Sin formularios seleccionados</AlertTitle>
+          <AlertDescription className="text-[11px] leading-relaxed">
+            Elige una tarjeta guardada arriba (aplica ruta y alcance) o abre{' '}
+            <span className="font-medium">Parametrizacion menu</span> si aun no existe la tarjeta.
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
+      {moduloParametrizarInfo ? (
+        <Alert className="shrink-0 border-border bg-muted/30 py-2">
+          <AlertTitle className="text-xs font-medium">Contexto de menu</AlertTitle>
+          <AlertDescription className="space-y-1 text-[11px] leading-relaxed">
+            <span className="font-medium text-foreground">{moduloParametrizarInfo.title}</span>
+            <span className="block text-[10px] text-muted-foreground">
+              {rutaIdsMarcados.length} formulario(s) marcado(s) para autorizar.
+            </span>
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
+      {rutaContextoRow ? (
+        <Alert className="shrink-0 border-primary/40 bg-primary/5 py-2">
+          <AlertTitle className="text-xs font-medium">Ruta activa (ultima marcada)</AlertTitle>
+          <AlertDescription className="space-y-1 text-[11px] leading-relaxed">
+            <span className="font-medium text-foreground">{rutaContextoRow.name}</span>
+            {tituloCatalogoParaContexto && !moduloParametrizarInfo ? (
+              <span className="block text-[10px] text-muted-foreground">
+                Modulo de menu relacionado:{' '}
+                <span className="font-medium text-foreground">{tituloCatalogoParaContexto}</span>
+              </span>
+            ) : null}
+            <span className="block break-all font-mono text-[10px] text-muted-foreground">{rutaContextoRow.path}</span>
+            <span className="mt-1 block text-[10px] text-muted-foreground">
+              Marca usuarios abajo y guarda para aplicar{' '}
+              <code className="rounded bg-muted px-0.5">formulariosConfig</code> a las rutas marcadas.
+            </span>
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
+      {alcanceParametrizacionLabel ? (
+        <Alert className="shrink-0 border-border bg-muted/30 py-2">
+          <AlertTitle className="text-xs font-medium">Alcance (desde ConfigInventario)</AlertTitle>
+          <AlertDescription className="text-[11px] leading-relaxed">
+            <span className="font-medium text-foreground">{alcanceParametrizacionLabel}</span>
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
+      {meta?.requiereParametrizacionTenantSuperAdmin ? (
                 <Alert className="border-amber-500/50 bg-amber-50/80 text-amber-950 dark:bg-amber-950/20 dark:text-amber-100">
                   <AlertTitle className="text-sm">Parametrizar tenantSuperAdmin</AlertTitle>
                   <AlertDescription className="text-xs leading-relaxed">
@@ -1175,7 +1678,7 @@ export default function InventarioFormulariosTenantModal({
                 </Alert>
               ) : null}
 
-              {mostrarSelectorSa ? (
+              {mostrarSelectorSaEnAutorizacion ? (
                 <div className="shrink-0 space-y-1.5">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <Label className="text-xs font-medium text-muted-foreground">
@@ -1288,13 +1791,40 @@ export default function InventarioFormulariosTenantModal({
                 </div>
               ) : null}
 
-              {saIdsMarcados.length > 0 ? (
+              {saIdsMarcados.length > 0 || saArbolRama.length > 0 ? (
                 <div className="flex min-h-0 shrink-0 flex-col gap-1.5">
-                  <Label className="text-xs font-medium text-muted-foreground">
-                    Árbol TenantSuperAdmin (rama seleccionada)
-                    {saArbolRama.length > 0 ? ` · ${saArbolRama.length} nodo(s)` : ''}
-                  </Label>
-                  <ScrollArea className="h-[min(110px,15vh)] rounded-md border border-border bg-muted/10">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <Label className="text-xs font-medium text-muted-foreground">
+                      Tenants SuperAdmin de la rama (alcance)
+                      {saArbolRama.length > 0 ? ` · ${saArbolRama.length} nodo(s)` : ''}
+                      {saIdsMarcados.length > 0 ? ` · ${saIdsMarcados.length} marcado(s)` : ''}
+                    </Label>
+                    {saArbolRama.length > 0 ? (
+                      <div className="flex gap-1">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-7 border-border bg-background text-[10px] text-foreground"
+                          disabled={loading}
+                          onClick={() => selectAllSaArbolVisible(true)}
+                        >
+                          Marcar rama
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-[10px]"
+                          disabled={loading}
+                          onClick={() => selectAllSaArbolVisible(false)}
+                        >
+                          Ninguno
+                        </Button>
+                      </div>
+                    ) : null}
+                  </div>
+                  <ScrollArea className="h-[min(140px,18vh)] rounded-md border border-border bg-muted/10">
                     <div className="space-y-0 p-2">
                       {loading ? (
                         <div className="flex items-center gap-2 py-4 text-xs text-muted-foreground">
@@ -1309,26 +1839,35 @@ export default function InventarioFormulariosTenantModal({
                       ) : (
                         saArbolRama.map((t) => {
                           const depth = t.profundidad ?? 0;
-                          const esAncla = saIdsMarcados.includes(t.iud);
+                          const tid = normalizarIdApi(t.iud);
+                          const marcado = Boolean(tid && selectedSaIds[tid]);
+                          const esAncla = tid ? alcanceParametrizacionIds.includes(tid) : false;
                           return (
-                            <div
+                            <label
                               key={t.iud}
-                              className={`border-b border-border/40 py-1.5 text-xs last:border-0 ${
-                                esAncla ? 'rounded bg-primary/5' : ''
+                              className={`flex cursor-pointer items-start gap-2 border-b border-border/40 py-1.5 text-xs last:border-0 ${
+                                marcado ? 'rounded bg-primary/5 px-1' : ''
                               }`}
                               style={{ paddingLeft: `${8 + depth * 14}px` }}
                             >
-                              <span className="font-medium text-foreground">
-                                {t.codigoJerarquia ? `SA ${t.codigoJerarquia}` : t.label}
+                              <Checkbox
+                                checked={marcado}
+                                onCheckedChange={(v) => tid && toggleSa(tid, v === true)}
+                                className="mt-0.5"
+                              />
+                              <span className="min-w-0 flex-1">
+                                <span className="font-medium text-foreground">
+                                  {t.codigoJerarquia ? `SA ${t.codigoJerarquia}` : t.label}
+                                </span>
+                                {t.codigoPadre ? (
+                                  <span className="ml-1 text-[10px] text-muted-foreground">← {t.codigoPadre}</span>
+                                ) : null}
+                                {esAncla ? (
+                                  <span className="ml-1 text-[10px] font-medium text-primary">ancla ConfigInventario</span>
+                                ) : null}
+                                <span className="mt-0.5 block font-mono text-[10px] text-muted-foreground">{t.iud}</span>
                               </span>
-                              {t.codigoPadre ? (
-                                <span className="ml-1 text-[10px] text-muted-foreground">← {t.codigoPadre}</span>
-                              ) : null}
-                              {esAncla ? (
-                                <span className="ml-1 text-[10px] font-medium text-primary">ancla</span>
-                              ) : null}
-                              <span className="mt-0.5 block font-mono text-[10px] text-muted-foreground">{t.iud}</span>
-                            </div>
+                            </label>
                           );
                         })
                       )}
@@ -1336,14 +1875,43 @@ export default function InventarioFormulariosTenantModal({
                   </ScrollArea>
                   {jerarquiaSaCounters.length > 0 ? (
                     <p className="text-[10px] text-muted-foreground">
-                      Índice counters: {jerarquiaSaCounters.length} fila(s) · orden por secuenciaJerarquia ASC.
+                      Marca los tenants de la rama a los que aplica el alcance. Índice counters: {jerarquiaSaCounters.length}{' '}
+                      fila(s).
                     </p>
                   ) : null}
                 </div>
               ) : null}
 
               <div className="flex min-h-0 shrink-0 flex-col gap-1.5">
-                <Label className="text-xs font-medium text-muted-foreground">2. Rama tenant global (validacion)</Label>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <Label className="text-xs font-medium text-muted-foreground">
+                    2. Tenants global de la rama (alcance)
+                  </Label>
+                  {filteredTenantGlobales.length > 0 ? (
+                    <div className="flex gap-1">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 border-border bg-background text-[10px] text-foreground"
+                        disabled={loading || saIdsMarcados.length === 0}
+                        onClick={() => selectAllTenantGlobalVisible(true)}
+                      >
+                        {needleTenantGlobal.trim() ? 'Marcar visibles' : 'Marcar todos'}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-[10px]"
+                        disabled={loading || saIdsMarcados.length === 0}
+                        onClick={() => selectAllTenantGlobalVisible(false)}
+                      >
+                        Ninguno
+                      </Button>
+                    </div>
+                  ) : null}
+                </div>
                 <Input
                   value={needleTenantGlobal}
                   onChange={(e) => setNeedleTenantGlobal(e.target.value)}
@@ -1432,12 +2000,28 @@ export default function InventarioFormulariosTenantModal({
                             : 'Sin tenant global en la rama del SA seleccionado.'}
                       </p>
                     ) : (
-                      filteredTenantGlobales.map((t) => (
-                        <div key={t.iud} className="border-b border-border/50 py-1.5 text-xs last:border-0">
-                          <span className="font-medium text-foreground">{t.label}</span>
-                          <span className="mt-0.5 block font-mono text-[10px] text-muted-foreground">{t.iud}</span>
-                        </div>
-                      ))
+                      filteredTenantGlobales.map((t) => {
+                        const tid = normalizarIdApi(t.iud);
+                        const marcado = Boolean(tid && selectedTenantGlobales[tid]);
+                        return (
+                          <label
+                            key={t.iud}
+                            className={`flex cursor-pointer items-start gap-2 border-b border-border/50 py-1.5 text-xs last:border-0 ${
+                              marcado ? 'rounded bg-primary/5 px-1' : ''
+                            }`}
+                          >
+                            <Checkbox
+                              checked={marcado}
+                              onCheckedChange={(v) => tid && toggleTenantGlobal(tid, v === true)}
+                              className="mt-0.5"
+                            />
+                            <span className="min-w-0 flex-1">
+                              <span className="font-medium text-foreground">{t.label}</span>
+                              <span className="mt-0.5 block font-mono text-[10px] text-muted-foreground">{t.iud}</span>
+                            </span>
+                          </label>
+                        );
+                      })
                     )}
                   </div>
                 </ScrollArea>
@@ -1576,27 +2160,152 @@ export default function InventarioFormulariosTenantModal({
                   </div>
                 </ScrollArea>
               </div>
-            </div>
-            </div>
-          </div>
+    </div>
+  );
+
+  return (
+    <>
+      {showTrigger ? (
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="shrink-0 gap-2"
+            onClick={() => setOpenParametrizacion(true)}
+          >
+            <LayoutGrid className="h-4 w-4" />
+            Parametrizacion menu
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="shrink-0 gap-2"
+            onClick={() => setOpenAutorizacion(true)}
+          >
+            <ShieldCheck className="h-4 w-4" />
+            Autorizacion formulario
+          </Button>
+        </div>
+      ) : null}
+
+      <Dialog open={openParametrizacion} onOpenChange={setOpenParametrizacion}>
+        <DialogContent className="flex max-h-[92vh] w-[min(96vw,42rem)] max-w-2xl flex-col gap-0 overflow-hidden p-0">
+          <DialogHeader className="shrink-0 border-b border-border px-6 py-4">
+            <DialogTitle className="flex items-center gap-2">
+              <LayoutGrid className="h-5 w-5" />
+              Parametrizacion menu
+            </DialogTitle>
+            <DialogDescription>
+              Paso 1: guarda modulo + formularios en{' '}
+              <code className="rounded bg-muted px-1 text-xs">PUT /api/inventario/config/tarjetas/parametrizacion</code>{' '}
+              (coleccion inventarioconfigtarjetas). Paso 2: asigna usuarios en Autorizacion de formulario. Catalogo desde{' '}
+              <code className="rounded bg-muted px-1 text-xs">GET /api/inventario/config/formularios-autorizacion/opciones</code>.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">{panelParametrizacionMenu}</div>
 
           <DialogFooter className="shrink-0 flex flex-col gap-3 border-t border-border bg-background px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-xs text-muted-foreground">
               {moduloParametrizarInfo ? (
                 <>
-                  Tarjeta activa: <span className="font-medium text-foreground">{moduloParametrizarInfo.title}</span>
-                  {tarjetaModuloActiva?.id ? ' · registrada en menu' : ' · pendiente de guardar'}
+                  Modulo: <span className="font-medium text-foreground">{moduloParametrizarInfo.title}</span>
+                  {tarjetaModuloActiva?.id ? ' · tarjeta registrada' : ' · pendiente de guardar'}
+                  {alcanceParametrizacionLabel ? ` · ${alcanceParametrizacionLabel}` : ''}
                 </>
               ) : (
-                'Marca el modulo de inventario a parametrizar (panel izquierdo).'
+                'Marca el modulo de inventario a parametrizar.'
               )}
             </p>
             <div className="flex flex-wrap justify-end gap-2">
               <Button
                 type="button"
+                variant="ghost"
+                size="sm"
+                className="text-xs"
+                onClick={() => {
+                  setOpenParametrizacion(false);
+                  setOpenAutorizacion(true);
+                }}
+                disabled={saving}
+              >
+                Ir a autorizacion
+              </Button>
+              <Button
+                type="button"
                 variant="outline"
                 className="border-border bg-background text-foreground"
-                onClick={() => setOpen(false)}
+                onClick={() => setOpenParametrizacion(false)}
+                disabled={saving}
+              >
+                Cerrar
+              </Button>
+              <Button
+                type="button"
+                variant="default"
+                onClick={() => void guardarParametrizacion()}
+                disabled={!puedeGuardarParametrizacion}
+              >
+                {saving ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Guardando...
+                  </>
+                ) : (
+                  'Guardar parametrizacion'
+                )}
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={openAutorizacion} onOpenChange={setOpenAutorizacion}>
+        <DialogContent className="flex max-h-[92vh] w-[min(96vw,48rem)] max-w-3xl flex-col gap-0 overflow-hidden p-0">
+          <DialogHeader className="shrink-0 border-b border-border px-6 py-4">
+            <DialogTitle className="flex items-center gap-2">
+              <ShieldCheck className="h-5 w-5" />
+              Autorizacion de formulario
+            </DialogTitle>
+            <DialogDescription>
+              Selecciona una parametrizacion guardada (inventarioconfigtarjetas), la rama tenant SuperAdmin y los usuarios
+              autorizados. Guardar con{' '}
+              <code className="rounded bg-muted px-1 text-xs">PUT /api/inventario/config/formularios-autorizacion</code>{' '}
+              (rol DIOS) incluyendo <code className="rounded bg-muted px-1 text-xs">tenantSuperAdminId</code> cuando aplica.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">{panelAutorizacionFormulario}</div>
+
+          <DialogFooter className="shrink-0 flex flex-col gap-3 border-t border-border bg-background px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs text-muted-foreground">
+              {rutaIdsMarcados.length
+                ? `${rutaIdsMarcados.length} formulario(s) listo(s) para autorizar`
+                : tarjetaSeleccionadaAutorizacion
+                  ? `Tarjeta «${tarjetaSeleccionadaAutorizacion.titulo}» sin ruta en catalogo`
+                  : 'Selecciona una tarjeta guardada o formularios en Parametrizacion menu.'}
+            </p>
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="text-xs"
+                onClick={() => {
+                  setOpenAutorizacion(false);
+                  setOpenParametrizacion(true);
+                }}
+                disabled={saving}
+              >
+                Ir a parametrizacion
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="border-border bg-background text-foreground"
+                onClick={() => setOpenAutorizacion(false)}
                 disabled={saving}
               >
                 Cerrar

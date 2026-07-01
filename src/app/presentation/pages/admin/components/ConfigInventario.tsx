@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'react-toastify';
-import { Boxes, ClipboardCheck, Info, Link2, Loader2, Pencil, Plus, Save, Trash2 } from 'lucide-react';
+import { Boxes, ClipboardCheck, Info, LayoutGrid, Loader2, Pencil, Plus, Save, ShieldCheck, Trash2 } from 'lucide-react';
 import type { InventarioComprasConfig, InventarioConfig, MetodoValuacion } from '@/app/services/inventarioService';
 import inventarioService from '@/app/services/inventarioService';
 import { useAuth } from '@/app/providers/AuthProvider';
@@ -100,6 +100,7 @@ export default function ConfigInventario({
   const esDios = String(user?.role ?? (user as { rol?: string } | null)?.rol ?? '').toUpperCase() === 'DIOS';
   const [recepcionAutomaticaLocal, setRecepcionAutomaticaLocal] = useState(false);
   const [ayudaComprasOpen, setAyudaComprasOpen] = useState(false);
+  const [modalParametrizacionOpen, setModalParametrizacionOpen] = useState(false);
   const [modalAutorizacionOpen, setModalAutorizacionOpen] = useState(false);
   const [modalFocusTarjeta, setModalFocusTarjeta] = useState<InventarioAutorizacionFocusTarjeta | null>(null);
   const [tarjetaBusyId, setTarjetaBusyId] = useState<string | null>(null);
@@ -113,21 +114,29 @@ export default function ConfigInventario({
   const recepcionAutomatica = recepcionAutomaticaLocal;
   const tabsCatalogo = useMemo(() => inventarioTabsDesdeCatalogo(), []);
 
-  const abrirModalAutorizacion = useCallback((item?: ConfigInventarioGridItem | null) => {
-    if (item) {
-      setModalFocusTarjeta({
-        catalogPath: item.catalogPath,
-        menuPath: item.path,
-        tab: item.tab,
-        tarjetaId: item.tarjetaId,
-        rutaId: item.rutaId ?? null,
-        tenantSuperAdminId: item.tenantSuperAdminId ?? null,
-      });
-    } else {
-      setModalFocusTarjeta(null);
-    }
-    setModalAutorizacionOpen(true);
-  }, []);
+  const abrirModalInventario = useCallback(
+    (item: ConfigInventarioGridItem | null | undefined, modo: 'parametrizacion' | 'autorizacion') => {
+      if (item) {
+        setModalFocusTarjeta({
+          catalogPath: item.catalogPath,
+          menuPath: item.path,
+          tab: item.tab,
+          tarjetaId: item.tarjetaId,
+          rutaId: item.rutaId ?? null,
+          tenantSuperAdminId: item.tenantSuperAdminId ?? tenantSuperAdminId ?? null,
+        });
+      } else {
+        setModalFocusTarjeta(
+          tenantSuperAdminId
+            ? { catalogPath: '', tenantSuperAdminId }
+            : null,
+        );
+      }
+      if (modo === 'parametrizacion') setModalParametrizacionOpen(true);
+      else setModalAutorizacionOpen(true);
+    },
+    [tenantSuperAdminId],
+  );
 
   const modulosGrid = useMemo(
     () => inventarioModulosParaGridConfig(filtroModulos ?? (() => true)),
@@ -139,7 +148,9 @@ export default function ConfigInventario({
 
   const refreshPathsDesdeSeguridad = useCallback(async () => {
     try {
-      const data = await inventarioService.obtenerFormulariosAutorizacionOpciones(undefined);
+      const data = await inventarioService.obtenerFormulariosAutorizacionOpciones(undefined, {
+        soloCatalogo: true,
+      });
       const forms = data.formularios ?? [];
       const next: Partial<Record<InventarioTabValue, string>> = {};
       for (const m of modulosGrid) {
@@ -416,16 +427,26 @@ export default function ConfigInventario({
                 </p>
               ) : null}
             </div>
-            <div className="sm:ml-auto sm:self-end">
+            <div className="flex flex-wrap gap-2 sm:ml-auto sm:self-end">
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 className="shrink-0 gap-2"
-                onClick={() => abrirModalAutorizacion(null)}
+                onClick={() => abrirModalInventario(null, 'parametrizacion')}
               >
-                <Link2 className="h-4 w-4" />
-                Autorizacion formularios
+                <LayoutGrid className="h-4 w-4" />
+                Parametrizacion menu
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="shrink-0 gap-2"
+                onClick={() => abrirModalInventario(null, 'autorizacion')}
+              >
+                <ShieldCheck className="h-4 w-4" />
+                Autorizacion formulario
               </Button>
             </div>
           </div>
@@ -469,13 +490,35 @@ export default function ConfigInventario({
                     className="h-8 gap-1.5 text-xs"
                     disabled={busy}
                     onClick={() =>
-                      abrirModalAutorizacion({
-                        ...item,
-                        path: displayPath,
-                      })
+                      abrirModalInventario(
+                        {
+                          ...item,
+                          path: displayPath,
+                        },
+                        'parametrizacion',
+                      )
                     }
                   >
-                    <Link2 className="h-3.5 w-3.5" />
+                    <LayoutGrid className="h-3.5 w-3.5" />
+                    Parametrizar menu
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 gap-1.5 text-xs"
+                    disabled={busy}
+                    onClick={() =>
+                      abrirModalInventario(
+                        {
+                          ...item,
+                          path: displayPath,
+                        },
+                        'autorizacion',
+                      )
+                    }
+                  >
+                    <ShieldCheck className="h-3.5 w-3.5" />
                     Autorizar
                   </Button>
                   {esDios ? (
@@ -520,13 +563,19 @@ export default function ConfigInventario({
       <InventarioFormulariosTenantModal
         modules={modulosGrid.map(({ tab, title, description, path }) => ({ tab, title, description, path }))}
         onFormulariosAutorizacionApplied={() => void refreshPathsDesdeSeguridad()}
-        open={modalAutorizacionOpen}
-        onOpenChange={(next) => {
+        openParametrizacion={modalParametrizacionOpen}
+        onOpenParametrizacionChange={(next) => {
+          setModalParametrizacionOpen(next);
+          if (!next && !modalAutorizacionOpen) setModalFocusTarjeta(null);
+        }}
+        openAutorizacion={modalAutorizacionOpen}
+        onOpenAutorizacionChange={(next) => {
           setModalAutorizacionOpen(next);
-          if (!next) setModalFocusTarjeta(null);
+          if (!next && !modalParametrizacionOpen) setModalFocusTarjeta(null);
         }}
         focusModulePath={modalFocusTarjeta?.catalogPath ?? null}
         focusTarjeta={modalFocusTarjeta}
+        alcanceTenantSuperAdminId={tenantSuperAdminId}
         showTrigger={false}
       />
 

@@ -149,10 +149,10 @@ export default function InventarioSkuCatalogoModal({
                                 title="Ver e imprimir codigo"
                                 onClick={() => setBarcodePreview(producto)}
                               >
-                                <BarcodePreview codigo={producto.codigoBarras} />
+                                <BarcodePreview codigo={producto.codigoBarras} formato={producto.formatoCodigoBarras} />
                               </button>
                             ) : (
-                              <BarcodePreview codigo={producto.codigoBarras} />
+                              <BarcodePreview codigo={producto.codigoBarras} formato={producto.formatoCodigoBarras} />
                             )}
                             {!producto.codigoBarras && puedeGestionarSku && (
                               <Button
@@ -253,7 +253,7 @@ export default function InventarioSkuCatalogoModal({
               <p className="text-sm font-semibold">{barcodePreview?.sku || 'SKU'}</p>
               <p className="mb-3 text-xs uppercase text-slate-500">{barcodePreview?.nombre || 'Producto'}</p>
               <div className="flex justify-center">
-                <BarcodePreview codigo={barcodePreview?.codigoBarras} />
+                <BarcodePreview codigo={barcodePreview?.codigoBarras} formato={barcodePreview?.formatoCodigoBarras} />
               </div>
             </div>
             <div className="flex justify-end gap-2">

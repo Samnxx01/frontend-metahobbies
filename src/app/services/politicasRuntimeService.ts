@@ -46,6 +46,7 @@ export type PoliticaRuntimeUsuarioOpcion = {
   correo: string;
   label: string;
   rol?: string;
+  tenantSuperAdminId?: string | null;
   tenantGlobalId?: string | null;
   tenantCorporativoId?: string | null;
 };
@@ -57,17 +58,30 @@ export type PoliticaRuntimeComportamiento =
   | 'NEUTRO'
   | 'REQUIERE_TECHO';
 
+export type PoliticaRuntimeComportamientoCatalogoItem = {
+  id?: string;
+  nombre: string;
+  etiqueta: string;
+  valor: string;
+  label: string;
+  motorSemantica?: string | null;
+  activo: boolean;
+  protegido: boolean;
+};
+
 export type PoliticaRuntimeCatalogoItem = {
+  id?: string;
   valor: string;
   label: string;
   descripcion: string;
   comportamiento: PoliticaRuntimeComportamiento | null;
+  motorSemantica: PoliticaRuntimeComportamiento | null;
   orden: number;
   activo: boolean;
   protegido: boolean;
 };
 
-export type PoliticaRuntimeCatalogoCategoria = 'TIPO' | 'EFECTO';
+export type PoliticaRuntimeCatalogoCategoria = 'TIPO' | 'EFECTO' | 'REFERENCIA' | 'COMPORTAMIENTO';
 
 export type PoliticaRuntimeAccionOpcion = {
   id: string;
@@ -85,25 +99,77 @@ export type PoliticaRuntimeRutaOpcion = {
   label: string;
 };
 
+export type PoliticaRuntimeBypassAlcanceOpcion = {
+  id?: string;
+  nombre: string;
+  etiqueta: string;
+  pipeline: string;
+  pipelineLabel?: string;
+  alcance: string;
+  dominio: string;
+  label: string;
+  descripcion: string;
+  reglasDinamicas?: string[];
+  orden: number;
+};
+
+export type PoliticaRuntimeBypassPipelineOpcion = {
+  nombre: string;
+  label: string;
+  referencia?: string;
+  descripcion?: string;
+  orden: number;
+};
+
+export type PoliticaRuntimeTenantScopeOpcion = {
+  id: string;
+  label: string;
+  codigoJerarquia?: string | null;
+  tenantSuperAdminId?: string | null;
+  tenantGlobalId?: string | null;
+  corporativoId?: string | null;
+};
+
+export type PoliticaRuntimeTenantsScopeOpciones = {
+  tenantSuperAdmins: PoliticaRuntimeTenantScopeOpcion[];
+  tenantGlobales: PoliticaRuntimeTenantScopeOpcion[];
+  tenantCorporativos: PoliticaRuntimeTenantScopeOpcion[];
+};
+
 export type PoliticaRuntimeOpciones = {
   tipos: string[];
   efectos: string[];
   catalogoTipos: PoliticaRuntimeCatalogoItem[];
   catalogoEfectos: PoliticaRuntimeCatalogoItem[];
-  roles: string[];
+  catalogoReferencias: PoliticaRuntimeCatalogoItem[];
+  catalogoComportamientos: PoliticaRuntimeComportamientoCatalogoItem[];
+  /** Semánticas que el motor interpreta (PERMITE, BLOQUEA, BYPASS, …). */
+  motorSemanticas?: string[];
   dominiosPolitica: string[];
   apisDominios: PoliticaRuntimeApisDominio[];
   acciones: PoliticaRuntimeAccionOpcion[];
   rutas: PoliticaRuntimeRutaOpcion[];
   usuarios: PoliticaRuntimeUsuarioOpcion[];
+  bypassAlcances: PoliticaRuntimeBypassAlcanceOpcion[];
+  bypassPipelines?: PoliticaRuntimeBypassPipelineOpcion[];
+  tenantsScope?: PoliticaRuntimeTenantsScopeOpciones;
+  contexto?: {
+    tenantSuperAdminId?: string | null;
+    tenantGlobalId?: string | null;
+    tenantCorporativoId?: string | null;
+    apisDominiosId?: string | null;
+  };
 };
 
 export type GuardarCatalogoItemPayload = {
   categoria: PoliticaRuntimeCatalogoCategoria;
-  valor: string;
+  valor?: string;
+  nombre?: string;
   label?: string;
+  etiqueta?: string;
   descripcion?: string;
-  comportamiento?: PoliticaRuntimeComportamiento;
+  comportamiento?: string;
+  motorSemantica?: string;
   orden?: number;
   activo?: boolean;
 };
@@ -123,7 +189,6 @@ export type SimularPoliticaRuntimePayload = {
   tipo?: string;
   referencia?: string;
   alcance?: string;
-  rolNombre?: string;
   tenantSuperAdminId?: string;
   tenantGlobalId?: string;
   tenantCorporativoId?: string;
@@ -134,13 +199,32 @@ export type SimularPoliticaRuntimePayload = {
 
 const BASE = '/api/seguridad/politicas-runtime';
 
-export async function fetchPoliticasRuntimeCatalogo(params: { dominio?: string; tipo?: string } = {}) {
+// ─── Cache de promesas para /catalogo (TTL 30 s) ────────────────────────────
+const CATALOGO_TTL_MS = 30_000;
+const _catalogoCache = new Map<string, { at: number; promise: Promise<PoliticaRuntime[]> }>();
+
+export async function fetchPoliticasRuntimeCatalogo(params: { dominio?: string; tipo?: string } = {}): Promise<PoliticaRuntime[]> {
   const q = new URLSearchParams();
   if (params.dominio) q.set('dominio', params.dominio);
   if (params.tipo) q.set('tipo', params.tipo);
-  const suffix = q.toString() ? `?${q.toString()}` : '';
-  const res = await apiFetch(`${BASE}/catalogo${suffix}`, { method: 'GET' });
-  return ((res as { politicas?: PoliticaRuntime[] })?.politicas ?? []);
+  const key = q.toString();
+  const now = Date.now();
+  const cached = _catalogoCache.get(key);
+  if (cached && now - cached.at < CATALOGO_TTL_MS) return cached.promise;
+  const suffix = key ? `?${key}` : '';
+  const promise = apiFetch(`${BASE}/catalogo${suffix}`, { method: 'GET' })
+    .then((res) => (res as { politicas?: PoliticaRuntime[] })?.politicas ?? [])
+    .catch((err) => {
+      if (_catalogoCache.get(key)?.promise === promise) _catalogoCache.delete(key);
+      throw err;
+    });
+  _catalogoCache.set(key, { at: now, promise });
+  return promise;
+}
+
+/** Fuerza recarga en el próximo llamado (usar tras guardar/eliminar políticas). */
+export function invalidarCatalogoPoliticasRuntime(): void {
+  _catalogoCache.clear();
 }
 
 export async function fetchPoliticasRuntimeOpciones(): Promise<PoliticaRuntimeOpciones> {

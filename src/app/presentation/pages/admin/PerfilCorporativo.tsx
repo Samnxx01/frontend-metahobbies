@@ -1,5 +1,17 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { apiFetch } from '@/app/services/api';
+import {
+    colectarTodasOpcionesPerfilCorporativo,
+    fetchPerfilCorporativoDetallePorId,
+    fetchPerfilesCorporativosCompletos,
+    fetchPerfilesCorporativosScopeOpciones,
+    perfilCorporativoCoincideId,
+    PERFIL_CORPORATIVO_NUEVO_ID,
+    resolvePerfilCorporativoApiId,
+    resolvePerfilCorporativoScopeJwt,
+    type PerfilCorporativoScopeOpcion,
+} from '@/app/services/routesService';
+import { useAuth } from '@/app/providers/AuthProvider';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -12,6 +24,7 @@ import { Switch } from '@/components/ui/switch';
 import { format, parseISO, isValid } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
+import { resolveApiEntityId } from '@/app/utils/normalizeMongoId';
 import { Loader2, Building2, Edit, Save, Globe, Calendar as CalendarIcon, FileText } from 'lucide-react';
 import { toast } from 'react-toastify';
 
@@ -21,21 +34,100 @@ interface FormularioProps {
     representantes: any[];
     tiposSociedad: any[];
     direcciones: any[];
+    /** Si true, la razón social se elige arriba con el select (no input). */
+    ocultarRazonSocial?: boolean;
 }
 
-const FormularioEmpresa = ({ data, setData, representantes, tiposSociedad, direcciones }: FormularioProps) => {
+const SelectorRazonSocialPerfil = ({
+    opciones,
+    value,
+    onChange,
+    loading = false,
+    disabled = false,
+    mostrarCrearNuevo = false,
+}: {
+    opciones: PerfilCorporativoScopeOpcion[];
+    value: string | null;
+    onChange: (id: string) => void;
+    loading?: boolean;
+    disabled?: boolean;
+    mostrarCrearNuevo?: boolean;
+}) => (
+    <div className="space-y-2 md:col-span-2">
+        <label className="flex items-center gap-2 text-sm font-semibold">
+            <Building2 className="h-4 w-4 text-primary" /> Razon Social *
+        </label>
+        <Select
+            value={value || undefined}
+            disabled={loading || disabled}
+            onValueChange={onChange}
+        >
+            <SelectTrigger>
+                {loading ? (
+                    <span className="flex items-center gap-2 text-muted-foreground">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Cargando perfiles…
+                    </span>
+                ) : (
+                    <SelectValue placeholder="Seleccione razón social" />
+                )}
+            </SelectTrigger>
+            <SelectContent>
+                {mostrarCrearNuevo && (
+                    <SelectItem value={PERFIL_CORPORATIVO_NUEVO_ID}>
+                        + Crear nuevo perfil corporativo
+                    </SelectItem>
+                )}
+                {opciones.map((opcion) => (
+                    <SelectItem key={opcion.id} value={opcion.id}>
+                        {opcion.label}
+                    </SelectItem>
+                ))}
+            </SelectContent>
+        </Select>
+        {mostrarCrearNuevo ? (
+            <p className="text-xs text-muted-foreground">
+                Elija un perfil existente para consultarlo o seleccione crear nuevo para registrar uno.
+            </p>
+        ) : (
+            <p className="text-xs text-muted-foreground">
+                {disabled
+                    ? 'Perfil parametrizado al tenant corporativo (solo lectura).'
+                    : 'Seleccione la razón social del perfil a editar.'}
+            </p>
+        )}
+    </div>
+);
+
+const FormularioEmpresa = ({
+    data,
+    setData,
+    representantes,
+    tiposSociedad,
+    direcciones,
+    ocultarRazonSocial = false,
+}: FormularioProps) => {
     const updateField = (field: string, value: any) => {
         setData({ ...data, [field]: value });
     };
 
+    const catalogId = (item: Record<string, unknown>) => resolveApiEntityId(item);
+
     return (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <div className="space-y-2 md:col-span-2">
-                <label className="flex items-center gap-2 text-sm font-semibold">
-                    <Building2 className="h-4 w-4 text-primary" /> Razon Social *
-                </label>
-                <Input required value={data.razon_social} onChange={(e) => updateField('razon_social', e.target.value)} placeholder="Nombre legal" />
-            </div>
+            {!ocultarRazonSocial && (
+                <div className="space-y-2 md:col-span-2">
+                    <label className="flex items-center gap-2 text-sm font-semibold">
+                        <Building2 className="h-4 w-4 text-primary" /> Razon Social *
+                    </label>
+                    <Input
+                        required
+                        value={data.razon_social}
+                        onChange={(e) => updateField('razon_social', e.target.value)}
+                        placeholder="Nombre legal de la empresa"
+                    />
+                </div>
+            )}
 
             <div className="space-y-2">
                 <label className="text-sm font-semibold">Titulo / Eslogan</label>
@@ -50,7 +142,7 @@ const FormularioEmpresa = ({ data, setData, representantes, tiposSociedad, direc
             <div className="space-y-2">
                 <label className="text-sm font-semibold">Tipo de Sociedad *</label>
                 <Select
-                    value={data.tipo_sociedad}
+                    value={data.tipo_sociedad || undefined}
                     onValueChange={(value) => {
                         updateField('tipo_sociedad', value);
                     }}
@@ -59,43 +151,55 @@ const FormularioEmpresa = ({ data, setData, representantes, tiposSociedad, direc
                         <SelectValue placeholder="Seleccione..." />
                     </SelectTrigger>
                     <SelectContent>
-                        {tiposSociedad.map((tipo) => (
-                            <SelectItem key={tipo._id} value={tipo._id}>
-                                {tipo.tipo_sociedad} - {tipo.nombre_sociedad}
-                            </SelectItem>
-                        ))}
+                        {tiposSociedad.map((tipo) => {
+                            const tipoId = catalogId(tipo);
+                            if (!tipoId) return null;
+                            return (
+                                <SelectItem key={tipoId} value={tipoId}>
+                                    {tipo.tipo_sociedad} - {tipo.nombre_sociedad}
+                                </SelectItem>
+                            );
+                        })}
                     </SelectContent>
                 </Select>
             </div>
 
             <div className="space-y-2">
                 <label className="text-sm font-semibold">Representante Legal</label>
-                <Select value={data.represeLegaEmpresa} onValueChange={(value) => updateField('represeLegaEmpresa', value)}>
+                <Select value={data.represeLegaEmpresa || undefined} onValueChange={(value) => updateField('represeLegaEmpresa', value)}>
                     <SelectTrigger>
                         <SelectValue placeholder="Seleccione..." />
                     </SelectTrigger>
                     <SelectContent>
-                        {representantes.map((representante) => (
-                            <SelectItem key={representante._id} value={representante._id}>
-                                {representante.nombre_representante_legal}
-                            </SelectItem>
-                        ))}
+                        {representantes.map((representante) => {
+                            const repId = catalogId(representante);
+                            if (!repId) return null;
+                            return (
+                                <SelectItem key={repId} value={repId}>
+                                    {representante.nombre_representante_legal}
+                                </SelectItem>
+                            );
+                        })}
                     </SelectContent>
                 </Select>
             </div>
 
             <div className="space-y-2">
                 <label className="text-sm font-semibold">Ubicacion (Sede)</label>
-                <Select value={data.direccion_empresa_relacion} onValueChange={(value) => updateField('direccion_empresa_relacion', value)}>
+                <Select value={data.direccion_empresa_relacion || undefined} onValueChange={(value) => updateField('direccion_empresa_relacion', value)}>
                     <SelectTrigger>
                         <SelectValue placeholder="Seleccione..." />
                     </SelectTrigger>
                     <SelectContent>
-                        {direcciones.map((direccion) => (
-                            <SelectItem key={direccion._id} value={direccion._id}>
-                                {direccion.ciudad?.nombre_ciudad} - {direccion.telefono_empresa}
-                            </SelectItem>
-                        ))}
+                        {direcciones.map((direccion) => {
+                            const dirId = catalogId(direccion);
+                            if (!dirId) return null;
+                            return (
+                                <SelectItem key={dirId} value={dirId}>
+                                    {direccion.ciudad?.nombre_ciudad} - {direccion.telefono_empresa}
+                                </SelectItem>
+                            );
+                        })}
                     </SelectContent>
                 </Select>
             </div>
@@ -205,13 +309,64 @@ const initialFormState = {
     estado: true,
 };
 
+function normalizeFechaPerfil(value: unknown): string {
+    if (!value) return '';
+    const raw = String(value).trim();
+    if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10);
+    const parsed = parseISO(raw);
+    if (isValid(parsed)) return format(parsed, 'yyyy-MM-dd');
+    const fallback = new Date(raw);
+    if (isValid(fallback)) return format(fallback, 'yyyy-MM-dd');
+    return '';
+}
+
+function perfilToUpdateForm(perfil: Record<string, any>) {
+    return {
+        razon_social: perfil.razon_social || '',
+        titulo: perfil.titulo || '',
+        descripcion: perfil.descripcion || '',
+        represeLegaEmpresa: resolveApiEntityId(perfil.represeLegaEmpresa),
+        nit_ruc_rtn: perfil.nit_ruc_rtn || '',
+        tipo_sociedad: resolveApiEntityId(perfil.tipo_sociedad),
+        direccion_empresa: perfil.direccion_empresa || '',
+        direccion_empresa_relacion: resolveApiEntityId(perfil.direccion_empresa_relacion),
+        movil_corporativo: perfil.movil_corporativo?.toString() || '',
+        descripcion_mision_empresa: perfil.descripcion_mision_empresa || '',
+        descripcion_vision_empresa: perfil.descripcion_vision_empresa || '',
+        fecha_constitucion: normalizeFechaPerfil(perfil.fecha_constitucion),
+        camara_comercio: perfil.camara_comercio || '',
+        publicar: perfil.publicar === true,
+        estado: perfil.estado ?? true,
+    };
+}
+
+function opcionDesdePerfil(perfil: Record<string, unknown>): PerfilCorporativoScopeOpcion {
+    const id = resolvePerfilCorporativoApiId(perfil);
+    const razonSocial = String(perfil.razon_social || '').trim();
+    return {
+        id,
+        perfilCorporativoId: id,
+        label: razonSocial || id,
+        razonSocial,
+    };
+}
+
 export default function PerfilCorporativo() {
+    const { user } = useAuth();
     const [perfil, setPerfil] = useState<any>(null);
     const [perfilId, setPerfilId] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
     const [updating, setUpdating] = useState(false);
     const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
+    const [loadingPerfilesScope, setLoadingPerfilesScope] = useState(false);
+    const [loadingPerfilDetalle, setLoadingPerfilDetalle] = useState(false);
+    const [perfilesScopeOpciones, setPerfilesScopeOpciones] = useState<PerfilCorporativoScopeOpcion[]>([]);
+    const [perfilesEnScopeCache, setPerfilesEnScopeCache] = useState<Record<string, any>[]>([]);
+    const [selectedPerfilScopeId, setSelectedPerfilScopeId] = useState<string | null>(null);
+    const [scopeModo, setScopeModo] = useState<'catalogo_completo' | 'tenant_corporativo' | 'legacy'>('legacy');
+    const [selectorPerfilEditable, setSelectorPerfilEditable] = useState(true);
+    const selectedPerfilRef = useRef<string | null>(null);
 
     const [representantes, setRepresentantes] = useState<any[]>([]);
     const [tiposSociedad, setTiposSociedad] = useState<any[]>([]);
@@ -219,6 +374,20 @@ export default function PerfilCorporativo() {
 
     const [form, setForm] = useState(initialFormState);
     const [updateForm, setUpdateForm] = useState(initialFormState);
+    const [modoRegistroNuevo, setModoRegistroNuevo] = useState(true);
+
+    const hayOpcionesPerfil = perfilesScopeOpciones.length > 0;
+    const selectedVistaId = selectedPerfilScopeId
+        ?? (modoRegistroNuevo ? PERFIL_CORPORATIVO_NUEVO_ID : null);
+
+    const aplicarPerfilAlEstado = useCallback((perfilData: Record<string, any>) => {
+        const id = resolvePerfilCorporativoApiId(perfilData);
+        setPerfil(perfilData);
+        setPerfilId(id || null);
+        setSelectedPerfilScopeId(id || null);
+        selectedPerfilRef.current = id || null;
+        setUpdateForm(perfilToUpdateForm(perfilData));
+    }, []);
 
     const fetchCatalogos = async () => {
         try {
@@ -237,59 +406,216 @@ export default function PerfilCorporativo() {
         }
     };
 
-    const fetchPerfil = async () => {
+    const fetchPerfilLegacy = async (): Promise<Record<string, unknown> | null> => {
+        const res = await apiFetch('/api/configuracion/listar/user/coporativo/perfil/publico', {
+            method: 'GET',
+            logoutOn401: false,
+        });
+
+        if (res?.ok && res?.perfil) {
+            aplicarPerfilAlEstado(res.perfil);
+            return res.perfil as Record<string, unknown>;
+        }
+
+        setPerfil(null);
+        setPerfilId(null);
+        setSelectedPerfilScopeId(null);
+        setModoRegistroNuevo(true);
+        return null;
+    };
+
+    const fetchPerfil = useCallback(async () => {
         setLoading(true);
+        setLoadingPerfilesScope(true);
 
         try {
-            const res = await apiFetch('/api/configuracion/listar/user/coporativo/perfil/publico', {
-                method: 'GET',
-            });
+            const scope = resolvePerfilCorporativoScopeJwt(user);
+            let { opciones, selectorEditable, modo, perfilPreferidoId } = await fetchPerfilesCorporativosScopeOpciones(scope);
 
-            if (res?.ok && res?.perfil) {
-                setPerfil(res.perfil);
-                setPerfilId(res.perfil._id);
+            if (!opciones.length) {
+                const todas = await colectarTodasOpcionesPerfilCorporativo();
+                if (todas.length) {
+                    opciones = todas;
+                    modo = scope.tenantCorporativoId ? 'tenant_corporativo' : 'catalogo_completo';
+                    selectorEditable = !scope.tenantCorporativoId && todas.length > 1;
+                }
+            }
 
-                const tipoSociedadId = res.perfil.tipo_sociedad?._id || '';
+            if (modo === 'legacy' || opciones.length === 0) {
+                const legacyPerfil = await fetchPerfilLegacy();
+                if (legacyPerfil?._id) {
+                    const opLegacy = opcionDesdePerfil(legacyPerfil);
+                    setPerfilesScopeOpciones([opLegacy]);
+                    setScopeModo('catalogo_completo');
+                    setSelectorPerfilEditable(false);
+                    setModoRegistroNuevo(false);
+                } else {
+                    setPerfilesScopeOpciones(opciones);
+                    setScopeModo(modo);
+                    setSelectorPerfilEditable(selectorEditable);
+                    setModoRegistroNuevo(true);
+                    setSelectedPerfilScopeId(PERFIL_CORPORATIVO_NUEVO_ID);
+                }
+                return;
+            }
 
-                setUpdateForm({
-                    razon_social: res.perfil.razon_social || '',
-                    titulo: res.perfil.titulo || '',
-                    descripcion: res.perfil.descripcion || '',
-                    represeLegaEmpresa: res.perfil.represeLegaEmpresa?._id || '',
-                    nit_ruc_rtn: res.perfil.nit_ruc_rtn || '',
-                    tipo_sociedad: tipoSociedadId,
-                    direccion_empresa: res.perfil.direccion_empresa || '',
-                    direccion_empresa_relacion: res.perfil.direccion_empresa_relacion?._id || '',
-                    movil_corporativo: res.perfil.movil_corporativo?.toString() || '',
-                    descripcion_mision_empresa: res.perfil.descripcion_mision_empresa || '',
-                    descripcion_vision_empresa: res.perfil.descripcion_vision_empresa || '',
-                    fecha_constitucion: res.perfil.fecha_constitucion ? res.perfil.fecha_constitucion.split('T')[0] : '',
-                    camara_comercio: res.perfil.camara_comercio || '',
-                    publicar: res.perfil.publicar === true,
-                    estado: res.perfil.estado ?? true,
-                });
+            setScopeModo(modo);
+            setSelectorPerfilEditable(selectorEditable);
+            setPerfilesScopeOpciones(opciones);
+
+            const perfilesCompletos = await fetchPerfilesCorporativosCompletos();
+            const idsScope = new Set(opciones.map((o) => o.id));
+            const perfilesFiltrados =
+                modo === 'catalogo_completo'
+                    ? perfilesCompletos
+                    : perfilesCompletos.filter((p) => idsScope.has(resolvePerfilCorporativoApiId(p)));
+
+            setPerfilesEnScopeCache(perfilesFiltrados);
+
+            const preferido =
+                (selectedPerfilRef.current && idsScope.has(selectedPerfilRef.current)
+                    ? selectedPerfilRef.current
+                    : null)
+                || (perfilPreferidoId && idsScope.has(perfilPreferidoId) ? perfilPreferidoId : null)
+                || (modo === 'tenant_corporativo' || opciones.length === 1 ? opciones[0]?.id : null)
+                || null;
+
+            if (!preferido && modo === 'catalogo_completo' && opciones.length > 1) {
+                setPerfil(null);
+                setPerfilId(null);
+                selectedPerfilRef.current = null;
+                setModoRegistroNuevo(true);
+                setSelectedPerfilScopeId(PERFIL_CORPORATIVO_NUEVO_ID);
+                return;
+            }
+
+            const perfilSeleccionado = preferido
+                ? perfilesFiltrados.find((p) => perfilCorporativoCoincideId(p, preferido))
+                : undefined;
+
+            if (perfilSeleccionado) {
+                aplicarPerfilAlEstado(perfilSeleccionado);
+                setModoRegistroNuevo(false);
+            } else if (preferido) {
+                const detalle = await fetchPerfilCorporativoDetallePorId(preferido, perfilesFiltrados);
+                if (detalle) {
+                    setPerfilesEnScopeCache((prev) => {
+                        const exists = prev.some((p) => perfilCorporativoCoincideId(p, preferido));
+                        return exists ? prev : [...prev, detalle];
+                    });
+                    aplicarPerfilAlEstado(detalle);
+                    setModoRegistroNuevo(false);
+                } else {
+                    setSelectedPerfilScopeId(preferido);
+                    selectedPerfilRef.current = preferido;
+                    setPerfilId(preferido);
+                    setModoRegistroNuevo(false);
+                }
             } else {
                 setPerfil(null);
+                setPerfilId(null);
+                selectedPerfilRef.current = null;
+                setModoRegistroNuevo(true);
+                setSelectedPerfilScopeId(PERFIL_CORPORATIVO_NUEVO_ID);
             }
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('Error cargando perfil:', err);
-            if (err.message?.includes('no encontrado') || err.message?.includes('404')) {
+            const message = err instanceof Error ? err.message : '';
+            if (message.includes('no encontrado') || message.includes('404')) {
                 setPerfil(null);
+                setPerfilId(null);
+                setModoRegistroNuevo(true);
+                setSelectedPerfilScopeId(PERFIL_CORPORATIVO_NUEVO_ID);
             } else {
                 toast.error('Error al cargar el perfil');
             }
         } finally {
             setLoading(false);
+            setLoadingPerfilesScope(false);
+        }
+    }, [user, aplicarPerfilAlEstado]);
+
+    const handleCambioPerfilScope = async (id: string, contexto: 'vista' | 'edicion' = 'vista') => {
+        if (id === PERFIL_CORPORATIVO_NUEVO_ID) {
+            selectedPerfilRef.current = null;
+            setSelectedPerfilScopeId(PERFIL_CORPORATIVO_NUEVO_ID);
+            setPerfil(null);
+            setPerfilId(null);
+            setModoRegistroNuevo(true);
+            setForm(initialFormState);
+            if (contexto === 'edicion') {
+                setIsUpdateModalOpen(false);
+            }
+            return;
+        }
+
+        selectedPerfilRef.current = id;
+        setSelectedPerfilScopeId(id);
+        setModoRegistroNuevo(false);
+        setLoadingPerfilDetalle(true);
+        try {
+            const detalle = await fetchPerfilCorporativoDetallePorId(id, perfilesEnScopeCache);
+            if (detalle) {
+                setPerfilesEnScopeCache((prev) => {
+                    const exists = prev.some((p) => perfilCorporativoCoincideId(p, id));
+                    return exists ? prev : [...prev, detalle];
+                });
+                aplicarPerfilAlEstado(detalle);
+                return;
+            }
+
+            toast.error('No se pudo cargar el perfil seleccionado');
+            setModoRegistroNuevo(true);
+            setSelectedPerfilScopeId(PERFIL_CORPORATIVO_NUEVO_ID);
+        } catch (err: unknown) {
+            console.error('Error cargando perfil del scope:', err);
+            toast.error('Error al cargar el perfil seleccionado');
+        } finally {
+            setLoadingPerfilDetalle(false);
         }
     };
 
     useEffect(() => {
         void fetchCatalogos();
-        void fetchPerfil();
     }, []);
+
+    useEffect(() => {
+        if (!perfil) return;
+        setUpdateForm(perfilToUpdateForm(perfil));
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- re-sincronizar selects cuando llegan catálogos
+    }, [perfil, representantes, tiposSociedad, direcciones]);
+
+    useEffect(() => {
+        if (!user) return;
+        void fetchPerfil();
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- recargar solo al cambiar scope JWT
+    }, [
+        user,
+        user?.auth?.tenantScope?.tenantCorporativoId,
+        user?.auth?.tenantScope?.tenantGlobalId,
+        user?.auth?.tenantScope?.tenantSuperAdminId,
+    ]);
+
+    useEffect(() => {
+        if (!isUpdateModalOpen || !user) return;
+        void fetchPerfil();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isUpdateModalOpen]);
+
+    useEffect(() => {
+        const id = selectedPerfilScopeId;
+        if (!id || id === PERFIL_CORPORATIVO_NUEVO_ID || perfil || loading || loadingPerfilDetalle) return;
+        void handleCambioPerfilScope(id, 'vista');
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- cargar detalle si el select quedó con id sin perfil
+    }, [selectedPerfilScopeId, perfil, loading, loadingPerfilDetalle]);
 
     const handleCreateSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+
+        if (!form.razon_social?.trim()) {
+            toast.error('Debe ingresar la razón social');
+            return;
+        }
 
         if (!form.tipo_sociedad) {
             toast.error('Debe seleccionar un tipo de sociedad');
@@ -335,7 +661,12 @@ export default function PerfilCorporativo() {
         try {
             await apiFetch(`/api/configuracion/parametrizacion/actualizar/corporativo/perfil/${perfilId}`, {
                 method: 'PUT',
-                body: updateForm,
+                body: {
+                    ...updateForm,
+                    represeLegaEmpresa: resolveApiEntityId(updateForm.represeLegaEmpresa),
+                    tipo_sociedad: resolveApiEntityId(updateForm.tipo_sociedad),
+                    direccion_empresa_relacion: resolveApiEntityId(updateForm.direccion_empresa_relacion),
+                },
             });
 
             toast.success('Informacion actualizada');
@@ -372,38 +703,67 @@ export default function PerfilCorporativo() {
                         <div className="flex justify-center py-20">
                             <Loader2 className="h-8 w-8 animate-spin text-primary" />
                         </div>
-                    ) : perfil ? (
-                        <div className="space-y-6">
-                            <div className="grid grid-cols-1 gap-4 rounded-xl border bg-muted p-5 md:grid-cols-4">
-                                <div>
-                                    <p className="text-[10px] font-bold uppercase text-primary">Razon Social</p>
-                                    <p className="text-lg font-bold">{perfil.razon_social}</p>
-                                </div>
-                                <div>
-                                    <p className="text-[10px] font-bold uppercase text-primary">NIT / Documento</p>
-                                    <p className="font-medium">{perfil.nit_ruc_rtn}</p>
-                                </div>
-                                <div>
-                                    <p className="text-[10px] font-bold uppercase text-primary">Tipo de Sociedad</p>
-                                    <p className="font-medium">{getTipoSociedadDisplay(perfil.tipo_sociedad)}</p>
-                                </div>
-                                <div>
-                                    <p className="text-[10px] font-bold uppercase text-primary">Publicacion</p>
-                                    <p className="font-medium">{perfil.publicar === true ? 'Publicado' : 'Privado'}</p>
-                                </div>
-                            </div>
-                            <Button onClick={() => setIsUpdateModalOpen(true)} className="h-12 w-full">
-                                <Edit className="mr-2 h-5 w-5" /> Editar Informacion Corporativa
-                            </Button>
-                        </div>
                     ) : (
-                        <form onSubmit={handleCreateSubmit} className="space-y-8">
-                            <FormularioEmpresa data={form} setData={setForm} representantes={representantes} tiposSociedad={tiposSociedad} direcciones={direcciones} />
-                            <Button type="submit" disabled={submitting} className="h-12 w-full text-lg">
-                                {submitting ? <Loader2 className="mr-2 animate-spin" /> : <Save className="mr-2" />}
-                                Finalizar Registro de Empresa
-                            </Button>
-                        </form>
+                        <div className="space-y-6">
+                            {(hayOpcionesPerfil || loadingPerfilesScope) && (
+                                <SelectorRazonSocialPerfil
+                                    opciones={perfilesScopeOpciones}
+                                    value={perfil ? (selectedPerfilScopeId || perfilId) : selectedVistaId}
+                                    onChange={(id) => void handleCambioPerfilScope(id, 'vista')}
+                                    loading={loadingPerfilesScope || loadingPerfilDetalle}
+                                    disabled={Boolean(perfil) && !selectorPerfilEditable}
+                                    mostrarCrearNuevo={!perfil && scopeModo !== 'tenant_corporativo'}
+                                />
+                            )}
+
+                            {loadingPerfilDetalle && (
+                                <div className="flex justify-center py-8">
+                                    <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                                </div>
+                            )}
+
+                            {perfil && !loadingPerfilDetalle && (
+                                <div className="space-y-6">
+                                    <div className="grid grid-cols-1 gap-4 rounded-xl border bg-muted p-5 md:grid-cols-4">
+                                        <div>
+                                            <p className="text-[10px] font-bold uppercase text-primary">Razon Social</p>
+                                            <p className="text-lg font-bold">{perfil.razon_social}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[10px] font-bold uppercase text-primary">NIT / Documento</p>
+                                            <p className="font-medium">{perfil.nit_ruc_rtn}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[10px] font-bold uppercase text-primary">Tipo de Sociedad</p>
+                                            <p className="font-medium">{getTipoSociedadDisplay(perfil.tipo_sociedad)}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[10px] font-bold uppercase text-primary">Publicacion</p>
+                                            <p className="font-medium">{perfil.publicar === true ? 'Publicado' : 'Privado'}</p>
+                                        </div>
+                                    </div>
+                                    <Button onClick={() => setIsUpdateModalOpen(true)} className="h-12 w-full">
+                                        <Edit className="mr-2 h-5 w-5" /> Editar Informacion Corporativa
+                                    </Button>
+                                </div>
+                            )}
+
+                            {!perfil && modoRegistroNuevo && !loadingPerfilDetalle && (
+                                <form onSubmit={handleCreateSubmit} className="space-y-8">
+                                    <FormularioEmpresa
+                                        data={form}
+                                        setData={setForm}
+                                        representantes={representantes}
+                                        tiposSociedad={tiposSociedad}
+                                        direcciones={direcciones}
+                                    />
+                                    <Button type="submit" disabled={submitting} className="h-12 w-full text-lg">
+                                        {submitting ? <Loader2 className="mr-2 animate-spin" /> : <Save className="mr-2" />}
+                                        Finalizar Registro de Empresa
+                                    </Button>
+                                </form>
+                            )}
+                        </div>
                     )}
                 </CardContent>
             </Card>
@@ -417,12 +777,39 @@ export default function PerfilCorporativo() {
                         <DialogDescription>Actualiza la informacion corporativa de tu empresa</DialogDescription>
                     </DialogHeader>
                     <form onSubmit={handleUpdateSubmit} className="space-y-6 pt-4">
-                        <FormularioEmpresa data={updateForm} setData={setUpdateForm} representantes={representantes} tiposSociedad={tiposSociedad} direcciones={direcciones} />
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                            <SelectorRazonSocialPerfil
+                                opciones={
+                                    perfilesScopeOpciones.length
+                                        ? perfilesScopeOpciones
+                                        : perfilId && updateForm.razon_social
+                                            ? [{
+                                                id: perfilId,
+                                                perfilCorporativoId: perfilId,
+                                                label: updateForm.razon_social,
+                                                razonSocial: updateForm.razon_social,
+                                            }]
+                                            : []
+                                }
+                                value={selectedPerfilScopeId || perfilId}
+                                onChange={(id) => void handleCambioPerfilScope(id, 'edicion')}
+                                loading={loadingPerfilesScope || loadingPerfilDetalle}
+                                disabled={!selectorPerfilEditable}
+                            />
+                        </div>
+                        <FormularioEmpresa
+                            data={updateForm}
+                            setData={setUpdateForm}
+                            representantes={representantes}
+                            tiposSociedad={tiposSociedad}
+                            direcciones={direcciones}
+                            ocultarRazonSocial
+                        />
                         <div className="flex justify-end gap-3 border-t pt-4">
                             <Button type="button" variant="outline" onClick={() => setIsUpdateModalOpen(false)}>
                                 Cancelar
                             </Button>
-                            <Button type="submit" disabled={updating} className="min-w-[150px]">
+                            <Button type="submit" disabled={updating || loadingPerfilDetalle} className="min-w-[150px]">
                                 {updating ? <Loader2 className="mr-2 animate-spin" /> : <Save className="mr-2" />}
                                 Guardar Cambios
                             </Button>

@@ -7,6 +7,7 @@ import {
   type ParametrosGobernanzaModuloMenuParametrizacion,
 } from './parametrosGobernanzaModuloMenu';
 import { normalizeGobernanzaModuloSlug } from './gobernanzaModulosCatalog';
+import { resolverMenuPathHubOperaciones } from './gobernanzaActionIds';
 
 export type UseParametrosGobernanzaModuloMenuOptions = {
   moduloSlug: string | null | undefined;
@@ -44,11 +45,15 @@ export function useParametrosGobernanzaModuloMenu({
   }, [slug, parametrizacionOverride]);
 
   const menuPathNorm = String(menuPath || '').trim();
+  const menuPathOperativo = operacionesHub
+    ? resolverMenuPathHubOperaciones(menuPathNorm)
+    : menuPathNorm;
   const menu = useGobernanzaModuloMenu({
     moduloSlug: slug || null,
     sectionKey: parametrizacionBase?.section ?? slug,
-    menuPath: menuPathNorm || null,
+    menuPath: menuPathOperativo || null,
     syncDefaultAction: operacionesHub ? false : (syncDefaultAction ?? parametrizacionBase?.syncDefaultAction ?? true),
+    /** Hub: pestañas en el padre sin navegar a subrutas (menú siempre visible). */
     inlineFormularios: operacionesHub || !menuPathNorm,
     operacionesHub,
     tipoSection,

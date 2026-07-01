@@ -66,6 +66,11 @@ export interface ParametrosGobernanzaProps {
   operacionesHub?: boolean;
   /** Filtra menú por gobernanzaModuloTipos.section (TenantSuperAdmin → gobernanza). */
   tipoSection?: string | null;
+  /**
+   * Modo formulario directo: renderiza el primer endpoint de `allowedEndpointIds` inline
+   * sin hub de tarjetas ni Dialog. Úsalo en rutas dinámica donde solo hay un endpoint.
+   */
+  singleFormInline?: boolean;
 }
 
 /** Dominio UI / catálogos (solo usados dentro de ParametrosGobernanza). */
@@ -99,3 +104,7 @@ export type GenericSelectOption = { id: string; label: string; rol?: string; met
 export type HeredaScope = 'tenantSuperAdmin' | 'tenantGlobal' | 'unknown';
 export type VistaLoc = { suiteId: string; suiteName: string; moduloId: string; moduloName: string };
 export type VistaItem = { id: string; label: string; path: string };
+export type RunEndpointOpts = {
+  diosSyncCompleta?: boolean;
+  diosFormSourceId?: string;
+};

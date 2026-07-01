@@ -1,5 +1,44 @@
 import { apiFetch } from './api';
 
+export type PoliticaBypassPipeline = string;
+
+export type PoliticaBypassMotorEventoItem = {
+  nombre: string;
+  etiqueta: string;
+  pipeline: PoliticaBypassPipeline;
+  pipelineLabel?: string;
+  alcance?: string;
+  label?: string;
+  dominio?: string;
+  descripcion?: string;
+  activo?: boolean;
+  orden?: number;
+};
+
+export type PoliticaBypassPipelineItem = {
+  id?: string;
+  nombre: string;
+  label: string;
+  referencia?: string;
+  descripcion?: string;
+  orden?: number;
+  activo?: boolean;
+};
+
+export type GuardarPoliticaBypassMotorEventoPayload = {
+  nombre: string;
+  etiqueta: string;
+  pipeline: PoliticaBypassPipeline;
+};
+
+export type GuardarPoliticaBypassPipelinePayload = {
+  nombre: string;
+  label: string;
+  referencia?: string;
+  descripcion?: string;
+  orden?: number;
+};
+
 export type PoliticaBypassAlcanceItem = {
   alcance: string;
   dominio: string;
@@ -144,4 +183,38 @@ export async function actualizarPoliticaBypassRoles(
   const item = (res as { alcance?: PoliticaBypassAlcanceItem })?.alcance;
   if (!item) throw new Error('No se pudo actualizar roles del alcance');
   return item;
+}
+
+export async function guardarPoliticaBypassMotorEvento(
+  payload: GuardarPoliticaBypassMotorEventoPayload,
+): Promise<PoliticaBypassMotorEventoItem> {
+  const res = await apiFetch(`${BASE}/motor-evento`, {
+    method: 'POST',
+    body: payload,
+  });
+  const item = (res as { item?: PoliticaBypassMotorEventoItem })?.item;
+  if (!item) throw new Error('No se pudo guardar el motor evento');
+  return item;
+}
+
+export async function guardarPoliticaBypassPipeline(
+  payload: GuardarPoliticaBypassPipelinePayload,
+): Promise<PoliticaBypassPipelineItem> {
+  const res = await apiFetch('/api/seguridad/catalogo-pipeline', {
+    method: 'POST',
+    body: payload,
+  });
+  const item = (res as { item?: PoliticaBypassPipelineItem })?.item;
+  if (!item) throw new Error('No se pudo guardar el pipeline');
+  return item;
+}
+
+export async function fetchCatalogoPipeline(): Promise<PoliticaBypassPipelineItem[]> {
+  const res = await apiFetch('/api/seguridad/catalogo-pipeline', { method: 'GET' });
+  const items = (res as { items?: PoliticaBypassPipelineItem[] })?.items;
+  return Array.isArray(items) ? items : [];
+}
+
+export async function eliminarPoliticaBypassMotorEvento(nombre: string): Promise<void> {
+  await apiFetch(`${BASE}/motor-evento/${encodeURIComponent(nombre)}`, { method: 'DELETE' });
 }

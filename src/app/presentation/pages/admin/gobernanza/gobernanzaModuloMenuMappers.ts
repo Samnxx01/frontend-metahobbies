@@ -7,6 +7,7 @@ import {
 import { accionApiToEndpointSpec, ENDPOINTS_BY_ID } from './gobernanzaEndpointCatalog';
 import type { GobernanzaModuloConfigApi, GobernanzaModuloMenuAccion } from './gobernanzaModuloApiTypes';
 import type { EndpointSection, EndpointSpec, FieldSpec } from './parametrosGobernanzaTypes';
+import { filtrarConfigsConAlcancesParametrizados } from './gobernanzaModuloAlcance';
 
 /** true cuando el formulario React publicado en BD/config resuelve la UI. */
 export function tieneFormularioComponentResuelto(
@@ -148,6 +149,7 @@ const GOBERNANZA_HUB_FORM_COMPONENTS = new Set([
   'TenantSuperAdmin',
   'TenantGlobal',
   'ParametrosGobernanza',
+  'ParametrizacionCorporativa',
   'GobernanzaModuloPorRuta',
 ]);
 
@@ -157,12 +159,20 @@ export function buildAccionesHubDesdeConfigsClient(
   hubMenuPath?: string | null
 ): GobernanzaModuloMenuAccion[] {
   const pathKey = normalizarGobernanzaMenuPath(hubMenuPath)?.toLowerCase();
-  const tarjetas = configs
+  const tarjetas = filtrarConfigsConAlcancesParametrizados(configs)
     .filter((cfg) => {
       const menuPath = normalizarGobernanzaMenuPath(cfg.menuPath || cfg.frontPath || cfg.rutaPath || '');
-      const component = String(cfg.formularioComponent || '').trim();
+      const component = String(
+        cfg.formularioComponent || cfg.tipoFormularioComponent || ''
+      ).trim();
       if (!menuPath || !component) return false;
-      if (pathKey && menuPath.toLowerCase() === pathKey) return false;
+      if (
+        pathKey
+        && menuPath.toLowerCase() === pathKey
+        && GOBERNANZA_HUB_FORM_COMPONENTS.has(component)
+      ) {
+        return false;
+      }
       if (GOBERNANZA_HUB_FORM_COMPONENTS.has(component)) return false;
       return true;
     })
@@ -218,7 +228,7 @@ export function buildAccionesFromConfigsClient(
   const acciones: GobernanzaModuloMenuAccion[] = [];
   const seen = new Set<string>();
 
-  for (const cfg of configs) {
+  for (const cfg of filtrarConfigsConAlcancesParametrizados(configs)) {
     const formularioComponent = String(
       cfg.formularioComponent || 'GobernanzaPermisosFormByEndpoint'
     ).trim();

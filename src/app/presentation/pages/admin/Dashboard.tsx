@@ -115,6 +115,19 @@ const COLOR_META: Array<{
             'Fondo de badges de estado "secondary"',
         ],
     },
+    {
+        key: 'COLOR_TEXT',
+        label: 'Color de texto',
+        cssVar: '--foreground',
+        afecta: 'Color de todas las letras de la aplicación, público y admin.',
+        elementos: [
+            'Texto del body y párrafos en toda la app',
+            'Texto dentro de tarjetas, modales y popovers',
+            'Texto de títulos h1–h6 en vistas públicas y admin',
+            'Labels de formularios e inputs',
+            'Texto en componentes shadcn/ui (Dialog, Sheet, etc.)',
+        ],
+    },
 ];
 
 type DashboardUser = {

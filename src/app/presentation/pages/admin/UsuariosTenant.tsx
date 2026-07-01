@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { RefreshCw, Shield, Building2, Globe, Plus, Loader2, Trash2, Edit, Settings2, Users, X } from 'lucide-react';
+import { RefreshCw, Shield, Building2, Globe, Plus, Loader2, Trash2, Edit, Settings2, Users, List, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { BTN_GHOST_ACCENT } from '@/app/utils/buttonStyles';
 import { Badge } from '@/components/ui/badge';
@@ -27,6 +27,7 @@ import { RolesGlobalesModal } from '@/app/presentation/components/admin/usuarios
 import { RolesCorporativosModal } from '@/app/presentation/components/admin/usuarios-tenant/RolesCorporativosModal';
 import { ParametrizacionMarcoAfiliadoModal } from '@/app/presentation/components/admin/usuarios-tenant/ParametrizacionMarcoAfiliadoModal';
 import { UsuariosRolCorporativoListadoModal } from '@/app/presentation/components/admin/usuarios-tenant/UsuariosRolCorporativoListadoModal';
+import { UsuariosTenantJerarquiaListadoModal } from '@/app/presentation/components/admin/usuarios-tenant/UsuariosTenantJerarquiaListadoModal';
 import type { UsuarioRolCorporativoItem } from '@/app/presentation/components/admin/usuarios-tenant/usuariosRolCorporativoTypes';
 import type {
     CorpNode,
@@ -41,7 +42,7 @@ import {
     resolveEntityPublicId,
 } from '@/app/utils/entityPublicId';
 
-const BYPASS_DOMINIOS_OPCIONES = ['RUTAS', 'DOMINIOS', 'REFERIDOS', 'COMISIONES', 'ROLES_CORPORATIVOS'] as const;
+const BYPASS_DOMINIOS_OPCIONES = ['RUTAS', 'DOMINIOS', 'REFERIDOS', 'VENTAS', 'COMISIONES', 'ROLES_CORPORATIVOS'] as const;
 
 function bypassDominiosExplicitos(doc: { bypassDominios?: string[] }) {
     return (doc.bypassDominios ?? [])
@@ -181,6 +182,7 @@ export default function UsuariosTenant(): React.ReactElement {
     const [modalRolesCorporativos, setModalRolesCorporativos] = useState(false);
     const [modalParametrizacionMarco, setModalParametrizacionMarco] = useState(false);
     const [modalListadoUsuariosRolCorp, setModalListadoUsuariosRolCorp] = useState(false);
+    const [modalListadoSaTgTc, setModalListadoSaTgTc] = useState(false);
 
     const scope = jerarquia?.scope ?? null;
 
@@ -691,7 +693,7 @@ export default function UsuariosTenant(): React.ReactElement {
                 </div>
             </div>
 
-            <div className="mx-auto flex max-w-5xl flex-col">
+            <div id="organigrama-tenant-usuarios" className="mx-auto flex max-w-5xl flex-col scroll-mt-6">
                 {showSuperAdmins && (
                     <>
                         <OrganigramaColumn
@@ -774,10 +776,10 @@ export default function UsuariosTenant(): React.ReactElement {
                                         size="sm"
                                         variant="secondary"
                                         className="h-8 text-xs"
-                                        onClick={() => setModalParametrizacionMarco(true)}
+                                        onClick={() => setModalListadoSaTgTc(true)}
                                     >
-                                        <Settings2 className="h-3.5 w-3.5 mr-1.5" />
-                                        Parametrizar marco
+                                        <List className="h-3.5 w-3.5 mr-1.5" />
+                                        Listar usuarios Tenant SA, TG y TC
                                     </Button>
                                     <Button
                                         type="button"
@@ -804,10 +806,10 @@ export default function UsuariosTenant(): React.ReactElement {
                                             type="button"
                                             size="sm"
                                             variant="secondary"
-                                            onClick={() => setModalParametrizacionMarco(true)}
+                                            onClick={() => setModalListadoSaTgTc(true)}
                                         >
-                                            <Settings2 className="h-3.5 w-3.5 mr-1.5" />
-                                            Parametrizar marco
+                                            <List className="h-3.5 w-3.5 mr-1.5" />
+                                            Listar usuarios Tenant SA, TG y TC
                                         </Button>
                                         <Button
                                             type="button"
@@ -1168,6 +1170,15 @@ export default function UsuariosTenant(): React.ReactElement {
             <ParametrizacionMarcoAfiliadoModal
                 open={modalParametrizacionMarco}
                 onClose={() => setModalParametrizacionMarco(false)}
+            />
+
+            <UsuariosTenantJerarquiaListadoModal
+                open={modalListadoSaTgTc}
+                onClose={() => setModalListadoSaTgTc(false)}
+                onEditUsuario={(u) => {
+                    setModalListadoSaTgTc(false);
+                    void openEditUser(u);
+                }}
             />
 
             <UsuariosRolCorporativoListadoModal

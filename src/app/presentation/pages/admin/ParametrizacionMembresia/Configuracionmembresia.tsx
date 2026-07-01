@@ -18,24 +18,19 @@ import {
     Loader2, Plus, RefreshCw, Tag, AlertCircle, Pencil,
     CheckCircle2, XCircle, DollarSign, ListFilter,
 } from 'lucide-react';
-
-interface Moneda {
-    _id: string;
-    monedas: string;
-    estadoMoneda: boolean;
-}
-
-interface ParametrizacionMembresia {
-    _id: string;
-    nombreMembresia: string;
-    descripcion: string;
-    precioMembresia: number;
-    tipoPagos: string;
-    estadoPrecio: boolean;
-    esPrecioDefault: boolean;
-    creacionDate: string;
-    monedasId?: { _id: string; monedas: string; estadoMoneda: boolean } | string;
-}
+import {
+    MEMBRESIA_PRECIO_CREATE_URL,
+    MEMBRESIA_PRECIO_LIST_URL,
+    MONEDAS_LIST_URL,
+    membresiaPrecioUpdatePath,
+    normalizeMembresiaPrecioFromApi,
+    normalizeMonedaFromApi,
+    resolveMonedaIdForApiBody,
+    type MembresiaPrecioApiRow,
+    type MembresiaPrecioRow,
+    type MonedaApiRow,
+    type MonedaRow,
+} from './parametrizacionMembresiaApi';
 
 interface CrearForm {
     emailInvitado: string;
@@ -90,11 +85,11 @@ export default function ConfiguracionMembresia() {
     const [formCrear, setFormCrear] = useState<CrearForm>(INITIAL_CREAR);
 
     // Monedas
-    const [monedas, setMonedas] = useState<Moneda[]>([]);
+    const [monedas, setMonedas] = useState<MonedaRow[]>([]);
     const [loadingMonedas, setLoadingMonedas] = useState(false);
 
     // Tabla de membresías
-    const [membresias, setMembresias] = useState<ParametrizacionMembresia[]>([]);
+    const [membresias, setMembresias] = useState<MembresiaPrecioRow[]>([]);
     const [loadingMembresias, setLoadingMembresias] = useState(false);
 
     // Modal de edición
@@ -111,8 +106,13 @@ export default function ConfiguracionMembresia() {
     const cargarMonedas = useCallback(async () => {
         setLoadingMonedas(true);
         try {
-            const res = await apiFetch('/api/monedas/seguridad/listar/monedas', { method: 'GET' });
-            if (res?.monedas) setMonedas(res.monedas.filter((m: Moneda) => m.estadoMoneda));
+            const res = await apiFetch(MONEDAS_LIST_URL, { method: 'GET' });
+            if (res?.monedas) {
+                const rows = (res.monedas as MonedaApiRow[])
+                    .map(normalizeMonedaFromApi)
+                    .filter((m): m is MonedaRow => m !== null && m.estadoMoneda);
+                setMonedas(rows);
+            }
         } catch { /* no bloqueante */ }
         finally { setLoadingMonedas(false); }
     }, []);
@@ -120,9 +120,9 @@ export default function ConfiguracionMembresia() {
     const cargarMembresias = useCallback(async () => {
         setLoadingMembresias(true);
         try {
-            const res = await apiFetch('/api/membresia/seguridad/crear/parametrizacion/membresia', { method: 'GET' });
-            const lista: ParametrizacionMembresia[] = Array.isArray(res?.data) ? res.data : [];
-            setMembresias(lista);
+            const res = await apiFetch(MEMBRESIA_PRECIO_LIST_URL, { method: 'GET' });
+            const raw = Array.isArray(res?.data) ? res.data as MembresiaPrecioApiRow[] : [];
+            setMembresias(raw.map(normalizeMembresiaPrecioFromApi).filter((m): m is MembresiaPrecioRow => m !== null));
         } catch { /* no bloqueante */ }
         finally { setLoadingMembresias(false); }
     }, []);
@@ -132,15 +132,14 @@ export default function ConfiguracionMembresia() {
         cargarMembresias();
     }, [cargarMonedas, cargarMembresias]);
 
-    const abrirEditar = (m: ParametrizacionMembresia) => {
-        setEditandoId(m._id);
-        const monedaId = typeof m.monedasId === 'object' ? m.monedasId?._id : m.monedasId;
+    const abrirEditar = (m: MembresiaPrecioRow) => {
+        setEditandoId(m.id);
         setFormEditar({
             nombreMembresia: m.nombreMembresia,
             descripcion: m.descripcion ?? '',
             precioMembresia: String(normalizarPrecioDesdeCentavos(m.precioMembresia)),
             tipoPagos: m.tipoPagos ?? '',
-            monedasId: monedaId ?? '',
+            monedasId: m.monedaId ?? '',
         });
         setModalAbierto(true);
     };
@@ -188,9 +187,9 @@ export default function ConfiguracionMembresia() {
                 tipoPagos: formCrear.tipoPagos || undefined,
             };
             if (formCrear.monedasId && formCrear.monedasId !== '__none__') {
-                body.monedasId = formCrear.monedasId;
+                body.monedasId = resolveMonedaIdForApiBody(formCrear.monedasId);
             }
-            await apiFetch('/api/membresia/seguridad/crear/parametrizacion/membresia/moneda', {
+            await apiFetch(MEMBRESIA_PRECIO_CREATE_URL, {
                 method: 'POST',
                 body,
             });
@@ -223,9 +222,9 @@ export default function ConfiguracionMembresia() {
                 tipoPagos: formEditar.tipoPagos || undefined,
             };
             if (formEditar.monedasId && formEditar.monedasId !== '__none__') {
-                body.monedasId = formEditar.monedasId;
+                body.monedasId = resolveMonedaIdForApiBody(formEditar.monedasId);
             }
-            await apiFetch(`/api/membresia/seguridad/crear/parametrizacion/membresia/${editandoId}`, {
+            await apiFetch(membresiaPrecioUpdatePath(editandoId), {
                 method: 'PUT',
                 body,
             });
@@ -361,7 +360,7 @@ export default function ConfiguracionMembresia() {
                                     <SelectContent>
                                         <SelectItem value="__none__">Sin moneda específica</SelectItem>
                                         {monedas.map(m => (
-                                            <SelectItem key={m._id} value={m._id}>{m.monedas}</SelectItem>
+                                            <SelectItem key={m.id} value={m.id}>{m.monedas}</SelectItem>
                                         ))}
                                     </SelectContent>
                                 </Select>
@@ -471,11 +470,9 @@ export default function ConfiguracionMembresia() {
                                         </tr>
                                     ) : (
                                         membresias.map(m => {
-                                            const monedaLabel = typeof m.monedasId === 'object'
-                                                ? m.monedasId?.monedas
-                                                : '—';
+                                            const monedaLabel = m.monedaLabel;
                                             return (
-                                                <tr key={m._id} className="hover:bg-muted/20 transition-colors">
+                                                <tr key={m.id} className="hover:bg-muted/20 transition-colors">
                                                     <td className="px-4 py-3 font-medium text-foreground max-w-[180px]">
                                                         <span className="truncate block" title={m.nombreMembresia}>
                                                             {m.nombreMembresia}
@@ -595,7 +592,7 @@ export default function ConfiguracionMembresia() {
                                     <SelectContent>
                                         <SelectItem value="__none__">Sin moneda específica</SelectItem>
                                         {monedas.map(m => (
-                                            <SelectItem key={m._id} value={m._id}>{m.monedas}</SelectItem>
+                                            <SelectItem key={m.id} value={m.id}>{m.monedas}</SelectItem>
                                         ))}
                                     </SelectContent>
                                 </Select>

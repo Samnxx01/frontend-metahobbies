@@ -20,6 +20,7 @@ export const GOBERNANZA_REGLAS_FORM_REGISTRY: Record<
   ReglasListarTenantForm,
   ReglasCrearGlobalForm,
   ReglasActualizarGlobalForm,
+  ReglasActualizarSaAlcancePanel: ReglasActualizarGlobalForm,
   ReglasDesactivarGlobalForm,
   ReglasEliminarGlobalForm,
   ReglasCrearDiosForm,

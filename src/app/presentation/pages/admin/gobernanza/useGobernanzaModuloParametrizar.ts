@@ -34,6 +34,7 @@ import {
   buildTiposModuloOpciones,
   buildTitulosOpciones,
   filtrarAccionesPorTipo,
+  filtrarAccionesPorContextoOperativo,
   resolverConfigPorRuta,
   type GobernanzaAccionCatalogItem,
 } from './gobernanzaModuloParametrizarOpciones';
@@ -566,10 +567,12 @@ export function useGobernanzaModuloParametrizar({
       return;
     }
 
-    const sugeridasTipo = filtrarAccionesPorTipo(
-      accionesPublicables,
-      tipoSeleccionado,
-      componenteActivo
+    const sugeridasTipo = filtrarAccionesPorContextoOperativo(
+      filtrarAccionesPorTipo(accionesPublicables, tipoSeleccionado, componenteActivo),
+      {
+        label: label.trim() || rutaSeleccionada?.name?.trim() || '',
+        path: rutaSeleccionada?.path || formularioDetalle?.path || menuPathInicialNorm || '',
+      }
     );
     const seed =
       sugeridasTipo.length > 0
@@ -585,6 +588,11 @@ export function useGobernanzaModuloParametrizar({
     accionesPublicadas,
     tipoSeleccionado,
     componenteActivo,
+    label,
+    rutaSeleccionada?.name,
+    rutaSeleccionada?.path,
+    formularioDetalle?.path,
+    menuPathInicialNorm,
   ]);
 
   const seleccionarTipoModulo = useCallback((nextTipoId: string) => {

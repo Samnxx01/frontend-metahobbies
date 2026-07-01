@@ -55,7 +55,8 @@ export type PaletaColorKey =
     | 'COLOR_LIGHT'
     | 'COLOR_BG'
     | 'COLOR_CHAMPAGNE'
-    | 'COLOR_SUNSET';
+    | 'COLOR_SUNSET'
+    | 'COLOR_TEXT';
 
 export interface ColoresPaleta {
     COLOR_PRIMARY: string;
@@ -64,6 +65,7 @@ export interface ColoresPaleta {
     COLOR_BG: string;
     COLOR_CHAMPAGNE: string;
     COLOR_SUNSET: string;
+    COLOR_TEXT: string;
 }
 
 /**
@@ -76,6 +78,11 @@ export function aplicarPaletaEnApp(colores: ColoresPaleta): void {
     const hsl: any = (key: PaletaColorKey) => hexToHsl(colores[key]);
 
     root.style.setProperty('--background', hsl('COLOR_BG'));
+
+    // COLOR_TEXT → color de texto principal en toda la app
+    root.style.setProperty('--foreground', hsl('COLOR_TEXT'));
+    root.style.setProperty('--card-foreground', hsl('COLOR_TEXT'));
+    root.style.setProperty('--popover-foreground', hsl('COLOR_TEXT'));
 
     // COLOR_PRIMARY → color dominante de la app
     root.style.setProperty('--primary', hsl('COLOR_PRIMARY'));
@@ -100,11 +107,9 @@ export function aplicarPaletaEnApp(colores: ColoresPaleta): void {
     root.style.setProperty('--border', hsl('COLOR_LIGHT'));
     root.style.setProperty('--input', hsl('COLOR_LIGHT'));
 
-    // COLOR_CHAMPAGNE → card y popover
+    // COLOR_CHAMPAGNE → card y popover (foreground ya fue seteado con COLOR_TEXT arriba)
     root.style.setProperty('--card', hsl('COLOR_CHAMPAGNE'));
-    root.style.setProperty('--card-foreground', '222 84% 5%');
     root.style.setProperty('--popover', hsl('COLOR_CHAMPAGNE'));
-    root.style.setProperty('--popover-foreground', '222 84% 5%');
 
     // COLOR_PRIMARY también como destructive (tono de marca)
     root.style.setProperty('--destructive', hsl('COLOR_PRIMARY'));
@@ -137,14 +142,15 @@ export function limpiarPaletaApp(): void {
     const root = document.documentElement;
     const vars = [
         '--background',
+        '--foreground', '--card-foreground', '--popover-foreground',
         '--primary', '--primary-foreground', '--ring',
         '--accent', '--accent-foreground',
         '--button', '--button-foreground',
         '--secondary', '--secondary-foreground',
         '--muted', '--muted-foreground',
         '--border', '--input',
-        '--card', '--card-foreground',
-        '--popover', '--popover-foreground',
+        '--card',
+        '--popover',
         '--destructive', '--destructive-foreground',
     ];
     vars.forEach(v => root.style.removeProperty(v));

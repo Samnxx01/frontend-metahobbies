@@ -7,6 +7,7 @@ export interface ColoresApp {
   COLOR_BG: string;
   COLOR_CHAMPAGNE: string;
   COLOR_SUNSET: string;
+  COLOR_TEXT: string;
 }
 
 export const DEFAULT_COLORES_APP: ColoresApp = {
@@ -16,6 +17,7 @@ export const DEFAULT_COLORES_APP: ColoresApp = {
   COLOR_BG:        '#FBD9E5',
   COLOR_CHAMPAGNE: '#FBF4EB',
   COLOR_SUNSET:    '#F3CC97',
+  COLOR_TEXT:      '#1F2937',
 };
 
 /** Misma fuente que el backend por defecto: evita HEX “quemados” distintos al endpoint. */

@@ -53,6 +53,10 @@ export interface BackendProducto {
   id?: string;
   sku?: string;
   codigoBarras?: string;
+  /** Formato para impresion/escaneo resuelto por el backend (EAN13 o CODE128). */
+  formatoCodigoBarras?: 'EAN13' | 'CODE128' | null;
+  /** Indica si el codigo actual es escaneable con pistola laser. */
+  codigoBarrasEscaneable?: boolean;
   nombre: string;
   descripcion?: string;
   descripcionCorta?: string;
