@@ -52,6 +52,18 @@ interface ReferidosResponse {
     usuarios: UsuarioReferido[];
 }
 
+const isVoucher = (voucher: Voucher | null | undefined): voucher is Voucher => Boolean(voucher);
+
+const sanitizeReferidosResponse = (response: ReferidosResponse): ReferidosResponse => ({
+    ...response,
+    usuarios: (response?.usuarios ?? [])
+        .filter(Boolean)
+        .map((usuario) => ({
+            ...usuario,
+            vouchers: (usuario.vouchers ?? []).filter(isVoucher),
+        })),
+});
+
 interface UserDetail {
     _id: string;
     correo: string;
@@ -72,17 +84,18 @@ interface ReferralChainNode {
     isCurrent: boolean;
 }
 
-const voucherMonto = (voucher: Voucher): number => Number(voucher.montoGanado) || 0;
+const voucherMonto = (voucher: Voucher | null | undefined): number => Number(voucher?.montoGanado) || 0;
 
-const totalesDesdeVouchers = (vouchers: Voucher[]) => {
-    const totalGenerado = vouchers.reduce((acc, v) => acc + voucherMonto(v), 0);
-    const totalPendiente = vouchers
+const totalesDesdeVouchers = (vouchers: Array<Voucher | null | undefined>) => {
+    const vouchersValidos = vouchers.filter(isVoucher);
+    const totalGenerado = vouchersValidos.reduce((acc, v) => acc + voucherMonto(v), 0);
+    const totalPendiente = vouchersValidos
         .filter((v) => v.status === 'pendiente')
         .reduce((acc, v) => acc + voucherMonto(v), 0);
-    const totalPagado = vouchers
+    const totalPagado = vouchersValidos
         .filter((v) => v.status === 'pagado')
         .reduce((acc, v) => acc + voucherMonto(v), 0);
-    const saldoInicial = vouchers.length ? voucherMonto(vouchers[0]) : 0;
+    const saldoInicial = vouchersValidos.length ? voucherMonto(vouchersValidos[0]) : 0;
     return { totalGenerado, totalPendiente, totalPagado, saldoInicial };
 };
 
@@ -275,7 +288,7 @@ const buildReferralChain = (
 
     const findUpstream = (targetId: string): string | null => {
         for (const u of allUsuarios) {
-            for (const v of u.vouchers) {
+            for (const v of (u.vouchers ?? []).filter(isVoucher)) {
                 if (v.referidoId === targetId) return u.usuarioId;
             }
         }
@@ -332,7 +345,7 @@ function GestionReferidos(): React.ReactElement {
             const response = await apiFetch(`${API_BASE_URL}/referido/listarSaldoRefere`, {
                 method: 'GET'
             });
-            setData(response);
+            setData(sanitizeReferidosResponse(response));
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : 'Error al cargar datos de referidos';
             setError(errorMessage);

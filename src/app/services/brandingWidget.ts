@@ -13,6 +13,7 @@ export interface BrandingPalette {
 }
 
 export interface BrandingConfig {
+  etiqueta?: string;
   tipografia?: {
     fontFamilyBase?: string;
     fontFamilyHeading?: string;
@@ -39,12 +40,13 @@ export interface BrandingConfig {
       enabled?: boolean;
     };
     navigation?: {
-      login?: { path?: string; enabled?: boolean };
-      postLogin?: { path?: string; enabled?: boolean };
-      logout?: { path?: string; enabled?: boolean };
-      register?: { path?: string; enabled?: boolean };
-      forgotPassword?: { path?: string; enabled?: boolean };
-      publicHome?: { path?: string; enabled?: boolean };
+      etiqueta?: string;
+      login?: { path?: string; enabled?: boolean; rutaSeguridadId?: string | null };
+      postLogin?: { path?: string; enabled?: boolean; rutaSeguridadId?: string | null };
+      logout?: { path?: string; enabled?: boolean; rutaSeguridadId?: string | null };
+      register?: { path?: string; enabled?: boolean; rutaSeguridadId?: string | null };
+      forgotPassword?: { path?: string; enabled?: boolean; rutaSeguridadId?: string | null };
+      publicHome?: { path?: string; enabled?: boolean; rutaSeguridadId?: string | null };
       allowedPaths?: string[];
     };
     [key: string]: unknown;
