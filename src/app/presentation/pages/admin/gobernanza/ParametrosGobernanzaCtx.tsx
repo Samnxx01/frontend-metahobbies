@@ -4,7 +4,6 @@ import type {
   EndpointSpec,
 } from './parametrosGobernanzaTypes';
 import type {
-  Vista,
   Accion,
   TenantGlobal,
   ReglaOption,
@@ -38,6 +37,7 @@ export interface ParametrosGobernanzaCtxType {
   herenciasUsuario: any[];
   jerarquiaSaCounters: any[];
   loadingData: boolean;
+  loadingDeltaByEndpoint: Record<string, boolean>;
   loadingHerenciasPorUsuario: Record<string, boolean>;
   loadingUsuarios: Record<string, boolean>;
   politicasRuntimeCatalog: PoliticaRuntime[];
@@ -59,17 +59,30 @@ export interface ParametrosGobernanzaCtxType {
   tenantUpdateTargets: Array<{ id: string; label: string }>;
   usuariosDestinoSel: Record<string, string[]>;
   usuariosDisponibles: Record<string, any[]>;
+  vistasDesactivarSeleccion: Record<string, string[]>;
   vistas: VistaItem[];
+  crearReglasJerarquiaSyncing: boolean;
+  expandedModulos: Set<string>;
+  bulkAllMode: Record<string, boolean>;
+  result: Record<string, string>;
+  resultData: Record<string, any>;
+  reglasSearch: string;
+  reglasTenantFilter: string;
+  reglasHerenciaSyncBusy: boolean;
+  vistaSearchByEndpoint: Record<string, string>;
   // Additional computed vars
   DIOS_REGLAS_ENDPOINT_IDS: Set<string>;
   PERM_ADMIN_TENANT_GLOBAL_ACTUALIZAR_IDS: Set<string>;
   ENDPOINT_IDS_SELECT_MULTI_SA_JERARQUIA: Set<string>;
   saJerarquiaConCorporativo: boolean;
+  saJerarquiaPosicion: { esRaizPrimera: boolean; esHijo: boolean; codigoPadre: string | null };
+  saJerarquiaPosicionDropdown: { esRaizPrimera: boolean; esHijo: boolean; codigoPadre: string | null };
+  padreTotalVistas: number | null;
   esJwtSoloTenantSuperAdmin: boolean;
   scopeJwtSaAlcanceJerarquiaValidado: boolean | undefined;
   saJerarquiaTieneCorporativoEnCountersEfectivo: boolean | undefined;
   tenantActualizarLoadedIdRef: React.MutableRefObject<string>;
-  tenantActualizarLabelsRef: React.MutableRefObject<Record<string, string>>;
+  tenantActualizarLabelsRef: React.MutableRefObject<Partial<Record<string, string>>>;
   dominioPorSaMap: any;
   running: Record<string, boolean>;
   TENANT_SUPERADMIN_SCOPE_PREFIX: string;
@@ -85,7 +98,13 @@ export interface ParametrosGobernanzaCtxType {
   setSyncInfoByEndpoint: React.Dispatch<React.SetStateAction<Record<string, any>>>;
   setTenantFilterByEndpoint: React.Dispatch<React.SetStateAction<Record<string, string>>>;
   setUsuariosDestinoSel: React.Dispatch<React.SetStateAction<Record<string, string[]>>>;
-  setVistasDesactivarSeleccion: (...args: any[]) => any;
+  setVistasDesactivarSeleccion: React.Dispatch<React.SetStateAction<Record<string, string[]>>>;
+  setCrearReglasJerarquiaSyncing: React.Dispatch<React.SetStateAction<boolean>>;
+  setExpandedModulos: React.Dispatch<React.SetStateAction<Set<string>>>;
+  setReglasSearch: React.Dispatch<React.SetStateAction<string>>;
+  setReglasTenantFilter: React.Dispatch<React.SetStateAction<string>>;
+  setVistaSearchByEndpoint: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  setBulkAllFor: (endpointId: string, enabled: boolean) => void;
   // Functions
   actorEsTenantSuperAdmin: () => boolean;
   actorEsTenantGlobalScope: () => boolean;
@@ -102,10 +121,22 @@ export interface ParametrosGobernanzaCtxType {
   consultaReglasGlobalesRamaCorporativo: (endpointId: string) => boolean;
   diosReglaAlcanceFormularioEditable: (endpoint: EndpointSpec) => boolean;
   endpointDisponibleParaScope: (endpoint: EndpointSpec) => boolean;
+  endpointEsReglasGlobalesTenant: (endpointId: string) => boolean;
   fetchHerenciasAsociadasByTenantGlobal: (...args: any[]) => any;
   fetchHerenciasConReglasParaTenant: (...args: any[]) => any;
   fetchTenantCorporativosByGlobal: (endpointId: string, tgId: string) => any;
   findReglaJerarquiaPorSa: (...args: any[]) => any;
+  getCatalogSelection: (endpointId: string) => any;
+  getCatalogoVistaIdsRelacionadas: (endpointId: string, suiteId?: string) => string[];
+  getExtraVistaIdsReglaPlantillaCrear: (endpointId: string) => Set<string>;
+  getSelectedRuleCatalogKey: (endpointId: string) => string;
+  getBulkAllMode: (endpointId: string) => boolean;
+  getPermisos: (endpointId: string) => any[];
+  getAccionesPorVistaDesdeRegla: (endpointId: string) => Map<string, string[]>;
+  resolveActiveReglasEndpointId: () => string | null;
+  resolveTenantGlobalParaReglasEndpoint: (endpointId: string) => string;
+  resolverVistaDesdeRutasSeguridad: (rawId: string) => any;
+  seleccionarTodasVistasDesactivar: (...args: any[]) => any;
   getDiosReglaTenantsSel: (endpointId: string) => string[];
   getDiosReglaUsuariosPorTenantSel: (endpointId: string) => any;
   getFieldValue: (endpointId: string, fieldName: string) => string;
@@ -122,6 +153,7 @@ export interface ParametrosGobernanzaCtxType {
   getCorporativoByHerencia: (heredaId: string) => string | null;
   getCorporativosDelTG: () => TenantCorporativoOption[];
   handleCatalogSeedDefaults: () => Promise<void>;
+  hydrateData: (options?: { force?: boolean; bundles?: Set<any> }) => Promise<void>;
   limpiarActualizarReglasAlCambiarSa: (endpointId: string) => void;
   modoSoloLecturaReglasDios: (endpoint: EndpointSpec) => boolean;
   permiteReglaDiosEnActualizarReglasGlobales: () => boolean;
@@ -140,7 +172,9 @@ export interface ParametrosGobernanzaCtxType {
   setDiosReglaUsuariosPorTenantFor: (...args: any[]) => any;
   setFieldValue: (endpointId: string, fieldName: string, value: string) => void;
   setPermisos: (endpointId: string, permisos: any[]) => void;
+  toggleCatalogItem: (endpointId: string, key: 'vistas' | 'acciones', id: string, checked: boolean) => void;
   sincronizarContextoTenantGlobalPermUsuario: (endpointId: string, tgId: string) => Promise<any>;
+  sincronizarCatalogoReglasYHerencia: (endpointId: string) => Promise<void>;
   toggleReglaPoliticaRuntime: (endpointId: string, politicaId: string, checked: boolean) => void;
   // Render functions
   renderHerenciaAsociadaDetalle: (endpointId: string) => React.ReactElement | null;

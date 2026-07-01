@@ -652,7 +652,12 @@ export const fetchAllSecurityRoutes = async (useAuth: boolean): Promise<RouteRes
         return cached.promise;
     }
 
-    const promise = _fetchAllSecurityRoutesRaw(useAuth).catch((err) => {
+    const promise = _fetchAllSecurityRoutesRaw(useAuth).then((result) => {
+        if (useAuth && (!Array.isArray(result?.data) || result.data.length === 0)) {
+            _securityRoutesCacheByAuth.delete(useAuth);
+        }
+        return result;
+    }).catch((err) => {
         if (_securityRoutesCacheByAuth.get(useAuth)?.promise === promise) {
             _securityRoutesCacheByAuth.delete(useAuth);
         }
@@ -1017,9 +1022,29 @@ export const getAuthorizedRoutes = async (): Promise<AuthorizedRoutes> => {
         const token = localStorage.getItem("token");
         const hasToken = Boolean(token);
         const actorTipo = resolveAdminActorTipoFromToken();
+        const debugTargetPath = normalizeRoutePath('/admin/parametros/dashboard-admin');
+        const routeMatchesTarget = (path = '') => {
+            const rel = toRelativeRoutePath(String(path || '').replace(/^\/admin\/?/i, ''));
+            return [
+                normalizeRoutePath(path),
+                normalizeRoutePath(`/${rel}`),
+                normalizeRoutePath(`/admin/${rel}`),
+            ].includes(debugTargetPath);
+        };
+        const treeHasTarget = (nodes: AdminNavTreeItem[] = []): boolean =>
+            nodes.some((node) => routeMatchesTarget(node.path) || treeHasTarget(node.children || []));
+        const routesHaveTarget = (routes: AdminRouteConfig[] = []): boolean =>
+            flattenAdminRoutes(routes).some((route) =>
+                normalizeRoutePath(`/admin/${String(route.path || '').replace(/^\//, '')}`) === debugTargetPath
+            );
 
         const catalogRows = await fetchMergedSecurityRouteCatalog(hasToken);
         if (!catalogRows.length) {
+            console.warn('[AUTH_RUTAS_FRONT][getAuthorizedRoutes] catalogo vacio', {
+                actorTipo,
+                hasToken,
+                target: debugTargetPath,
+            });
             return { publicRoutes: [], adminRoutes: [], authRoutes: [], hybridStorefrontRoutes: [], hybridAdminShellRoutes: [] };
         }
 
@@ -1096,6 +1121,23 @@ export const getAuthorizedRoutes = async (): Promise<AuthorizedRoutes> => {
                   ? adminSource
                   : [];
 
+            console.warn('[AUTH_RUTAS_FRONT][getAuthorizedRoutes] decision admin inicial', {
+                actorTipo,
+                hasToken,
+                catalogRows: catalogRows.length,
+                adminCatalogRows: adminCatalogRows.length,
+                treeRoots: tree.length,
+                treeHasTarget: treeHasTarget(tree),
+                adminSource: adminSource.length,
+                adminSourceHasTarget: adminSource.some((r) => routeMatchesTarget(r.path)),
+                hasHerenciaAdmin,
+                aplicarHerencia,
+                filtrarPorHerencia,
+                adminFiltrado: adminFiltrado.length,
+                adminFiltradoHasTarget: adminFiltrado.some((r) => routeMatchesTarget(r.path)),
+                target: debugTargetPath,
+            });
+
             /**
              * Si jerarquía obliga filtro pero IDs/rutas no alinean con listado de herencias (p. ej. path con/sin /admin),
              * quedaría 0 rutas → React Router no registra /admin y cualquier URL muestra 404 real.
@@ -1133,6 +1175,14 @@ export const getAuthorizedRoutes = async (): Promise<AuthorizedRoutes> => {
                     adminRoutes = [...adminRoutes, ...rutasFaltantes];
                 }
             }
+
+            console.warn('[AUTH_RUTAS_FRONT][getAuthorizedRoutes] resultado admin', {
+                actorTipo,
+                adminRoutesRoots: adminRoutes.length,
+                adminRoutesTotal: flattenAdminRoutes(adminRoutes).length,
+                adminRoutesHasTarget: routesHaveTarget(adminRoutes),
+                target: debugTargetPath,
+            });
         }
 
         return { publicRoutes, authRoutes, adminRoutes, hybridStorefrontRoutes, hybridAdminShellRoutes };
@@ -1504,7 +1554,17 @@ const _fetchSidebarTreeWithContext = async (): Promise<AdminSidebarTreeContext> 
             const sourceCollection = resolveSidebarSourceCollection(actorTipo);
             const securityLookup = buildAllowedRouteLookup(securityRoutesResult?.data);
             let filteredTree = filterRootsByActorTipo(mapTreeNodes(treeResult.data), actorTipo);
-
+            const debugTargetPath = normalizeRoutePath('/admin/parametros/dashboard-admin');
+            const nodeMatchesTarget = (path = '') => {
+                const rel = toRelativeRoutePath(String(path || '').replace(/^\/admin\/?/i, ''));
+                return [
+                    normalizeRoutePath(path),
+                    normalizeRoutePath(`/${rel}`),
+                    normalizeRoutePath(`/admin/${rel}`),
+                ].includes(debugTargetPath);
+            };
+            const treeHasTarget = (nodes: AdminNavTreeItem[] = []): boolean =>
+                nodes.some((node) => nodeMatchesTarget(node.path) || treeHasTarget(node.children || []));
             if (actorTipo === 'SUPERADMIN') {
                 filteredTree = filterTreeByAllowedRoutes(filteredTree, securityLookup.ids, securityLookup.paths);
                 const jerarquiaCorpSa = await fetchSaJerarquiaTieneCorporativoEnCounters();

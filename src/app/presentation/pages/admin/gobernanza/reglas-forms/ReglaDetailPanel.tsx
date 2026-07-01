@@ -16,8 +16,22 @@ function methodStyle(method?: string) {
   return METHOD_STYLES[String(method ?? '').toUpperCase()] ?? 'bg-muted text-foreground/70 border-border';
 }
 
-function VistaTable({ vistas }: { vistas: RecursoVista[] }) {
+export interface VistaSelectionProps {
+  selectedIds: Set<string>;
+  onToggle: (id: string) => void;
+  onSelectAll: (allIds: string[]) => void;
+  onClearAll: () => void;
+}
+
+function VistaTable({
+  vistas,
+  selection,
+}: {
+  vistas: RecursoVista[];
+  selection?: VistaSelectionProps;
+}) {
   const [buscar, setBuscar] = useState('');
+  const selectable = Boolean(selection);
 
   const filtradas = useMemo(() => {
     const q = buscar.trim().toLowerCase();
@@ -30,9 +44,19 @@ function VistaTable({ vistas }: { vistas: RecursoVista[] }) {
     );
   }, [vistas, buscar]);
 
+  const allFilteredIds = useMemo(
+    () => filtradas.map((v) => v._id ?? v.iud ?? '').filter(Boolean),
+    [filtradas],
+  );
+
+  const allSelected =
+    selectable &&
+    allFilteredIds.length > 0 &&
+    allFilteredIds.every((id) => selection!.selectedIds.has(id));
+
   return (
     <div className="space-y-2">
-      {/* Buscador */}
+      {/* Buscador + controles de selección */}
       <div className="flex items-center gap-2">
         <input
           type="text"
@@ -55,11 +79,48 @@ function VistaTable({ vistas }: { vistas: RecursoVista[] }) {
         )}
       </div>
 
+      {selectable && (
+        <div className="flex items-center gap-3 text-[11px]">
+          <span className="text-muted-foreground font-medium">
+            {selection!.selectedIds.size} seleccionada{selection!.selectedIds.size !== 1 ? 's' : ''}
+          </span>
+          <button
+            type="button"
+            onClick={() => selection!.onSelectAll(allFilteredIds)}
+            className="text-primary underline"
+          >
+            Todas
+          </button>
+          <button
+            type="button"
+            onClick={selection!.onClearAll}
+            className="text-muted-foreground underline"
+          >
+            Ninguna
+          </button>
+        </div>
+      )}
+
       {/* Tabla */}
       <div className="max-h-64 overflow-y-auto rounded-md border border-border">
         <table className="w-full text-xs">
           <thead className="sticky top-0 bg-muted/90 backdrop-blur-sm">
             <tr>
+              {selectable && (
+                <th className="px-2 py-1.5 w-8">
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    onChange={() =>
+                      allSelected
+                        ? selection!.onClearAll()
+                        : selection!.onSelectAll(allFilteredIds)
+                    }
+                    className="h-3.5 w-3.5"
+                    title="Seleccionar / deseleccionar todas"
+                  />
+                </th>
+              )}
               <th className="px-3 py-1.5 text-left font-medium text-muted-foreground w-8">#</th>
               <th className="px-3 py-1.5 text-left font-medium text-muted-foreground">Path / Ruta</th>
               <th className="px-3 py-1.5 text-left font-medium text-muted-foreground hidden sm:table-cell">Nombre</th>
@@ -68,25 +129,47 @@ function VistaTable({ vistas }: { vistas: RecursoVista[] }) {
           <tbody>
             {filtradas.length === 0 ? (
               <tr>
-                <td colSpan={3} className="px-3 py-4 text-center text-muted-foreground">
+                <td colSpan={selectable ? 4 : 3} className="px-3 py-4 text-center text-muted-foreground">
                   Sin resultados
                 </td>
               </tr>
             ) : (
-              filtradas.map((v, i) => (
-                <tr
-                  key={v._id ?? v.iud ?? i}
-                  className="border-t border-border/50 hover:bg-muted/30 transition-colors"
-                >
-                  <td className="px-3 py-1.5 text-muted-foreground tabular-nums">{i + 1}</td>
-                  <td className="px-3 py-1.5 font-mono text-foreground/80 break-all">
-                    {v.path ?? v._id ?? v.iud ?? '—'}
-                  </td>
-                  <td className="px-3 py-1.5 text-foreground/60 hidden sm:table-cell">
-                    {v.name ?? '—'}
-                  </td>
-                </tr>
-              ))
+              filtradas.map((v, i) => {
+                const vistaId = v._id ?? v.iud ?? '';
+                const checked = selectable && Boolean(vistaId) && selection!.selectedIds.has(vistaId);
+                return (
+                  <tr
+                    key={v._id ?? v.iud ?? i}
+                    className={`border-t border-border/50 transition-colors ${
+                      selectable && vistaId
+                        ? checked
+                          ? 'bg-destructive/5 hover:bg-destructive/10 cursor-pointer'
+                          : 'hover:bg-muted/30 cursor-pointer'
+                        : 'hover:bg-muted/30'
+                    }`}
+                    onClick={() => selectable && vistaId && selection!.onToggle(vistaId)}
+                  >
+                    {selectable && (
+                      <td className="px-2 py-1.5" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => vistaId && selection!.onToggle(vistaId)}
+                          className="h-3.5 w-3.5"
+                          disabled={!vistaId}
+                        />
+                      </td>
+                    )}
+                    <td className="px-3 py-1.5 text-muted-foreground tabular-nums">{i + 1}</td>
+                    <td className="px-3 py-1.5 font-mono text-foreground/80 break-all">
+                      {v.path ?? v._id ?? v.iud ?? '—'}
+                    </td>
+                    <td className="px-3 py-1.5 text-foreground/60 hidden sm:table-cell">
+                      {v.name ?? '—'}
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
@@ -128,9 +211,11 @@ export interface ReglaDetailPanelProps {
   regla: ReglaDios;
   /** Slot opcional: botones de acción (Desactivar / Eliminar) */
   actions?: React.ReactNode;
+  /** Cuando está definido, la pestaña Vistas muestra checkboxes de selección */
+  vistaSelection?: VistaSelectionProps;
 }
 
-export function ReglaDetailPanel({ regla, actions }: ReglaDetailPanelProps): React.ReactElement {
+export function ReglaDetailPanel({ regla, actions, vistaSelection }: ReglaDetailPanelProps): React.ReactElement {
   const [tab, setTab] = useState<Tab>('vistas');
 
   const vistas = Array.isArray(regla.recurso) ? regla.recurso : [];
@@ -139,6 +224,11 @@ export function ReglaDetailPanel({ regla, actions }: ReglaDetailPanelProps): Rea
   const activa = regla.estado !== false;
   const rid = String(regla.iud || regla._id || '');
 
+  // Si hay selección activa, cambiar a pestaña vistas automáticamente
+  React.useEffect(() => {
+    if (vistaSelection) setTab('vistas');
+  }, [vistaSelection]);
+
   const tabs: { id: Tab; label: string; count: number }[] = [
     { id: 'vistas',   label: 'Vistas',   count: vistas.length   },
     { id: 'acciones', label: 'Acciones', count: acciones.length },
@@ -146,9 +236,21 @@ export function ReglaDetailPanel({ regla, actions }: ReglaDetailPanelProps): Rea
   ];
 
   return (
-    <div className={`rounded-lg border ${activa ? 'border-border' : 'border-amber-300'} bg-background shadow-sm overflow-hidden`}>
+    <div className={`rounded-lg border ${
+      vistaSelection
+        ? 'border-destructive/50 ring-1 ring-destructive/20'
+        : activa
+          ? 'border-border'
+          : 'border-amber-300'
+    } bg-background shadow-sm overflow-hidden`}>
       {/* Header de la regla */}
-      <div className={`flex flex-wrap items-start justify-between gap-3 px-4 py-3 ${activa ? 'bg-muted/30' : 'bg-amber-50/60'}`}>
+      <div className={`flex flex-wrap items-start justify-between gap-3 px-4 py-3 ${
+        vistaSelection
+          ? 'bg-destructive/5'
+          : activa
+            ? 'bg-muted/30'
+            : 'bg-amber-50/60'
+      }`}>
         <div className="space-y-1.5 min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-mono text-xs font-semibold text-foreground/80">
@@ -160,6 +262,11 @@ export function ReglaDetailPanel({ regla, actions }: ReglaDetailPanelProps): Rea
             {!activa && (
               <Badge variant="outline" className="text-[10px] border-amber-400 text-amber-700 bg-amber-50">
                 desactivada
+              </Badge>
+            )}
+            {vistaSelection && (
+              <Badge variant="outline" className="text-[10px] border-destructive/50 text-destructive bg-destructive/5">
+                seleccionando vistas
               </Badge>
             )}
           </div>
@@ -174,7 +281,6 @@ export function ReglaDetailPanel({ regla, actions }: ReglaDetailPanelProps): Rea
                 {regla.dominioTenatGlobales}
               </Badge>
             )}
-            {/* Resumen rápido de métodos HTTP en el header */}
             {acciones.map((a, i) => (
               <span
                 key={i}
@@ -222,7 +328,7 @@ export function ReglaDetailPanel({ regla, actions }: ReglaDetailPanelProps): Rea
 
       {/* Contenido del tab */}
       <div className="p-4">
-        {tab === 'vistas'   && <VistaTable vistas={vistas} />}
+        {tab === 'vistas'   && <VistaTable vistas={vistas} selection={vistaSelection} />}
         {tab === 'acciones' && <AccionesPanel acciones={acciones} />}
         {tab === 'contexto' && <ContextoPanel contextos={contextos} />}
       </div>

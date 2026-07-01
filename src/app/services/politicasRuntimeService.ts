@@ -103,13 +103,21 @@ export type PoliticaRuntimeBypassAlcanceOpcion = {
   id?: string;
   nombre: string;
   etiqueta: string;
-  pipeline: 'PIPELINE_A' | 'PIPELINE_B';
+  pipeline: string;
   pipelineLabel?: string;
   alcance: string;
   dominio: string;
   label: string;
   descripcion: string;
   reglasDinamicas?: string[];
+  orden: number;
+};
+
+export type PoliticaRuntimeBypassPipelineOpcion = {
+  nombre: string;
+  label: string;
+  referencia?: string;
+  descripcion?: string;
   orden: number;
 };
 
@@ -143,6 +151,7 @@ export type PoliticaRuntimeOpciones = {
   rutas: PoliticaRuntimeRutaOpcion[];
   usuarios: PoliticaRuntimeUsuarioOpcion[];
   bypassAlcances: PoliticaRuntimeBypassAlcanceOpcion[];
+  bypassPipelines?: PoliticaRuntimeBypassPipelineOpcion[];
   tenantsScope?: PoliticaRuntimeTenantsScopeOpciones;
   contexto?: {
     tenantSuperAdminId?: string | null;
@@ -190,13 +199,32 @@ export type SimularPoliticaRuntimePayload = {
 
 const BASE = '/api/seguridad/politicas-runtime';
 
-export async function fetchPoliticasRuntimeCatalogo(params: { dominio?: string; tipo?: string } = {}) {
+// ─── Cache de promesas para /catalogo (TTL 30 s) ────────────────────────────
+const CATALOGO_TTL_MS = 30_000;
+const _catalogoCache = new Map<string, { at: number; promise: Promise<PoliticaRuntime[]> }>();
+
+export async function fetchPoliticasRuntimeCatalogo(params: { dominio?: string; tipo?: string } = {}): Promise<PoliticaRuntime[]> {
   const q = new URLSearchParams();
   if (params.dominio) q.set('dominio', params.dominio);
   if (params.tipo) q.set('tipo', params.tipo);
-  const suffix = q.toString() ? `?${q.toString()}` : '';
-  const res = await apiFetch(`${BASE}/catalogo${suffix}`, { method: 'GET' });
-  return ((res as { politicas?: PoliticaRuntime[] })?.politicas ?? []);
+  const key = q.toString();
+  const now = Date.now();
+  const cached = _catalogoCache.get(key);
+  if (cached && now - cached.at < CATALOGO_TTL_MS) return cached.promise;
+  const suffix = key ? `?${key}` : '';
+  const promise = apiFetch(`${BASE}/catalogo${suffix}`, { method: 'GET' })
+    .then((res) => (res as { politicas?: PoliticaRuntime[] })?.politicas ?? [])
+    .catch((err) => {
+      if (_catalogoCache.get(key)?.promise === promise) _catalogoCache.delete(key);
+      throw err;
+    });
+  _catalogoCache.set(key, { at: now, promise });
+  return promise;
+}
+
+/** Fuerza recarga en el próximo llamado (usar tras guardar/eliminar políticas). */
+export function invalidarCatalogoPoliticasRuntime(): void {
+  _catalogoCache.clear();
 }
 
 export async function fetchPoliticasRuntimeOpciones(): Promise<PoliticaRuntimeOpciones> {

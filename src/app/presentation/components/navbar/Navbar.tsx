@@ -21,7 +21,6 @@ import { useMiniCartConfig } from "@/app/hooks/useMiniCartConfig";
 import { groupCartItemsByProduct } from "@/app/presentation/components/carrito/cartColorQtyCache";
 import type { CartItem as CartItemType } from "@/types/common";
 
-import { apiFetch } from "@/app/services/api";
 import { fetchSplashLogo, invalidateSplashLogoCache, resolveSplashLogoUrl } from '@/app/services/splashLogoService';
 import {
     getNavbarNavigationRoutes,
@@ -243,7 +242,11 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
         cartTotal,
         config: miniCartConfig,
         onRemoveGroup: (lines: CartItemType[]) => { void handleRemoveGroup(lines); },
-        onQuantityChange: (line, color, qty) => { void handleVariantQuantityChange(line, color, qty); },
+        onQuantityChange: (
+            line: CartItemType,
+            color: CartItemType['color'],
+            qty: number,
+        ) => { void handleVariantQuantityChange(line, color, qty); },
         onImageError: handleImageError,
     };
 
@@ -297,20 +300,31 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
         </DropdownMenu>
     );
 
-    const ICON_MAP: Record<string, React.ReactNode> = {
-        USER: <User className="mr-2 h-4 w-4" />,
-        SHIELD_CHECK: <ShieldCheck className="mr-2 h-4 w-4" />,
-        CROWN: <Crown className="mr-2 h-4 w-4" />,
-        LOG_OUT: <LogOut className="mr-2 h-4 w-4" />,
+    const ICON_MAP: Record<string, React.ElementType> = {
+        USER: User,
+        SHIELD_CHECK: ShieldCheck,
+        CROWN: Crown,
+        LOG_OUT: LogOut,
     };
 
-    const resolveIcon = (icon: string | null): React.ReactNode =>
-        (icon && ICON_MAP[icon.toUpperCase()]) ?? <ChevronRight className="mr-2 h-4 w-4" />;
+    const resolveIconComponent = (icon: string | null): React.ElementType => {
+        const key = String(icon || '').toUpperCase();
+        return ICON_MAP[key] || ChevronRight;
+    };
+
+    const resolveIcon = (icon: string | null): React.ReactNode => {
+        const Icon = resolveIconComponent(icon);
+        return <Icon className="mr-2 h-4 w-4" />;
+    };
 
     const renderProfileDropdown = (
         <DropdownMenu>
             <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="icon" className="h-9 w-9 p-0 rounded-full hover:border-button/40 transition-colors">
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-9 w-9 rounded-full border border-primary/25 bg-popover/80 p-0 shadow-sm transition-colors hover:border-primary/45 hover:bg-accent/40"
+                >
                     <Avatar className="h-full w-full">
                         <AvatarFallback className="bg-primary text-primary-foreground text-sm font-semibold">
                             {getUserInitials()}
@@ -318,42 +332,51 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
                     </Avatar>
                 </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-80 backdrop-blur-lg border-none shadow-xl" align="end">
-                <div className="flex items-center gap-2 p-3">
-                    <Avatar className="h-9 w-9">
-                        <AvatarFallback className="bg-primary text-primary-foreground text-sm">
-                            {getUserInitials()}
-                        </AvatarFallback>
-                    </Avatar>
-                    <div className="flex flex-col space-y-0.5">
-                        <p className="text-sm font-medium leading-none">{getUserName()}</p>
-                        <p className="text-xs leading-none text-muted-foreground">{getUserEmail()}</p>
-                        {(getUserRoleLabel() || getUserProfileLabel()) && (
-                            <div className="flex flex-wrap gap-1 pt-1">
-                                {getUserRoleLabel() && (
-                                    <Badge variant="secondary" className="h-5 rounded-md px-1.5 text-[10px]">
-                                        {getUserRoleLabel()}
-                                    </Badge>
-                                )}
-                                {getUserProfileLabel() && (
-                                    <Badge variant="outline" className="h-5 rounded-md px-1.5 text-[10px]">
-                                        {getUserProfileLabel()}
-                                    </Badge>
-                                )}
-                            </div>
-                        )}
+            <DropdownMenuContent
+                className="w-[min(calc(100vw-1.5rem),22rem)] overflow-hidden rounded-lg border border-primary/20 bg-popover p-0 text-popover-foreground shadow-xl"
+                align="end"
+                sideOffset={10}
+            >
+                <div className="border-b border-primary/15 bg-[linear-gradient(135deg,hsl(var(--primary)/0.14),hsl(var(--accent)/0.38),hsl(var(--secondary)/0.28))] px-3.5 py-3">
+                    <div className="flex items-center gap-3">
+                        <Avatar className="h-10 w-10 shrink-0 ring-1 ring-primary/25">
+                            <AvatarFallback className="bg-primary text-primary-foreground text-sm">
+                                {getUserInitials()}
+                            </AvatarFallback>
+                        </Avatar>
+                        <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-semibold leading-5 text-foreground">{getUserName()}</p>
+                            <p className="truncate text-xs leading-4 text-muted-foreground">{getUserEmail()}</p>
+                            {(getUserRoleLabel() || getUserProfileLabel()) && (
+                                <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
+                                    {getUserRoleLabel() && (
+                                        <Badge className="h-5 max-w-full truncate rounded-md border border-primary/15 bg-primary/10 px-2 text-[10px] font-medium text-primary hover:bg-primary/10">
+                                            {getUserRoleLabel()}
+                                        </Badge>
+                                    )}
+                                    {getUserProfileLabel() && (
+                                        <Badge className="h-5 max-w-full truncate rounded-md border border-secondary/40 bg-secondary/35 px-2 text-[10px] font-medium text-secondary-foreground hover:bg-secondary/35">
+                                            {getUserProfileLabel()}
+                                        </Badge>
+                                    )}
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
                 <DropdownMenuSeparator />
                 {menuUsuarioItems.map((item) => (
-                    <DropdownMenuItem key={item.key ?? item.path} asChild className="cursor-pointer py-2.5">
-                        <Link to={appendPublicAttributionToInternalPath(item.path)}>
+                    <DropdownMenuItem key={item.key ?? item.path} asChild className="cursor-pointer rounded-md p-0 focus:bg-transparent">
+                        <Link
+                            to={appendPublicAttributionToInternalPath(item.path)}
+                            className="flex h-10 min-w-0 items-center rounded-md px-2.5 text-sm font-medium text-foreground transition-colors hover:bg-accent/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        >
                             {resolveIcon(item.icon)} {item.label}
                         </Link>
                     </DropdownMenuItem>
                 ))}
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleLogout} className="cursor-pointer text-destructive focus:text-destructive py-2.5">
+                <DropdownMenuItem onClick={handleLogout} className="h-10 cursor-pointer rounded-md bg-secondary/20 px-2.5 text-destructive focus:bg-destructive/10 focus:text-destructive">
                     <LogOut className="mr-2 h-4 w-4" /> Cerrar Sesión
                 </DropdownMenuItem>
             </DropdownMenuContent>
@@ -499,5 +522,3 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
 }
 
 // PR hecho por Gustavo Pereira el 13-02-2026
-
-

@@ -1,9 +1,11 @@
 import { apiFetch } from './api';
 
+export type PoliticaBypassPipeline = string;
+
 export type PoliticaBypassMotorEventoItem = {
   nombre: string;
   etiqueta: string;
-  pipeline: 'PIPELINE_A' | 'PIPELINE_B';
+  pipeline: PoliticaBypassPipeline;
   pipelineLabel?: string;
   alcance?: string;
   label?: string;
@@ -13,10 +15,28 @@ export type PoliticaBypassMotorEventoItem = {
   orden?: number;
 };
 
+export type PoliticaBypassPipelineItem = {
+  id?: string;
+  nombre: string;
+  label: string;
+  referencia?: string;
+  descripcion?: string;
+  orden?: number;
+  activo?: boolean;
+};
+
 export type GuardarPoliticaBypassMotorEventoPayload = {
   nombre: string;
   etiqueta: string;
-  pipeline: 'PIPELINE_A' | 'PIPELINE_B';
+  pipeline: PoliticaBypassPipeline;
+};
+
+export type GuardarPoliticaBypassPipelinePayload = {
+  nombre: string;
+  label: string;
+  referencia?: string;
+  descripcion?: string;
+  orden?: number;
 };
 
 export type PoliticaBypassAlcanceItem = {
@@ -175,6 +195,24 @@ export async function guardarPoliticaBypassMotorEvento(
   const item = (res as { item?: PoliticaBypassMotorEventoItem })?.item;
   if (!item) throw new Error('No se pudo guardar el motor evento');
   return item;
+}
+
+export async function guardarPoliticaBypassPipeline(
+  payload: GuardarPoliticaBypassPipelinePayload,
+): Promise<PoliticaBypassPipelineItem> {
+  const res = await apiFetch('/api/seguridad/catalogo-pipeline', {
+    method: 'POST',
+    body: payload,
+  });
+  const item = (res as { item?: PoliticaBypassPipelineItem })?.item;
+  if (!item) throw new Error('No se pudo guardar el pipeline');
+  return item;
+}
+
+export async function fetchCatalogoPipeline(): Promise<PoliticaBypassPipelineItem[]> {
+  const res = await apiFetch('/api/seguridad/catalogo-pipeline', { method: 'GET' });
+  const items = (res as { items?: PoliticaBypassPipelineItem[] })?.items;
+  return Array.isArray(items) ? items : [];
 }
 
 export async function eliminarPoliticaBypassMotorEvento(nombre: string): Promise<void> {

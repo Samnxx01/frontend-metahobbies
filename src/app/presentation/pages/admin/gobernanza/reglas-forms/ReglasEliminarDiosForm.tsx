@@ -9,6 +9,7 @@ import { ReglaDetailPanel } from './ReglaDetailPanel';
 import { ReglasDesactivadasDiosModal } from './ReglasDesactivadasDiosModal';
 import {
   desactivarReglaDiosPorId,
+  desactivarVistasEnRegla,
   eliminarReglaDiosPorId,
   listarReglasDiosPorTenant,
   listarSaAlcanceDios,
@@ -80,6 +81,54 @@ function ConfirmPanel({
   );
 }
 
+function VistaSelectionConfirmPanel({
+  rid,
+  count,
+  fase,
+  error,
+  onConfirmar,
+  onCancelar,
+}: {
+  rid: string;
+  count: number;
+  fase: Fase;
+  error: string | null;
+  onConfirmar: () => void;
+  onCancelar: () => void;
+}): React.ReactElement {
+  return (
+    <div className="mt-2 rounded-md border border-destructive/40 bg-destructive/5 p-3 space-y-2">
+      <p className="text-sm font-medium text-destructive">
+        Desactivar {count} vista{count !== 1 ? 's' : ''} seleccionada{count !== 1 ? 's' : ''}
+      </p>
+      <p className="text-xs text-muted-foreground">
+        Las vistas seleccionadas quedarán desactivadas en la regla{' '}
+        <span className="font-mono break-all">{rid}</span>.
+        El resto de vistas no se verán afectadas.
+      </p>
+      <div className="flex gap-2">
+        <Button
+          variant="destructive"
+          size="sm"
+          onClick={onConfirmar}
+          disabled={fase === 'loading' || count === 0}
+        >
+          {fase === 'loading' ? 'Desactivando…' : `Desactivar ${count} vista${count !== 1 ? 's' : ''}`}
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onCancelar}
+          disabled={fase === 'loading'}
+        >
+          Cancelar
+        </Button>
+      </div>
+      {error && <p className="text-xs text-destructive">{error}</p>}
+    </div>
+  );
+}
+
 function ReglasEliminarDiosFormContent(): React.ReactElement {
   const [faseSa, setFaseSa] = useState<Fase>('idle');
   const [tenants, setTenants] = useState<SaAlcanceDiosItem[]>([]);
@@ -94,7 +143,13 @@ function ReglasEliminarDiosFormContent(): React.ReactElement {
   const [confirmar, setConfirmar] = useState<{ id: string; accion: AccionRegla } | null>(null);
   const [faseAccion, setFaseAccion] = useState<Fase>('idle');
   const [errorAccion, setErrorAccion] = useState<string | null>(null);
-  const [resultados, setResultados] = useState<{ id: string; accion: AccionRegla }[]>([]);
+  const [resultados, setResultados] = useState<{ id: string; accion: string }[]>([]);
+
+  // Estado de selección de vistas (para el modo "Eliminar vistas")
+  const [modoVistaId, setModoVistaId] = useState<string | null>(null);
+  const [vistasSel, setVistasSel] = useState<Set<string>>(new Set());
+  const [faseVistas, setFaseVistas] = useState<Fase>('idle');
+  const [errorVistas, setErrorVistas] = useState<string | null>(null);
 
   useEffect(() => {
     setFaseSa('loading');
@@ -117,6 +172,8 @@ function ReglasEliminarDiosFormContent(): React.ReactElement {
     setConfirmar(null);
     setResultados([]);
     setErrorAccion(null);
+    setModoVistaId(null);
+    setVistasSel(new Set());
     listarReglasDiosPorTenant(saId)
       .then((res) => { setReglas(res.reglas ?? []); setFaseReglas('idle'); })
       .catch((err) => {
@@ -162,6 +219,74 @@ function ReglasEliminarDiosFormContent(): React.ReactElement {
       setFaseAccion('error');
       toast.error(msg, { id: toastId });
     }
+  };
+
+  const handleDesactivarVistas = async () => {
+    if (!modoVistaId || vistasSel.size === 0) return;
+    const reglaId = modoVistaId;
+    const vistaIds = [...vistasSel];
+    const toastId = toast.loading(`Desactivando ${vistaIds.length} vista${vistaIds.length !== 1 ? 's' : ''}…`);
+    setFaseVistas('loading');
+    setErrorVistas(null);
+    try {
+      await desactivarVistasEnRegla(reglaId, vistaIds);
+      // Remover las vistas desactivadas del array local
+      setReglas((prev) =>
+        prev.map((r) => {
+          if (r.iud !== reglaId && r._id !== reglaId) return r;
+          return {
+            ...r,
+            recurso: (r.recurso ?? []).filter(
+              (v) => !vistaIds.includes(v._id ?? '') && !vistaIds.includes(v.iud ?? '')
+            ),
+          };
+        })
+      );
+      setResultados((prev) => [
+        ...prev,
+        { id: reglaId, accion: `${vistaIds.length} vista${vistaIds.length !== 1 ? 's' : ''} desactivada${vistaIds.length !== 1 ? 's' : ''}` },
+      ]);
+      toast.success(`${vistaIds.length} vista${vistaIds.length !== 1 ? 's' : ''} desactivada${vistaIds.length !== 1 ? 's' : ''}`, { id: toastId });
+      setModoVistaId(null);
+      setVistasSel(new Set());
+      setFaseVistas('idle');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err ?? 'Error desactivando vistas');
+      setErrorVistas(msg);
+      setFaseVistas('error');
+      toast.error(msg, { id: toastId });
+    }
+  };
+
+  const toggleVistaId = useCallback((id: string) => {
+    setVistasSel((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const selectAllVistas = useCallback((ids: string[]) => {
+    setVistasSel(new Set(ids));
+  }, []);
+
+  const clearAllVistas = useCallback(() => {
+    setVistasSel(new Set());
+  }, []);
+
+  const enterModoVistas = (rid: string) => {
+    setModoVistaId(rid);
+    setVistasSel(new Set());
+    setErrorVistas(null);
+    setConfirmar(null);
+    setErrorAccion(null);
+  };
+
+  const salirModoVistas = () => {
+    setModoVistaId(null);
+    setVistasSel(new Set());
+    setErrorVistas(null);
   };
 
   const tenantsManipulables = tenants.filter((t) => t.puedeManipularDios);
@@ -233,43 +358,71 @@ function ReglasEliminarDiosFormContent(): React.ReactElement {
                 const rid = regla.iud || regla._id;
                 const estaConfirmando = confirmar?.id === rid;
                 const esDesactivada = regla.estado === false;
+                const enModoVistas = modoVistaId === rid;
 
                 const actionButtons = esDesactivada ? (
                   <Button
                     variant="destructive"
                     size="sm"
-                    onClick={() => { setConfirmar({ id: rid, accion: 'eliminar' }); setErrorAccion(null); }}
+                    onClick={() => { setConfirmar({ id: rid, accion: 'eliminar' }); setErrorAccion(null); salirModoVistas(); }}
                     disabled={faseAccion === 'loading'}
                   >
-                    Eliminar
+                    Eliminar permanente
                   </Button>
                 ) : (
                   <>
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => { setConfirmar({ id: rid, accion: 'desactivar' }); setErrorAccion(null); }}
-                      disabled={faseAccion === 'loading'}
+                      onClick={() => { setConfirmar({ id: rid, accion: 'desactivar' }); setErrorAccion(null); salirModoVistas(); }}
+                      disabled={faseAccion === 'loading' || faseVistas === 'loading'}
                       className="border-amber-400 text-amber-700 hover:bg-amber-50"
                     >
                       Desactivar
                     </Button>
                     <Button
-                      variant="destructive"
+                      variant={enModoVistas ? 'secondary' : 'destructive'}
                       size="sm"
-                      onClick={() => { setConfirmar({ id: rid, accion: 'eliminar' }); setErrorAccion(null); }}
-                      disabled={faseAccion === 'loading'}
+                      onClick={() => {
+                        if (enModoVistas) salirModoVistas();
+                        else enterModoVistas(rid);
+                      }}
+                      disabled={faseAccion === 'loading' || faseVistas === 'loading'}
                     >
-                      Eliminar
+                      {enModoVistas ? 'Cancelar' : 'Eliminar vistas'}
                     </Button>
                   </>
                 );
 
                 return (
                   <div key={rid}>
-                    <ReglaDetailPanel regla={regla} actions={actionButtons} />
+                    <ReglaDetailPanel
+                      regla={regla}
+                      actions={actionButtons}
+                      vistaSelection={
+                        enModoVistas
+                          ? {
+                              selectedIds: vistasSel,
+                              onToggle: toggleVistaId,
+                              onSelectAll: selectAllVistas,
+                              onClearAll: clearAllVistas,
+                            }
+                          : undefined
+                      }
+                    />
 
-                    {estaConfirmando && confirmar && (
+                    {enModoVistas && (
+                      <VistaSelectionConfirmPanel
+                        rid={rid}
+                        count={vistasSel.size}
+                        fase={faseVistas}
+                        error={errorVistas}
+                        onConfirmar={handleDesactivarVistas}
+                        onCancelar={salirModoVistas}
+                      />
+                    )}
+
+                    {estaConfirmando && confirmar && !enModoVistas && (
                       <ConfirmPanel
                         rid={rid}
                         confirmar={confirmar}
@@ -293,7 +446,7 @@ function ReglasEliminarDiosFormContent(): React.ReactElement {
           {resultados.map((r, i) => (
             <p key={i} className="text-sm text-green-800">
               Regla <span className="font-mono">{r.id.slice(0, 8)}…</span>{' '}
-              {r.accion === 'eliminar' ? 'eliminada.' : 'desactivada.'}
+              {r.accion}.
             </p>
           ))}
         </div>

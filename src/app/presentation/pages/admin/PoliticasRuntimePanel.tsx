@@ -45,8 +45,20 @@ import {
 } from '@/app/services/politicasRuntimeService';
 import {
   eliminarPoliticaBypassMotorEvento,
+  fetchCatalogoPipeline,
+  guardarPoliticaBypassPipeline,
   guardarPoliticaBypassMotorEvento,
+  type PoliticaBypassPipelineItem,
+  type PoliticaBypassPipeline,
 } from '@/app/services/politicaBypassService';
+import {
+  fetchCatalogoMotorEventosSg,
+  guardarCatalogoMotorEventoSg,
+  actualizarCatalogoMotorEventoSg,
+  eliminarCatalogoMotorEventoSg,
+  type CatalogoMotorEventoSgItem,
+  type GuardarMotorEventoSgPayload,
+} from '@/app/services/catalogoSegmentadoService';
 type PoliticasRuntimePanelProps = {
   className?: string;
 };
@@ -149,16 +161,19 @@ const resolverScopeTipo = (
 const TIPO_ACCION = 'ACCION';
 const TIPO_BYPASS = 'BYPASS';
 
-const PIPELINE_LABELS: Record<'PIPELINE_A' | 'PIPELINE_B', string> = {
-  PIPELINE_A: 'Pipeline A (global.js)',
-  PIPELINE_B: 'Pipeline B (motorProductos)',
-};
-
 type MotorEventoDraft = {
   nombre: string;
   etiqueta: string;
-  pipeline: 'PIPELINE_A' | 'PIPELINE_B';
+  pipeline: PoliticaBypassPipeline;
   esNuevo: boolean;
+};
+
+type PipelineDraft = {
+  nombre: string;
+  label: string;
+  referencia: string;
+  descripcion: string;
+  orden: string;
 };
 
 const esPoliticaBypassLike = (tipoValor: string, codigoValor: string): boolean => {
@@ -266,8 +281,11 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
   const [scopeDraftUsuarios, setScopeDraftUsuarios] = useState<Record<string, boolean>>({});
   const [catalogoTipoEfectoOpen, setCatalogoTipoEfectoOpen] = useState(false);
   const [catalogoTipoEfectoTab, setCatalogoTipoEfectoTab] = useState<
-    'TIPOS' | 'EFECTOS' | 'REFERENCIA' | 'COMPORTAMIENTO' | 'MOTOR_EVENTO'
+    'TIPOS' | 'EFECTOS' | 'REFERENCIA' | 'COMPORTAMIENTO' | 'MOTOR_EVENTO' | 'PIPELINES'
   >('TIPOS');
+  const [catalogoMotorEventosSg, setCatalogoMotorEventosSg] = useState<CatalogoMotorEventoSgItem[]>([]);
+  const [catalogoPipelineItems, setCatalogoPipelineItems] = useState<PoliticaBypassPipelineItem[]>([]);
+  const [motorEventoSgDraft, setMotorEventoSgDraft] = useState<(GuardarMotorEventoSgPayload & { esNuevo: boolean }) | null>(null);
   const [referencia, setReferencia] = useState('');
   const [motorEvento, setMotorEvento] = useState('');
   const [apisDominiosIds, setApisDominiosIds] = useState<string[]>([]);
@@ -284,6 +302,7 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
   const [politicaEditId, setPoliticaEditId] = useState('');
   const [itemDraft, setItemDraft] = useState<CatalogoItemDraft | null>(null);
   const [motorEventoDraft, setMotorEventoDraft] = useState<MotorEventoDraft | null>(null);
+  const [pipelineDraft, setPipelineDraft] = useState<PipelineDraft | null>(null);
   const [guardandoItem, setGuardandoItem] = useState(false);
 
   const cargar = useCallback(async () => {
@@ -299,6 +318,24 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
       toast.error(e instanceof Error ? e.message : 'No se pudo cargar políticas runtime');
     } finally {
       setLoading(false);
+    }
+  }, []);
+
+  const cargarMotorEventosSg = useCallback(async () => {
+    try {
+      const items = await fetchCatalogoMotorEventosSg();
+      setCatalogoMotorEventosSg(items);
+    } catch {
+      // silencioso: la colección puede estar vacía en entornos nuevos
+    }
+  }, []);
+
+  const cargarCatalogoPipeline = useCallback(async () => {
+    try {
+      const items = await fetchCatalogoPipeline();
+      setCatalogoPipelineItems(items);
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo cargar el catÃ¡logo de pipelines');
     }
   }, []);
 
@@ -397,26 +434,39 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
         .filter((t) => !saSet.size || (t.tenantSuperAdminId && saSet.has(String(t.tenantSuperAdminId))))
         .map((t) => String(t.id)),
     );
+    const tcIdsRamaSa = new Set(
+      tenantsScope.tenantCorporativos
+        .filter((t) => !saSet.size || (t.tenantGlobalId && tgIdsRamaSa.has(String(t.tenantGlobalId))))
+        .map((t) => String(t.id)),
+    );
+    const tcIdsRamaTg = new Set(
+      tenantsScope.tenantCorporativos
+        .filter((t) => !tgSet.size || (t.tenantGlobalId && tgSet.has(String(t.tenantGlobalId))))
+        .map((t) => String(t.id)),
+    );
 
     return usuariosOpciones.filter((u) => {
       const uSa = u.tenantSuperAdminId ? String(u.tenantSuperAdminId) : '';
       const uTg = u.tenantGlobalId ? String(u.tenantGlobalId) : '';
+      const uTc = u.tenantCorporativoId ? String(u.tenantCorporativoId) : '';
 
       if (tcSet.size) {
-        return Boolean(u.tenantCorporativoId && tcSet.has(String(u.tenantCorporativoId)));
+        return Boolean(uTc && tcSet.has(uTc));
       }
       if (tgSet.size) {
-        return Boolean(uTg && tgSet.has(uTg));
+        if (uTg && tgSet.has(uTg)) return true;
+        if (uTc && tcIdsRamaTg.has(uTc)) return true;
+        return false;
       }
       if (saSet.size) {
         if (uSa && saSet.has(uSa)) return true;
         if (uTg && tgIdsRamaSa.has(uTg)) return true;
-        if (!uSa && !uTg) return true;
+        if (uTc && tcIdsRamaSa.has(uTc)) return true;
         return false;
       }
       return true;
     });
-  }, [usuariosOpciones, scopeDraftSa, scopeDraftTg, scopeDraftTc, tenantsScope.tenantGlobales]);
+  }, [usuariosOpciones, scopeDraftSa, scopeDraftTg, scopeDraftTc, tenantsScope.tenantGlobales, tenantsScope.tenantCorporativos]);
 
   const scopeResumenSa = useMemo(
     () => scopeSaIds.map((id) => tenantsScope.tenantSuperAdmins.find((t) => t.id === id)?.label || id),
@@ -479,17 +529,41 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
     [opcionesRuntime?.bypassAlcances],
   );
 
+  const pipelineOpciones = useMemo(() => (
+    (opcionesRuntime?.bypassPipelines ?? [])
+      .map((pipeline) => ({
+        nombre: String(pipeline.nombre || '').trim().toUpperCase(),
+        label: String(pipeline.label || pipeline.nombre || '').trim(),
+        referencia: String(pipeline.referencia || '').trim().toUpperCase(),
+        descripcion: String(pipeline.descripcion || '').trim(),
+        orden: Number(pipeline.orden ?? 0),
+      }))
+      .filter((pipeline) => pipeline.nombre)
+      .sort((a, b) => a.orden - b.orden || a.label.localeCompare(b.label))
+  ), [opcionesRuntime?.bypassPipelines]);
+
+  const normalizarPipelineMotorEvento = useCallback((value?: string | null): PoliticaBypassPipeline => {
+    const key = String(value || '').trim().toUpperCase();
+    if (key && pipelineOpciones.some((pipeline) => pipeline.nombre === key)) return key;
+    return pipelineOpciones[0]?.nombre || key;
+  }, [pipelineOpciones]);
+
+  const etiquetaPipeline = useCallback((value?: string | null): string => {
+    const key = normalizarPipelineMotorEvento(value);
+    return pipelineOpciones.find((pipeline) => pipeline.nombre === key)?.label || key;
+  }, [normalizarPipelineMotorEvento, pipelineOpciones]);
+
   const motorEventosPorPipeline = useMemo(() => {
-    const grupos: Record<'PIPELINE_A' | 'PIPELINE_B', PoliticaRuntimeBypassAlcanceOpcion[]> = {
-      PIPELINE_A: [],
-      PIPELINE_B: [],
-    };
+    const grupos = new Map<PoliticaBypassPipeline, PoliticaRuntimeBypassAlcanceOpcion[]>(
+      pipelineOpciones.map((pipeline) => [pipeline.nombre, []])
+    );
     for (const item of bypassAlcancesOpciones) {
-      const pipeline = item.pipeline === 'PIPELINE_B' ? 'PIPELINE_B' : 'PIPELINE_A';
-      grupos[pipeline].push(item);
+      const pipeline = normalizarPipelineMotorEvento(item.pipeline);
+      if (!grupos.has(pipeline)) grupos.set(pipeline, []);
+      grupos.get(pipeline)!.push(item);
     }
     return grupos;
-  }, [bypassAlcancesOpciones]);
+  }, [bypassAlcancesOpciones, normalizarPipelineMotorEvento, pipelineOpciones]);
 
   const motorEventoPlaceholder = useMemo(() => {
     const ejemplos = bypassAlcancesOpciones.slice(0, 2).map((item) => item.etiqueta || item.nombre);
@@ -874,13 +948,22 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
       const motorNorm = esPoliticaBypassLike(tipo, codigoNormalizado)
         ? (motorEvento.trim() || String((politicaSeleccionada?.condiciones?.metadata as { motorEvento?: string })?.motorEvento || '')).toUpperCase()
         : '';
+      const motorItemSeleccionado = motorNorm
+        ? bypassAlcancesOpciones.find((i) => (i.nombre || i.alcance) === motorNorm)
+        : undefined;
+      if (esPoliticaBypassLike(tipo, codigoNormalizado) && motorNorm && !motorItemSeleccionado) {
+        throw new Error('El motor evento seleccionado no existe en el catalogo parametrizado');
+      }
+      const pipelineMotorSeleccionado = motorItemSeleccionado?.pipeline
+        ? normalizarPipelineMotorEvento(motorItemSeleccionado.pipeline)
+        : '';
       const selectsDinamicosIds = {
         tipoCatalogoId: resolverIdCatalogo(catalogoTiposBD, tipo),
         efectoCatalogoId: resolverIdCatalogo(catalogoEfectosBD, efecto),
         referenciaCatalogoId: resolverIdCatalogo(catalogoReferenciasBD, dominioNorm),
         motorEventoId: motorNorm
           ? normalizarIdApiOpcional(
-            bypassAlcancesOpciones.find((i) => (i.nombre || i.alcance) === motorNorm)?.id,
+            motorItemSeleccionado?.id,
           )
           : undefined,
         comportamientoCatalogoId: efectoItem?.comportamiento
@@ -926,6 +1009,8 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
           ...alcanceMeta,
           alcance: motor,
           motorEvento: motor,
+          pipeline: pipelineMotorSeleccionado || undefined,
+          pipelineLabel: pipelineMotorSeleccionado ? etiquetaPipeline(pipelineMotorSeleccionado) : undefined,
         });
       } else {
         condiciones.metadata = sanitizarMetadata({ ...metaPrev, ...alcanceMeta });
@@ -1223,7 +1308,7 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
     setMotorEventoDraft({
       nombre: '',
       etiqueta: '',
-      pipeline: 'PIPELINE_A',
+      pipeline: pipelineOpciones[0]?.nombre || '',
       esNuevo: true,
     });
     setItemDraft(null);
@@ -1235,12 +1320,66 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
     setMotorEventoDraft({
       nombre: item.nombre || item.alcance,
       etiqueta: item.etiqueta || item.label,
-      pipeline: item.pipeline === 'PIPELINE_B' ? 'PIPELINE_B' : 'PIPELINE_A',
+      pipeline: normalizarPipelineMotorEvento(item.pipeline),
       esNuevo: false,
     });
     setItemDraft(null);
     setCatalogoTipoEfectoTab('MOTOR_EVENTO');
     setCatalogoTipoEfectoOpen(true);
+  };
+
+  const iniciarNuevoPipeline = () => {
+    setPipelineDraft({
+      nombre: '',
+      label: '',
+      referencia: '',
+      descripcion: '',
+      orden: '',
+    });
+  };
+
+  const seleccionarReferenciaPipeline = (referenciaValor: string) => {
+    if (!pipelineDraft) return;
+    const valor = referenciaValor.trim().toUpperCase();
+    const item = catalogoReferenciasBD.find((ref) => ref.valor === valor);
+    setPipelineDraft({
+      ...pipelineDraft,
+      referencia: valor,
+      label: item?.label || valor,
+      descripcion: pipelineDraft.descripcion || item?.descripcion || '',
+    });
+  };
+
+  const guardarPipelineItem = async () => {
+    if (!pipelineDraft) return;
+    const nombre = pipelineDraft.nombre.trim().toUpperCase();
+    const label = pipelineDraft.label.trim();
+    if (!nombre) {
+      toast.error('El nombre del pipeline es obligatorio');
+      return;
+    }
+    if (!label) {
+      toast.error('La etiqueta del pipeline es obligatoria');
+      return;
+    }
+    setGuardandoItem(true);
+    try {
+      const pipeline = await guardarPoliticaBypassPipeline({
+        nombre,
+        label,
+        referencia: pipelineDraft.referencia.trim().toUpperCase() || undefined,
+        descripcion: pipelineDraft.descripcion.trim() || undefined,
+        orden: pipelineDraft.orden.trim() ? Number(pipelineDraft.orden) : undefined,
+      });
+      toast.success('Pipeline guardado');
+      setPipelineDraft(null);
+      setMotorEventoDraft((draft) => draft ? { ...draft, pipeline: pipeline.nombre } : draft);
+      await Promise.all([recargarOpcionesCatalogo(), cargarCatalogoPipeline()]);
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo guardar el pipeline');
+    } finally {
+      setGuardandoItem(false);
+    }
   };
 
   const guardarMotorEventoItem = async () => {
@@ -1285,11 +1424,225 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
     }
   };
 
+  // ─── CRUD Motor Eventos Sg (colección catalogomotoreventos) ────────────────
+  const iniciarNuevoMotorEventoSg = () => {
+    setMotorEventoSgDraft({ codigo: '', label: '', descripcion: '', pipeline: '', semantica: 'NEUTRO', activo: true, esNuevo: true });
+    setCatalogoTipoEfectoTab('PIPELINES');
+    setCatalogoTipoEfectoOpen(true);
+  };
+
+  const editarMotorEventoSg = (item: CatalogoMotorEventoSgItem) => {
+    setMotorEventoSgDraft({
+      codigo: item.codigo,
+      label: item.label,
+      descripcion: item.descripcion,
+      pipeline: item.pipeline ?? '',
+      semantica: item.semantica ?? 'NEUTRO',
+      activo: item.activo,
+      esNuevo: false,
+    });
+  };
+
+  const guardarMotorEventoSgItem = async () => {
+    if (!motorEventoSgDraft) return;
+    const codigo = motorEventoSgDraft.codigo.trim().toUpperCase();
+    if (!codigo) { toast.error('El código es obligatorio'); return; }
+    setGuardandoItem(true);
+    try {
+      if (motorEventoSgDraft.esNuevo) {
+        await guardarCatalogoMotorEventoSg({ ...motorEventoSgDraft, codigo });
+      } else {
+        const { esNuevo: _, codigo: _c, ...rest } = motorEventoSgDraft;
+        await actualizarCatalogoMotorEventoSg(codigo, rest);
+      }
+      toast.success(motorEventoSgDraft.esNuevo ? 'Motor evento guardado' : 'Motor evento actualizado');
+      setMotorEventoSgDraft(null);
+      await cargarMotorEventosSg();
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo guardar el motor evento');
+    } finally {
+      setGuardandoItem(false);
+    }
+  };
+
+  const eliminarMotorEventoSgItem = async (codigo: string) => {
+    setGuardandoItem(true);
+    try {
+      await eliminarCatalogoMotorEventoSg(codigo);
+      toast.success('Motor evento eliminado');
+      await cargarMotorEventosSg();
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo eliminar el motor evento');
+    } finally {
+      setGuardandoItem(false);
+    }
+  };
+
+  const SEMANTICAS = ['PERMITE', 'BLOQUEA', 'BYPASS', 'NEUTRO', 'REQUIERE_TECHO'] as const;
+
+  const renderPipelinesLista = (): React.ReactElement => {
+    return (
+      <div className="space-y-2">
+        <p className="text-[11px] text-muted-foreground">
+          Coleccion <code className="rounded bg-muted px-1 text-xs">catologoPipeline</code> - opciones visibles para el selector de pipeline en motor evento.
+        </p>
+        <div className="flex justify-end">
+          <Button type="button" size="sm" variant="outline" onClick={iniciarNuevoPipeline}>
+            <Plus className="mr-1 h-3 w-3" />
+            Nuevo pipeline
+          </Button>
+        </div>
+        <ScrollArea className="h-64 rounded border p-2">
+          <div className="space-y-2">
+            {catalogoPipelineItems.length === 0 ? (
+              <p className="text-xs text-muted-foreground">Sin registros. Crea el primero con Nuevo pipeline.</p>
+            ) : null}
+            {catalogoPipelineItems.map((item) => (
+              <div key={item.nombre} className="rounded border p-2 text-xs">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <Badge variant="outline">{item.nombre}</Badge>
+                  <span className="text-muted-foreground">{item.label}</span>
+                  {item.referencia ? <Badge variant="secondary">{item.referencia}</Badge> : null}
+                  {item.activo === false ? <Badge variant="secondary">inactivo</Badge> : null}
+                  {Number.isFinite(Number(item.orden)) ? <Badge variant="secondary">orden {item.orden}</Badge> : null}
+                </div>
+                {item.descripcion ? (
+                  <p className="mt-1 text-muted-foreground">{item.descripcion}</p>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        </ScrollArea>
+      </div>
+    );
+
+    const grupos = Array.from(
+      catalogoMotorEventosSg.reduce((map, item) => {
+        const key = item.pipeline || 'SIN_PIPELINE';
+        if (!map.has(key)) map.set(key, []);
+        map.get(key)!.push(item);
+        return map;
+      }, new Map<string, CatalogoMotorEventoSgItem[]>()),
+    );
+    return (
+      <div className="space-y-2">
+        <p className="text-[11px] text-muted-foreground">
+          Colección <code className="rounded bg-muted px-1 text-xs">catalogomotoreventos</code> · pipelines y motores de evento creados.
+        </p>
+        {motorEventoSgDraft ? (
+          <div className="space-y-3 rounded-md border border-primary/40 bg-muted/30 p-3">
+            <p className="text-xs font-medium">{motorEventoSgDraft.esNuevo ? 'Nuevo' : 'Editar'} motor evento</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1">
+                <Label className="text-xs">Código *</Label>
+                <Input
+                  value={motorEventoSgDraft.codigo}
+                  disabled={!motorEventoSgDraft.esNuevo}
+                  placeholder="EJ: REFERIDOS"
+                  onChange={(e) => setMotorEventoSgDraft({ ...motorEventoSgDraft, codigo: e.target.value.toUpperCase() })}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Etiqueta</Label>
+                <Input
+                  value={motorEventoSgDraft.label ?? ''}
+                  placeholder="Referidos y membresía"
+                  onChange={(e) => setMotorEventoSgDraft({ ...motorEventoSgDraft, label: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Pipeline</Label>
+                <Input
+                  value={motorEventoSgDraft.pipeline ?? ''}
+                  placeholder="EJ: PIPELINE_A"
+                  onChange={(e) => setMotorEventoSgDraft({ ...motorEventoSgDraft, pipeline: e.target.value.toUpperCase() })}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Semántica</Label>
+                <Select
+                  value={motorEventoSgDraft.semantica ?? 'NEUTRO'}
+                  onValueChange={(v) => setMotorEventoSgDraft({ ...motorEventoSgDraft, semantica: v })}
+                >
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {SEMANTICAS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1 sm:col-span-2">
+                <Label className="text-xs">Descripción</Label>
+                <Input
+                  value={motorEventoSgDraft.descripcion ?? ''}
+                  placeholder="Para qué sirve este motor"
+                  onChange={(e) => setMotorEventoSgDraft({ ...motorEventoSgDraft, descripcion: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button type="button" size="sm" disabled={guardandoItem} onClick={() => void guardarMotorEventoSgItem()}>
+                {guardandoItem ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                Guardar
+              </Button>
+              <Button type="button" size="sm" variant="outline" onClick={() => setMotorEventoSgDraft(null)}>Cancelar</Button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex justify-end">
+            <Button type="button" size="sm" variant="outline" onClick={iniciarNuevoMotorEventoSg}>
+              <Plus className="mr-1 h-3 w-3" />
+              Nuevo motor evento
+            </Button>
+          </div>
+        )}
+        <ScrollArea className="h-64 rounded border p-2">
+          <div className="space-y-4">
+            {grupos.length === 0 ? (
+              <p className="text-xs text-muted-foreground">Sin registros. Crea el primero con «Nuevo motor evento».</p>
+            ) : null}
+            {grupos.map(([pipeline, items]) => (
+              <div key={pipeline} className="space-y-2">
+                <p className="text-xs font-semibold text-muted-foreground">{pipeline}</p>
+                {items.map((item) => (
+                  <div key={item.codigo} className="flex items-center justify-between gap-2 rounded border p-2 text-xs">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <Badge variant="outline">{item.codigo}</Badge>
+                        {item.semantica ? <Badge variant="secondary">{item.semantica}</Badge> : null}
+                        {!item.activo ? <Badge variant="secondary">inactivo</Badge> : null}
+                        {item.protegido ? <Badge variant="secondary">sistema</Badge> : null}
+                      </div>
+                      {item.label || item.descripcion ? (
+                        <p className="mt-1 text-muted-foreground">{item.label}{item.descripcion ? ` · ${item.descripcion}` : ''}</p>
+                      ) : null}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Button type="button" size="sm" variant="outline" onClick={() => editarMotorEventoSg(item)}>
+                        <Pencil className="mr-1 h-3 w-3" />Editar
+                      </Button>
+                      <Button
+                        type="button" size="sm" variant="destructive"
+                        disabled={item.protegido || guardandoItem}
+                        onClick={() => void eliminarMotorEventoSgItem(item.codigo)}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        </ScrollArea>
+      </div>
+    );
+  };
+
   const renderMotorEventoLista = (): React.ReactElement => (
     <div className="space-y-2">
       <p className="text-[11px] text-muted-foreground">
         Colección <code className="rounded bg-muted px-1 text-xs">politicabypassalcances</code> · identifica
-        funcionalidades por pipeline (A = global.js, B = motorProductos).
+        funcionalidades por pipeline configurado.
       </p>
       <div className="flex justify-end">
         <Button type="button" size="sm" variant="outline" onClick={iniciarNuevoMotorEvento}>
@@ -1299,13 +1652,13 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
       </div>
       <ScrollArea className="h-64 rounded border p-2">
         <div className="space-y-4">
-          {(['PIPELINE_A', 'PIPELINE_B'] as const).map((pipeline) => (
-            <div key={pipeline} className="space-y-2">
-              <p className="text-xs font-medium">{PIPELINE_LABELS[pipeline]}</p>
-              {motorEventosPorPipeline[pipeline].length === 0 ? (
+          {pipelineOpciones.map((pipeline) => (
+            <div key={pipeline.nombre} className="space-y-2">
+              <p className="text-xs font-medium">{pipeline.label}</p>
+              {(motorEventosPorPipeline.get(pipeline.nombre) ?? []).length === 0 ? (
                 <p className="text-xs text-muted-foreground">Sin registros en este pipeline.</p>
               ) : (
-                motorEventosPorPipeline[pipeline].map((item) => (
+                (motorEventosPorPipeline.get(pipeline.nombre) ?? []).map((item) => (
                   <div
                     key={item.nombre || item.alcance}
                     className="flex items-center justify-between gap-2 rounded border p-2 text-xs"
@@ -1374,20 +1727,27 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
             />
           </div>
           <div className="space-y-1 sm:col-span-2">
-            <Label className="text-xs">Pipeline</Label>
+            <div className="flex items-center justify-between gap-2">
+              <Label className="text-xs">Pipeline</Label>
+              <Button type="button" size="sm" variant="outline" onClick={iniciarNuevoPipeline}>
+                <Plus className="mr-1 h-3 w-3" />
+                Nuevo pipeline
+              </Button>
+            </div>
             <Select
               value={motorEventoDraft.pipeline}
               onValueChange={(v) => setMotorEventoDraft({
                 ...motorEventoDraft,
-                pipeline: v as 'PIPELINE_A' | 'PIPELINE_B',
+                pipeline: normalizarPipelineMotorEvento(v),
               })}
             >
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="PIPELINE_A">{PIPELINE_LABELS.PIPELINE_A}</SelectItem>
-                <SelectItem value="PIPELINE_B">{PIPELINE_LABELS.PIPELINE_B}</SelectItem>
+                {pipelineOpciones.map((pipeline) => (
+                  <SelectItem key={pipeline.nombre} value={pipeline.nombre}>{pipeline.label}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -1404,6 +1764,88 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
       </div>
     );
   };
+
+  const renderPipelineDialog = (): React.ReactElement => (
+    <Dialog open={Boolean(pipelineDraft)} onOpenChange={(open) => { if (!open) setPipelineDraft(null); }}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Nuevo pipeline</DialogTitle>
+          <DialogDescription>
+            Crea la opciÃ³n visible en el selector de pipeline para motor evento.
+          </DialogDescription>
+        </DialogHeader>
+        {pipelineDraft ? (
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Nombre</Label>
+              <Input
+                value={pipelineDraft.nombre}
+                placeholder="EJ: PIPELINE_JERARQUIA"
+                onChange={(e) => setPipelineDraft({ ...pipelineDraft, nombre: e.target.value.toUpperCase() })}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Referencia</Label>
+              <Select
+                value={pipelineDraft.referencia || undefined}
+                onValueChange={seleccionarReferenciaPipeline}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecciona una referencia" />
+                </SelectTrigger>
+                <SelectContent>
+                  {catalogoReferenciasBD.filter((item) => item.activo !== false).length === 0 ? (
+                    <SelectItem value="__sin_referencias_pipeline__" disabled>
+                      Sin referencias creadas
+                    </SelectItem>
+                  ) : null}
+                  {catalogoReferenciasBD.filter((item) => item.activo !== false).map((item) => (
+                    <SelectItem key={item.valor} value={item.valor}>
+                      {item.label || item.valor}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Etiqueta del select</Label>
+              <Input
+                value={pipelineDraft.label}
+                placeholder="Se completa desde la referencia"
+                onChange={(e) => setPipelineDraft({ ...pipelineDraft, label: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">DescripciÃ³n</Label>
+              <Input
+                value={pipelineDraft.descripcion}
+                placeholder="Uso del pipeline"
+                onChange={(e) => setPipelineDraft({ ...pipelineDraft, descripcion: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Orden</Label>
+              <Input
+                value={pipelineDraft.orden}
+                inputMode="numeric"
+                placeholder="10"
+                onChange={(e) => setPipelineDraft({ ...pipelineDraft, orden: e.target.value.replace(/\D/g, '') })}
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button type="button" size="sm" disabled={guardandoItem} onClick={() => void guardarPipelineItem()}>
+                {guardandoItem ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                Guardar
+              </Button>
+              <Button type="button" size="sm" variant="outline" onClick={() => setPipelineDraft(null)}>
+                Cancelar
+              </Button>
+            </div>
+          </div>
+        ) : null}
+      </DialogContent>
+    </Dialog>
+  );
 
   const renderItemForm = (): React.ReactElement | null => {
     if (!itemDraft) return null;
@@ -2016,7 +2458,7 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
           </div>
           {esPoliticaBypassLike(tipo, codigo) ? (
             <div className="space-y-3 rounded-md border border-amber-500/30 bg-amber-500/5 p-3 md:col-span-3">
-              <p className="text-xs font-medium text-foreground">Bypass dinámico (motor global.js y JWT)</p>
+              <p className="text-xs font-medium text-foreground">Bypass dinamico por motor evento y JWT</p>
               <div className="space-y-1">
                 <Label className="text-xs">Motor evento (por etiqueta)</Label>
                 <Select
@@ -2031,11 +2473,11 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
                   <SelectContent className="z-[200] max-h-72">
                     {bypassAlcancesOpciones.map((item) => {
                       const nombre = item.nombre || item.alcance;
-                      const pipe = item.pipeline === 'PIPELINE_B' ? 'B' : 'A';
+                      const pipeline = normalizarPipelineMotorEvento(item.pipeline);
                       const etiqueta = item.etiqueta || item.label || nombre;
                       return (
                         <SelectItem key={nombre} value={nombre}>
-                          [{pipe} · {pipe === 'A' ? 'global.js' : 'motorProductos'}] {etiqueta}
+                          [{etiquetaPipeline(pipeline)}] {etiqueta}
                         </SelectItem>
                       );
                     })}
@@ -2055,11 +2497,11 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
               </div>
               {bypassAlcancesOpciones.length ? (
                 <div className="space-y-3">
-                  {(['PIPELINE_A', 'PIPELINE_B'] as const).map((pipeline) => (
-                    <div key={pipeline} className="space-y-2">
-                      <p className="text-[11px] font-medium">{PIPELINE_LABELS[pipeline]}</p>
+                  {pipelineOpciones.map((pipeline) => (
+                    <div key={pipeline.nombre} className="space-y-2">
+                      <p className="text-[11px] font-medium">{pipeline.label}</p>
                       <ul className="grid gap-2 sm:grid-cols-2">
-                        {motorEventosPorPipeline[pipeline].map((item) => {
+                        {(motorEventosPorPipeline.get(pipeline.nombre) ?? []).map((item) => {
                           const nombre = item.nombre || item.alcance;
                           const activo = motorEvento === nombre;
                           return (
@@ -2457,6 +2899,8 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
           if (!open) {
             setItemDraft(null);
             setMotorEventoDraft(null);
+            setMotorEventoSgDraft(null);
+            setPipelineDraft(null);
           }
         }}
       >
@@ -2472,7 +2916,7 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
               type="button"
               size="sm"
               variant={catalogoTipoEfectoTab === 'TIPOS' ? 'default' : 'outline'}
-              onClick={() => { setCatalogoTipoEfectoTab('TIPOS'); setItemDraft(null); setMotorEventoDraft(null); }}
+              onClick={() => { setCatalogoTipoEfectoTab('TIPOS'); setItemDraft(null); setMotorEventoDraft(null); setMotorEventoSgDraft(null); }}
             >
               Tipos
             </Button>
@@ -2480,7 +2924,7 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
               type="button"
               size="sm"
               variant={catalogoTipoEfectoTab === 'EFECTOS' ? 'default' : 'outline'}
-              onClick={() => { setCatalogoTipoEfectoTab('EFECTOS'); setItemDraft(null); setMotorEventoDraft(null); }}
+              onClick={() => { setCatalogoTipoEfectoTab('EFECTOS'); setItemDraft(null); setMotorEventoDraft(null); setMotorEventoSgDraft(null); }}
             >
               Efectos
             </Button>
@@ -2488,7 +2932,7 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
               type="button"
               size="sm"
               variant={catalogoTipoEfectoTab === 'COMPORTAMIENTO' ? 'default' : 'outline'}
-              onClick={() => { setCatalogoTipoEfectoTab('COMPORTAMIENTO'); setItemDraft(null); setMotorEventoDraft(null); }}
+              onClick={() => { setCatalogoTipoEfectoTab('COMPORTAMIENTO'); setItemDraft(null); setMotorEventoDraft(null); setMotorEventoSgDraft(null); }}
             >
               Comportamiento
             </Button>
@@ -2496,7 +2940,7 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
               type="button"
               size="sm"
               variant={catalogoTipoEfectoTab === 'MOTOR_EVENTO' ? 'default' : 'outline'}
-              onClick={() => { setCatalogoTipoEfectoTab('MOTOR_EVENTO'); setItemDraft(null); setMotorEventoDraft(null); }}
+              onClick={() => { setCatalogoTipoEfectoTab('MOTOR_EVENTO'); setItemDraft(null); setMotorEventoDraft(null); setMotorEventoSgDraft(null); }}
             >
               Motor evento
             </Button>
@@ -2504,14 +2948,25 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
               type="button"
               size="sm"
               variant={catalogoTipoEfectoTab === 'REFERENCIA' ? 'default' : 'outline'}
-              onClick={() => { setCatalogoTipoEfectoTab('REFERENCIA'); setItemDraft(null); setMotorEventoDraft(null); }}
+              onClick={() => { setCatalogoTipoEfectoTab('REFERENCIA'); setItemDraft(null); setMotorEventoDraft(null); setMotorEventoSgDraft(null); }}
             >
               Referencia
             </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={catalogoTipoEfectoTab === 'PIPELINES' ? 'default' : 'outline'}
+              onClick={() => { setCatalogoTipoEfectoTab('PIPELINES'); setItemDraft(null); setMotorEventoDraft(null); setMotorEventoSgDraft(null); void cargarCatalogoPipeline(); }}
+            >
+              Pipelines
+            </Button>
           </div>
-          {catalogoTipoEfectoTab === 'MOTOR_EVENTO'
-            ? (motorEventoDraft ? renderMotorEventoForm() : renderMotorEventoLista())
-            : (itemDraft ? renderItemForm() : renderCatalogoLista())}
+          {catalogoTipoEfectoTab === 'PIPELINES'
+            ? renderPipelinesLista()
+            : catalogoTipoEfectoTab === 'MOTOR_EVENTO'
+              ? (motorEventoDraft ? renderMotorEventoForm() : renderMotorEventoLista())
+              : (itemDraft ? renderItemForm() : renderCatalogoLista())}
+          {renderPipelineDialog()}
         </DialogContent>
       </Dialog>
 

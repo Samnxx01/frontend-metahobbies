@@ -104,3 +104,7 @@ export type GenericSelectOption = { id: string; label: string; rol?: string; met
 export type HeredaScope = 'tenantSuperAdmin' | 'tenantGlobal' | 'unknown';
 export type VistaLoc = { suiteId: string; suiteName: string; moduloId: string; moduloName: string };
 export type VistaItem = { id: string; label: string; path: string };
+export type RunEndpointOpts = {
+  diosSyncCompleta?: boolean;
+  diosFormSourceId?: string;
+};

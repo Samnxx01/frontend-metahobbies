@@ -86,7 +86,6 @@ export function ReglasActualizarSaAlcancePanel({
   tenantGlobalRefs = [],
   selectedTenantGlobalId = '',
 }: ReglasActualizarSaAlcancePanelProps) {
-  console.log('[SAPanel] saOptions:', saOptions, '| tenantGlobales:', tenantGlobales, '| selectedSaId:', selectedSaId, '| actorTsaJwt:', actorTsaJwt);
   const saSel = String(selectedSaId || actorTsaJwt || '').trim();
   const tgJwt = String(actorTgJwt || '').trim();
   const tc = String(actorTcJwt || '').trim();

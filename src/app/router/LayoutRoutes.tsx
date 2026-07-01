@@ -171,6 +171,31 @@ interface AuthorizedRoutes {
 
 // ── Hybrid layout ──────────────────────────────────────────────────────────────
 // Rutas híbridas de panel (/admin/* sin flag de tienda): AdminLayout con sesión.
+const flattenRouteConfigs = (routes: RouteConfig[] = []): Array<{ path: string; component: string }> => {
+    const flat: Array<{ path: string; component: string }> = [];
+    const walk = (items: RouteConfig[] = [], parentPath = ''): void => {
+        items.forEach((route) => {
+            const rawPath = String(route.path || '').trim();
+            const fullPath = parentPath
+                ? `${parentPath.replace(/\/$/, '')}/${rawPath.replace(/^\//, '')}`
+                : rawPath;
+            if (fullPath) {
+                flat.push({
+                    path: fullPath.startsWith('/admin/')
+                        ? fullPath
+                        : `/admin/${fullPath.replace(/^\/admin\/?/i, '').replace(/^\//, '')}`,
+                    component: String(route.component || ''),
+                });
+            }
+            if (Array.isArray(route.children) && route.children.length > 0) {
+                walk(route.children, fullPath);
+            }
+        });
+    };
+    walk(routes);
+    return flat;
+};
+
 function HybridLayout(): ReactElement {
     const { isAuthenticated, loading } = useAuth();
     const location = useLocation();
@@ -368,6 +393,13 @@ export default function LayoutRoutes(): ReactElement {
 
     const hybridStorefrontRoutes = authorizedRoutes.hybridStorefrontRoutes ?? [];
     const hybridAdminShellRoutes = authorizedRoutes.hybridAdminShellRoutes ?? [];
+    const adminRoutesFlat = flattenRouteConfigs(authorizedRoutes.adminRoutes ?? []);
+    const menuTagRoutesFlat = flattenRouteConfigs(menuTagRoutes);
+    const currentAdminPath = location.pathname.replace(/\/+$/, '') || '/';
+    const currentAdminRouteRegistrada = [...adminRoutesFlat, ...menuTagRoutesFlat].some((route) => {
+        const routePath = route.path.replace(/\/+$/, '') || '/';
+        return routePath === currentAdminPath;
+    });
 
     const renderFallbackElement = (route: RouteConfig): ReactElement => (
         <DynamicRouteFallback routePath={route.path} componentName={route.component} />

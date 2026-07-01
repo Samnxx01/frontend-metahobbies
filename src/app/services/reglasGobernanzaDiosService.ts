@@ -125,3 +125,23 @@ export async function eliminarReglaDiosPorId(
   );
   return res?.data ?? res;
 }
+
+export interface DesactivarVistasReglaResponse {
+  id: string;
+  desactivadas?: string[];
+  [key: string]: unknown;
+}
+
+export async function desactivarVistasEnRegla(
+  reglaId: string,
+  vistaIds: string[]
+): Promise<DesactivarVistasReglaResponse> {
+  const res = await apiFetch(
+    `/api/config/permisos/creacion/admin/tenant/global/${encodeURIComponent(reglaId)}/vista`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ vistaIds }),
+    }
+  );
+  return res?.data ?? res;
+}

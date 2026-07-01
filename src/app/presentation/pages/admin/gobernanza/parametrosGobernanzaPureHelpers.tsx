@@ -9,7 +9,7 @@ import { formatSaJerarquiaOptionLabel } from './SaJerarquiaUsuariosPanel';
 // Tipos locales compartidos entre las funciones puras y el componente principal
 // ---------------------------------------------------------------------------
 
-export type Vista = { id: string; label: string; path: string };
+export type Vista = { id: string; label: string; path: string; _id?: string };
 export type Accion = { id: string; label: string; method: string };
 export type TenantGlobal = {
   id: string;

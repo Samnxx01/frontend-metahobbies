@@ -2,10 +2,8 @@ import React, { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTheme } from 'next-themes'
 import { useAuth } from '@/app/providers/AuthProvider'
-import { useMembership } from '@/app/hooks/useMembership'
 import { apiFetch } from '@/app/services/api'
-import { getMenuUsuarioRoutes, getPrivateHomeRoute, getUserShortcutRoutes, readCachedPrivateHomeRoute, type MenuUsuarioItem } from '@/app/services/routeService'
-import { getRouteMenuTags, resolveCurrentRouteMenuTags, type RouteMenuTag } from '@/app/services/routesService'
+import { getMenuUsuarioRoutes, getPrivateHomeRoute, readCachedPrivateHomeRoute, type MenuUsuarioItem } from '@/app/services/routeService'
 import { getGovernedLogoutPath } from '@/app/services/governedNavigation'
 import { resolveUserDisplayName, resolveUserInitial } from '@/app/presentation/utils/resolveUserDisplayName'
 import { Button } from "@/components/ui/button"
@@ -13,8 +11,6 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Crown, Home, Landmark, LayoutDashboard, LogOut, Menu, Moon, Settings, Sun, User as UserIcon } from 'lucide-react'
 import type { AdminNavbarProps } from '@/types/components'
-
-const ADMIN_PROFILE_VIEW_PATH = '/admin/parametros/perfil/visualizacion'
 
 const MENU_ICON_MAP: Record<string, React.ElementType> = {
     USER: UserIcon,
@@ -26,42 +22,13 @@ const MENU_ICON_MAP: Record<string, React.ElementType> = {
     CIRCLE: UserIcon,
 }
 
-const mergeMenuUsuarioItems = (...sources: Array<MenuUsuarioItem[] | RouteMenuTag[] | null | undefined>): MenuUsuarioItem[] => {
-    const items = new Map<string, MenuUsuarioItem>()
-
-    sources.forEach((source) => {
-        ; (Array.isArray(source) ? source : []).forEach((row: any) => {
-            const key = String(row?.key || row?.codigo || row?.iud || '').trim()
-            const path = String(row?.path || row?.routePath || row?.ruta?.path || '').trim()
-            const label = String(row?.label || row?.nombreTag || '').trim()
-
-            if (!key || !path || !label) return
-
-            items.set(key, {
-                key,
-                label,
-                path,
-                icon: row?.icon ?? row?.iconKey ?? null,
-                order: Number(row?.order ?? 0),
-            })
-        })
-    })
-
-    return Array.from(items.values()).sort(
-        (a, b) => Number(a.order ?? 0) - Number(b.order ?? 0) || String(a.label || '').localeCompare(String(b.label || ''))
-    )
-}
-
 export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarProps): React.ReactElement {
     const navigate = useNavigate()
     const { user, logout } = useAuth()
     const { theme, setTheme } = useTheme()
-    const { hasActiveMembership } = useMembership()
     const [logoUrl, setLogoUrl] = useState<string | null>(null)
     const [logoLoading, setLogoLoading] = useState<boolean>(true)
     const [adminHomePath, setAdminHomePath] = useState<string>('/admin')
-    const [profilePath, setProfilePath] = useState<string>(ADMIN_PROFILE_VIEW_PATH)
-    const [membershipPath, setMembershipPath] = useState<string>('/membresia/dashboard')
     const [dynamicMenuItems, setDynamicMenuItems] = useState<MenuUsuarioItem[]>([])
     const [menuOpen, setMenuOpen] = useState(false)
 
@@ -109,20 +76,13 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
 
         const cargarShortcuts = async (): Promise<void> => {
             try {
-                const [shortcuts, privateHome] = await Promise.all([
-                    getUserShortcutRoutes(),
-                    getPrivateHomeRoute()
-                ])
+                const privateHome = await getPrivateHomeRoute()
 
                 if (!active) return
                 setAdminHomePath(privateHome || readCachedPrivateHomeRoute() || '/public/render/home')
-                setProfilePath(ADMIN_PROFILE_VIEW_PATH)
-                setMembershipPath(shortcuts.membresia || '/membresia/dashboard')
             } catch (_error) {
                 if (!active) return
                 setAdminHomePath(readCachedPrivateHomeRoute() || '/public/render/home')
-                setProfilePath(ADMIN_PROFILE_VIEW_PATH)
-                setMembershipPath('/membresia/dashboard')
             }
         }
 
@@ -205,71 +165,75 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
     const renderProfileDropdown = (
         <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
             <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="icon" className="h-9 w-9 p-0 rounded-full hover:border-button/40 transition-colors">
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-9 w-9 rounded-full border border-border/70 bg-background/70 p-0 shadow-sm hover:bg-muted"
+                >
                     <Avatar className="h-full w-full">
-                        <AvatarFallback className="bg-primary text-primary-foreground text-sm font-semibold">
+                        <AvatarFallback className="bg-foreground text-background text-sm font-semibold">
                             {getUserInitials()}
                         </AvatarFallback>
                     </Avatar>
                 </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent
-                className="w-80 overflow-hidden rounded-3xl border border-primary/10 bg-background/95 p-0 shadow-2xl backdrop-blur-2xl"
+                className="w-[min(calc(100vw-1.5rem),22rem)] overflow-hidden rounded-lg border border-border/70 bg-popover p-0 text-popover-foreground shadow-xl"
                 align="end"
-                sideOffset={14}
+                sideOffset={10}
             >
-                <div className="border-b border-primary/10 bg-gradient-to-br from-primary/10 via-background to-secondary/25 px-4 py-4">
+                <div className="border-b border-border bg-muted/35 px-3.5 py-3">
                     <div className="flex items-center gap-3">
-                        <Avatar className="h-11 w-11 ring-2 ring-primary/15">
-                            <AvatarFallback className="bg-primary text-primary-foreground text-sm font-semibold">
+                        <Avatar className="h-10 w-10 shrink-0 ring-1 ring-border">
+                            <AvatarFallback className="bg-foreground text-background text-sm font-semibold">
                                 {getUserInitials()}
                             </AvatarFallback>
                         </Avatar>
                         <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-semibold leading-none text-foreground">{getUserName()}</p>
+                            <p className="truncate text-sm font-semibold leading-5 text-foreground">{getUserName()}</p>
                             {getUserEmail() ? (
-                                <p className="mt-1 truncate text-xs text-muted-foreground">{getUserEmail()}</p>
+                                <p className="truncate text-xs leading-4 text-muted-foreground">{getUserEmail()}</p>
                             ) : null}
-                            <div className="mt-2 flex flex-wrap items-center gap-2">
+                            <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5">
                                 {getUserRoleLabel() ? (
-                                    <div className="inline-flex items-center rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-medium text-primary">
+                                    <span className="max-w-full truncate rounded-md border border-border bg-background px-2 py-0.5 text-[11px] font-medium leading-4 text-foreground">
                                         {getUserRoleLabel()}
-                                    </div>
+                                    </span>
                                 ) : (
-                                    <div className="inline-flex items-center rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-medium text-primary">
+                                    <span className="rounded-md border border-border bg-background px-2 py-0.5 text-[11px] font-medium leading-4 text-foreground">
                                         Panel privado
-                                    </div>
+                                    </span>
                                 )}
-                                <div className="inline-flex items-center rounded-full bg-secondary/25 px-2.5 py-1 text-[11px] font-medium text-secondary-foreground">
-                                    {menuItems.length} accesos
-                                </div>
+                                <span className="rounded-md bg-primary/10 px-2 py-0.5 text-[11px] font-medium leading-4 text-primary">
+                                    {visibleMenuItems.length} accesos
+                                </span>
                             </div>
                         </div>
                     </div>
                 </div>
-                <div className="px-3 py-3">
-                    {menuItems.filter((item) => item.visible && item.path).length > 0 ? (
-                        <div className="space-y-1.5">
-                            <div className="px-2 pb-1 text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                <div className="max-h-[min(420px,var(--radix-dropdown-menu-content-available-height))] overflow-y-auto px-2 py-2">
+                    {visibleMenuItems.length > 0 ? (
+                        <div className="space-y-0.5">
+                            <div className="px-2 pb-1 pt-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                                 Accesos rapidos
                             </div>
-                            {menuItems.filter((item) => item.visible && item.path).map((item) => {
+                            {visibleMenuItems.map((item) => {
                                 const Icon = item.Icon
                                 return (
                                     <DropdownMenuItem
                                         key={item.key}
                                         asChild
-                                        className="cursor-pointer rounded-2xl px-3 py-0 focus:bg-transparent"
+                                        className="cursor-pointer rounded-md p-0 focus:bg-transparent"
                                     >
                                         <a
                                             href={item.path}
-                                            onClick={(e) => { e.preventDefault(); navigate(item.path) }}
-                                            className="group flex min-h-[48px] items-center gap-3 rounded-2xl border border-transparent bg-muted/35 px-3 py-2.5 transition-all hover:border-primary/15 hover:bg-primary/5"
+                                            onClick={(e) => { e.preventDefault(); setMenuOpen(false); navigate(item.path) }}
+                                            className="group flex h-10 min-w-0 items-center gap-3 rounded-md px-2.5 text-sm transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                                         >
-                                            <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary transition-transform group-hover:scale-105">
-                                                <Icon className="h-4.5 w-4.5" />
+                                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                                                <Icon className="h-4 w-4" />
                                             </span>
-                                            <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+                                            <span className="min-w-0 flex-1 truncate font-medium text-foreground">
                                                 {item.label}
                                             </span>
                                         </a>
@@ -278,19 +242,21 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
                             })}
                         </div>
                     ) : (
-                        <div className="rounded-2xl border border-dashed border-primary/15 bg-muted/20 px-4 py-5 text-center">
+                        <div className="rounded-lg border border-dashed border-border bg-muted/30 px-4 py-5 text-center">
                             <p className="text-sm font-medium text-foreground">Sin accesos visibles</p>
                             <p className="mt-1 text-xs text-muted-foreground">Cuando parametrices los tags del avatar, apareceran aqui.</p>
                         </div>
                     )}
                 </div>
-                <div className="border-t border-primary/10 bg-muted/15 p-3">
+                <div className="border-t border-border bg-muted/25 p-2">
                     <DropdownMenuItem
                         onClick={handleLogout}
-                        className="cursor-pointer rounded-2xl px-3 py-3 text-destructive focus:bg-destructive/5 focus:text-destructive"
+                        className="h-10 cursor-pointer rounded-md px-2.5 text-destructive focus:bg-destructive/10 focus:text-destructive"
                     >
-                        <LogOut className="mr-2 h-4 w-4" />
-                        Cerrar Sesion
+                        <span className="flex h-7 w-7 items-center justify-center rounded-md bg-destructive/10">
+                            <LogOut className="h-4 w-4" />
+                        </span>
+                        <span className="ml-3 text-sm font-medium">Cerrar Sesion</span>
                     </DropdownMenuItem>
                 </div>
             </DropdownMenuContent>

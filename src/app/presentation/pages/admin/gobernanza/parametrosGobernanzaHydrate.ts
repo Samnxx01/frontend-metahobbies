@@ -171,7 +171,7 @@ export function buildHydrateFetchers(bundles: Set<HydrateBundle>): HydrateFetche
     fetchers.herencias = () => apiFetch('/api/config/permisos/listar/usu/tenant/libres', { method: 'GET' });
   }
   if (bundles.has('reglas')) {
-    fetchers.reglas = () => apiFetch('/api/config/tenant/listar/reglas', { method: 'GET' });
+    fetchers.reglas = () => fetchReglasTenantCached();
   }
   if (bundles.has('tenantsDestino')) {
     fetchers.tenantsDestino = () =>
@@ -211,4 +211,43 @@ export function mergeHydrateBundleResults(
   source: HydrateBundleResults
 ): HydrateBundleResults {
   return { ...target, ...source };
+}
+
+// ─── Cache de promesas para /listar/reglas (TTL 30 s, clave por params) ──────
+
+const REGLAS_CACHE_TTL_MS = 30_000;
+const _reglasCache = new Map<string, { at: number; promise: Promise<unknown> }>();
+
+export type FetchReglasParams = {
+  tenantSuperTenant?: string;
+  tenantGlobal?: string;
+  tenantCorporativo?: string;
+  soloActivos?: boolean;
+};
+
+export async function fetchReglasTenantCached(params: FetchReglasParams = {}): Promise<unknown> {
+  const q = new URLSearchParams();
+  if (params.tenantSuperTenant) q.set('tenantSuperTenant', params.tenantSuperTenant);
+  if (params.tenantGlobal) q.set('tenantGlobal', params.tenantGlobal);
+  if (params.tenantCorporativo) q.set('tenantCorporativo', params.tenantCorporativo);
+  if (params.soloActivos) q.set('soloActivos', 'true');
+  const key = q.toString() || 'base';
+  const now = Date.now();
+  const cached = _reglasCache.get(key);
+  if (cached && now - cached.at < REGLAS_CACHE_TTL_MS) return cached.promise;
+  const qs = q.toString();
+  const promise = apiFetch(
+    `/api/config/tenant/listar/reglas${qs ? `?${qs}` : ''}`,
+    { method: 'GET' },
+  ).catch((err) => {
+    if (_reglasCache.get(key)?.promise === promise) _reglasCache.delete(key);
+    throw err;
+  });
+  _reglasCache.set(key, { at: now, promise });
+  return promise;
+}
+
+/** Fuerza recarga en el próximo llamado (usar tras crear/actualizar/eliminar reglas). */
+export function invalidarReglasCache(): void {
+  _reglasCache.clear();
 }

@@ -55,6 +55,12 @@ export interface BrandingConfig {
 interface BrandingResponse {
   ok: boolean;
   branding?: BrandingConfig;
+  msg?: string;
+  transaccion?: {
+    estado?: string;
+    conSession?: boolean;
+  };
+  scope?: Record<string, unknown>;
 }
 
 export interface BrandingScopeParams {
@@ -115,6 +121,14 @@ export const guardarBrandingPrivado = async (
   branding: BrandingConfig,
   params?: BrandingScopeParams
 ): Promise<BrandingConfig | null> => {
+  const response = await guardarBrandingPrivadoConRespuesta(branding, params);
+  return response.branding ?? null;
+};
+
+export const guardarBrandingPrivadoConRespuesta = async (
+  branding: BrandingConfig,
+  params?: BrandingScopeParams
+): Promise<BrandingResponse> => {
   const payload = normalizeBrandingWidgetImages(branding);
   const response = (await apiFetch(`/api/config/parametrizacion/widget/branding${buildBrandingScopeQuery(params)}`, {
     method: 'PUT',
@@ -123,12 +137,15 @@ export const guardarBrandingPrivado = async (
   })) as BrandingResponse | null;
 
   if (!response?.ok || !response.branding) {
-    return null;
+    throw new Error(response?.msg || 'No se pudo guardar la configuracion de branding.');
   }
 
   const saved = normalizeBrandingWidgetImages(response.branding);
   persistBrandingCache(saved);
-  return saved;
+  return {
+    ...response,
+    branding: saved,
+  };
 };
 
 export const subirImagenFondoLogin = async (file: File): Promise<{ id: string; url: string } | null> => {
