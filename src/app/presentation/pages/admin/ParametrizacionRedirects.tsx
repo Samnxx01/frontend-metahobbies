@@ -27,6 +27,7 @@ import { getJerarquiaUsuarios, type TenantGlobalNode } from '@/app/services/tena
 interface RedirectEntryState {
   path: string;
   enabled: boolean;
+  rutaSeguridadId?: string | null;
 }
 
 interface RedirectFormState {
@@ -85,6 +86,9 @@ const parseAllowedPaths = (value: string): string[] => {
     .filter((item) => item.startsWith('/'));
 };
 
+const getRedirectRouteId = (entry?: { rutaSeguridadId?: string | null }): string | null =>
+  String(entry?.rutaSeguridadId || '').trim() || null;
+
 const collectTenantGlobalOptions = (nodes: TenantGlobalNode[] = [], acc: ScopeOption[] = []): ScopeOption[] => {
   nodes.forEach((node) => {
     const tenant = node?.tenantGlobal;
@@ -128,12 +132,12 @@ export default function ParametrizacionRedirects({
     const allowedPaths = Array.isArray(navigation?.allowedPaths) ? navigation.allowedPaths : [];
 
     setForm({
-      login:          { path: String(navigation?.login?.path          || ''), enabled: navigation?.login?.enabled          !== false },
-      postLogin:      { path: String(navigation?.postLogin?.path      || ''), enabled: navigation?.postLogin?.enabled      !== false },
-      logout:         { path: String(navigation?.logout?.path         || ''), enabled: navigation?.logout?.enabled         !== false },
-      register:       { path: String(navigation?.register?.path       || ''), enabled: navigation?.register?.enabled       !== false },
-      forgotPassword: { path: String(navigation?.forgotPassword?.path || ''), enabled: navigation?.forgotPassword?.enabled !== false },
-      publicHome:     { path: String(navigation?.publicHome?.path     || ''), enabled: navigation?.publicHome?.enabled     !== false },
+      login:          { path: String(navigation?.login?.path          || ''), enabled: navigation?.login?.enabled          !== false, rutaSeguridadId: getRedirectRouteId(navigation?.login) },
+      postLogin:      { path: String(navigation?.postLogin?.path      || ''), enabled: navigation?.postLogin?.enabled      !== false, rutaSeguridadId: getRedirectRouteId(navigation?.postLogin) },
+      logout:         { path: String(navigation?.logout?.path         || ''), enabled: navigation?.logout?.enabled         !== false, rutaSeguridadId: getRedirectRouteId(navigation?.logout) },
+      register:       { path: String(navigation?.register?.path       || ''), enabled: navigation?.register?.enabled       !== false, rutaSeguridadId: getRedirectRouteId(navigation?.register) },
+      forgotPassword: { path: String(navigation?.forgotPassword?.path || ''), enabled: navigation?.forgotPassword?.enabled !== false, rutaSeguridadId: getRedirectRouteId(navigation?.forgotPassword) },
+      publicHome:     { path: String(navigation?.publicHome?.path     || ''), enabled: navigation?.publicHome?.enabled     !== false, rutaSeguridadId: getRedirectRouteId(navigation?.publicHome) },
       allowedPathsJson: JSON.stringify(allowedPaths, null, 2),
     });
   };
@@ -178,6 +182,13 @@ export default function ParametrizacionRedirects({
         .filter((path) => path.startsWith('/'))
     )
   ).sort((a, b) => a.localeCompare(b));
+
+  const resolveRutaSeguridadIdByPath = (path: string): string | null => {
+    const normalizedPath = String(path || '').trim();
+    if (!normalizedPath) return null;
+    const route = routeCatalog.find((row) => String(row.path || '').trim() === normalizedPath);
+    return route?.iud ? String(route.iud) : null;
+  };
 
   // Incluye el path actual del campo (si existe) para que el Select lo muestre aunque no esté en el catálogo
   const getPathOptions = (currentPath: string): string[] => {
@@ -235,6 +246,7 @@ export default function ParametrizacionRedirects({
             register:       form.register,
             forgotPassword: form.forgotPassword,
             publicHome:     form.publicHome,
+            etiqueta: 'navegacion',
             allowedPaths,
           },
         },
@@ -350,7 +362,10 @@ export default function ParametrizacionRedirects({
                 <Label>Path</Label>
                 <Select
                   value={form[field.key].path || undefined}
-                  onValueChange={(value) => updateField(field.key, { path: value })}
+                  onValueChange={(value) => updateField(field.key, {
+                    path: value,
+                    rutaSeguridadId: resolveRutaSeguridadIdByPath(value),
+                  })}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Selecciona un path de rutasSeguridad" />

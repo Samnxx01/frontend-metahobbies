@@ -63,6 +63,26 @@ interface ReferidosResponse {
     usuarios: UsuarioReferido[];
 }
 
+const isVoucher = (voucher: Voucher | null | undefined): voucher is Voucher => Boolean(voucher);
+const isReferidoRelacion = (referido: ReferidoRelacion | null | undefined): referido is ReferidoRelacion =>
+    Boolean(referido);
+
+const sanitizeReferidosResponse = (response: ReferidosResponse): ReferidosResponse => ({
+    ...response,
+    usuarios: (response?.usuarios ?? [])
+        .filter(Boolean)
+        .map((usuario) => ({
+            ...usuario,
+            vouchers: (usuario.vouchers ?? []).filter(isVoucher),
+            referidos: (usuario.referidos ?? [])
+                .filter(isReferidoRelacion)
+                .map((referido) => ({
+                    ...referido,
+                    vouchers: (referido.vouchers ?? []).filter(isVoucher),
+                })),
+        })),
+});
+
 type EstadoTx = 'aprobada' | 'pendiente' | 'rechazada';
 
 interface BannerConfig {
@@ -203,17 +223,18 @@ function BannerTransaccion() {
     );
 }
 
-const voucherMonto = (voucher: Voucher): number => Number(voucher.montoGanado) || 0;
+const voucherMonto = (voucher: Voucher | null | undefined): number => Number(voucher?.montoGanado) || 0;
 
-const totalesDesdeVouchers = (vouchers: Voucher[]) => {
-    const totalGenerado = vouchers.reduce((acc, v) => acc + voucherMonto(v), 0);
-    const totalPendiente = vouchers
+const totalesDesdeVouchers = (vouchers: Array<Voucher | null | undefined>) => {
+    const vouchersValidos = vouchers.filter(isVoucher);
+    const totalGenerado = vouchersValidos.reduce((acc, v) => acc + voucherMonto(v), 0);
+    const totalPendiente = vouchersValidos
         .filter((v) => v.status === 'pendiente')
         .reduce((acc, v) => acc + voucherMonto(v), 0);
-    const totalPagado = vouchers
+    const totalPagado = vouchersValidos
         .filter((v) => v.status === 'pagado')
         .reduce((acc, v) => acc + voucherMonto(v), 0);
-    const saldoInicial = vouchers.length ? voucherMonto(vouchers[0]) : 0;
+    const saldoInicial = vouchersValidos.length ? voucherMonto(vouchersValidos[0]) : 0;
     return { totalGenerado, totalPendiente, totalPagado, saldoInicial };
 };
 
@@ -252,7 +273,7 @@ export default function MembershipDashboard(): React.ReactElement {
         try {
             setLoadingReferidos(true);
             const response = await apiFetch('/api/referido/listarMiMembresia', { method: 'GET' });
-            setReferidosData(response);
+            setReferidosData(sanitizeReferidosResponse(response));
         } catch (err) {
             console.error('Error al cargar datos de referidos:', err);
             toast.error('Error al cargar datos de referidos');
@@ -277,10 +298,10 @@ export default function MembershipDashboard(): React.ReactElement {
     const totalEarnings = totales?.saldoActual ?? 0;
     const totalPagado = totales?.totalPagado ?? 0;
     const totalPendiente = totales?.totalPendiente ?? 0;
-    const visibleVouchers = misDatos?.vouchers ?? [];
-    const visibleReferidos = misDatos?.referidos ?? [];
+    const visibleVouchers = (misDatos?.vouchers ?? []).filter(isVoucher);
+    const visibleReferidos = (misDatos?.referidos ?? []).filter(isReferidoRelacion);
     const totalMontoVouchers = totales?.totalGenerado ?? visibleVouchers.reduce(
-        (sum, v) => sum + (Number(v.montoGanado) || 0),
+        (sum, v) => sum + voucherMonto(v),
         0,
     );
 
@@ -315,10 +336,10 @@ export default function MembershipDashboard(): React.ReactElement {
     );
 
     const sumarVouchers = (lista: Voucher[]): number =>
-        lista.reduce((s, v) => s + (Number(v.montoGanado) || 0), 0);
+        lista.reduce((s, v) => s + voucherMonto(v), 0);
 
     const vouchersDeReferido = (ref: ReferidoRelacion): Voucher[] => {
-        if (ref.vouchers?.length) return ref.vouchers;
+        if (ref.vouchers?.length) return ref.vouchers.filter(isVoucher);
         const uid = normalizePublicIdForApi(ref.usuarioId);
         if (!uid) return [];
         return visibleVouchers.filter(
