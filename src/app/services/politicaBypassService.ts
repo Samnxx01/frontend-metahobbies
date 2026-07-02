@@ -215,6 +215,23 @@ export async function fetchCatalogoPipeline(): Promise<PoliticaBypassPipelineIte
   return Array.isArray(items) ? items : [];
 }
 
+export async function actualizarPoliticaBypassPipeline(
+  nombre: string,
+  payload: GuardarPoliticaBypassPipelinePayload,
+): Promise<PoliticaBypassPipelineItem> {
+  const res = await apiFetch(`/api/seguridad/catalogo-pipeline/${encodeURIComponent(nombre)}`, {
+    method: 'PUT',
+    body: payload,
+  });
+  const item = (res as { item?: PoliticaBypassPipelineItem })?.item;
+  if (!item) throw new Error('No se pudo actualizar el pipeline');
+  return item;
+}
+
+export async function eliminarPoliticaBypassPipeline(nombre: string): Promise<void> {
+  await apiFetch(`/api/seguridad/catalogo-pipeline/${encodeURIComponent(nombre)}`, { method: 'DELETE' });
+}
+
 export async function eliminarPoliticaBypassMotorEvento(nombre: string): Promise<void> {
   await apiFetch(`${BASE}/motor-evento/${encodeURIComponent(nombre)}`, { method: 'DELETE' });
 }

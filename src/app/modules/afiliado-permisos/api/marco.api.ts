@@ -173,3 +173,24 @@ export const getContextoClienteMe = async (): Promise<ContextoClienteResponse> =
     method: 'GET',
     useAuth: true,
   });
+
+export interface PoliticaRuntime {
+  _id: string;
+  iud?: string;
+  codigo: string;
+  dominio: string;
+  tipo: string;
+  efecto: string;
+  prioridad?: number;
+  activo: boolean;
+  scope?: { tipo?: string };
+}
+
+export const getPoliticasCatalogo = async (): Promise<{ ok: boolean; politicas: PoliticaRuntime[] }> =>
+  apiFetch(AFILIADO_PERMISOS_PATHS.politicasCatalogo, { method: 'GET', useAuth: true });
+
+export const guardarPoliticasMarco = async (payload: {
+  rolCorporativoId: string;
+  politicaIds: string[];
+}): Promise<{ ok: boolean; msg: string; resultado: { herenciaClienteId: string; politicasRuntimeIds: string[]; total: number } }> =>
+  apiFetch(AFILIADO_PERMISOS_PATHS.marcoPoliticas, { method: 'POST', body: payload, useAuth: true });

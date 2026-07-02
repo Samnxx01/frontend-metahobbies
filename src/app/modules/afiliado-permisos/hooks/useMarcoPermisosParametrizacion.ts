@@ -310,15 +310,16 @@ export function useMarcoPermisosParametrizacion() {
     setAccionesSel((prev) => {
       const next = new Set(prev);
       acciones
-        .filter((a) =>
-          SUGERENCIAS_AFILIADO.test(`${a.method} ${a.etiquetas}`) ||
-          ['GET', 'POST'].includes(String(a.method || '').toUpperCase())
+        .filter(
+          (a) =>
+            SUGERENCIAS_AFILIADO.test(`${a.method} ${a.etiquetas}`) ||
+            ['GET', 'POST'].includes(String(a.method || '').toUpperCase()),
         )
         .forEach((a) => next.add(toId(a)));
       return next;
     });
     setSoloSugeridas(true);
-    toast.info('Seleccionadas rutas sugeridas y acciones del catálogo. Revise y guarde el techo.');
+    toast.info('Sugeridas seleccionadas. Revise el catálogo y guarde el techo cuando esté conforme.');
   };
 
   const sincronizar = async () => {

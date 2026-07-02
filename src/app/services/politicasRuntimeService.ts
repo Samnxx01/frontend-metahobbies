@@ -81,7 +81,7 @@ export type PoliticaRuntimeCatalogoItem = {
   protegido: boolean;
 };
 
-export type PoliticaRuntimeCatalogoCategoria = 'TIPO' | 'EFECTO' | 'REFERENCIA' | 'COMPORTAMIENTO';
+export type PoliticaRuntimeCatalogoCategoria = 'TIPO' | 'EFECTO' | 'REFERENCIA' | 'COMPORTAMIENTO' | 'SEMANTICA_MOTOR';
 
 export type PoliticaRuntimeAccionOpcion = {
   id: string;
@@ -143,6 +143,8 @@ export type PoliticaRuntimeOpciones = {
   catalogoEfectos: PoliticaRuntimeCatalogoItem[];
   catalogoReferencias: PoliticaRuntimeCatalogoItem[];
   catalogoComportamientos: PoliticaRuntimeComportamientoCatalogoItem[];
+  /** Ítems completos de SEMANTICA_MOTOR para CRUD en UI. */
+  catalogoSemanticaMotor?: PoliticaRuntimeCatalogoItem[];
   /** Semánticas que el motor interpreta (PERMITE, BLOQUEA, BYPASS, …). */
   motorSemanticas?: string[];
   dominiosPolitica: string[];
@@ -172,6 +174,7 @@ export type GuardarCatalogoItemPayload = {
   motorSemantica?: string;
   orden?: number;
   activo?: boolean;
+  protegido?: boolean;
 };
 
 export type PoliticaRuntimeDecision = {

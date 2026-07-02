@@ -44,7 +44,9 @@ import {
   type PoliticaRuntimeBypassAlcanceOpcion,
 } from '@/app/services/politicasRuntimeService';
 import {
+  actualizarPoliticaBypassPipeline,
   eliminarPoliticaBypassMotorEvento,
+  eliminarPoliticaBypassPipeline,
   fetchCatalogoPipeline,
   guardarPoliticaBypassPipeline,
   guardarPoliticaBypassMotorEvento,
@@ -173,7 +175,7 @@ type PipelineDraft = {
   label: string;
   referencia: string;
   descripcion: string;
-  orden: string;
+  esNuevo: boolean;
 };
 
 const esPoliticaBypassLike = (tipoValor: string, codigoValor: string): boolean => {
@@ -246,10 +248,11 @@ const siguienteOrdenCatalogo = (
 
 const tabDeCategoria = (
   categoria: PoliticaRuntimeCatalogoCategoria,
-): 'TIPOS' | 'EFECTOS' | 'REFERENCIA' | 'COMPORTAMIENTO' => {
+): 'TIPOS' | 'EFECTOS' | 'REFERENCIA' | 'COMPORTAMIENTO' | 'SEMANTICA_MOTOR' => {
   if (categoria === 'TIPO') return 'TIPOS';
   if (categoria === 'EFECTO') return 'EFECTOS';
   if (categoria === 'REFERENCIA') return 'REFERENCIA';
+  if (categoria === 'SEMANTICA_MOTOR') return 'SEMANTICA_MOTOR';
   return 'COMPORTAMIENTO';
 };
 
@@ -257,6 +260,7 @@ const labelCategoriaCatalogo = (categoria: PoliticaRuntimeCatalogoCategoria): st
   if (categoria === 'TIPO') return 'tipo';
   if (categoria === 'EFECTO') return 'efecto';
   if (categoria === 'REFERENCIA') return 'referencia / dominio';
+  if (categoria === 'SEMANTICA_MOTOR') return 'semántica del motor';
   return 'comportamiento';
 };
 
@@ -281,7 +285,7 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
   const [scopeDraftUsuarios, setScopeDraftUsuarios] = useState<Record<string, boolean>>({});
   const [catalogoTipoEfectoOpen, setCatalogoTipoEfectoOpen] = useState(false);
   const [catalogoTipoEfectoTab, setCatalogoTipoEfectoTab] = useState<
-    'TIPOS' | 'EFECTOS' | 'REFERENCIA' | 'COMPORTAMIENTO' | 'MOTOR_EVENTO' | 'PIPELINES'
+    'TIPOS' | 'EFECTOS' | 'REFERENCIA' | 'COMPORTAMIENTO' | 'MOTOR_EVENTO' | 'PIPELINES' | 'SEMANTICA_MOTOR'
   >('TIPOS');
   const [catalogoMotorEventosSg, setCatalogoMotorEventosSg] = useState<CatalogoMotorEventoSgItem[]>([]);
   const [catalogoPipelineItems, setCatalogoPipelineItems] = useState<PoliticaBypassPipelineItem[]>([]);
@@ -335,7 +339,7 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
       const items = await fetchCatalogoPipeline();
       setCatalogoPipelineItems(items);
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : 'No se pudo cargar el catÃ¡logo de pipelines');
+      toast.error(e instanceof Error ? e.message : 'No se pudo cargar el catálogo de pipelines');
     }
   }, []);
 
@@ -390,6 +394,11 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
   const catalogoComportamientosBD = useMemo(
     () => opcionesRuntime?.catalogoComportamientos ?? [],
     [opcionesRuntime?.catalogoComportamientos],
+  );
+
+  const catalogoSemanticasBD = useMemo(
+    () => opcionesRuntime?.catalogoSemanticaMotor ?? [],
+    [opcionesRuntime?.catalogoSemanticaMotor],
   );
 
   const motorSemanticasOpciones = useMemo(
@@ -1071,7 +1080,7 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
     setItemDraft({
       ...draftVacio(categoria),
       valor: valorInicial.trim().toUpperCase(),
-      ...(categoria !== 'COMPORTAMIENTO' ? {
+      ...(categoria !== 'COMPORTAMIENTO' && categoria !== 'SEMANTICA_MOTOR' ? {
         orden: siguienteOrdenCatalogo(
           categoria,
           catalogoTiposBD,
@@ -1126,6 +1135,9 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
     if (catalogoTipoEfectoTab === 'COMPORTAMIENTO') {
       return { categoria: 'COMPORTAMIENTO', items: catalogoComportamientosBD, label: 'comportamiento' };
     }
+    if (catalogoTipoEfectoTab === 'SEMANTICA_MOTOR') {
+      return { categoria: 'SEMANTICA_MOTOR', items: catalogoSemanticasBD, label: 'semántica' };
+    }
     return null;
   };
 
@@ -1136,13 +1148,20 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
     return (
       <div className="space-y-2">
         <p className="text-[11px] text-muted-foreground">
-          Colección <code className="rounded bg-muted px-1 text-xs">politicasruntimecatalogo</code> · categoría{' '}
-          <code className="rounded bg-muted px-1 text-xs">{categoria}</code>
-          {categoria === 'REFERENCIA' ? ' → se usa como dominio de la política.' : ''}
+          Colección{' '}
+          <code className="rounded bg-muted px-1 text-xs">
+            {categoria === 'TIPO' ? 'catalogotipos'
+              : categoria === 'EFECTO' ? 'catalogoefectos'
+                : categoria === 'REFERENCIA' ? 'catalogoreferencias'
+                  : categoria === 'COMPORTAMIENTO' ? 'catalogocomportamientos'
+                    : 'politicasruntimecatalogo'}
+          </code>
+          {categoria === 'REFERENCIA' ? ' → se usa como dominio de la política. Puede enlazarse a un Motor Evento.' : ''}
           {categoria === 'COMPORTAMIENTO' ? ' → nombre, etiqueta y semántica del motor (EFECTO enlaza aquí).' : ''}
-          {categoria !== 'REFERENCIA' && categoria !== 'COMPORTAMIENTO' ? '.' : ''}
+          {categoria === 'SEMANTICA_MOTOR' ? ' → vocabulario dinámico que el motor evalúa. Alimenta el selector de semántica en Comportamiento.' : ''}
+          {categoria !== 'REFERENCIA' && categoria !== 'COMPORTAMIENTO' && categoria !== 'SEMANTICA_MOTOR' ? '.' : ''}
         </p>
-        <div className="flex justify-end">
+        <div className="flex items-center justify-end gap-2">
           <Button
             type="button"
             size="sm"
@@ -1150,13 +1169,17 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
             onClick={() => iniciarNuevoItem(categoria)}
           >
             <Plus className="mr-1 h-3 w-3" />
-            Nuevo {label}
+            {categoria === 'SEMANTICA_MOTOR' ? 'Nueva semantica' : `Nuevo ${label}`}
           </Button>
         </div>
         <ScrollArea className="h-64 rounded border p-2">
           <div className="space-y-2">
             {items.length === 0 ? (
-              <p className="text-xs text-muted-foreground">Sin registros. Crea el primero con «Nuevo {label}».</p>
+              <p className="text-xs text-muted-foreground">
+                {categoria === 'SEMANTICA_MOTOR'
+                  ? 'Sin registros. Crea una semantica personalizada.'
+                  : `Sin registros. Crea el primero con «Nuevo ${label}».`}
+              </p>
             ) : null}
             {items.map((item) => {
               const itemKey = 'nombre' in item ? item.nombre : item.valor;
@@ -1329,13 +1352,30 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
   };
 
   const iniciarNuevoPipeline = () => {
+    setPipelineDraft({ nombre: '', label: '', referencia: '', descripcion: '', esNuevo: true });
+  };
+
+  const iniciarEditarPipeline = (item: PoliticaBypassPipelineItem) => {
     setPipelineDraft({
-      nombre: '',
-      label: '',
-      referencia: '',
-      descripcion: '',
-      orden: '',
+      nombre: item.nombre,
+      label: item.label,
+      referencia: item.referencia || '',
+      descripcion: item.descripcion || '',
+      esNuevo: false,
     });
+  };
+
+  const eliminarPipelineItem = async (nombre: string) => {
+    setGuardandoItem(true);
+    try {
+      await eliminarPoliticaBypassPipeline(nombre);
+      toast.success('Pipeline eliminado');
+      await Promise.all([recargarOpcionesCatalogo(), cargarCatalogoPipeline()]);
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo eliminar el pipeline');
+    } finally {
+      setGuardandoItem(false);
+    }
   };
 
   const seleccionarReferenciaPipeline = (referenciaValor: string) => {
@@ -1354,26 +1394,24 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
     if (!pipelineDraft) return;
     const nombre = pipelineDraft.nombre.trim().toUpperCase();
     const label = pipelineDraft.label.trim();
-    if (!nombre) {
-      toast.error('El nombre del pipeline es obligatorio');
-      return;
-    }
-    if (!label) {
-      toast.error('La etiqueta del pipeline es obligatoria');
-      return;
-    }
+    if (!nombre) { toast.error('El nombre del pipeline es obligatorio'); return; }
+    if (!label) { toast.error('La etiqueta del pipeline es obligatoria'); return; }
     setGuardandoItem(true);
     try {
-      const pipeline = await guardarPoliticaBypassPipeline({
+      const payload = {
         nombre,
         label,
         referencia: pipelineDraft.referencia.trim().toUpperCase() || undefined,
         descripcion: pipelineDraft.descripcion.trim() || undefined,
-        orden: pipelineDraft.orden.trim() ? Number(pipelineDraft.orden) : undefined,
-      });
-      toast.success('Pipeline guardado');
+      };
+      const pipeline = pipelineDraft.esNuevo
+        ? await guardarPoliticaBypassPipeline(payload)
+        : await actualizarPoliticaBypassPipeline(nombre, payload);
+      toast.success(pipelineDraft.esNuevo ? 'Pipeline creado' : 'Pipeline actualizado');
       setPipelineDraft(null);
-      setMotorEventoDraft((draft) => draft ? { ...draft, pipeline: pipeline.nombre } : draft);
+      if (pipelineDraft.esNuevo) {
+        setMotorEventoDraft((draft) => draft ? { ...draft, pipeline: pipeline.nombre } : draft);
+      }
       await Promise.all([recargarOpcionesCatalogo(), cargarCatalogoPipeline()]);
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : 'No se pudo guardar el pipeline');
@@ -1498,17 +1536,34 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
               <p className="text-xs text-muted-foreground">Sin registros. Crea el primero con Nuevo pipeline.</p>
             ) : null}
             {catalogoPipelineItems.map((item) => (
-              <div key={item.nombre} className="rounded border p-2 text-xs">
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <Badge variant="outline">{item.nombre}</Badge>
-                  <span className="text-muted-foreground">{item.label}</span>
-                  {item.referencia ? <Badge variant="secondary">{item.referencia}</Badge> : null}
-                  {item.activo === false ? <Badge variant="secondary">inactivo</Badge> : null}
-                  {Number.isFinite(Number(item.orden)) ? <Badge variant="secondary">orden {item.orden}</Badge> : null}
+              <div key={item.nombre} className="flex items-center justify-between gap-2 rounded border p-2 text-xs">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <Badge variant="outline">{item.nombre}</Badge>
+                    <span className="text-muted-foreground">{item.label}</span>
+                    {item.referencia ? <Badge variant="secondary">{item.referencia}</Badge> : null}
+                    {item.activo === false ? <Badge variant="secondary">inactivo</Badge> : null}
+                    {Number.isFinite(Number(item.orden)) ? <Badge variant="secondary">orden {item.orden}</Badge> : null}
+                  </div>
+                  {item.descripcion ? (
+                    <p className="mt-1 text-muted-foreground">{item.descripcion}</p>
+                  ) : null}
                 </div>
-                {item.descripcion ? (
-                  <p className="mt-1 text-muted-foreground">{item.descripcion}</p>
-                ) : null}
+                <div className="flex items-center gap-1">
+                  <Button type="button" size="sm" variant="outline" onClick={() => iniciarEditarPipeline(item)}>
+                    <Pencil className="mr-1 h-3 w-3" />
+                    Editar
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="destructive"
+                    disabled={guardandoItem}
+                    onClick={() => void eliminarPipelineItem(item.nombre)}
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
+                </div>
               </div>
             ))}
           </div>
@@ -1746,7 +1801,7 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
               </SelectTrigger>
               <SelectContent>
                 {pipelineOpciones.map((pipeline) => (
-                  <SelectItem key={pipeline.nombre} value={pipeline.nombre}>{pipeline.label}</SelectItem>
+                  <SelectItem key={pipeline.nombre} value={pipeline.nombre}>{pipeline.nombre}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -1769,9 +1824,11 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
     <Dialog open={Boolean(pipelineDraft)} onOpenChange={(open) => { if (!open) setPipelineDraft(null); }}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Nuevo pipeline</DialogTitle>
+          <DialogTitle>{pipelineDraft?.esNuevo ? 'Nuevo pipeline' : 'Editar pipeline'}</DialogTitle>
           <DialogDescription>
-            Crea la opciÃ³n visible en el selector de pipeline para motor evento.
+            {pipelineDraft?.esNuevo
+              ? 'Crea la opción visible en el selector de pipeline para motor evento.'
+              : 'Edita los datos del pipeline seleccionado.'}
           </DialogDescription>
         </DialogHeader>
         {pipelineDraft ? (
@@ -1780,6 +1837,7 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
               <Label className="text-xs">Nombre</Label>
               <Input
                 value={pipelineDraft.nombre}
+                disabled={!pipelineDraft.esNuevo}
                 placeholder="EJ: PIPELINE_JERARQUIA"
                 onChange={(e) => setPipelineDraft({ ...pipelineDraft, nombre: e.target.value.toUpperCase() })}
               />
@@ -1816,20 +1874,11 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
               />
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">DescripciÃ³n</Label>
+              <Label className="text-xs">Descripción</Label>
               <Input
                 value={pipelineDraft.descripcion}
                 placeholder="Uso del pipeline"
                 onChange={(e) => setPipelineDraft({ ...pipelineDraft, descripcion: e.target.value })}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Orden</Label>
-              <Input
-                value={pipelineDraft.orden}
-                inputMode="numeric"
-                placeholder="10"
-                onChange={(e) => setPipelineDraft({ ...pipelineDraft, orden: e.target.value.replace(/\D/g, '') })}
               />
             </div>
             <div className="flex gap-2">
@@ -1849,6 +1898,69 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
 
   const renderItemForm = (): React.ReactElement | null => {
     if (!itemDraft) return null;
+
+    if (itemDraft.categoria === 'SEMANTICA_MOTOR') {
+      return (
+        <div className="space-y-3 rounded-md border border-primary/40 bg-muted/30 p-3">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div className="space-y-1">
+              <p className="text-xs font-medium">
+                {itemDraft.esNuevo ? 'Nueva' : 'Editar'} semantica del motor
+              </p>
+              <p className="text-[11px] text-muted-foreground">
+                Define el vocabulario que el motor usa para evaluar reglas, efectos y comportamientos.
+              </p>
+            </div>
+            <label className="flex items-center gap-2 rounded-md border border-primary/30 px-2 py-1 text-xs">
+              <Checkbox
+                checked={itemDraft.activo !== false}
+                onCheckedChange={(checked) => setItemDraft({ ...itemDraft, activo: checked === true })}
+              />
+              Activa
+            </label>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1">
+              <Label className="text-xs">Codigo semantica *</Label>
+              <Input
+                value={itemDraft.valor}
+                disabled={!itemDraft.esNuevo}
+                placeholder="EJ: BYPASS"
+                onChange={(e) => setItemDraft({ ...itemDraft, valor: e.target.value.toUpperCase() })}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Etiqueta</Label>
+              <Input
+                value={itemDraft.label}
+                placeholder="Nombre visible"
+                onChange={(e) => setItemDraft({ ...itemDraft, label: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1 sm:col-span-2">
+              <Label className="text-xs">Descripcion</Label>
+              <Input
+                value={itemDraft.descripcion}
+                placeholder="Ej: Permite saltar una validacion bajo condiciones controladas"
+                onChange={(e) => setItemDraft({ ...itemDraft, descripcion: e.target.value })}
+              />
+              <p className="text-[10px] text-muted-foreground">
+                Luego podras asociarla desde Comportamiento para que el motor la interprete de forma dinamica.
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button type="button" size="sm" disabled={guardandoItem} onClick={() => void guardarItem()}>
+              {guardandoItem ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+              Guardar
+            </Button>
+            <Button type="button" size="sm" variant="outline" onClick={() => setItemDraft(null)}>
+              Cancelar
+            </Button>
+          </div>
+        </div>
+      );
+    }
 
     if (itemDraft.categoria === 'COMPORTAMIENTO') {
       return (
@@ -1914,12 +2026,15 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
 
     const esEfecto = itemDraft.categoria === 'EFECTO';
     const esReferencia = itemDraft.categoria === 'REFERENCIA';
+    const esSemanticaMotor = itemDraft.categoria === 'SEMANTICA_MOTOR';
     const tituloCategoria = labelCategoriaCatalogo(itemDraft.categoria);
     const placeholderValor = esEfecto
       ? 'EJ: ALLOW_SOLO_LECTURA'
       : esReferencia
         ? 'EJ: VENTAS'
-        : 'EJ: ACCION';
+        : esSemanticaMotor
+          ? 'EJ: REQUIERE_SUSCRIPCION'
+          : 'EJ: ACCION';
     const comportamientosActivos = catalogoComportamientosBD.filter((c) => c.activo !== false);
     return (
       <div className="space-y-3 rounded-md border border-primary/40 bg-muted/30 p-3">
@@ -1996,45 +2111,47 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs">
-              Orden
-              {itemDraft.esNuevo ? (
-                <span className="ml-1 font-normal text-muted-foreground">
-                  (secuencia {
-                    itemDraft.categoria === 'TIPO'
-                      ? 'tipos'
-                      : itemDraft.categoria === 'EFECTO'
-                        ? 'efectos'
-                        : 'referencias'
-                  })
-                </span>
-              ) : null}
-            </Label>
-            <Input
-              type="number"
-              min={1}
-              value={itemDraft.orden == null ? '' : String(itemDraft.orden)}
-              placeholder={
-                itemDraft.esNuevo
-                  ? String(siguienteOrdenCatalogo(
-                    itemDraft.categoria,
-                    catalogoTiposBD,
-                    catalogoEfectosBD,
-                    catalogoReferenciasBD,
-                    catalogoComportamientosBD,
-                  ))
-                  : 'Opcional'
-              }
-              onChange={(e) => {
-                const raw = e.target.value.trim();
-                setItemDraft({
-                  ...itemDraft,
-                  orden: raw === '' ? undefined : Number(raw),
-                });
-              }}
-            />
-          </div>
+          {itemDraft.categoria !== 'SEMANTICA_MOTOR' ? (
+            <div className="space-y-1">
+              <Label className="text-xs">
+                Orden
+                {itemDraft.esNuevo ? (
+                  <span className="ml-1 font-normal text-muted-foreground">
+                    (secuencia {
+                      itemDraft.categoria === 'TIPO'
+                        ? 'tipos'
+                        : itemDraft.categoria === 'EFECTO'
+                          ? 'efectos'
+                          : 'referencias'
+                    })
+                  </span>
+                ) : null}
+              </Label>
+              <Input
+                type="number"
+                min={1}
+                value={itemDraft.orden == null ? '' : String(itemDraft.orden)}
+                placeholder={
+                  itemDraft.esNuevo
+                    ? String(siguienteOrdenCatalogo(
+                      itemDraft.categoria,
+                      catalogoTiposBD,
+                      catalogoEfectosBD,
+                      catalogoReferenciasBD,
+                      catalogoComportamientosBD,
+                    ))
+                    : 'Opcional'
+                }
+                onChange={(e) => {
+                  const raw = e.target.value.trim();
+                  setItemDraft({
+                    ...itemDraft,
+                    orden: raw === '' ? undefined : Number(raw),
+                  });
+                }}
+              />
+            </div>
+          ) : null}
         </div>
         {esEfecto ? (
           <p className="text-[11px] text-muted-foreground">
@@ -2960,12 +3077,22 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
             >
               Pipelines
             </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={catalogoTipoEfectoTab === 'SEMANTICA_MOTOR' ? 'default' : 'outline'}
+              onClick={() => { setCatalogoTipoEfectoTab('SEMANTICA_MOTOR'); setItemDraft(null); setMotorEventoDraft(null); setMotorEventoSgDraft(null); }}
+            >
+              Semánticas
+            </Button>
           </div>
           {catalogoTipoEfectoTab === 'PIPELINES'
             ? renderPipelinesLista()
             : catalogoTipoEfectoTab === 'MOTOR_EVENTO'
               ? (motorEventoDraft ? renderMotorEventoForm() : renderMotorEventoLista())
-              : (itemDraft ? renderItemForm() : renderCatalogoLista())}
+              : (catalogoTipoEfectoTab === 'TIPOS' || catalogoTipoEfectoTab === 'EFECTOS' || catalogoTipoEfectoTab === 'REFERENCIA' || catalogoTipoEfectoTab === 'COMPORTAMIENTO' || catalogoTipoEfectoTab === 'SEMANTICA_MOTOR')
+                ? (itemDraft ? renderItemForm() : renderCatalogoLista())
+                : null}
           {renderPipelineDialog()}
         </DialogContent>
       </Dialog>

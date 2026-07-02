@@ -1768,23 +1768,17 @@ export const GobernanzaFormFieldsInner: React.FC<{
                   selectedTenantGlobalId={tenantFiltro}
                 />
                 {soloLecturaActualizarGlobales ? (
-                  <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                  <div className="rounded-md border border-border bg-card/70 px-3 py-2 text-xs text-muted-foreground">
                     <span className="font-semibold">Modo consulta: </span>
                     tu JWT tiene corporativo en tenantJerarquiaCounter. Elige un tenant global de tu rama para ver la
                     regla parametrizada (vistas, acciones y políticas). No se valida contra el techo del SA padre ni
                     puedes guardar cambios desde este flujo.
                   </div>
                 ) : null}
-                {modoSaSinTg && esReglaDiosSaSinTg && permiteReglaDiosEnActualizarReglasGlobales() ? (
-                  <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
-                    Regla <strong>DIOS</strong> (securityPlatform true) del SuperAdmin sin tenant global materializado.
-                    Editable en este flujo porque tu JWT es tenantSuperAdmin sin corporativo.
-                  </div>
-                ) : null}
                 <div>
                   <Label>Tenant global {modoSaSinTg ? '' : '*'}</Label>
                   <select
-                    className="mt-1 h-10 w-full rounded-md border border-input px-3 text-sm"
+                    className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground"
                     value={tenantFiltro}
                     disabled={tenantComboBloqueado}
                     onChange={(e) => {
@@ -1826,12 +1820,12 @@ export const GobernanzaFormFieldsInner: React.FC<{
                     })}
                   </select>
                   {saSel && tenantComboBloqueado && !loadingData && !modoSaSinTg && !soloLecturaActualizarGlobales ? (
-                    <p className="mt-1 text-xs text-amber-800">
+                    <p className="mt-1 text-xs text-muted-foreground">
                       El SuperAdmin elegido no tiene regla global (view) con tenant materializado. Crea la regla desde «Crear reglas globales» o sincroniza jerarquía.
                     </p>
                   ) : null}
                   {modoSaSinTg ? (
-                    <p className="mt-1 text-xs text-emerald-800">
+                    <p className="mt-1 text-xs text-muted-foreground">
                       Regla parametrizada por SuperAdmin (generacionTenatGlobales). No requiere tenant global en counters — edita vistas y permisos abajo.
                     </p>
                   ) : null}
@@ -1839,7 +1833,7 @@ export const GobernanzaFormFieldsInner: React.FC<{
                 <div>
                   <Label>{field.label} {field.required ? '*' : ''}</Label>
                   <select
-                    className="mt-1 h-10 w-full rounded-md border border-input px-3 text-sm"
+                    className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground"
                     value={getFieldValue(endpoint.id, field.name)}
                     disabled={
                       soloLecturaActualizarGlobales
