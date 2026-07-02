@@ -13,6 +13,7 @@ import { useMarcoPermisosParametrizacion } from '@/app/modules/afiliado-permisos
 import { MarcoPermisosStatsCards } from '@/app/modules/afiliado-permisos/components/MarcoPermisosStatsCards';
 import { MarcoPermisosCatalogCard } from '@/app/modules/afiliado-permisos/components/MarcoPermisosCatalogCard';
 import { MarcoRolSelector } from '@/app/modules/afiliado-permisos/components/MarcoRolSelector';
+import { PoliticasMarcoModal } from '@/app/modules/afiliado-permisos/components/PoliticasMarcoModal';
 import { MARCO_AFILIADO_CODIGO } from '@/app/modules/afiliado-permisos/constants/catalog-filters';
 import type { ListadoUsuariosRolCorporativoResponse } from '@/app/presentation/components/admin/usuarios-tenant/usuariosRolCorporativoTypes';
 
@@ -27,6 +28,7 @@ export const ParametrizacionMarcoAfiliadoModal = ({
 }: ParametrizacionMarcoAfiliadoModalProps): React.ReactElement => {
     const vm = useMarcoPermisosParametrizacion();
     const [pendientesCount, setPendientesCount] = useState(0);
+    const [politicasModalOpen, setPoliticasModalOpen] = useState(false);
 
     const cargarPendientes = useCallback(async () => {
         try {
@@ -62,6 +64,7 @@ export const ParametrizacionMarcoAfiliadoModal = ({
     const nombreRol = vm.rolSeleccionado?.rol ?? 'CLIENTE';
 
     return (
+        <>
         <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
             <DialogContent className="flex max-h-[92vh] w-[min(96vw,56rem)] flex-col gap-0 overflow-hidden p-0">
                 <DialogHeader className="shrink-0 border-b border-border px-6 pb-4 pt-6">
@@ -115,11 +118,11 @@ export const ParametrizacionMarcoAfiliadoModal = ({
                                     type="button"
                                     variant="outline"
                                     size="sm"
-                                    onClick={() => vm.aplicarSugeridas()}
-                                    disabled={vm.saving || vm.syncingLote}
+                                    onClick={() => setPoliticasModalOpen(true)}
+                                    disabled={vm.saving || vm.syncingLote || !vm.rolSeleccionadoId}
                                 >
                                     <Sparkles className="mr-2 h-4 w-4" />
-                                    Aplicar sugeridas
+                                    Políticas usuarios
                                 </Button>
                                 <Button
                                     type="button"
@@ -199,6 +202,15 @@ export const ParametrizacionMarcoAfiliadoModal = ({
                 </div>
             </DialogContent>
         </Dialog>
+
+        <PoliticasMarcoModal
+            open={politicasModalOpen}
+            onClose={() => setPoliticasModalOpen(false)}
+            rolCorporativoId={vm.rolSeleccionadoId}
+            politicasRuntimeIds={(vm.marcoActivo as { politicasRuntimeIds?: string[] } | null)?.politicasRuntimeIds ?? []}
+            onGuardado={() => void vm.cargar()}
+        />
+        </>
     );
 };
 

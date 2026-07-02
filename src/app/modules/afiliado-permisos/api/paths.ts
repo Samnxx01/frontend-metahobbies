@@ -18,4 +18,6 @@ export const AFILIADO_PERMISOS_PATHS = {
   herenciaCliente: (usuarioId: string) =>
     `${API_ROOT}/config/jerarquia-counters-cliente/herencia/${encodeURIComponent(usuarioId)}`,
   contextoMe: `${API_ROOT}/config/jerarquia-counters-cliente/me`,
+  marcoPoliticas: `${API_ROOT}/config/marco-permisos-afiliado/politicas`,
+  politicasCatalogo: `${API_ROOT}/seguridad/politicas-runtime/catalogo`,
 } as const;
