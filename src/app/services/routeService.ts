@@ -222,11 +222,20 @@ const getHerenciaAdminPermitida = async (): Promise<{
                     if (rel) {
                         pathsPermitidos.add(normalizeRoutePath(`/${rel}`));
                         pathsPermitidos.add(normalizeRoutePath(`/admin/${rel}`));
+                        // Propagar rutas padre para que los nodos contenedor sean navegables
+                        // cuando algún hijo está en la herencia.
+                        const segments = rel.split('/').filter(Boolean);
+                        for (let i = 1; i < segments.length; i++) {
+                            const parentRel = segments.slice(0, i).join('/');
+                            pathsPermitidos.add(normalizeRoutePath(`/${parentRel}`));
+                            pathsPermitidos.add(normalizeRoutePath(`/admin/${parentRel}`));
+                        }
                     }
                 }
             });
         });
 
+        console.log('[DEBUG-HERENCIA] idsPermitidos:', idsPermitidos.size, '| pathsPermitidos:', [...pathsPermitidos]);
         return { idsPermitidos, pathsPermitidos };
     } catch (error) {
         console.error("Error al resolver herencias de vistas admin:", error);
@@ -314,7 +323,10 @@ const isFormularioNode = (node: { tipoNodo?: string | null; children?: any[] }):
     String(node?.tipoNodo || '').trim().toUpperCase() === 'FORMULARIO';
 
 const filterRootsByActorTipo = (roots: AdminNavTreeItem[], actorTipo: AdminActorTipo): AdminNavTreeItem[] => {
-    if (actorTipo === 'SUPERADMIN') return roots;
+    // SUPERADMIN y CLIENTE: devolver todos los nodos sin filtrar por tipoNodo.
+    // Para CLIENTE el backend puede devolver nodos FORMULARIO planos (sin hijos);
+    // filtrarlos aquí vacía el árbol antes de que la herencia pueda actuar.
+    if (actorTipo === 'SUPERADMIN' || actorTipo === 'CLIENTE') return roots;
     return roots.filter((node) => !isFormularioNode(node) || (Array.isArray(node.children) && node.children.length > 0));
 };
 
@@ -1064,7 +1076,9 @@ export const getAuthorizedRoutes = async (): Promise<AuthorizedRoutes> => {
         let adminRoutes: AdminRouteConfig[] = [];
         if (hasToken) {
             const adminResult = await fetchAllSecurityRoutes(true);
-            const adminCatalogRows = adminResult?.data ?? catalogRows;
+            const adminResultData = adminResult?.data;
+            const adminCatalogRows = (adminResultData && adminResultData.length > 0) ? adminResultData : catalogRows;
+            console.log('[DEBUG-CATALOG] adminResult?.data?.length=', adminResultData?.length, 'catalogRows.length=', catalogRows.length, 'adminCatalogRows.length=', adminCatalogRows.length);
 
             const [{ tree }, herencia] = await Promise.all([
                 getAdminSidebarTreeWithContext(),
@@ -1085,6 +1099,7 @@ export const getAuthorizedRoutes = async (): Promise<AuthorizedRoutes> => {
             const hasHerenciaAdmin = herencia.idsPermitidos.size > 0 || herencia.pathsPermitidos.size > 0;
             const aplicarHerencia = await debeAplicarFiltroHerenciaSuperAdmin(actorTipo, hasHerenciaAdmin);
             const filtrarPorHerencia = aplicarHerencia && hasHerenciaAdmin;
+            console.log('[DEBUG-CATALOG] adminSource.length=', adminSource.length, 'hasHerenciaAdmin=', hasHerenciaAdmin, 'filtrarPorHerencia=', filtrarPorHerencia, 'pathsPermitidos=', [...herencia.pathsPermitidos].slice(0, 20));
             let adminFiltrado = filtrarPorHerencia
                 ? adminSource.filter((r) => {
                     const routeId = String(r._id || r.iud || "");
@@ -1101,6 +1116,7 @@ export const getAuthorizedRoutes = async (): Promise<AuthorizedRoutes> => {
                   ? adminSource
                   : [];
 
+            console.log('[DEBUG-CATALOG] adminFiltrado.length=', adminFiltrado.length, adminFiltrado.map(r => r.path).slice(0, 10));
             /**
              * Si jerarquía obliga filtro pero IDs/rutas no alinean con listado de herencias (p. ej. path con/sin /admin),
              * quedaría 0 rutas → React Router no registra /admin y cualquier URL muestra 404 real.
@@ -1141,6 +1157,7 @@ export const getAuthorizedRoutes = async (): Promise<AuthorizedRoutes> => {
 
         }
 
+        console.log('[DEBUG-AUTH-ROUTES] adminRoutes finales:', flattenAdminRoutes(adminRoutes).map((r) => `${r.path} → ${r.component}`));
         return { publicRoutes, authRoutes, adminRoutes, hybridStorefrontRoutes, hybridAdminShellRoutes };
 
     } catch (error) {
@@ -1504,12 +1521,20 @@ const _fetchSidebarTreeWithContext = async (): Promise<AdminSidebarTreeContext> 
             fetchAllSecurityRoutes(true)
         ]);
 
+        console.log('[DEBUG-SIDEBAR] ▶ treeResult.success:', treeResult?.success, '| data.length:', Array.isArray(treeResult?.data) ? treeResult.data.length : 'N/A', '| actorTipoJwt:', actorTipoJwt);
         if (treeResult?.success && Array.isArray(treeResult?.data)) {
             const actorTipoBackend = String(treeResult?.actorTipo || '').trim().toUpperCase() as AdminActorTipo;
             const actorTipo = actorTipoJwt === 'UNKNOWN' ? resolveEffectiveAdminActorTipo(actorTipoBackend) : actorTipoJwt;
             const sourceCollection = resolveSidebarSourceCollection(actorTipo);
             const securityLookup = buildAllowedRouteLookup(securityRoutesResult?.data);
-            let filteredTree = filterRootsByActorTipo(mapTreeNodes(treeResult.data), actorTipo);
+            const rawMapped = mapTreeNodes(treeResult.data);
+            let filteredTree = filterRootsByActorTipo(rawMapped, actorTipo);
+
+            const flattenNodes = (nodes: AdminNavTreeItem[]): AdminNavTreeItem[] =>
+                nodes.flatMap((n) => [n, ...flattenNodes(n.children || [])]);
+            console.log('[DEBUG-SIDEBAR] actorTipo:', actorTipo, '| actorTipoBackend:', actorTipoBackend, '| rawMapped:', rawMapped.length, '→ nodos raíz tipoNodo:', rawMapped.map(n => `${n.tipoNodo}(${n.path})`));
+            console.log('[DEBUG-SIDEBAR] tras filterRootsByActorTipo:', filteredTree.length, '| paths:', flattenNodes(filteredTree).map((n) => n.path));
+
             if (actorTipo === 'SUPERADMIN') {
                 filteredTree = filterTreeByAllowedRoutes(filteredTree, securityLookup.ids, securityLookup.paths);
                 const jerarquiaCorpSa = await fetchSaJerarquiaTieneCorporativoEnCounters();
@@ -1525,13 +1550,20 @@ const _fetchSidebarTreeWithContext = async (): Promise<AdminSidebarTreeContext> 
 
             if (actorTipo === 'GLOBAL' || actorTipo === 'CORPORATIVO' || actorTipo === 'CLIENTE') {
                 const herencia = await getHerenciaAdminPermitida();
+                console.log('[DEBUG-SIDEBAR] herencia idsPermitidos:', herencia.idsPermitidos.size, '| pathsPermitidos:', [...herencia.pathsPermitidos]);
+                const treePrevHerencia = filteredTree;
                 filteredTree = filterTreeByHerenciaConRescate(filteredTree, herencia, 'getAdminSidebarTree');
+                console.log('[DEBUG-SIDEBAR] tras filterByHerencia:', filteredTree.length, '(antes:', treePrevHerencia.length, ')');
+                const treePrevSecurity = filteredTree;
                 filteredTree = filterTreeByAllowedRoutes(filteredTree, securityLookup.ids, securityLookup.paths);
+                console.log('[DEBUG-SIDEBAR] tras filterByAllowedRoutes:', filteredTree.length, '(antes:', treePrevSecurity.length, ')');
+                console.log('[DEBUG-SIDEBAR] paths finales registrados:', flattenNodes(filteredTree).map((n) => n.path));
             }
 
             return { actorTipo, sourceCollection, tree: filteredTree };
         }
 
+        console.warn('[DEBUG-SIDEBAR] backend /arbol/admin falló:', treeResult?.success, treeResult?.message);
         const actorTipo = actorTipoJwt;
         return { actorTipo, sourceCollection: resolveSidebarSourceCollection(actorTipo), tree: [] };
     } catch (error) {

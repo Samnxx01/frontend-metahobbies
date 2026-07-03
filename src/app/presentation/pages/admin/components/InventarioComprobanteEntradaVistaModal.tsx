@@ -1,5 +1,5 @@
 import React from 'react';
-import { FileText, Loader2 } from 'lucide-react';
+import { CheckCircle2, FileText, Loader2 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import inventarioService, { type ComprobanteEntradaDetalle } from '@/app/services/inventarioService';
 import {
@@ -33,12 +33,16 @@ export type InventarioComprobanteEntradaVistaModalProps = {
   open: boolean;
   recepcionId: string | null;
   onOpenChange: (open: boolean) => void;
+  onConfirmarComprobante?: (recepcionId: string) => Promise<void>;
+  confirmandoComprobanteId?: string;
 };
 
 export default function InventarioComprobanteEntradaVistaModal({
   open,
   recepcionId,
   onOpenChange,
+  onConfirmarComprobante,
+  confirmandoComprobanteId,
 }: InventarioComprobanteEntradaVistaModalProps): React.ReactElement {
   const [loading, setLoading] = React.useState(false);
   const [detalle, setDetalle] = React.useState<ComprobanteEntradaDetalle | null>(null);
@@ -79,6 +83,8 @@ export default function InventarioComprobanteEntradaVistaModal({
     ),
     [detalle],
   );
+  const pendienteConfirmacion = String(detalle?.estado || '').trim().toUpperCase() === 'PENDIENTE_APROBACION';
+  const confirmando = Boolean(recepcionId && confirmandoComprobanteId === recepcionId);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -90,6 +96,22 @@ export default function InventarioComprobanteEntradaVistaModal({
               ? 'Comprobante de entrada · Kardex registrado'
               : 'Comprobante de entrada'}
           </DialogTitle>
+          {pendienteConfirmacion && recepcionId ? (
+            <Button
+              type="button"
+              size="sm"
+              className="absolute right-14 top-5"
+              onClick={() => void onConfirmarComprobante?.(recepcionId)}
+              disabled={confirmando}
+            >
+              {confirmando ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <CheckCircle2 className="mr-2 h-4 w-4" />
+              )}
+              {confirmando ? 'Confirmando...' : 'Confirmar comprobante'}
+            </Button>
+          ) : null}
           <DialogDescription className="sr-only">
             Consulta del comprobante de entrada, líneas recibidas y movimiento en kardex.
           </DialogDescription>

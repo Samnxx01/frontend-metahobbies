@@ -474,6 +474,8 @@ export interface EliminarOrdenCompraResponse {
   recepcionesAnuladas?: number;
   reversionAutomatica?: boolean;
   modoRecepcion?: 'AUTOMATICA' | 'MANUAL';
+  casoOmisoTenant?: boolean;
+  auditoriaId?: string;
 }
 
 export interface AuditoriaOrdenCompra {
@@ -499,6 +501,7 @@ export interface InventarioOrdenCompra {
   proveedor: { nombre: string; nit: string };
   documentoLegalCompra: { tipo: string; numero: string; fecha: string };
   estado: string;
+  nRecepciones?: number;
   comprobanteContable?: {
     tipo?: string;
     numero?: string;
@@ -1546,7 +1549,7 @@ const inventarioService = {
     };
   },
 
-  async eliminarOrdenCompra(id: string, payload: { justificacion: string }): Promise<EliminarOrdenCompraResponse> {
+  async eliminarOrdenCompra(id: string, payload: { justificacion: string; confirmarCasoOmiso?: boolean }): Promise<EliminarOrdenCompraResponse> {
     const resp = await apiFetch(`/api/inventario/compras/ordenes/${id}`, { method: 'DELETE', body: payload });
     return resp?.data as EliminarOrdenCompraResponse;
   },

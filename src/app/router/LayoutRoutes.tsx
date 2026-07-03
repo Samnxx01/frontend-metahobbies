@@ -123,6 +123,10 @@ const buildComponentMap = (): ComponentMapType => {
         CalculoNomina:                 'NominaColombia',
         NominaColombiaAdmin:           'NominaColombia',
         LiquidacionNomina:             'NominaColombia',
+        // Referidos: dashboard-de-referidos en BD puede apuntar a GestionReferidos.tsx
+        DashboardReferidos:            'GestionReferidos',
+        ReferidosPanel:                'GestionReferidos',
+        ArbolReferidos:                'GestionReferidos',
     };
 
     for (const [alias, target] of Object.entries(aliases)) {
@@ -478,10 +482,10 @@ export default function LayoutRoutes(): ReactElement {
                 </Route>
             )}
 
-            {isAuthenticated && authorizedRoutes?.adminRoutes && authorizedRoutes.adminRoutes.length > 0 && (
+            {isAuthenticated && ((authorizedRoutes?.adminRoutes?.length ?? 0) > 0 || menuTagRoutes.length > 0) && (
                 <Route path="/admin" element={<AdminLayout />}>
                     <Route index element={<AdminEntryRedirect />} />
-                    {renderRoutes(authorizedRoutes.adminRoutes)}
+                    {renderRoutes(authorizedRoutes?.adminRoutes ?? [])}
                     {renderRoutes(menuTagRoutes)}
                     <Route path="*" element={<AdminEntryRedirect />} />
                 </Route>

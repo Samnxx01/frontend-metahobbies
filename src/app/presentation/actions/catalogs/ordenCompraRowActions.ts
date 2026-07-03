@@ -2,7 +2,7 @@ import type { InventarioOrdenCompra, EstadoOrdenCompraConfig } from '@/app/servi
 import { createActionCatalog } from '../createActionCatalog';
 import { MABS_ACTION_DEFINITIONS } from '../registry/actionDefinitions';
 import type { ActionId } from '../types';
-import { puedeEditarOrdenCompra } from '@/app/presentation/pages/admin/utils/estadoOrdenCompraUi';
+import { puedeEditarOrdenCompra, puedeEliminarOrdenCompra } from '@/app/presentation/pages/admin/utils/estadoOrdenCompraUi';
 
 export const ORDEN_COMPRA_ROW_ACTION_IDS = {
   VER: MABS_ACTION_DEFINITIONS.VER.id,
@@ -30,9 +30,11 @@ function fallbackOrdenCompraAllowedIds(
   const editable = puedeEditarOrdenCompra(orden.estado, helpers.estadosOrden ?? [], {
     esTenantSuperAdmin: helpers.esTenantSuperAdmin,
   });
-  const eliminable = editable || helpers.esTenantSuperAdmin;
+  const estaConfirmada = String(orden.estado || '').toUpperCase() !== 'VERIFICACION';
+  const tieneRecepciones = (orden.nRecepciones ?? 0) > 0;
+  const eliminable = (!estaConfirmada || !tieneRecepciones) || helpers.esTenantSuperAdmin;
   if (editable) ids.push(ORDEN_COMPRA_ROW_ACTION_IDS.EDITAR);
-  if (eliminable && orden.estado !== 'CERRADA') ids.push(ORDEN_COMPRA_ROW_ACTION_IDS.ELIMINAR);
+  if (eliminable) ids.push(ORDEN_COMPRA_ROW_ACTION_IDS.ELIMINAR);
   return ids;
 }
 
@@ -43,8 +45,13 @@ export function resolveOrdenCompraRowAllowedIds(
   const parametrized = (helpers.parametrizedIds ?? [])
     .map((id) => String(id).trim())
     .filter(Boolean);
-  if (parametrized.length > 0) return parametrized;
-  return fallbackOrdenCompraAllowedIds(orden, helpers);
+  const fallback = fallbackOrdenCompraAllowedIds(orden, helpers);
+  if (parametrized.length > 0) {
+    return parametrized.filter(
+      (id) => id !== ORDEN_COMPRA_ROW_ACTION_IDS.ELIMINAR || fallback.includes(ORDEN_COMPRA_ROW_ACTION_IDS.ELIMINAR),
+    );
+  }
+  return fallback;
 }
 
 export function buildOrdenCompraRowActionCatalog(
@@ -71,7 +78,9 @@ export function buildOrdenCompraRowActionCatalog(
       onClick: (orden) => handlers.onEliminar(orden),
       overrides: {
         title: (orden) =>
-          orden.estado !== 'ABIERTA' ? 'Eliminar y reversar relacionados' : 'Eliminar',
+          puedeEliminarOrdenCompra(orden.estado, helpers.estadosOrden ?? [])
+            ? 'Eliminar'
+            : 'No se puede eliminar una OC confirmada o recibida',
       },
     },
   ]);
