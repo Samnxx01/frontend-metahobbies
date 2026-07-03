@@ -7,7 +7,7 @@ let socket: Socket | null = null;
 // Conectar socket
 export const conectarSocket = (): Socket | null => {
     const token = localStorage.getItem("token");
-    const API_URL = import.meta.env.PUBLIC_BASE_URL;
+    const API_URL = import.meta.env.VITE_API_BASE_URL ?? import.meta.env.VITE_SOCKET_URL ?? '';
 
     if (!token) {
         return null;

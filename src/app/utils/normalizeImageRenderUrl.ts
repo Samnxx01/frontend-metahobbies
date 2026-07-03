@@ -25,6 +25,10 @@ const OBJECT_ID_REGEX = /^[0-9a-fA-F]{24}$/;
 const PUBLIC_UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+// En producción convierte /api/... a URL absoluta apuntando a Render.
+// En dev queda vacío y el proxy de Vite maneja las rutas relativas.
+const API_IMAGE_ORIGIN = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/api\/?$/, '');
+
 function stripUrlOrigin(value: string): string {
   if (!/^https?:\/\//i.test(value)) return value;
   try {
@@ -83,7 +87,11 @@ export function normalizeImageRenderUrl(urlOrId: unknown): string {
     return buildImgFondoVerUrl(raw);
   }
 
-  return path.startsWith('/') ? path : raw;
+  const resolved = path.startsWith('/') ? path : raw;
+  if (API_IMAGE_ORIGIN && resolved.startsWith('/api')) {
+    return `${API_IMAGE_ORIGIN}${resolved}`;
+  }
+  return resolved;
 }
 
 export function normalizeImagenFondoAsset<T extends { id?: string; url?: string }>(

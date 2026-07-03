@@ -235,7 +235,6 @@ const getHerenciaAdminPermitida = async (): Promise<{
             });
         });
 
-        console.log('[DEBUG-HERENCIA] idsPermitidos:', idsPermitidos.size, '| pathsPermitidos:', [...pathsPermitidos]);
         return { idsPermitidos, pathsPermitidos };
     } catch (error) {
         console.error("Error al resolver herencias de vistas admin:", error);
@@ -1078,8 +1077,6 @@ export const getAuthorizedRoutes = async (): Promise<AuthorizedRoutes> => {
             const adminResult = await fetchAllSecurityRoutes(true);
             const adminResultData = adminResult?.data;
             const adminCatalogRows = (adminResultData && adminResultData.length > 0) ? adminResultData : catalogRows;
-            console.log('[DEBUG-CATALOG] adminResult?.data?.length=', adminResultData?.length, 'catalogRows.length=', catalogRows.length, 'adminCatalogRows.length=', adminCatalogRows.length);
-
             const [{ tree }, herencia] = await Promise.all([
                 getAdminSidebarTreeWithContext(),
                 getHerenciaAdminPermitida(),
@@ -1099,7 +1096,6 @@ export const getAuthorizedRoutes = async (): Promise<AuthorizedRoutes> => {
             const hasHerenciaAdmin = herencia.idsPermitidos.size > 0 || herencia.pathsPermitidos.size > 0;
             const aplicarHerencia = await debeAplicarFiltroHerenciaSuperAdmin(actorTipo, hasHerenciaAdmin);
             const filtrarPorHerencia = aplicarHerencia && hasHerenciaAdmin;
-            console.log('[DEBUG-CATALOG] adminSource.length=', adminSource.length, 'hasHerenciaAdmin=', hasHerenciaAdmin, 'filtrarPorHerencia=', filtrarPorHerencia, 'pathsPermitidos=', [...herencia.pathsPermitidos].slice(0, 20));
             let adminFiltrado = filtrarPorHerencia
                 ? adminSource.filter((r) => {
                     const routeId = String(r._id || r.iud || "");
@@ -1116,7 +1112,6 @@ export const getAuthorizedRoutes = async (): Promise<AuthorizedRoutes> => {
                   ? adminSource
                   : [];
 
-            console.log('[DEBUG-CATALOG] adminFiltrado.length=', adminFiltrado.length, adminFiltrado.map(r => r.path).slice(0, 10));
             /**
              * Si jerarquía obliga filtro pero IDs/rutas no alinean con listado de herencias (p. ej. path con/sin /admin),
              * quedaría 0 rutas → React Router no registra /admin y cualquier URL muestra 404 real.
@@ -1157,7 +1152,6 @@ export const getAuthorizedRoutes = async (): Promise<AuthorizedRoutes> => {
 
         }
 
-        console.log('[DEBUG-AUTH-ROUTES] adminRoutes finales:', flattenAdminRoutes(adminRoutes).map((r) => `${r.path} → ${r.component}`));
         return { publicRoutes, authRoutes, adminRoutes, hybridStorefrontRoutes, hybridAdminShellRoutes };
 
     } catch (error) {
