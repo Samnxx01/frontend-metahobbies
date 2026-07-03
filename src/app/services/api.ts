@@ -136,6 +136,17 @@ const appendSpaContextQuery = (endpoint: string, spaFrontendPath = ''): string =
     return `${endpoint}${join}_mabsPath=${encodeURIComponent(spaFrontendPath)}`;
 };
 
+// En producción VITE_API_URL = "https://server-mabs-1.onrender.com/api"
+// En dev el proxy de Vite maneja /api → Render, por eso API_ORIGIN queda vacío.
+const API_ORIGIN = (import.meta.env.VITE_API_URL ?? '').replace(/\/api\/?$/, '');
+
+const buildAbsoluteUrl = (endpoint: string): string => {
+    if (API_ORIGIN && endpoint.startsWith('/api')) {
+        return `${API_ORIGIN}${endpoint}`;
+    }
+    return endpoint;
+};
+
 export const apiFetch = async (
     endpoint: string,
     options: ApiOptions = {}
@@ -158,7 +169,7 @@ export const apiFetch = async (
     }
 
     try {
-        const response: Response = await fetch(resolvedEndpoint, requestOptions as RequestInit);
+        const response: Response = await fetch(buildAbsoluteUrl(resolvedEndpoint), requestOptions as RequestInit);
 
         // Verificar si es 401 Unauthorized en endpoints autenticados
         if (response.status === 401 && useAuth && logoutOn401) {
