@@ -44,7 +44,7 @@ import type { RecepcionOrdenCompraResponse } from '@/app/services/inventarioServ
 import InventarioOrdenCompraModal from './InventarioOrdenCompraModal';
 import InventarioOrdenCompraDetallesModal from './InventarioOrdenCompraDetallesModal';
 import InventarioEstadoOrdenCompraConfigModal from './InventarioEstadoOrdenCompraConfigModal';
-import { codigosEstadoPermitenComprobanteEntrada, labelEstadoOrdenCompra } from '@/app/presentation/pages/admin/utils/estadoOrdenCompraUi';
+import { codigosEstadoPermitenComprobanteEntrada, labelEstadoOrdenCompra, puedeEliminarOrdenCompra } from '@/app/presentation/pages/admin/utils/estadoOrdenCompraUi';
 import { getOrdenCompraId } from '@/app/presentation/pages/admin/utils/ordenCompraIdUtils';
 import InventarioComprobanteEntradaModal from './InventarioComprobanteEntradaModal';
 import InventarioComprobanteEntradaParamModal from './InventarioComprobanteEntradaParamModal';
@@ -214,8 +214,11 @@ export default function InventarioOrdenComprasTab({
   };
 
   const eliminarOrden = async (oc: InventarioOrdenCompra): Promise<void> => {
-    if (oc.estado === 'CERRADA') {
-      toast.error('No se pueden eliminar ordenes cerradas.');
+    const estaConfirmada = String(oc.estado || '').toUpperCase() !== 'VERIFICACION';
+    const tieneRecepciones = (oc.nRecepciones ?? 0) > 0;
+    const requiereCasoOmiso = estaConfirmada && tieneRecepciones;
+    if (requiereCasoOmiso && !esTenantSuperAdmin) {
+      toast.error('No se puede eliminar: la orden está confirmada y tiene comprobantes de entrada. Solo un SuperAdmin puede forzar la eliminación.');
       return;
     }
     setOrdenEliminar(oc);
@@ -237,9 +240,17 @@ export default function InventarioOrdenComprasTab({
     }
     try {
       setEliminando(true);
-      const result = await inventarioService.eliminarOrdenCompra(getOrdenCompraId(ordenEliminar), { justificacion: motivo });
+      const estaConfirmada = String(ordenEliminar.estado || '').toUpperCase() !== 'VERIFICACION';
+      const tieneRecepciones = (ordenEliminar.nRecepciones ?? 0) > 0;
+      const confirmarCasoOmiso = esTenantSuperAdmin && estaConfirmada && tieneRecepciones;
+      const result = await inventarioService.eliminarOrdenCompra(getOrdenCompraId(ordenEliminar), {
+        justificacion: motivo,
+        confirmarCasoOmiso,
+      });
       toast.success(
-        result?.reversionAutomatica
+        result?.casoOmisoTenant
+          ? 'Orden eliminada por caso omiso del tenant. Auditoria registrada.'
+          : result?.reversionAutomatica
           ? `Orden eliminada. Se reversaron y anularon ${result.recepcionesAnuladas ?? 0} recepcion(es).`
           : 'Orden eliminada.'
       );
@@ -267,6 +278,12 @@ export default function InventarioOrdenComprasTab({
         { esTenantSuperAdmin, estadosOrden },
       ),
     [abrirEditarOrdenCompra, esTenantSuperAdmin, estadosOrden],
+  );
+  const eliminacionForzadaTenant = Boolean(
+    ordenEliminar &&
+    esTenantSuperAdmin &&
+    String(ordenEliminar.estado || '').toUpperCase() !== 'VERIFICACION' &&
+    (ordenEliminar.nRecepciones ?? 0) > 0
   );
 
   return (
@@ -453,7 +470,9 @@ export default function InventarioOrdenComprasTab({
               Eliminar orden de compra
             </DialogTitle>
             <DialogDescription className="text-muted-foreground">
-              Si la orden tiene recepciones, el sistema intentara reversar kardex y ledger, anular los comprobantes relacionados y luego eliminar la orden.
+              {eliminacionForzadaTenant
+                ? 'Caso omiso tenant: se eliminara la orden y quedara una auditoria con observacion, fecha, hora, usuario e IP.'
+                : 'Solo se eliminan ordenes en verificacion y sin comprobantes de entrada asociados.'}
             </DialogDescription>
           </DialogHeader>
 
@@ -486,7 +505,11 @@ export default function InventarioOrdenComprasTab({
               disabled={eliminando || !motivoEliminar.trim()}
             >
               <Trash2 className="mr-2 h-4 w-4" />
-              {eliminando ? 'Eliminando...' : 'Eliminar orden'}
+              {eliminando
+                ? 'Eliminando...'
+                : eliminacionForzadaTenant
+                  ? 'Confirmar caso omiso'
+                  : 'Eliminar orden'}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { toast } from 'react-toastify';
 import {
   AlertTriangle,
-  CheckCircle2,
   ClipboardList,
   Pencil,
   Plus,
@@ -316,6 +315,7 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
   const [comprobanteEntradaOpen, setComprobanteEntradaOpen] = useState(false);
   const [comprobanteEntradaData, setComprobanteEntradaData] = useState<RecepcionOrdenCompraResponse | null>(null);
   const [comprobanteEntradaDoc, setComprobanteEntradaDoc] = useState<DocumentoSoporte | null>(null);
+  const [confirmandoComprobanteId, setConfirmandoComprobanteId] = useState('');
 
   const handleOrdenCompraModalChange = (nextOpen: boolean): void => {
     setOrdenCompraModalOpen(nextOpen);
@@ -466,6 +466,54 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
     } catch (error) {
       console.error('Error recargando comprobantes:', error);
       toast.error('No se pudieron cargar los comprobantes de entrada.');
+    }
+  };
+
+  const confirmarComprobanteMovimiento = async (recepcionId: string): Promise<void> => {
+    const id = String(recepcionId || '').trim();
+    if (!id) {
+      toast.error('Selecciona un comprobante de entrada.');
+      return;
+    }
+
+    try {
+      setConfirmandoComprobanteId(id);
+      const data = await inventarioService.confirmarRecepcionOrdenCompra(id, {
+        estado: true,
+        aplicarKardex: true,
+        confirmar: true,
+      });
+      setComprobanteEntradaData(data);
+      const soporte = data?.recepcion?.documentoSoporte;
+      setComprobanteEntradaDoc(soporte ? { tipo: soporte.tipo, numero: soporte.numero } : null);
+      setComprobanteEntradaOpen(true);
+      setReporteKardexRecepcionId(id);
+      setReporteKardexOpen(true);
+
+      const [stock, kardexActualizado, comprobantesActualizados] = await Promise.all([
+        inventarioService.stockActual(),
+        inventarioService.listarKardex({ limit: 100 }),
+        inventarioService.listarComprobantesEntradaMovimientos(200),
+      ]);
+      setStockActual(stock);
+      setKardex(kardexActualizado);
+      setComprobantesEntradaMov(comprobantesActualizados);
+
+      const contable = data?.comprobanteContable;
+      toast.success(
+        contable?.numero
+          ? `Comprobante confirmado. Contable ${contable.tipo || 'COMPROBANTE_ENTRADA'} - ${contable.numero}. Kardex e inventario actualizados.`
+          : (data?.msg || 'Comprobante confirmado. Kardex y contabilidad actualizados.'),
+        { autoClose: 9000 },
+      );
+    } catch (error) {
+      console.error('Error confirmando comprobante desde movimientos:', error);
+      toast.error(
+        mensajeErrorComprasInventario(error, 'No se pudo confirmar el comprobante de entrada.'),
+        { autoClose: 10000 },
+      );
+    } finally {
+      setConfirmandoComprobanteId('');
     }
   };
 
@@ -2161,6 +2209,8 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
       <InventarioComprobanteEntradaVistaModal
         open={comprobanteVistaOpen}
         recepcionId={comprobanteVistaId}
+        onConfirmarComprobante={confirmarComprobanteMovimiento}
+        confirmandoComprobanteId={confirmandoComprobanteId}
         onOpenChange={(open) => {
           setComprobanteVistaOpen(open);
           if (!open) setComprobanteVistaId(null);
