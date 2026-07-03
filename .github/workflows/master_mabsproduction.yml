@@ -25,6 +25,9 @@ jobs:
 
       - name: Build Vite app
         run: npm run build
+        env:
+          VITE_API_URL: https://server-mabs-1.onrender.com/api
+        
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
