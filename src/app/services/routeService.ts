@@ -236,8 +236,7 @@ const getHerenciaAdminPermitida = async (): Promise<{
         });
 
         return { idsPermitidos, pathsPermitidos };
-    } catch (error) {
-        console.error("Error al resolver herencias de vistas admin:", error);
+    } catch {
         return { idsPermitidos: new Set(), pathsPermitidos: new Set() };
     }
 };
@@ -377,9 +376,6 @@ const filterTreeByHerenciaConRescate = (
     if (!hasHerencia) return nodes;
     const filtered = filterTreeByAllowedRoutes(nodes, herencia.idsPermitidos, herencia.pathsPermitidos);
     if (filtered.length === 0 && nodes.length > 0) {
-        console.warn(
-            `[MABS][${logLabel}] Filtro por herencia dejó 0 nodos; usando árbol previo (revisar herencia en API)`
-        );
         return nodes;
     }
     return filtered;
@@ -408,7 +404,6 @@ const filterAdminRoutesByHerenciaConRescate = (
         return pathCandidates.some((p) => herencia.pathsPermitidos.has(p));
     });
     if (filtered.length === 0 && adminSource.length > 0) {
-        console.warn(`[MABS][${logLabel}] Filtro por herencia dejó 0 rutas; usando catálogo admin completo`);
         return adminSource;
     }
     return filtered;
@@ -649,8 +644,7 @@ const _fetchAllSecurityRoutesRaw = async (useAuth: boolean): Promise<RouteRespon
                 method: "GET"
             });
         return result;
-    } catch (error) {
-        console.error("Error al obtener rutas de seguridad:", error);
+    } catch {
         return null;
     }
 };
@@ -800,8 +794,7 @@ export const getRouteCatalog = async (): Promise<RouteCatalogItem[]> => {
                     }
                     : undefined,
             }));
-    } catch (error) {
-        console.error("Error al obtener catalogo de rutas:", error);
+    } catch {
         return [];
     }
 };
@@ -903,7 +896,6 @@ export const getUserShortcutRoutes = async (): Promise<UserShortcutRoutes> => {
             membresia: membresiaRoute ? toAppRoutePath(membresiaRoute) : '/membresia/dashboard',
         };
     } catch (error) {
-        console.error('Error al resolver shortcuts de usuario:', error);
         const cachedAdmin = readCachedPrivateHomeRoute() || '';
         return {
             admin: cachedAdmin,
@@ -1118,10 +1110,6 @@ export const getAuthorizedRoutes = async (): Promise<AuthorizedRoutes> => {
              * Rescate: catálogo admin completo (mismo criterio que si no hubiera herencia en API).
              */
             if (filtrarPorHerencia && adminFiltrado.length === 0 && adminSource.length > 0) {
-                console.warn(
-                    '[MABS][getAuthorizedRoutes] Filtro por herencia dejó 0 rutas; usando catálogo admin completo como respaldo',
-                    { actorTipo, hasHerenciaAdmin, herenciaIds: herencia.idsPermitidos.size, herenciaPaths: herencia.pathsPermitidos.size }
-                );
                 adminFiltrado = adminSource;
             }
 
@@ -1155,7 +1143,6 @@ export const getAuthorizedRoutes = async (): Promise<AuthorizedRoutes> => {
         return { publicRoutes, authRoutes, adminRoutes, hybridStorefrontRoutes, hybridAdminShellRoutes };
 
     } catch (error) {
-        console.error("Error al obtener rutas autorizadas:", error);
         return { publicRoutes: [], adminRoutes: [], authRoutes: [], hybridStorefrontRoutes: [], hybridAdminShellRoutes: [] };
     }
 };
@@ -1313,7 +1300,6 @@ export const getPublicNavigationRoutes = async (): Promise<PublicNavItem[]> => {
                 order: route.order ?? 0,
             }));
     } catch (error) {
-        console.error("Error al obtener rutas de navegacion publica:", error);
         return [];
     }
 };
@@ -1329,7 +1315,6 @@ export const getFooterPublicRoutes = async (): Promise<FooterNavItem[]> => {
                 order: item.order ?? 0,
             }));
     } catch (error) {
-        console.error("Error al obtener rutas para footer:", error);
         return [];
     }
 };
@@ -1367,7 +1352,6 @@ export const getAdminSidebarRoutes = async (): Promise<AdminNavItem[]> => {
                 order: r.order ?? 0
             }));
     } catch (error) {
-        console.error("Error al obtener menu Admin por herencia:", error);
         return [];
     }
 };
@@ -1467,7 +1451,6 @@ export const getAdminSidebarFallbackTree = async (actorTipo: AdminActorTipo): Pr
 
         return filterRootsByActorTipo(roots, effectiveActorTipo);
     } catch (error) {
-        console.error("Error al construir arbol fallback admin dinamico:", error);
         return [];
     }
 };
@@ -1515,7 +1498,6 @@ const _fetchSidebarTreeWithContext = async (): Promise<AdminSidebarTreeContext> 
             fetchAllSecurityRoutes(true)
         ]);
 
-        console.log('[DEBUG-SIDEBAR] ▶ treeResult.success:', treeResult?.success, '| data.length:', Array.isArray(treeResult?.data) ? treeResult.data.length : 'N/A', '| actorTipoJwt:', actorTipoJwt);
         if (treeResult?.success && Array.isArray(treeResult?.data)) {
             const actorTipoBackend = String(treeResult?.actorTipo || '').trim().toUpperCase() as AdminActorTipo;
             const actorTipo = actorTipoJwt === 'UNKNOWN' ? resolveEffectiveAdminActorTipo(actorTipoBackend) : actorTipoJwt;
@@ -1526,8 +1508,6 @@ const _fetchSidebarTreeWithContext = async (): Promise<AdminSidebarTreeContext> 
 
             const flattenNodes = (nodes: AdminNavTreeItem[]): AdminNavTreeItem[] =>
                 nodes.flatMap((n) => [n, ...flattenNodes(n.children || [])]);
-            console.log('[DEBUG-SIDEBAR] actorTipo:', actorTipo, '| actorTipoBackend:', actorTipoBackend, '| rawMapped:', rawMapped.length, '→ nodos raíz tipoNodo:', rawMapped.map(n => `${n.tipoNodo}(${n.path})`));
-            console.log('[DEBUG-SIDEBAR] tras filterRootsByActorTipo:', filteredTree.length, '| paths:', flattenNodes(filteredTree).map((n) => n.path));
 
             if (actorTipo === 'SUPERADMIN') {
                 filteredTree = filterTreeByAllowedRoutes(filteredTree, securityLookup.ids, securityLookup.paths);
@@ -1544,24 +1524,16 @@ const _fetchSidebarTreeWithContext = async (): Promise<AdminSidebarTreeContext> 
 
             if (actorTipo === 'GLOBAL' || actorTipo === 'CORPORATIVO' || actorTipo === 'CLIENTE') {
                 const herencia = await getHerenciaAdminPermitida();
-                console.log('[DEBUG-SIDEBAR] herencia idsPermitidos:', herencia.idsPermitidos.size, '| pathsPermitidos:', [...herencia.pathsPermitidos]);
-                const treePrevHerencia = filteredTree;
                 filteredTree = filterTreeByHerenciaConRescate(filteredTree, herencia, 'getAdminSidebarTree');
-                console.log('[DEBUG-SIDEBAR] tras filterByHerencia:', filteredTree.length, '(antes:', treePrevHerencia.length, ')');
-                const treePrevSecurity = filteredTree;
                 filteredTree = filterTreeByAllowedRoutes(filteredTree, securityLookup.ids, securityLookup.paths);
-                console.log('[DEBUG-SIDEBAR] tras filterByAllowedRoutes:', filteredTree.length, '(antes:', treePrevSecurity.length, ')');
-                console.log('[DEBUG-SIDEBAR] paths finales registrados:', flattenNodes(filteredTree).map((n) => n.path));
             }
 
             return { actorTipo, sourceCollection, tree: filteredTree };
         }
 
-        console.warn('[DEBUG-SIDEBAR] backend /arbol/admin falló:', treeResult?.success, treeResult?.message);
         const actorTipo = actorTipoJwt;
         return { actorTipo, sourceCollection: resolveSidebarSourceCollection(actorTipo), tree: [] };
     } catch (error) {
-        console.error('Error al obtener arbol admin por contexto:', error);
         const actorTipo = resolveAdminActorTipoFromToken();
         return { actorTipo, sourceCollection: resolveSidebarSourceCollection(actorTipo), tree: [] };
     }

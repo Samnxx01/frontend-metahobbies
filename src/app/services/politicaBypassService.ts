@@ -235,3 +235,93 @@ export async function eliminarPoliticaBypassPipeline(nombre: string): Promise<vo
 export async function eliminarPoliticaBypassMotorEvento(nombre: string): Promise<void> {
   await apiFetch(`${BASE}/motor-evento/${encodeURIComponent(nombre)}`, { method: 'DELETE' });
 }
+
+// ── Bypass Membresía (política dinámica vía DB) ───────────────────────────────
+
+const BYPASS_MEMBRESIA_BASE = '/api/seguridad/politicas-runtime';
+
+export interface BypassAtribucionTipo {
+    valor: string;
+    etiqueta: string;
+}
+
+export interface BypassMembresiaConfig {
+    bypass: boolean;
+    originType: string;
+    originId: string | null;
+    activo: boolean;
+    referidorEmail: string | null;
+    tiposAtribucion: BypassAtribucionTipo[];
+}
+
+export interface BypassMembresiaPayload {
+    activo: boolean;
+    originType?: string;
+    originId?: string | null;
+    referidorEmail?: string | null;
+    tiposAtribucion?: BypassAtribucionTipo[];
+}
+
+/** Sin auth — endpoint público para AffiliateBanner */
+export async function getBypassMembresiaPublico(): Promise<BypassMembresiaConfig> {
+    const { apiFetchPublic } = await import('@/app/services/api');
+    const data = await apiFetchPublic(`${BYPASS_MEMBRESIA_BASE}/publica/bypass/membresia`, { method: 'GET' });
+    return {
+        bypass: Boolean(data?.bypass),
+        originType: String(data?.originType ?? 'organico'),
+        originId: data?.originId ?? null,
+        activo: Boolean(data?.activo),
+        referidorEmail: data?.referidorEmail ?? null,
+        tiposAtribucion: Array.isArray(data?.tiposAtribucion) ? data.tiposAtribucion : [],
+    };
+}
+
+/** Admin — lee la configuración actual */
+export async function getBypassMembresiaAdmin(): Promise<BypassMembresiaConfig | null> {
+    const data = await apiFetch(`${BYPASS_MEMBRESIA_BASE}/bypass/membresia`, { method: 'GET' });
+    const p = data?.politica;
+    if (!p) return null;
+    const meta = p.condiciones?.metadata ?? {};
+    return {
+        bypass: Boolean(p.activo),
+        originType: meta.originType ?? 'organico',
+        originId: meta.originId ?? null,
+        activo: Boolean(p.activo),
+        referidorEmail: meta.referidorEmail ?? null,
+        tiposAtribucion: Array.isArray(meta.tiposAtribucion) ? meta.tiposAtribucion : [],
+    };
+}
+
+/** Admin — crea o actualiza la política */
+export async function upsertBypassMembresia(payload: BypassMembresiaPayload): Promise<void> {
+    await apiFetch(`${BYPASS_MEMBRESIA_BASE}/bypass/membresia`, {
+        method: 'POST',
+        body: payload,
+    });
+}
+
+/** Admin — toggle activo/inactivo */
+export async function toggleBypassMembresia(activo: boolean): Promise<void> {
+    await apiFetch(`${BYPASS_MEMBRESIA_BASE}/bypass/membresia/toggle`, {
+        method: 'PUT',
+        body: { activo },
+    });
+}
+
+/** Admin — agrega un tipo de atribución (persiste inmediato en DB) */
+export async function agregarTipoAtribucion(tipo: BypassAtribucionTipo): Promise<BypassAtribucionTipo[]> {
+    const data = await apiFetch(`${BYPASS_MEMBRESIA_BASE}/bypass/membresia/tipos-atribucion`, {
+        method: 'POST',
+        body: tipo,
+    });
+    return Array.isArray(data?.tiposAtribucion) ? data.tiposAtribucion : [];
+}
+
+/** Admin — elimina un tipo de atribución por valor (persiste inmediato en DB) */
+export async function eliminarTipoAtribucion(valor: string): Promise<BypassAtribucionTipo[]> {
+    const data = await apiFetch(
+        `${BYPASS_MEMBRESIA_BASE}/bypass/membresia/tipos-atribucion/${encodeURIComponent(valor)}`,
+        { method: 'DELETE' }
+    );
+    return Array.isArray(data?.tiposAtribucion) ? data.tiposAtribucion : [];
+}
