@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { BookOpen, Loader2, Pencil, Play, Plus, RefreshCw, Save, Settings2, ShieldCheck, Trash2, X } from 'lucide-react';
+import { BookOpen, Loader2, Pencil, Play, Plus, RefreshCw, Save, ShieldCheck, Trash2, X } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -21,7 +21,6 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Switch } from '@/components/ui/switch';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { isOpaqueDocumentId, normalizePublicIdForApi } from '@/app/utils/entityPublicId';
@@ -62,7 +61,6 @@ import {
   type CatalogoMotorEventoSgItem,
   type GuardarMotorEventoSgPayload,
 } from '@/app/services/catalogoSegmentadoService';
-import BypassMembresiaModal from './components/BypassMembresiaModal';
 type PoliticasRuntimePanelProps = {
   className?: string;
 };
@@ -310,8 +308,6 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
   const [motorEventoDraft, setMotorEventoDraft] = useState<MotorEventoDraft | null>(null);
   const [pipelineDraft, setPipelineDraft] = useState<PipelineDraft | null>(null);
   const [guardandoItem, setGuardandoItem] = useState(false);
-  const [bypassModalOpen, setBypassModalOpen] = useState(false);
-  const [togglingIds, setTogglingIds] = useState<Set<string>>(new Set());
 
   const cargar = useCallback(async () => {
     setLoading(true);
@@ -1079,21 +1075,6 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
       setGuardando(false);
     }
   };
-
-  const toggleActivoPolitica = useCallback(async (p: PoliticaRuntime, activo: boolean) => {
-    const id = politicaId(p);
-    if (!id) return;
-    setTogglingIds((prev) => new Set(prev).add(id));
-    try {
-      const actualizada = await actualizarPoliticaRuntimePorId(id, { activo });
-      setPoliticas((prev) => prev.map((pol) => politicaId(pol) === id ? { ...pol, activo: actualizada.activo } : pol));
-      toast.success(`Política ${activo ? 'activada' : 'desactivada'}.`);
-    } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : 'Error al cambiar estado de la política.');
-    } finally {
-      setTogglingIds((prev) => { const s = new Set(prev); s.delete(id); return s; });
-    }
-  }, []);
 
   const iniciarNuevoItem = (categoria: PoliticaRuntimeCatalogoCategoria, valorInicial = '') => {
     setItemDraft({
@@ -2227,10 +2208,6 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
             {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
             Actualizar
           </Button>
-          <Button type="button" variant="outline" size="sm" onClick={() => setBypassModalOpen(true)}>
-            <Settings2 className="mr-2 h-4 w-4" />
-            Bypass Membresía
-          </Button>
         </div>
       </div>
 
@@ -3130,19 +3107,9 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
               {items.map((p) => (
                 <div key={`${p.codigo}-${politicaId(p) || 'global'}`} className="rounded-md border border-border p-3 text-sm">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <Switch
-                        checked={Boolean(p.activo)}
-                        disabled={togglingIds.has(politicaId(p))}
-                        onCheckedChange={(checked) => void toggleActivoPolitica(p, checked)}
-                        aria-label={`Política ${p.codigo} ${p.activo ? 'activa' : 'inactiva'}`}
-                      />
-                      <span className={`font-mono text-xs font-medium ${p.activo ? '' : 'text-muted-foreground line-through'}`}>
-                        {p.codigo}
-                      </span>
-                    </div>
+                    <span className="font-mono text-xs font-medium">{p.codigo}</span>
                     <div className="flex items-center gap-2">
-                      <Badge variant={p.activo ? 'outline' : 'secondary'}>{p.efecto}</Badge>
+                      <Badge variant="outline">{p.efecto}</Badge>
                       <Button type="button" size="sm" variant="outline" onClick={() => editarPolitica(p)}>
                         <Pencil className="mr-1 h-3 w-3" />
                         Editar
@@ -3162,8 +3129,6 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
           </Card>
         ))}
       </div>
-
-      <BypassMembresiaModal open={bypassModalOpen} onClose={() => setBypassModalOpen(false)} />
     </div>
   );
 }
