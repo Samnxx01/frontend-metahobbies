@@ -79,7 +79,7 @@ export type InventarioOrdenCompraModalProps = {
   proveedores: InventarioProveedor[];
   bodegas: BodegaInventario[];
   productos: BackendProducto[];
-  onCreated: () => void | Promise<void>;
+  onCreated: (orden?: InventarioOrdenCompra) => void | Promise<void>;
   /** Si viene definida, el modal opera en modo edición (PUT). */
   ordenEdicion?: InventarioOrdenCompra | null;
   showTrigger?: boolean;
@@ -315,8 +315,9 @@ export default function InventarioOrdenCompraModal({
 
     try {
       setEnviando(true);
+      let ordenResultado: InventarioOrdenCompra | undefined;
       if (esEdicion && ordenEdicionId) {
-        await inventarioService.actualizarOrdenCompra(ordenEdicionId, {
+        ordenResultado = await inventarioService.actualizarOrdenCompra(ordenEdicionId, {
           justificacion: j,
           ...(tieneRem ? { numeroRemision: rem } : {}),
           ...(tieneFac ? { numeroFacturaElectronico: factura } : {}),
@@ -325,21 +326,21 @@ export default function InventarioOrdenCompraModal({
         });
         toast.success('Orden de compra actualizada.');
       } else {
-        const creada = await inventarioService.crearOrdenCompra({
+        ordenResultado = await inventarioService.crearOrdenCompra({
           concepto: c,
           ...(tieneRem ? { numeroRemision: rem } : {}),
           ...(tieneFac ? { numeroFacturaElectronico: factura } : {}),
           proveedor: { nombre: prov.nombre.trim(), nit: prov.nit.trim() },
           items,
         });
-        const estado = String(creada.estado || '').toUpperCase();
+        const estado = String(ordenResultado.estado || '').toUpperCase();
         toast.success(
-          mensajeExitoCrearOrden(creada.numeroOrden, estado, recepcionAutomatica),
+          mensajeExitoCrearOrden(ordenResultado.numeroOrden, estado, recepcionAutomatica),
           { autoClose: 9000 },
         );
       }
       onOpenChange(false);
-      await onCreated();
+      await onCreated(ordenResultado);
     } catch (error) {
       console.error('Error creando orden de compra:', error);
       toast.error(mensajeErrorComprasInventario(error, 'No se pudo guardar la orden de compra.'));

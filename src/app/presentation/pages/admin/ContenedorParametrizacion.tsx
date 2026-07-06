@@ -830,7 +830,7 @@ export default function ContenedorParametrizacion(): React.ReactElement {
 
       {/* ── Dialog: Crear / Editar contenedor ── */}
       <Dialog open={dialogContenedor} onOpenChange={setDialogContenedor}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="w-[calc(100%-2rem)] max-h-[90dvh] max-w-lg overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {editandoContenedor ? 'Editar contenedor' : 'Nuevo contenedor'}
@@ -928,7 +928,7 @@ export default function ContenedorParametrizacion(): React.ReactElement {
 
       {/* ── Dialog: Conexión BD ── */}
       <Dialog open={dialogDb} onOpenChange={setDialogDb}>
-        <DialogContent className="max-w-xl">
+        <DialogContent className="w-[calc(100%-2rem)] max-h-[90dvh] max-w-xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Database className="w-5 h-5 text-emerald-600" />
@@ -1115,7 +1115,7 @@ export default function ContenedorParametrizacion(): React.ReactElement {
 
       {/* ── Dialog: Parametrizar Conexión BD ── */}
       <Dialog open={dialogParametrizar} onOpenChange={setDialogParametrizar}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="w-[calc(100%-2rem)] max-h-[90dvh] max-w-2xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Database className="w-5 h-5 text-emerald-600" />

@@ -1515,7 +1515,6 @@ const _fetchSidebarTreeWithContext = async (): Promise<AdminSidebarTreeContext> 
             fetchAllSecurityRoutes(true)
         ]);
 
-        console.log('[DEBUG-SIDEBAR] ▶ treeResult.success:', treeResult?.success, '| data.length:', Array.isArray(treeResult?.data) ? treeResult.data.length : 'N/A', '| actorTipoJwt:', actorTipoJwt);
         if (treeResult?.success && Array.isArray(treeResult?.data)) {
             const actorTipoBackend = String(treeResult?.actorTipo || '').trim().toUpperCase() as AdminActorTipo;
             const actorTipo = actorTipoJwt === 'UNKNOWN' ? resolveEffectiveAdminActorTipo(actorTipoBackend) : actorTipoJwt;
@@ -1526,8 +1525,6 @@ const _fetchSidebarTreeWithContext = async (): Promise<AdminSidebarTreeContext> 
 
             const flattenNodes = (nodes: AdminNavTreeItem[]): AdminNavTreeItem[] =>
                 nodes.flatMap((n) => [n, ...flattenNodes(n.children || [])]);
-            console.log('[DEBUG-SIDEBAR] actorTipo:', actorTipo, '| actorTipoBackend:', actorTipoBackend, '| rawMapped:', rawMapped.length, '→ nodos raíz tipoNodo:', rawMapped.map(n => `${n.tipoNodo}(${n.path})`));
-            console.log('[DEBUG-SIDEBAR] tras filterRootsByActorTipo:', filteredTree.length, '| paths:', flattenNodes(filteredTree).map((n) => n.path));
 
             if (actorTipo === 'SUPERADMIN') {
                 filteredTree = filterTreeByAllowedRoutes(filteredTree, securityLookup.ids, securityLookup.paths);
@@ -1544,20 +1541,12 @@ const _fetchSidebarTreeWithContext = async (): Promise<AdminSidebarTreeContext> 
 
             if (actorTipo === 'GLOBAL' || actorTipo === 'CORPORATIVO' || actorTipo === 'CLIENTE') {
                 const herencia = await getHerenciaAdminPermitida();
-                console.log('[DEBUG-SIDEBAR] herencia idsPermitidos:', herencia.idsPermitidos.size, '| pathsPermitidos:', [...herencia.pathsPermitidos]);
-                const treePrevHerencia = filteredTree;
                 filteredTree = filterTreeByHerenciaConRescate(filteredTree, herencia, 'getAdminSidebarTree');
-                console.log('[DEBUG-SIDEBAR] tras filterByHerencia:', filteredTree.length, '(antes:', treePrevHerencia.length, ')');
-                const treePrevSecurity = filteredTree;
                 filteredTree = filterTreeByAllowedRoutes(filteredTree, securityLookup.ids, securityLookup.paths);
-                console.log('[DEBUG-SIDEBAR] tras filterByAllowedRoutes:', filteredTree.length, '(antes:', treePrevSecurity.length, ')');
-                console.log('[DEBUG-SIDEBAR] paths finales registrados:', flattenNodes(filteredTree).map((n) => n.path));
             }
 
             return { actorTipo, sourceCollection, tree: filteredTree };
         }
-
-        console.warn('[DEBUG-SIDEBAR] backend /arbol/admin falló:', treeResult?.success, treeResult?.message);
         const actorTipo = actorTipoJwt;
         return { actorTipo, sourceCollection: resolveSidebarSourceCollection(actorTipo), tree: [] };
     } catch (error) {

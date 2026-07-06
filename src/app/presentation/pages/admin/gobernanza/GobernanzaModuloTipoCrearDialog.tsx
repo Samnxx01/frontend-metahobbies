@@ -134,7 +134,7 @@ export function GobernanzaModuloTipoCrearDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="w-[calc(100%-2rem)] max-h-[90dvh] max-w-md overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Nuevo tipo de formulario</DialogTitle>
           <DialogDescription>

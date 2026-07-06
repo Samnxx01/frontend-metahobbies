@@ -31,8 +31,11 @@ import {
     subirImagenFondoLogin,
     type ImagenFondo,
     type BrandingConfig,
+    ABOUT_IMAGE_SEED,
 } from '@/app/services/brandingWidget';
 import { normalizeImageRenderUrl } from '@/app/utils/normalizeImageRenderUrl';
+import { apiFetch } from '@/app/services/api';
+import { fetchSplashLogo, resolveSplashLogoUrl, invalidateSplashLogoCache } from '@/app/services/splashLogoService';
 
 type PaletaColores = ColoresApp;
 
@@ -151,6 +154,11 @@ export default function PaletaRutasPage() {
     const [imagenesLoading, setImagenesLoading] = useState(false);
     const [loginBackgroundUploading, setLoginBackgroundUploading] = useState(false);
     const [loginBackgroundSaving, setLoginBackgroundSaving] = useState(false);
+    const [aboutImageUrl, setAboutImageUrl] = useState(ABOUT_IMAGE_SEED);
+    const [aboutImageEnabled, setAboutImageEnabled] = useState(true);
+    const [logoUrl, setLogoUrl] = useState<string | null>(null);
+    const [logoFetchDone, setLogoFetchDone] = useState(false);
+    const [logoUploading, setLogoUploading] = useState(false);
 
     // ── Socket: actualización de paleta en tiempo real ────────────────────────
     useEffect(() => {
@@ -183,12 +191,15 @@ export default function PaletaRutasPage() {
                 const brandingData = await obtenerBrandingPrivado();
                 const loginBackground = brandingData?.widgets?.loginBackground;
                 const loadingBackground = brandingData?.widgets?.loadingBackground;
+                const aboutImage = brandingData?.widgets?.aboutImage;
 
                 setBranding(brandingData || {});
                 setLoginBackgroundUrl(normalizeImageRenderUrl(loginBackground?.imageUrl));
                 setLoginBackgroundEnabled(loginBackground?.enabled !== false);
                 setLoadingBackgroundUrl(normalizeImageRenderUrl(loadingBackground?.imageUrl));
                 setLoadingBackgroundEnabled(loadingBackground?.enabled !== false);
+                setAboutImageUrl(normalizeImageRenderUrl(aboutImage?.imageUrl) || ABOUT_IMAGE_SEED);
+                setAboutImageEnabled(aboutImage?.enabled !== false);
             } catch (error) {
                 console.error(error);
                 toast.error('No se pudo cargar la configuracion del fondo de login.');
@@ -212,6 +223,10 @@ export default function PaletaRutasPage() {
 
     useEffect(() => {
         void cargarImagenesFondo();
+    }, []);
+
+    useEffect(() => {
+        void cargarLogo();
     }, []);
 
     // ── Abrir modal y cargar colores actuales ─────────────────────────────────
@@ -244,6 +259,40 @@ export default function PaletaRutasPage() {
             cerrarModalPaleta();
         } catch (error: any) { toast.error(error?.message || 'No se pudo guardar los colores.'); }
         finally { setPaletaSaving(false); }
+    };
+
+    const cargarLogo = async (): Promise<void> => {
+        setLogoFetchDone(false);
+        try {
+            const tieneToken = typeof window !== 'undefined' && Boolean(String(localStorage.getItem('token') || '').trim());
+            const res = await fetchSplashLogo(tieneToken, { forceRefresh: true });
+            setLogoUrl(resolveSplashLogoUrl(res?.logo));
+        } catch {
+            setLogoUrl(null);
+        } finally {
+            setLogoFetchDone(true);
+        }
+    };
+
+    const subirLogo = async (file?: File): Promise<void> => {
+        if (!file) return;
+        setLogoUploading(true);
+        try {
+            const formData = new FormData();
+            formData.append('archivo', file);
+            const res = await apiFetch('/api/config/parametrizacion/guardar/logos/coporativa', {
+                method: 'POST',
+                body: formData
+            }) as { ok?: boolean; msg?: string } | null;
+            if (!res?.ok) throw new Error(res?.msg || 'No se pudo subir el logo');
+            invalidateSplashLogoCache();
+            await cargarLogo();
+            toast.success('Logo subido correctamente.');
+        } catch (error: any) {
+            toast.error(error?.message || 'No se pudo subir el logo.');
+        } finally {
+            setLogoUploading(false);
+        }
     };
 
     const subirFondoLogin = async (file?: File): Promise<void> => {
@@ -286,6 +335,10 @@ export default function PaletaRutasPage() {
                     loadingBackground: {
                         imageUrl: normalizeImageRenderUrl(loadingBackgroundUrl.trim()),
                         enabled: loadingBackgroundEnabled,
+                    },
+                    aboutImage: {
+                        imageUrl: normalizeImageRenderUrl(aboutImageUrl.trim()) || ABOUT_IMAGE_SEED,
+                        enabled: aboutImageEnabled,
                     },
                 },
             };
@@ -390,6 +443,78 @@ export default function PaletaRutasPage() {
                 </CardContent>
             </Card>
 
+            {/* ── Logo corporativo ───────────────────────────────────────────── */}
+            <Card className="shadow-lg border-border">
+                <CardHeader className="pb-3">
+                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                        <div className="flex items-center gap-2">
+                            <ImageIcon className="h-5 w-5 text-primary" />
+                            <CardTitle>Logo corporativo</CardTitle>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => void cargarLogo()}
+                                disabled={!logoFetchDone}
+                            >
+                                {!logoFetchDone && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                Recargar
+                            </Button>
+                            <Button asChild type="button" size="sm" disabled={logoUploading}>
+                                <label className="cursor-pointer">
+                                    {logoUploading ? (
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    ) : (
+                                        <Upload className="mr-2 h-4 w-4" />
+                                    )}
+                                    {logoUploading ? 'Subiendo...' : 'Subir logo'}
+                                    <input
+                                        type="file"
+                                        accept="image/png,image/jpeg,image/jpg,image/svg+xml,image/webp"
+                                        className="hidden"
+                                        onChange={(event) => {
+                                            const file = event.target.files?.[0];
+                                            event.target.value = '';
+                                            void subirLogo(file);
+                                        }}
+                                    />
+                                </label>
+                            </Button>
+                        </div>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                        Logo que aparece en la pantalla de carga y el sidebar de administracion.
+                    </p>
+                </CardHeader>
+                <CardContent>
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+                        <div className="flex h-36 w-36 shrink-0 items-center justify-center rounded-xl border border-border bg-muted p-3">
+                            {!logoFetchDone ? (
+                                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                            ) : logoUrl ? (
+                                <img
+                                    src={logoUrl}
+                                    alt="Logo corporativo"
+                                    className="h-full w-full object-contain drop-shadow-sm"
+                                />
+                            ) : (
+                                <div className="flex flex-col items-center gap-2 text-center text-xs text-muted-foreground">
+                                    <ImageIcon className="h-8 w-8" />
+                                    Sin logo
+                                </div>
+                            )}
+                        </div>
+                        <div className="space-y-1.5 text-sm text-muted-foreground">
+                            <p>El logo activo se muestra en la <strong className="text-foreground">pantalla de carga</strong> y en el <strong className="text-foreground">sidebar</strong> de administracion.</p>
+                            <p>Sube un nuevo archivo con <strong className="text-foreground">Subir logo</strong> para reemplazarlo. Formatos: PNG, JPG, SVG, WEBP.</p>
+                            <p className="text-xs">Para gestion avanzada (historial, activar versiones anteriores), usa <strong className="text-foreground">Logos Corporativos</strong>.</p>
+                        </div>
+                    </div>
+                </CardContent>
+            </Card>
+
             {/* ═══════════════════════════════════════════════════════════════
                 MODAL: Configurar colores
             ════════════════════════════════════════════════════════════════ */}
@@ -449,11 +574,11 @@ export default function PaletaRutasPage() {
                         </div>
                     </div>
                     <p className="text-sm text-muted-foreground">
-                        Parametriza imagenes para el login y para la pantalla de validacion/carga.
+                        Parametriza imagenes para el login, la pantalla de carga y la seccion "Sobre nosotros". La imagen de "Sobre nosotros" tiene semilla <code className="text-xs font-mono">/assets/logo.png</code>.
                     </p>
                 </CardHeader>
                 <CardContent className="space-y-5">
-                    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                    <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
                         {[
                             {
                                 title: 'Login',
@@ -461,6 +586,7 @@ export default function PaletaRutasPage() {
                                 enabled: loginBackgroundEnabled,
                                 setUrl: setLoginBackgroundUrl,
                                 setEnabled: setLoginBackgroundEnabled,
+                                seed: undefined as string | undefined,
                             },
                             {
                                 title: 'Pantalla de carga',
@@ -468,6 +594,15 @@ export default function PaletaRutasPage() {
                                 enabled: loadingBackgroundEnabled,
                                 setUrl: setLoadingBackgroundUrl,
                                 setEnabled: setLoadingBackgroundEnabled,
+                                seed: undefined as string | undefined,
+                            },
+                            {
+                                title: 'Imagen "Sobre nosotros"',
+                                url: aboutImageUrl,
+                                enabled: aboutImageEnabled,
+                                setUrl: setAboutImageUrl,
+                                setEnabled: setAboutImageEnabled,
+                                seed: ABOUT_IMAGE_SEED,
                             },
                         ].map((item) => (
                             <div key={item.title} className="rounded-lg border border-border p-3 space-y-3">
@@ -510,11 +645,21 @@ export default function PaletaRutasPage() {
                                         variant="ghost"
                                         size="sm"
                                         onClick={() => item.setUrl('')}
-                                        disabled={!item.url}
+                                        disabled={!item.url || (!!item.seed && item.url === item.seed)}
                                     >
                                         <X className="mr-2 h-4 w-4" />
                                         Quitar
                                     </Button>
+                                    {item.seed && item.url !== item.seed && (
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => item.setUrl(item.seed!)}
+                                        >
+                                            Restaurar semilla
+                                        </Button>
+                                    )}
                                 </div>
                             </div>
                         ))}

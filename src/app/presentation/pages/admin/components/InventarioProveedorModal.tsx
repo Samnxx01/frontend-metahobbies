@@ -311,7 +311,7 @@ export default function InventarioProveedorModal({
       ) : null}
 
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-lg border-border bg-background text-foreground sm:max-w-2xl">
+        <DialogContent className="w-[calc(100%-2rem)] max-h-[90dvh] max-w-lg overflow-y-auto border-border bg-background text-foreground sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Building2 className="h-5 w-5 text-primary" />
@@ -481,7 +481,7 @@ export default function InventarioProveedorModal({
       </Dialog>
 
       <Dialog open={tipoModalOpen} onOpenChange={setTipoModalOpen}>
-        <DialogContent className="max-w-xl border-border bg-background text-foreground sm:max-w-xl">
+        <DialogContent className="w-[calc(100%-2rem)] max-h-[90dvh] max-w-xl overflow-y-auto border-border bg-background text-foreground sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>Tipo de proveedor</DialogTitle>
             <DialogDescription className="text-muted-foreground">

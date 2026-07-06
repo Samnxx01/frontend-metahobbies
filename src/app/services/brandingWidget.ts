@@ -39,6 +39,10 @@ export interface BrandingConfig {
       imageUrl?: string;
       enabled?: boolean;
     };
+    aboutImage?: {
+      imageUrl?: string;
+      enabled?: boolean;
+    };
     navigation?: {
       etiqueta?: string;
       login?: { path?: string; enabled?: boolean; rutaSeguridadId?: string | null };
@@ -213,6 +217,21 @@ export const eliminarImagenFondo = async (id: string): Promise<void> => {
     method: 'DELETE',
     useAuth: true
   });
+};
+
+export const ABOUT_IMAGE_SEED = '/assets/logo.png';
+
+export const obtenerAboutImageUrl = async (): Promise<string> => {
+  try {
+    const branding = await obtenerBrandingPublico();
+    const aboutImage = branding?.widgets?.aboutImage;
+    if (aboutImage?.enabled !== false && aboutImage?.imageUrl) {
+      return normalizeImageRenderUrl(aboutImage.imageUrl) || ABOUT_IMAGE_SEED;
+    }
+  } catch {
+    /* falla silenciosa, retorna semilla */
+  }
+  return ABOUT_IMAGE_SEED;
 };
 
 export const obtenerAccionesWidgetPublico = async (): Promise<AccionBackend[]> => {

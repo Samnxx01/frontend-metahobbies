@@ -136,9 +136,11 @@ const appendSpaContextQuery = (endpoint: string, spaFrontendPath = ''): string =
     return `${endpoint}${join}_mabsPath=${encodeURIComponent(spaFrontendPath)}`;
 };
 
-// En producción VITE_API_URL = "https://server-mabs-1.onrender.com/api"
-// En dev el proxy de Vite maneja /api → Render, por eso API_ORIGIN queda vacío.
-const API_ORIGIN = (import.meta.env.VITE_API_URL ?? '').replace(/\/api\/?$/, '');
+// En producción (build) VITE_API_URL apunta a Render.
+// En dev, el proxy de Vite redirige /api → localhost:8080, así que API_ORIGIN debe ser vacío.
+const API_ORIGIN = import.meta.env.PROD
+    ? (import.meta.env.VITE_API_URL ?? '').replace(/\/api\/?$/, '')
+    : '';
 
 const buildAbsoluteUrl = (endpoint: string): string => {
     if (API_ORIGIN && endpoint.startsWith('/api')) {

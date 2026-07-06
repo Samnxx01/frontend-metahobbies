@@ -79,6 +79,12 @@ type InventarioOrdenComprasTabProps = {
   guardarProveedorCompra: (draft: InventarioProveedorDraft) => Promise<void>;
   /** Opcional si el panel se monta sin `Inventario` (ruta mal resuelta); el listado se refresca con GET local. */
   refreshOrdenesCompra?: () => Promise<void>;
+  /** Callbacks optimistas: actualizan el estado del padre sin hacer refetch. */
+  onOrdenCreada?: (orden: InventarioOrdenCompra) => void;
+  onOrdenEliminada?: (id: string) => void;
+  onOrdenActualizadaEnPadre?: (orden: InventarioOrdenCompra) => void;
+  /** Refresca solo stock y kardex (sin ordenes) después de un comprobante entrada. */
+  refreshStockYKardex?: () => Promise<void>;
   /** Si falta, se calcula con `totalLineaOrdenCompra` (misma regla que `Inventario.tsx`). */
   sumSubtotalOrdenCompra?: (oc: InventarioOrdenCompra) => number;
   /** SuperAdmin de rama: habilita editar/eliminar OC fuera de VERIFICACION. */
@@ -104,6 +110,10 @@ export default function InventarioOrdenComprasTab({
   abrirEditarOrdenCompra,
   guardarProveedorCompra,
   refreshOrdenesCompra,
+  onOrdenCreada,
+  onOrdenEliminada,
+  onOrdenActualizadaEnPadre,
+  refreshStockYKardex,
   sumSubtotalOrdenCompra: sumSubtotalProp,
   esTenantSuperAdmin = false,
   config = null,
@@ -204,13 +214,11 @@ export default function InventarioOrdenComprasTab({
     };
   }, [ordenesCompra.length, proveedoresCompra.length]);
 
-  const sincronizarListadoOrdenesTrasMutacion = async (): Promise<void> => {
-    await refreshOrdenesCompra?.();
-    try {
-      setLocalOrdenes(await inventarioService.listarOrdenesCompra({ limit: 50 }));
-    } catch (error) {
-      console.error('Error refrescando ordenes de compra:', error);
-    }
+  /** Actualiza optimistamente una orden en el estado local y del padre. */
+  const actualizarOrdenEnEstado = (orden: InventarioOrdenCompra): void => {
+    const id = getOrdenCompraId(orden);
+    setLocalOrdenes((prev) => prev.map((oc) => (getOrdenCompraId(oc) === id ? orden : oc)));
+    onOrdenActualizadaEnPadre?.(orden);
   };
 
   const eliminarOrden = async (oc: InventarioOrdenCompra): Promise<void> => {
@@ -254,9 +262,12 @@ export default function InventarioOrdenComprasTab({
           ? `Orden eliminada. Se reversaron y anularon ${result.recepcionesAnuladas ?? 0} recepcion(es).`
           : 'Orden eliminada.'
       );
+      const eliminadoId = getOrdenCompraId(ordenEliminar);
       setOrdenEliminar(null);
       setMotivoEliminar('');
-      await sincronizarListadoOrdenesTrasMutacion();
+      // Actualización inmediata — no refetch
+      setLocalOrdenes((prev) => prev.filter((oc) => getOrdenCompraId(oc) !== eliminadoId));
+      onOrdenEliminada?.(eliminadoId);
     } catch (error) {
       toast.error(error instanceof Error ? error.message.replace(/^\[\d+\]\s*/, '') : 'No se pudo eliminar.');
     } finally {
@@ -361,7 +372,18 @@ export default function InventarioOrdenComprasTab({
                 productos={productosSku}
                 ordenEdicion={ordenEdicion}
                 recepcionAutomatica={recepcionAutomatica}
-                onCreated={sincronizarListadoOrdenesTrasMutacion}
+                onCreated={(orden) => {
+                  if (!orden) return;
+                  const id = getOrdenCompraId(orden);
+                  const esEdicion = localOrdenes.some((oc) => getOrdenCompraId(oc) === id)
+                    || ordenesCompra.some((oc) => getOrdenCompraId(oc) === id);
+                  if (esEdicion) {
+                    actualizarOrdenEnEstado(orden);
+                  } else {
+                    setLocalOrdenes((prev) => [orden, ...prev]);
+                    onOrdenCreada?.(orden);
+                  }
+                }}
                 onAntesNuevaOrden={abrirNuevaOrdenCompra}
                 showTrigger
                 triggerClassName="shrink-0"
@@ -531,7 +553,7 @@ export default function InventarioOrdenComprasTab({
         }}
         onOrdenActualizada={(actualizada) => {
           setOrdenDetalles(actualizada);
-          void sincronizarListadoOrdenesTrasMutacion();
+          actualizarOrdenEnEstado(actualizada);
         }}
       />
 
@@ -547,7 +569,10 @@ export default function InventarioOrdenComprasTab({
             tipo: confirmed.recepcion?.documentoSoporte?.tipo || comprobanteDoc?.tipo || '',
             numero: confirmed.recepcion?.documentoSoporte?.numero || comprobanteDoc?.numero || '',
           });
-          void sincronizarListadoOrdenesTrasMutacion();
+          // Actualizar la orden en lista sin refetch
+          if (confirmed.orden) actualizarOrdenEnEstado(confirmed.orden);
+          // Solo stock y kardex cambiaron — refrescar en background
+          void refreshStockYKardex?.();
         }}
         onOpenChange={(open) => {
           setComprobanteOpen(open);

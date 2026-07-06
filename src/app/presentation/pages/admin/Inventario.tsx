@@ -36,7 +36,7 @@ import inventarioService, {
 } from '@/app/services/inventarioService';
 import { totalLineaOrdenCompra } from '@/app/presentation/pages/admin/utils/ordenCompraLineaCalculo';
 import { getOrdenCompraId } from '@/app/presentation/pages/admin/utils/ordenCompraIdUtils';
-import productosService, { type BackendProducto } from '@/app/services/productosService';
+import productosService, { type BackendProducto, type BackendTipoProducto, type TipoProductoPayload } from '@/app/services/productosService';
 import { apiFetch } from '@/app/services/api';
 import { useAuth } from '@/app/providers/AuthProvider';
 import InventarioMenuTabs, { type InventarioTabValue } from './components/InventarioMenuTabs';
@@ -59,7 +59,8 @@ import InventarioOrdenComprasTab from './components/InventarioOrdenComprasTab';
 import InventarioProveedorModal, { type InventarioProveedorDraft } from './components/InventarioProveedorModal';
 import InventarioSkuCatalogoModal from './components/InventarioSkuCatalogoModal';
 import InventarioSkuModal, { type SkuForm } from './components/InventarioSkuModal';
-import { getProductoId, normalizarCodigoBarrasAlfanumerico } from './inventario/inventarioBarcodeUtils';
+import InventarioTipoProductoModal, { type TipoProductoDraft } from './components/InventarioTipoProductoModal';
+import { generarCodigoBarrasDesdeSkú, getProductoId, normalizarCodigoBarrasAlfanumerico } from './inventario/inventarioBarcodeUtils';
 import {
   esCodigoEntradaCompra,
   filtrarTiposMovimientoKardexEntrada,
@@ -201,6 +202,7 @@ const skuFormInicial: SkuForm = {
   codigoBarras: '',
   nombre: '',
   precio: '1',
+  tipo: 'FISICO',
   unidadMedida: 'UNIDAD',
   stockMinimo: '0',
   stockKardex: '0',
@@ -264,6 +266,9 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
   const [stockActual, setStockActual] = useState<StockActualItem[]>([]);
   const [productosSku, setProductosSku] = useState<BackendProducto[]>([]);
   const [tiposMovimiento, setTiposMovimiento] = useState<InventarioTipoMovimiento[]>([]);
+  const [tiposProducto, setTiposProducto] = useState<BackendTipoProducto[]>([]);
+  const [tipoProductoModalOpen, setTipoProductoModalOpen] = useState(false);
+  const [tipoProductoDraft, setTipoProductoDraft] = useState<TipoProductoDraft>({ nombre: '', codigo: '' });
   const [unidadesMedida, setUnidadesMedida] = useState<InventarioUnidadMedida[]>([]);
   const [kardex, setKardex] = useState<InventarioMovimiento[]>([]);
   const [ajustes, setAjustes] = useState<AjusteInventario[]>([]);
@@ -288,6 +293,7 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
   });
   const [skuModalOpen, setSkuModalOpen] = useState(false);
   const [skuCatalogoOpen, setSkuCatalogoOpen] = useState(false);
+  const [codigosRegistrados, setCodigosRegistrados] = useState<Set<string>>(new Set());
   const [skuEditandoId, setSkuEditandoId] = useState<string | null>(null);
   const [skuForm, setSkuForm] = useState<SkuForm>(skuFormInicial);
   const [tipoModalOpen, setTipoModalOpen] = useState(false);
@@ -634,12 +640,12 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
   const loadData = async (): Promise<void> => {
     try {
       setLoading(true);
-      const [configResp, bodegasResp, stockResp, ajustesResp, productosResp, tiposResp, unidadesResp, tiposUnidadResp, proveedoresResp, ordenesResp, causalesResp, comprobantesEntradaResp] = await Promise.all([
+      const [configResp, bodegasResp, stockResp, ajustesResp, productosResp, tiposResp, unidadesResp, tiposUnidadResp, proveedoresResp, ordenesResp, causalesResp, comprobantesEntradaResp, tiposProductoResp] = await Promise.all([
         inventarioService.obtenerConfig(),
         inventarioService.listarBodegas(),
         inventarioService.stockActual(),
         inventarioService.listarAjustes({ estado: ajusteFiltro }),
-        productosService.listarProductosAdmin({ tipo: 'FISICO', estadoCatalogo: 'ACTIVO' }),
+        productosService.listarProductosAdmin({ estadoCatalogo: 'ACTIVO' }),
         inventarioService.listarTiposMovimientoAdmin(),
         inventarioService.listarUnidadesMedidaAdmin(),
         inventarioService.listarTiposUnidadMedida(),
@@ -647,6 +653,7 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
         inventarioService.listarOrdenesCompra({ limit: 50 }),
         inventarioService.listarCausalesAjuste(),
         inventarioService.listarComprobantesEntradaMovimientos(200),
+        productosService.listarTiposProducto(),
       ]);
       setConfig(configResp);
       setBodegas(bodegasResp);
@@ -654,6 +661,7 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
       setAjustes(ajustesResp);
       setProductosSku(productosResp.filter((producto) => Boolean(producto.sku)));
       setTiposMovimiento(tiposResp);
+      setTiposProducto(tiposProductoResp);
       setUnidadesMedida(unidadesResp);
       setTiposUnidadMedida(tiposUnidadResp);
       setProveedoresCompra(proveedoresResp);
@@ -697,6 +705,27 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
     setOrdenesCompra(ordenes);
     setStockActual(stock);
     setKardex(kardexActualizado);
+  };
+
+  const refreshStockYKardex = async (): Promise<void> => {
+    const [stock, kardexActualizado] = await Promise.all([
+      inventarioService.stockActual(),
+      inventarioService.listarKardex({ limit: 50 }),
+    ]);
+    setStockActual(stock);
+    setKardex(kardexActualizado);
+  };
+
+  const onOrdenEliminada = (id: string): void => {
+    setOrdenesCompra((prev) => prev.filter((oc) => getOrdenCompraId(oc) !== id));
+  };
+
+  const onOrdenCreada = (orden: InventarioOrdenCompra): void => {
+    setOrdenesCompra((prev) => [orden, ...prev]);
+  };
+
+  const onOrdenActualizadaEnPadre = (orden: InventarioOrdenCompra): void => {
+    setOrdenesCompra((prev) => prev.map((oc) => (getOrdenCompraId(oc) === getOrdenCompraId(orden) ? orden : oc)));
   };
 
   useEffect(() => {
@@ -951,7 +980,7 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
     if (!bodegaDeleteTarget) return;
     try {
       setBodegaDeleteBusy(true);
-      await inventarioService.eliminarBodega(bodegaDeleteTarget._id);
+      await inventarioService.eliminarBodega(bodegaDeleteTarget._id!);
       setBodegas((prev) => prev.filter((b) => b._id !== bodegaDeleteTarget._id));
       if (editingBodegaId === bodegaDeleteTarget._id) cancelarEdicionBodega();
       setBodegaDeleteTarget(null);
@@ -1347,7 +1376,7 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
       nombre,
       precio,
       moneda: 'COP' as const,
-      tipo: 'FISICO',
+      tipo: skuForm.tipo || 'FISICO',
       unidadMedida: skuForm.unidadMedida,
       stockMinimo: Number.isNaN(stockMinimo) ? 0 : stockMinimo,
       descripcion: skuForm.descripcion.trim(),
@@ -1459,6 +1488,9 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
 
   const abrirModalSkuCatalogo = (): void => {
     setSkuCatalogoOpen(true);
+    productosService.listarCodigosBarrasRegistrados()
+      .then(setCodigosRegistrados)
+      .catch(() => {});
   };
 
   const abrirModalCrearSku = (): void => {
@@ -1489,6 +1521,7 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
         codigoBarras: String(producto.codigoBarras || ''),
         nombre: String(producto.nombre || ''),
         precio: String(Number(producto.precio || 0) || ''),
+        tipo: String(producto.tipo || 'FISICO'),
         unidadMedida: String(producto.unidadMedida || 'UNIDAD'),
         stockMinimo: String(Number(producto.stockMinimo || 0)),
         stockKardex: String(stockKardex),
@@ -1553,7 +1586,6 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
       toast.error('Tu scope no permite eliminar SKU.');
       return;
     }
-    if (!window.confirm(`Esta accion elimina definitivamente el SKU ${producto.sku || producto.nombre}. Deseas continuar?`)) return;
     try {
       setSaving(true);
       await productosService.eliminarProductoAdmin(productoId);
@@ -1566,25 +1598,171 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
     }
   };
 
+  const eliminarSkusCatalogoMasivo = async (productos: BackendProducto[]): Promise<void> => {
+    if (!puedeGestionarSku) { toast.error('Tu scope no permite eliminar SKU.'); return; }
+    const resultados = await Promise.allSettled(
+      productos.map(async (producto) => {
+        const productoId = getProductoId(producto);
+        if (!productoId) throw new Error(`Sin ID: ${producto.sku}`);
+        await productosService.eliminarProductoAdmin(productoId);
+        return productoId;
+      }),
+    );
+    const exitosos = resultados
+      .filter((r): r is PromiseFulfilledResult<string> => r.status === 'fulfilled')
+      .map((r) => r.value);
+    const nFallidos = resultados.filter((r) => r.status === 'rejected').length;
+    if (exitosos.length > 0) {
+      const eliminadosSet = new Set(exitosos);
+      setProductosSku((prev) => prev.filter((item) => !eliminadosSet.has(getProductoId(item))));
+    }
+    if (nFallidos === 0) toast.success(`${exitosos.length} SKU(s) eliminados.`);
+    else toast.warning(`${exitosos.length} eliminados, ${nFallidos} fallaron.`);
+  };
+
+  const eliminarCodigoBarrasCatalogo = async (productos: BackendProducto[]): Promise<void> => {
+    if (!puedeGestionarSku) { toast.error('Tu scope no permite eliminar codigos de barras.'); return; }
+    const resultados = await Promise.allSettled(
+      productos.map(async (producto) => {
+        const productoId = getProductoId(producto);
+        if (!productoId) throw new Error(`Sin ID: ${producto.sku}`);
+        await productosService.eliminarCodigoBarrasAdmin(productoId);
+        return productoId;
+      }),
+    );
+    const exitosos = resultados
+      .filter((r): r is PromiseFulfilledResult<string> => r.status === 'fulfilled')
+      .map((r) => r.value);
+    const nFallidos = resultados.filter((r) => r.status === 'rejected').length;
+    if (exitosos.length > 0) {
+      const eliminadosSet = new Set(exitosos);
+      setProductosSku((prev) => prev.map((item) =>
+        eliminadosSet.has(getProductoId(item)) ? { ...item, codigoBarras: undefined } : item,
+      ));
+      setCodigosRegistrados((prev) => {
+        const next = new Set(prev);
+        eliminadosSet.forEach((id) => next.delete(id));
+        return next;
+      });
+    }
+    if (nFallidos === 0) toast.success(`${exitosos.length} codigo(s) de barras eliminados.`);
+    else toast.warning(`${exitosos.length} eliminados, ${nFallidos} fallaron.`);
+  };
+
+  const codigosBarrasEnUso = (): Set<string> => new Set(
+    skuOptions
+      .map((p) => normalizarCodigoBarrasAlfanumerico(String(p.codigoBarras || '')))
+      .filter(Boolean),
+  );
+
   const generarCodigoSkuCatalogo = async (producto: BackendProducto): Promise<void> => {
     const productoId = getProductoId(producto);
-    if (!productoId) {
-      toast.error('No se encontro el ID del SKU.');
-      return;
-    }
-    if (!puedeGestionarSku) {
-      toast.error('Tu scope no permite generar codigo de barras.');
-      return;
-    }
+    if (!productoId) { toast.error('No se encontro el ID del SKU.'); return; }
+    if (!puedeGestionarSku) { toast.error('Tu scope no permite generar codigo de barras.'); return; }
     try {
       setSaving(true);
-      const actualizado = await productosService.actualizarProductoAdmin(productoId, { codigoBarras: '' });
+      const codigoBarras = generarCodigoBarrasDesdeSkú(producto.sku || '', codigosBarrasEnUso());
+      const actualizado = await productosService.actualizarProductoAdmin(productoId, { codigoBarras });
       setProductosSku((prev) => prev.map((item) => (getProductoId(item) === productoId ? { ...item, ...actualizado } : item)));
+      setCodigosRegistrados((prev) => new Set([...prev, productoId]));
       toast.success('Codigo de barras generado.');
     } catch (error: any) {
       toast.error(error?.message || 'No se pudo generar el codigo de barras.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const generarCodigosMasivoSkuCatalogo = async (
+    asignaciones: Array<{ producto: BackendProducto; codigoBarras: string }>,
+  ): Promise<void> => {
+    if (!puedeGestionarSku) { toast.error('Tu scope no permite generar codigos de barras.'); return; }
+    if (asignaciones.length === 0) { toast.info('No hay códigos para generar.'); return; }
+
+    // Tareas ya vienen pre-calculadas desde el modal de preview
+    const tareas = asignaciones
+      .map(({ producto, codigoBarras }) => {
+        const productoId = getProductoId(producto);
+        if (!productoId) return null;
+        return { productoId, codigoBarras };
+      })
+      .filter((t): t is { productoId: string; codigoBarras: string } => t !== null);
+
+    if (tareas.length === 0) return;
+
+    // 2. Toast de progreso en 2do plano — sin setSaving(true) para no bloquear la página
+    let completados = 0;
+    const toastId = toast.info(`Generando 0 / ${tareas.length} codigos de barras...`, { autoClose: false });
+
+    // 3. Lotes de 15 para no saturar el pool de conexiones de MongoDB
+    const LOTE = 15;
+    const resultados: PromiseSettledResult<{ productoId: string; actualizado: BackendProducto }>[] = [];
+    for (let i = 0; i < tareas.length; i += LOTE) {
+      const lote = tareas.slice(i, i + LOTE);
+      const loteResultados = await Promise.allSettled(
+        lote.map(({ productoId, codigoBarras }) =>
+          productosService.actualizarProductoAdmin(productoId, { codigoBarras })
+            .then((actualizado) => {
+              completados += 1;
+              toast.update(toastId, {
+                render: `Generando ${completados} / ${tareas.length} codigos de barras...`,
+              });
+              return { productoId, actualizado };
+            }),
+        ),
+      );
+      resultados.push(...loteResultados);
+    }
+
+    // 4. Actualizar lista en un solo setState
+    const exitosos = resultados
+      .filter((r): r is PromiseFulfilledResult<{ productoId: string; actualizado: BackendProducto }> => r.status === 'fulfilled')
+      .map((r) => r.value);
+
+    if (exitosos.length > 0) {
+      const mapa = new Map(exitosos.map(({ productoId, actualizado }) => [productoId, actualizado]));
+      setProductosSku((prev) =>
+        prev.map((item) => {
+          const id = getProductoId(item);
+          return mapa.has(id) ? { ...item, ...mapa.get(id)! } : item;
+        }),
+      );
+      setCodigosRegistrados((prev) => new Set([...prev, ...exitosos.map((e) => e.productoId)]));
+    }
+
+    const fallidos = tareas.length - exitosos.length;
+    toast.dismiss(toastId);
+    if (fallidos === 0) {
+      toast.success(`${exitosos.length} codigo(s) de barras generados.`);
+    } else {
+      toast.warning(`${exitosos.length} generados, ${fallidos} fallaron.`);
+    }
+  };
+
+  const exportarCatalogoExcel = async (): Promise<void> => {
+    try {
+      await productosService.exportarProductosExcel();
+      toast.success('Catalogo exportado correctamente.');
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo exportar el catalogo.');
+    }
+  };
+
+  const importarCatalogoExcel = async (file: File): Promise<{ total: number; insertados: number; errores: { fila: number; error: string }[] }> => {
+    try {
+      const result = await productosService.importarProductosExcel(file);
+      if (result.insertados > 0) {
+        const [nuevos, registrados] = await Promise.all([
+          productosService.listarProductosAdmin({ estadoCatalogo: 'ACTIVO' }),
+          productosService.listarCodigosBarrasRegistrados(),
+        ]);
+        setProductosSku(nuevos.filter((p) => Boolean(p.sku)));
+        setCodigosRegistrados(registrados);
+      }
+      return result;
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo importar el archivo.');
+      return { total: 0, insertados: 0, errores: [] };
     }
   };
 
@@ -1631,6 +1809,29 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
     } catch (error) {
       console.error('Error guardando tipo de movimiento:', error);
       toast.error('No se pudo guardar el tipo de movimiento.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const abrirModalTipoProducto = (): void => {
+    setTipoProductoDraft({ nombre: '', codigo: '' });
+    setTipoProductoModalOpen(true);
+  };
+
+  const crearTipoProductoInventario = async (): Promise<void> => {
+    if (!tipoProductoDraft.nombre.trim()) return;
+    try {
+      setSaving(true);
+      const created = await productosService.crearTipoProducto({
+        nombre: tipoProductoDraft.nombre.trim(),
+        codigo: tipoProductoDraft.codigo.trim() || undefined,
+      } as TipoProductoPayload);
+      setTiposProducto((prev) => [...prev, created]);
+      setSkuForm((prev) => ({ ...prev, tipo: created.nombre ?? prev.tipo }));
+      setTipoProductoDraft({ nombre: '', codigo: '' });
+    } catch {
+      // toast already shown by service
     } finally {
       setSaving(false);
     }
@@ -2007,7 +2208,6 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
             onRecargarComprobantes={recargarComprobantesEntrada}
             tiposMovimientoActivos={tiposMovimientoEntradaActivos}
             motivos={motivosMovimiento}
-            metodoValuacion={config?.metodoValuacion}
             saving={saving}
             renderSkuSelect={renderSkuSelect}
             renderBodegaSelect={renderBodegaSelect}
@@ -2039,6 +2239,10 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
             abrirEditarOrdenCompra={abrirEditarOrdenCompra}
             guardarProveedorCompra={guardarProveedorCompra}
             refreshOrdenesCompra={refreshOrdenesCompra}
+            onOrdenCreada={onOrdenCreada}
+            onOrdenEliminada={onOrdenEliminada}
+            onOrdenActualizadaEnPadre={onOrdenActualizadaEnPadre}
+            refreshStockYKardex={refreshStockYKardex}
             sumSubtotalOrdenCompra={sumSubtotalOrdenCompra}
             esTenantSuperAdmin={esUsuarioTenantSuperAdmin}
             config={config}
@@ -2143,25 +2347,51 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
         mode={skuEditandoId ? 'edit' : 'create'}
         form={skuForm}
         unidadesMedida={unidadesMedida}
+        tiposProducto={tiposProducto}
         codigosBarrasExistentes={codigosBarrasExistentes}
         excluirCodigoBarras={skuForm.codigoBarras}
         onOpenChange={cerrarModalSku}
         onFormChange={setSkuForm}
         onOpenUnidadMedida={abrirModalUnidadMedida}
+        onOpenTipoProducto={abrirModalTipoProducto}
         onSubmit={() => void crearSku()}
+      />
+
+      <InventarioTipoProductoModal
+        open={tipoProductoModalOpen}
+        saving={saving}
+        tipos={tiposProducto}
+        draft={tipoProductoDraft}
+        onOpenChange={setTipoProductoModalOpen}
+        onDraftChange={setTipoProductoDraft}
+        onSubmit={() => void crearTipoProductoInventario()}
       />
 
       <InventarioSkuCatalogoModal
         open={skuCatalogoOpen}
         saving={saving}
         productos={skuOptions}
+        codigosRegistrados={codigosRegistrados}
         puedeGestionarSku={puedeGestionarSku}
         onOpenChange={setSkuCatalogoOpen}
         onSelectSku={seleccionarSkuCatalogo}
         onEditSku={puedeGestionarSku ? editarSkuCatalogo : undefined}
         onDesactivarSku={desactivarSkuCatalogo}
         onEliminarSku={eliminarSkuCatalogo}
+        onEliminarSkusMasivo={puedeGestionarSku ? eliminarSkusCatalogoMasivo : undefined}
+        onEliminarCodigoBarras={puedeGestionarSku ? eliminarCodigoBarrasCatalogo : undefined}
         onGenerarCodigoBarras={generarCodigoSkuCatalogo}
+        onGenerarCodigosMasivo={puedeGestionarSku ? generarCodigosMasivoSkuCatalogo : undefined}
+        onRefresh={async () => {
+          const [nuevos, registrados] = await Promise.all([
+            productosService.listarProductosAdmin({ estadoCatalogo: 'ACTIVO' }),
+            productosService.listarCodigosBarrasRegistrados(),
+          ]);
+          setProductosSku(nuevos.filter((p) => Boolean(p.sku)));
+          setCodigosRegistrados(registrados);
+        }}
+        onExportarExcel={exportarCatalogoExcel}
+        onImportarExcel={puedeGestionarSku ? importarCatalogoExcel : undefined}
       />
 
       <InventarioUnidadMedidaModal

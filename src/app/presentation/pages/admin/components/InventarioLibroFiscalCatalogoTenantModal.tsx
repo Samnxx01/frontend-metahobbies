@@ -114,7 +114,7 @@ export default function InventarioLibroFiscalCatalogoTenantModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl border-border bg-background text-foreground">
+      <DialogContent className="w-[calc(100%-2rem)] max-h-[90dvh] max-w-3xl overflow-y-auto border-border bg-background text-foreground">
         <DialogHeader>
           <DialogTitle>{titulos[modo]}</DialogTitle>
         </DialogHeader>

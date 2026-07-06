@@ -95,7 +95,7 @@ export default function InventarioLibroFiscalPeriodicidadesModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl border-border bg-background text-foreground">
+      <DialogContent className="w-[calc(100%-2rem)] max-h-[90dvh] max-w-3xl overflow-y-auto border-border bg-background text-foreground">
         <DialogHeader>
           <DialogTitle>Periodicidades de {libro?.codigo || 'libro fiscal'}</DialogTitle>
         </DialogHeader>

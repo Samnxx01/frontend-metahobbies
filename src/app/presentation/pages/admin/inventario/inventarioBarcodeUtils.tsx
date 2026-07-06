@@ -56,6 +56,38 @@ export const crearSvgCodigoBarras = (
 export const getProductoId = (producto: BackendProducto): string =>
   String(producto.iud || producto._id || producto.id || '').trim();
 
+/**
+ * Genera un código de barras basado en el SKU del producto.
+ * Si el SKU normalizado tiene 8-14 chars y no está en uso, lo usa directamente.
+ * Si es más corto, rellena con dígitos consecutivos hasta alcanzar 8 chars.
+ * Si ya existe, incrementa el contador hasta encontrar uno libre.
+ */
+export const generarCodigoBarrasDesdeSkú = (
+  sku: string,
+  existentes: Set<string>,
+): string => {
+  const base = normalizarCodigoBarrasAlfanumerico(sku);
+  if (!base) {
+    const fallback = `B${Date.now().toString(36).toUpperCase()}`.slice(0, 12);
+    return fallback;
+  }
+
+  // SKU ya válido y libre
+  if (base.length >= 8 && base.length <= 14 && !existentes.has(base)) return base;
+
+  // Prefijo: si es > 10 chars lo acortamos para dejar espacio al sufijo consecutivo
+  const prefix = base.length >= 8 ? base.slice(0, 10) : base;
+  const minLen = Math.max(8, prefix.length + 1);
+
+  for (let i = 1; i <= 9999; i++) {
+    const suffix = String(i).padStart(minLen - prefix.length, '0');
+    const candidato = (prefix + suffix).slice(0, 14);
+    if (!existentes.has(candidato)) return candidato;
+  }
+
+  return (base + Date.now().toString(36).toUpperCase()).slice(0, 14);
+};
+
 export const BarcodePreview = ({
   codigo,
   formato,
@@ -89,6 +121,61 @@ export const BarcodePreview = ({
       <p className="font-mono text-[10px] leading-none tracking-wide">{clean}</p>
     </div>
   );
+};
+
+export const imprimirMultiplesCodigosBarras = (productos: BackendProducto[]): void => {
+  const validos = productos.filter((p) => normalizarCodigoBarrasAlfanumerico(String(p.codigoBarras || '')));
+  if (validos.length === 0) {
+    toast.error('Ninguno de los SKU seleccionados tiene codigo de barras.');
+    return;
+  }
+  const labelsHtml = validos.map((producto) => {
+    const codigo = normalizarCodigoBarrasAlfanumerico(String(producto.codigoBarras || ''));
+    const formato = inferirFormatoCodigoBarras(codigo, producto.formatoCodigoBarras);
+    const svgHtml = formato ? crearSvgCodigoBarras(codigo, formato) : '';
+    const nombre = String(producto.nombre || '').trim();
+    const sku = String(producto.sku || '').trim();
+    return `
+      <div class="label">
+        ${sku ? `<div class="sku">${sku}</div>` : ''}
+        <div class="name">${nombre}</div>
+        ${svgHtml || `<p style="font-size:10px;color:#999">Sin codigo</p>`}
+      </div>`;
+  }).join('');
+
+  const printWindow = window.open('', '_blank', 'width=860,height=620');
+  if (!printWindow) {
+    toast.error('No se pudo abrir la ventana de impresion.');
+    return;
+  }
+  printWindow.document.write(`
+    <!doctype html>
+    <html>
+      <head>
+        <title>Etiquetas de codigos de barras</title>
+        <style>
+          body { margin: 12px; font-family: Arial, sans-serif; color: #111827; }
+          .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+          .label { border: 1px solid #e5e7eb; border-radius: 6px; padding: 12px; text-align: center; page-break-inside: avoid; }
+          .sku { font-size: 10px; font-weight: 600; color: #6b7280; margin-bottom: 2px; }
+          .name { font-size: 11px; font-weight: 700; margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+          svg { max-width: 100%; height: 80px; }
+          @media print {
+            body { margin: 0; }
+            .grid { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+            .label { page-break-inside: avoid; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="grid">${labelsHtml}</div>
+        <script>
+          window.onload = function () { window.focus(); window.print(); };
+        </script>
+      </body>
+    </html>
+  `);
+  printWindow.document.close();
 };
 
 export const imprimirCodigoBarrasSku = (producto: BackendProducto | null): void => {

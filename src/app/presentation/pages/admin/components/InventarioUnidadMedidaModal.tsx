@@ -141,7 +141,7 @@ export default function InventarioUnidadMedidaModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92vh] max-w-3xl overflow-y-auto border-border bg-background text-foreground shadow-lg">
+      <DialogContent className="w-[calc(100%-2rem)] max-h-[92dvh] max-w-3xl overflow-y-auto border-border bg-background text-foreground shadow-lg">
         <DialogHeader className="space-y-1.5">
           <DialogTitle className="text-lg font-semibold">Parametrizar unidades de medida</DialogTitle>
           <DialogDescription className="text-sm text-muted-foreground">
@@ -398,7 +398,7 @@ export default function InventarioUnidadMedidaModal({
       </DialogContent>
 
       <Dialog open={tipoListModalOpen} onOpenChange={setTipoListModalOpen}>
-        <DialogContent className="z-[60] max-w-2xl border-border bg-background text-foreground shadow-xl">
+        <DialogContent className="z-[60] w-[calc(100%-2rem)] max-h-[90dvh] max-w-2xl overflow-y-auto border-border bg-background text-foreground shadow-xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Eye className="h-5 w-5" />
@@ -466,7 +466,7 @@ export default function InventarioUnidadMedidaModal({
       </Dialog>
 
       <Dialog open={tipoModalOpen} onOpenChange={setTipoModalOpen}>
-        <DialogContent className="z-[60] max-w-md border-border bg-background text-foreground shadow-xl">
+        <DialogContent className="z-[60] w-[calc(100%-2rem)] max-h-[90dvh] max-w-md overflow-y-auto border-border bg-background text-foreground shadow-xl">
           <DialogHeader>
             <DialogTitle>Nuevo tipo de unidad</DialogTitle>
             <DialogDescription>

@@ -7,7 +7,7 @@ import { Sheet, SheetContent } from "@/components/ui/sheet";
 import {
     LayoutDashboard, Package, Tags, Users, ScrollText, Settings,
     LogOut, Network, Wrench, Palette, SquareStack, Route, Building2,
-    ChevronDown, ShoppingCart, MapPin, Globe, Shield,
+    ChevronRight, CircleHelp, ShoppingCart, MapPin, Globe, Shield,
     Bell, FileText, BarChart2, Star, Layers, Link, Mail, Image,
     UserCheck, Database, Key, Sliders, BookOpen, Truck, CreditCard,
     MessageSquare, Calendar, Search, PieChart, HelpCircle, Boxes,
@@ -18,8 +18,23 @@ import {
 import { getAdminSidebarFallbackTree, getAdminSidebarTreeWithContext, invalidateSidebarCache, type AdminNavTreeItem } from '@/app/services/routeService';
 import { normalizeRoutePath } from '@/app/services/routePathNormalizer';
 import type { AdminSidebarProps } from '@/types/components';
+import { fetchSplashLogo, resolveSplashLogoUrl } from '@/app/services/splashLogoService';
 
 const DRAWER_WIDTH = '256px';
+
+const AYUDA_HUBS: Record<string, string> = {
+    'gobernanza': 'Configura roles, permisos, vistas y acceso a modulos del sistema. Desde aqui controlas quien puede ver y hacer que.',
+    'vistas públicas': 'Paginas accesibles sin autenticacion: landing, catalogo publico y formularios abiertos al visitante.',
+    'vistas privadas': 'Paginas que requieren sesion activa. Solo usuarios registrados y autenticados pueden acceder.',
+    'inventario': 'Gestiona stock, movimientos inmutables de kardex, ordenes de compra, bodegas y catalogo de productos.',
+    'multi nivel': 'Configura estructuras jerarquicas, redes de distribucion y arboles de referidos multinivel.',
+    'bd conexion': 'Parametros de conexion a bases de datos y configuracion tecnica del servidor.',
+    'rutas dinamicas': 'Administra y parametriza las rutas del sistema de navegacion generadas dinamicamente.',
+    'configuracion': 'Ajustes generales de la plataforma: moneda, comprobantes, parametros globales y preferencias del tenant.',
+    'seguridad': 'Control de acceso, politicas de contrasenas, sesiones activas y auditoria de accesos.',
+    'usuarios': 'Gestion de cuentas de usuario, perfiles, estados y asignacion de roles.',
+    'reportes': 'Informes y estadisticas de operaciones, ventas, inventario y actividad del sistema.',
+};
 
 interface MenuItem {
     label: string;
@@ -147,6 +162,8 @@ export default function AdminSidebar({ mobileOpen, setMobileOpen }: AdminSidebar
     const location = useLocation();
     const [dynamicTree, setDynamicTree] = useState<MenuTreeItem[]>([]);
     const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({});
+    const [ayudaHubId, setAyudaHubId] = useState<string | null>(null);
+    const [sidebarLogoUrl, setSidebarLogoUrl] = useState<string | null>(null);
 
     const mapMenuNode = (node: AdminNavTreeItem): MenuTreeItem => ({
         id: node.id,
@@ -241,6 +258,13 @@ export default function AdminSidebar({ mobileOpen, setMobileOpen }: AdminSidebar
         };
     }, []);
 
+    useEffect(() => {
+        const tieneToken = typeof window !== 'undefined' && Boolean(String(localStorage.getItem('token') || '').trim());
+        void fetchSplashLogo(tieneToken)
+            .then((res) => setSidebarLogoUrl(resolveSplashLogoUrl(res?.logo)))
+            .catch(() => setSidebarLogoUrl(null));
+    }, []);
+
     const toggleNode = (id: string): void => {
         setExpandedNodes((prev) => {
             if (prev[id]) {
@@ -261,6 +285,12 @@ export default function AdminSidebar({ mobileOpen, setMobileOpen }: AdminSidebar
         const componentName = String(node.component || '').trim();
         const hasRegisteredComponent = componentName ? registeredComponentNames.has(componentName) : false;
         const isNavigable = !!String(node.path || '').trim() && hasRegisteredComponent;
+
+        // Ayuda: solo en hubs de nivel 0 con hijos
+        const esHub = level === 0 && hasChildren;
+        const ayudaKey = node.label.trim().toLowerCase();
+        const ayudaTexto = AYUDA_HUBS[ayudaKey] ?? null;
+        const ayudaAbierta = ayudaHubId === node.id;
 
         const handleClick = (): void => {
             if (hasChildren) expandNode(node.id);
@@ -295,7 +325,6 @@ export default function AdminSidebar({ mobileOpen, setMobileOpen }: AdminSidebar
                 }}
             >
                 <div className="flex items-start gap-2.5 min-w-0 flex-1">
-                    {/* Línea de nivel para subnodos */}
                     {level > 0 && (
                         <span className="mt-1 flex-shrink-0 w-px h-4 bg-border/60 rounded-full" />
                     )}
@@ -307,17 +336,34 @@ export default function AdminSidebar({ mobileOpen, setMobileOpen }: AdminSidebar
                     </span>
                 </div>
 
-                {hasChildren && (
-                    <span
-                        className={`mt-0.5 flex-shrink-0 transition-transform duration-200 ${isExpanded ? 'rotate-180' : 'rotate-0'} ${isActive ? 'text-primary' : 'text-foreground/45'}`}
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            toggleNode(node.id);
-                        }}
-                    >
-                        <ChevronDown className="w-3.5 h-3.5" />
-                    </span>
-                )}
+                <div className="flex items-center gap-1 flex-shrink-0">
+                    {/* Botón de ayuda — solo en hubs de nivel 0 */}
+                    {esHub && ayudaTexto && (
+                        <button
+                            type="button"
+                            className={`mt-0.5 rounded p-0.5 transition-colors ${ayudaAbierta ? 'text-primary' : 'text-foreground/30 hover:text-primary'}`}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setAyudaHubId(ayudaAbierta ? null : node.id);
+                            }}
+                            aria-label={`Ayuda sobre ${node.label}`}
+                        >
+                            <CircleHelp className="w-3.5 h-3.5" />
+                        </button>
+                    )}
+
+                    {hasChildren && (
+                        <span
+                            className={`mt-0.5 transition-transform duration-200 ${isExpanded ? 'rotate-90' : 'rotate-0'} ${isActive ? 'text-primary' : 'text-foreground/45'}`}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                toggleNode(node.id);
+                            }}
+                        >
+                            <ChevronRight className="w-3.5 h-3.5" />
+                        </span>
+                    )}
+                </div>
             </div>
         );
 
@@ -333,6 +379,13 @@ export default function AdminSidebar({ mobileOpen, setMobileOpen }: AdminSidebar
                     </a>
                 ) : (
                     row
+                )}
+
+                {/* Panel de ayuda colapsable — solo hubs nivel 0 */}
+                {esHub && ayudaTexto && ayudaAbierta && (
+                    <div className="mx-2 mb-1 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-[11px] leading-relaxed text-primary/80">
+                        {ayudaTexto}
+                    </div>
                 )}
 
                 {/* Subopciones con transición suave */}
@@ -366,9 +419,17 @@ export default function AdminSidebar({ mobileOpen, setMobileOpen }: AdminSidebar
 
             {/* Header */}
             <div className="flex items-center gap-2.5 px-4 h-[57px] md:h-16 border-b border-border/50 flex-shrink-0">
-                <div className="w-7 h-7 rounded-lg bg-primary flex items-center justify-center flex-shrink-0">
-                    <LayoutDashboard className="w-3.5 h-3.5 text-primary-foreground" />
-                </div>
+                {sidebarLogoUrl ? (
+                    <img
+                        src={sidebarLogoUrl}
+                        alt="Logo"
+                        className="h-8 w-8 object-contain rounded-md flex-shrink-0"
+                    />
+                ) : (
+                    <div className="w-7 h-7 rounded-lg bg-primary flex items-center justify-center flex-shrink-0">
+                        <LayoutDashboard className="w-3.5 h-3.5 text-primary-foreground" />
+                    </div>
+                )}
                 <span className="font-semibold text-sm text-foreground tracking-tight">MABS Panel</span>
             </div>
 

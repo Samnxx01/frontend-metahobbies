@@ -426,6 +426,47 @@ const productosService = {
     await apiFetch(`/api/productos/admin/eliminar/${id}`, { method: 'DELETE' });
   },
 
+  async exportarProductosExcel(): Promise<void> {
+    const response = await apiFetch('/api/productos/admin/exportar/excel', {
+      method: 'GET',
+      responseType: 'raw',
+    }) as Response;
+    if (!response.ok) {
+      let msg = 'No se pudo exportar el catalogo.';
+      try {
+        const json = await response.json();
+        if (typeof json?.msg === 'string') msg = json.msg;
+      } catch { /* ignore */ }
+      throw new Error(msg);
+    }
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'productos.xlsx';
+    link.click();
+    URL.revokeObjectURL(url);
+  },
+
+  async importarProductosExcel(file: File): Promise<{ total: number; insertados: number; errores: { fila: number; error: string }[] }> {
+    const formData = new FormData();
+    formData.append('archivo', file);
+    const resp = await apiFetch('/api/productos/admin/importar/excel', {
+      method: 'POST',
+      body: formData,
+    });
+    return resp as { total: number; insertados: number; errores: { fila: number; error: string }[] };
+  },
+
+  async listarCodigosBarrasRegistrados(): Promise<Set<string>> {
+    const resp = await apiFetch('/api/productos/admin/codigos-barras/registrados', { method: 'GET' }) as { data: string[] };
+    return new Set(resp.data);
+  },
+
+  async eliminarCodigoBarrasAdmin(id: string): Promise<void> {
+    await apiFetch(`/api/productos/admin/${id}/codigo-barras`, { method: 'DELETE' });
+  },
+
   /** Lista productos mapeados directamente a ComponentProduct */
   async listarParaHome(categoriaId?: string): Promise<ComponentProduct[]> {
     const productos = await productosService.listarProductos({

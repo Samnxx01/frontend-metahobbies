@@ -193,7 +193,7 @@ export default function InventarioComprobanteEntradaParamModal({
         }
       }}
     >
-      <DialogContent className="max-w-xl border-border bg-background text-foreground">
+      <DialogContent className="w-[calc(100%-2rem)] max-h-[90dvh] max-w-xl overflow-y-auto border-border bg-background text-foreground">
         <DialogHeader className="pr-8">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="space-y-1.5">

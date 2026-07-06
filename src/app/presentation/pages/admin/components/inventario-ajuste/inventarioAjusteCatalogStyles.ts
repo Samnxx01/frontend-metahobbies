@@ -2,8 +2,8 @@ import { BTN_ACTION } from '@/app/utils/buttonStyles';
 
 /** Clases compartidas para modales de catálogo de ajustes (paleta primary del tema). */
 export const catalogoAjusteUi = {
-  dialogContent: 'max-w-4xl max-h-[90vh] overflow-y-auto border-primary/25',
-  dialogContentSm: 'max-w-lg border-primary/25',
+  dialogContent: 'w-[calc(100%-2rem)] max-w-4xl max-h-[90dvh] overflow-y-auto border-primary/25',
+  dialogContentSm: 'w-[calc(100%-2rem)] max-w-lg max-h-[90dvh] overflow-y-auto border-primary/25',
   description: 'text-primary',
   section: 'rounded-lg border border-primary/20 bg-primary/5 p-4 space-y-4',
   input: 'border-primary/35 focus-visible:ring-primary/40',

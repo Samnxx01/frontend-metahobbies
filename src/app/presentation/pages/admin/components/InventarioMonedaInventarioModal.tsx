@@ -56,7 +56,7 @@ export default function InventarioMonedaInventarioModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92vh] max-w-4xl overflow-y-auto border-border bg-background text-foreground">
+      <DialogContent className="w-[calc(100%-2rem)] max-h-[92dvh] max-w-4xl overflow-y-auto border-border bg-background text-foreground">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Settings className="h-5 w-5" />
@@ -162,7 +162,7 @@ export default function InventarioMonedaInventarioModal({
         </DialogFooter>
 
         <Dialog open={visualizadorOpen} onOpenChange={setVisualizadorOpen}>
-          <DialogContent className="max-w-3xl border-border bg-background text-foreground">
+          <DialogContent className="w-[calc(100%-2rem)] max-h-[90dvh] max-w-3xl overflow-y-auto border-border bg-background text-foreground">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Eye className="h-5 w-5" />

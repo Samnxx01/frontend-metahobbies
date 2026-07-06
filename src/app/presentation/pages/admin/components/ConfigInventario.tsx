@@ -588,7 +588,7 @@ export default function ConfigInventario({
           }
         }}
       >
-        <DialogContent className="max-w-lg border-border bg-background text-foreground">
+        <DialogContent className="w-[calc(100%-2rem)] max-h-[90dvh] max-w-lg overflow-y-auto border-border bg-background text-foreground">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Pencil className="h-5 w-5" />
@@ -779,7 +779,7 @@ export default function ConfigInventario({
       </Card>
 
       <Dialog open={ayudaComprasOpen} onOpenChange={setAyudaComprasOpen}>
-        <DialogContent className="max-w-lg border-border bg-background text-foreground">
+        <DialogContent className="w-[calc(100%-2rem)] max-h-[90dvh] max-w-lg overflow-y-auto border-border bg-background text-foreground">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Info className="h-5 w-5 text-primary" />
@@ -807,7 +807,7 @@ export default function ConfigInventario({
       </Dialog>
 
       <Dialog open={paramMetodoOpen} onOpenChange={(open) => !paramMetodoSaving && setParamMetodoOpen(open)}>
-        <DialogContent className="max-w-md border-border bg-background text-foreground">
+        <DialogContent className="w-[calc(100%-2rem)] max-h-[90dvh] max-w-md overflow-y-auto border-border bg-background text-foreground">
           <DialogHeader>
             <DialogTitle>Parametrizar metodo de valuacion</DialogTitle>
             <DialogDescription className="text-muted-foreground">

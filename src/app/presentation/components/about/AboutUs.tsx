@@ -1,10 +1,9 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { CheckCircle } from 'lucide-react';
 import type { AboutUsConfig, PuntoClaveItemProps } from "@/types/components";
-
-const IMAGEN_MOCKUP: string = '/assets/logo.png';
+import { obtenerAboutImageUrl, ABOUT_IMAGE_SEED } from '@/app/services/brandingWidget';
 
 const TITULO_SECUNDARIO: string = 'Desbloquea nuestra experiencia para impulsar el éxito en diversas industrias.';
 const TEXTO_DESCRIPCION: string = 'En Mabs by Gabs, creemos firmemente que el maquillaje es una extensión de tu personalidad y una herramienta poderosa para expresar tu individualidad. Desde la base perfecta hasta el labial audaz, cada producto está seleccionado para realzar tu belleza natural y potenciar tu confianza. Nuestra misión es ofrecerte no solo productos de alta calidad, sino también inspiración y alegría en cada aplicación. ¡Descubre la magia de Mabs by Gabs y atrévete a brillar con luz propia!';
@@ -18,7 +17,6 @@ const PUNTOS_CLAVE: readonly string[] = [
     'Brilla con luz propia',
 ] as const;
 
-// Componente para renderizar un punto clave individual
 const PuntoClaveItem: React.FC<PuntoClaveItemProps> = ({ punto, index }) => (
     <div key={index} className="flex items-start gap-2">
         <CheckCircle className="w-5 h-5 flex-shrink-0 text-secondary mt-0.5" />
@@ -29,8 +27,14 @@ const PuntoClaveItem: React.FC<PuntoClaveItemProps> = ({ punto, index }) => (
 );
 
 export default function AboutUs(): React.ReactElement {
+    const [imagenUrl, setImagenUrl] = useState<string>(ABOUT_IMAGE_SEED);
+
+    useEffect(() => {
+        obtenerAboutImageUrl().then(setImagenUrl).catch(() => { /* mantiene semilla */ });
+    }, []);
+
     const aboutConfig: AboutUsConfig = {
-        imagen: IMAGEN_MOCKUP,
+        imagen: imagenUrl,
         tituloSecundario: TITULO_SECUNDARIO,
         textoDescripcion: TEXTO_DESCRIPCION,
         puntosClave: PUNTOS_CLAVE as readonly string[],

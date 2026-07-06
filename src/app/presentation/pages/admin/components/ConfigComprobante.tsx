@@ -192,7 +192,7 @@ export default function ConfigComprobante(): React.ReactElement {
       />
 
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent className="sm:max-w-2xl">
+        <DialogContent className="w-[calc(100%-2rem)] max-h-[90dvh] max-w-2xl overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>Nuevo comprobante contable</DialogTitle>
           </DialogHeader>

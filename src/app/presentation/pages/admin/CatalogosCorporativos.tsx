@@ -62,7 +62,7 @@ function EditDialog({ item, onClose, onSaved }: EditDialogProps): React.ReactEle
 
     return (
         <Dialog open={!!item} onOpenChange={onClose}>
-            <DialogContent className="max-w-md">
+            <DialogContent className="w-[calc(100%-2rem)] max-h-[90dvh] max-w-md overflow-y-auto">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
                         <Pencil className="h-4 w-4 text-primary" />

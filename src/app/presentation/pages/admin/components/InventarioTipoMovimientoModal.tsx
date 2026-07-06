@@ -54,7 +54,7 @@ export default function InventarioTipoMovimientoModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl">
+      <DialogContent className="w-[calc(100%-2rem)] max-h-[90dvh] max-w-3xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Parametrizar tipos de movimiento</DialogTitle>
           <DialogDescription>

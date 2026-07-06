@@ -117,7 +117,7 @@ export function GestionRutasToolbarParametrizacion<TContext>({
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-xl">
+        <DialogContent className="w-[calc(100%-2rem)] max-h-[90dvh] max-w-xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Parametrizar toolbar</DialogTitle>
             <DialogDescription>
