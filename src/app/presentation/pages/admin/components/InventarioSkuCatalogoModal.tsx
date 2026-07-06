@@ -12,6 +12,7 @@ import {
   Trash2,
   Upload,
   Wand2,
+  Zap,
 } from 'lucide-react';
 import type { BackendProducto } from '@/app/services/productosService';
 import {
@@ -58,6 +59,8 @@ export type InventarioSkuCatalogoModalProps = {
   productos: BackendProducto[];
   codigosRegistrados?: Set<string>;
   puedeGestionarSku?: boolean;
+  /** Código pre-cargado al abrir (ej: desde pistola láser global) */
+  initialFiltro?: string;
   onOpenChange: (open: boolean) => void;
   onSelectSku: (producto: BackendProducto) => void;
   onEditSku?: (producto: BackendProducto) => void;
@@ -78,6 +81,7 @@ export default function InventarioSkuCatalogoModal({
   productos,
   codigosRegistrados,
   puedeGestionarSku = false,
+  initialFiltro,
   onOpenChange,
   onSelectSku,
   onEditSku,
@@ -92,6 +96,10 @@ export default function InventarioSkuCatalogoModal({
   onEliminarCodigoBarras,
 }: InventarioSkuCatalogoModalProps): React.ReactElement {
   const [filtro, setFiltro] = useState('');
+  const [scannerActivo, setScannerActivo] = useState(false);
+  const ultimoCambioRef = useRef<number>(0);
+  const isScanRef = useRef(false);
+  const scannerTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [barcodePreview, setBarcodePreview] = useState<BackendProducto | null>(null);
   const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set());
   const [exportando, setExportando] = useState(false);
@@ -108,13 +116,48 @@ export default function InventarioSkuCatalogoModal({
 
   useEffect(() => {
     if (open) {
-      setFiltro('');
+      setFiltro(initialFiltro ?? '');
       setBarcodePreview(null);
       setSeleccionados(new Set());
       setResultadoImport(null);
       setConfirmEliminar(null);
+      setScannerActivo(false);
+      isScanRef.current = false;
     }
-  }, [open]);
+    if (!open) {
+      if (scannerTimeoutRef.current) clearTimeout(scannerTimeoutRef.current);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, initialFiltro]);
+
+  useEffect(() => () => {
+    if (scannerTimeoutRef.current) clearTimeout(scannerTimeoutRef.current);
+  }, []);
+
+  const handleFiltroChange = (valor: string): void => {
+    const ahora = Date.now();
+    const delta = ahora - ultimoCambioRef.current;
+    ultimoCambioRef.current = ahora;
+
+    // Pistola láser: 1 carácter nuevo y llegó muy rápido
+    const esRapido = delta < 50 && valor.length === filtro.length + 1;
+
+    if (esRapido) {
+      isScanRef.current = true;
+      setScannerActivo(true);
+      if (scannerTimeoutRef.current) clearTimeout(scannerTimeoutRef.current);
+      scannerTimeoutRef.current = setTimeout(() => {
+        isScanRef.current = false;
+        setScannerActivo(false);
+      }, 500);
+    } else if (delta > 150) {
+      // Pausa larga → escritura manual
+      isScanRef.current = false;
+      setScannerActivo(false);
+      if (scannerTimeoutRef.current) clearTimeout(scannerTimeoutRef.current);
+    }
+    setFiltro(valor);
+  };
 
   const handleExportar = async (): Promise<void> => {
     if (!onExportarExcel || exportando) return;
@@ -291,14 +334,37 @@ export default function InventarioSkuCatalogoModal({
                 <Input
                   autoFocus
                   value={filtro}
-                  onChange={(event) => setFiltro(event.target.value)}
+                  onChange={(event) => handleFiltroChange(event.target.value)}
                   onKeyDown={(event) => {
-                    if (event.key !== 'Enter' || productosFiltrados.length !== 1) return;
+                    if (event.key !== 'Enter') return;
+                    const query = filtro.trim().toUpperCase();
+                    if (isScanRef.current && query) {
+                      // Pistola: match exacto por código de barras primero, luego primer resultado
+                      const exacto = productosFiltrados.find(
+                        (p) => String(p.codigoBarras || '').toUpperCase() === query,
+                      );
+                      const target = exacto ?? (productosFiltrados.length >= 1 ? productosFiltrados[0] : null);
+                      if (target) {
+                        onSelectSku(target);
+                        setFiltro('');
+                        setScannerActivo(false);
+                        isScanRef.current = false;
+                      }
+                      return;
+                    }
+                    if (productosFiltrados.length !== 1) return;
                     onSelectSku(productosFiltrados[0]);
+                    setFiltro('');
                   }}
-                  className="pl-9"
+                  className={`pl-9 ${scannerActivo ? 'pr-32' : 'pr-3'}`}
                   placeholder="Escanea codigo de barras o escribe nombre/SKU"
                 />
+                {scannerActivo && (
+                  <span className="pointer-events-none absolute right-3 top-1/2 flex -translate-y-1/2 items-center gap-1 rounded-full border border-green-500 bg-green-50 px-2 py-0.5 text-[10px] font-medium text-green-700">
+                    <Zap className="h-3 w-3 animate-pulse" />
+                    Escaneando...
+                  </span>
+                )}
               </div>
               <Badge variant="secondary" className="h-9 justify-center rounded-md px-3">
                 {productosFiltrados.length} de {productos.length}

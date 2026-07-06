@@ -61,6 +61,7 @@ import InventarioSkuCatalogoModal from './components/InventarioSkuCatalogoModal'
 import InventarioSkuModal, { type SkuForm } from './components/InventarioSkuModal';
 import InventarioTipoProductoModal, { type TipoProductoDraft } from './components/InventarioTipoProductoModal';
 import { generarCodigoBarrasDesdeSkú, getProductoId, normalizarCodigoBarrasAlfanumerico } from './inventario/inventarioBarcodeUtils';
+import { useBarcodeScanner } from '@/app/hooks/useBarcodeScanner';
 import {
   esCodigoEntradaCompra,
   filtrarTiposMovimientoKardexEntrada,
@@ -293,6 +294,7 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
   });
   const [skuModalOpen, setSkuModalOpen] = useState(false);
   const [skuCatalogoOpen, setSkuCatalogoOpen] = useState(false);
+  const [filtroEscaner, setFiltroEscaner] = useState('');
   const [codigosRegistrados, setCodigosRegistrados] = useState<Set<string>>(new Set());
   const [skuEditandoId, setSkuEditandoId] = useState<string | null>(null);
   const [skuForm, setSkuForm] = useState<SkuForm>(skuFormInicial);
@@ -1493,6 +1495,12 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
       .catch(() => {});
   };
 
+  // Cuando la pistola escanea con el modal cerrado → abre el modal con el código pre-cargado
+  useBarcodeScanner((codigo) => {
+    setFiltroEscaner(codigo);
+    if (!skuCatalogoOpen) abrirModalSkuCatalogo();
+  });
+
   const abrirModalCrearSku = (): void => {
     setSkuEditandoId(null);
     setSkuForm(skuFormInicial);
@@ -1758,6 +1766,13 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
         ]);
         setProductosSku(nuevos.filter((p) => Boolean(p.sku)));
         setCodigosRegistrados(registrados);
+      }
+      if (result.errores.length > 0) {
+        toast.warning(`${result.insertados} de ${result.total} productos importados. ${result.errores.length} fila(s) con errores.`);
+      } else if (result.insertados > 0) {
+        toast.success(`${result.insertados} producto(s) importados correctamente.`);
+      } else {
+        toast.warning('Ningún producto fue importado. Revisa el archivo.');
       }
       return result;
     } catch (error: any) {
@@ -2373,7 +2388,8 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
         productos={skuOptions}
         codigosRegistrados={codigosRegistrados}
         puedeGestionarSku={puedeGestionarSku}
-        onOpenChange={setSkuCatalogoOpen}
+        initialFiltro={filtroEscaner}
+        onOpenChange={(open) => { setSkuCatalogoOpen(open); if (!open) setFiltroEscaner(''); }}
         onSelectSku={seleccionarSkuCatalogo}
         onEditSku={puedeGestionarSku ? editarSkuCatalogo : undefined}
         onDesactivarSku={desactivarSkuCatalogo}
@@ -2389,6 +2405,7 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
           ]);
           setProductosSku(nuevos.filter((p) => Boolean(p.sku)));
           setCodigosRegistrados(registrados);
+          toast.success('Lista de SKUs actualizada.');
         }}
         onExportarExcel={exportarCatalogoExcel}
         onImportarExcel={puedeGestionarSku ? importarCatalogoExcel : undefined}
