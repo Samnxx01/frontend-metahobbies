@@ -66,6 +66,16 @@ export interface ReglaContable {
   esSistema?: boolean;
 }
 
+export interface ProductoEnCategoria {
+  _id?: string;
+  iud?: string;
+  nombre?: string;
+  categoria?: { _id?: string; iud?: string; nombre: string; nivel?: string };
+  reglasContables?: { codigo: string; aplica?: boolean }[];
+  tieneRegla: boolean;
+  productoVentaId?: { _id?: string; iud?: string; sku?: string; nombre?: string };
+}
+
 type ApiResponsePayload<T> = { ok?: boolean; data?: T; msg?: string; total?: number };
 
 export type ReglaContableApiResult<T> = { data: T; msg?: string };
@@ -273,6 +283,15 @@ const reglasContablesService = {
       method: 'DELETE',
     }) as ApiResponsePayload<{ codigo: string }>;
     return { data: resp.data as { codigo: string }, msg: resp.msg };
+  },
+
+  async listarProductosPorRegla(codigo: string, categorias: string[]): Promise<ProductoEnCategoria[]> {
+    const q = categorias.length > 0 ? `?categorias=${categorias.map(encodeURIComponent).join(',')}` : '';
+    const resp = await apiFetch(
+      `/api/inventario/config/reglas-contables/${encodeURIComponent(codigo)}/productos${q}`,
+      { method: 'GET' }
+    );
+    return (resp?.data ?? []) as ProductoEnCategoria[];
   },
 };
 

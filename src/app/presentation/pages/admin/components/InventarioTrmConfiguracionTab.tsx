@@ -16,6 +16,7 @@ import {
 } from '@/app/presentation/pages/admin/inventario/monedaInventarioDraft';
 import InventarioMonedaInventarioModal from './InventarioMonedaInventarioModal';
 import ReglasContablesParametrizacion from '../ParametrizacionContable/ReglasContablesParametrizacion';
+import MetodosPagoParametrizacion from '../ParametrizacionPagos/MetodosPagoParametrizacion';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -458,6 +459,8 @@ export default function InventarioTrmConfiguracionTab({
     </div>
 
     <ReglasContablesParametrizacion saving={saving} />
+
+    <MetodosPagoParametrizacion saving={saving} />
     </div>
   );
 }

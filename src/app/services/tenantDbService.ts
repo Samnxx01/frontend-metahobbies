@@ -186,6 +186,11 @@ export type CronSyncHijosSettingsPayload = Partial<
 >;
 
 // ─── Servicio ─────────────────────────────────────────────────────────────────
+// Los ids que circulan por este servicio son el `iud` público (UUID camuflado,
+// ver helpers/id/publicId.js en el backend) o, en llamadas legacy, el ObjectId
+// crudo. El backend resuelve ambos formatos automáticamente: body/query vía
+// publicIdRequestMiddleware (global) y params de ruta vía registerPublicIdParams
+// (registrado en tenantDbRoutes.js). No hay que tocar el valor aquí.
 
 export const tenantDbService = {
   /** Lista todas las configs activas de BD (sin mongoUri) */

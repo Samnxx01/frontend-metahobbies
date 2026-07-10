@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 // Lucide icons
-import { Menu, ShoppingCart, User, X, ShieldCheck, LogOut, LogIn, ChevronRight, Crown } from "lucide-react";
+import { Menu, ShoppingCart, User, X, ShieldCheck, LogOut, LogIn, ChevronRight, Crown, Home, LayoutDashboard, Settings, Landmark, Circle } from "lucide-react";
 // Theme Toggle
 import ThemeToggle from "@/app/presentation/components/common/ThemeToggle";
 import MiniCartContent from "@/app/presentation/components/carrito/MiniCartContent";
@@ -305,11 +305,16 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
         SHIELD_CHECK: ShieldCheck,
         CROWN: Crown,
         LOG_OUT: LogOut,
+        HOME: Home,
+        LAYOUT_DASHBOARD: LayoutDashboard,
+        SETTINGS: Settings,
+        LANDMARK: Landmark,
+        CIRCLE: Circle,
     };
 
     const resolveIconComponent = (icon: string | null): React.ElementType => {
         const key = String(icon || '').toUpperCase();
-        return ICON_MAP[key] || ChevronRight;
+        return ICON_MAP[key] || Circle;
     };
 
     const resolveIcon = (icon: string | null): React.ReactNode => {

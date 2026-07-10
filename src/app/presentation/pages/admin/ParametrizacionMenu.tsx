@@ -188,6 +188,7 @@ export default function ParametrizacionMenu() {
   const [routeCatalog, setRouteCatalog] = useState<RouteCatalogItem[]>([]);
   const [menuTags, setMenuTags] = useState<RouteMenuTag[]>([]);
   const [savingAcciones, setSavingAcciones] = useState<Record<string, boolean>>({});
+  const [sincronizandoContadores, setSincronizandoContadores] = useState(false);
   const [tagForm, setTagForm] = useState<MenuTagFormState>(EMPTY_TAG_FORM);
 
   const [tenantsGlobales, setTenantsGlobales] = useState<TenantGlobalInfo[]>([]);
@@ -362,6 +363,28 @@ export default function ParametrizacionMenu() {
       window.dispatchEvent(new CustomEvent('user-menu-tags-updated'));
     } catch (error) {
       console.error('Error al refrescar tags:', error);
+    }
+  };
+
+  const handleSincronizarCounterTags = async () => {
+    setSincronizandoContadores(true);
+    try {
+      const response = await apiFetch(
+        `${import.meta.env.VITE_API_BASE_URL ?? '/api'}/seguridad/rutas/menu-tags/sincronizar-contadores`,
+        { method: 'POST' }
+      );
+      const creados = Number((response as any)?.creados ?? 0);
+      const eliminados = Number((response as any)?.eliminados ?? 0);
+      toast.success(
+        response?.message
+          || `Sincronizacion completada: ${creados} contador(es) creado(s), ${eliminados} huerfano(s) eliminado(s).`
+      );
+      await refreshMenuTags();
+    } catch (error: any) {
+      console.error('Error al sincronizar counterTags:', error);
+      toast.error(error?.message || 'No se pudo sincronizar los counterTags.');
+    } finally {
+      setSincronizandoContadores(false);
     }
   };
 
@@ -1031,11 +1054,28 @@ export default function ParametrizacionMenu() {
           </Card>
 
           <Card>
-            <CardHeader>
-              <CardTitle>Tags configurados</CardTitle>
-              <CardDescription>
-                Se listan en el orden que tendra el dropdown del avatar.
-              </CardDescription>
+            <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
+              <div>
+                <CardTitle>Tags configurados</CardTitle>
+                <CardDescription>
+                  Se listan en el orden que tendra el dropdown del avatar.
+                </CardDescription>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={sincronizandoContadores}
+                onClick={handleSincronizarCounterTags}
+                title="Crea el contador (counterTags) faltante para cada tag y elimina los contadores huerfanos."
+              >
+                {sincronizandoContadores ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                )}
+                Sincronizar contadores
+              </Button>
             </CardHeader>
             <CardContent className="space-y-3">
               {menuTags.length === 0 && (

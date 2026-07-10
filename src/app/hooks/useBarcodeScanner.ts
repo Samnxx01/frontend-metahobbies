@@ -7,7 +7,17 @@ const RESET_MS = 300;
 /**
  * Detecta la entrada de una pistola láser de código de barras (HID keyboard emulator).
  * La pistola envía todos los caracteres muy rápido (< 50ms entre cada uno) y termina con Enter.
- * Solo actúa cuando el foco está FUERA de un input/textarea (evita capturar escritura manual).
+ * Los campos de texto (input/textarea/select) manejan su propio tecleo y se ignoran aquí.
+ *
+ * Para cualquier otro elemento (botones, enlaces, body, etc.) SÍ se sigue el ritmo de las
+ * teclas: si al llegar el Enter el patrón coincide con una lectura de pistola (>= MIN_CHARS
+ * caracteres, todos con < SCAN_INTERVAL_MS de separación), se bloquea el comportamiento nativo
+ * del navegador (preventDefault/stopPropagation) para que ese Enter NO active el botón/enlace
+ * que tenga el foco (p. ej. "Exportar" descargando un archivo) y en su lugar se dispara onScan.
+ * Si el Enter no coincide con ese patrón (un humano navegando con Tab+Enter), se deja pasar
+ * normal para no romper la accesibilidad por teclado.
+ *
+ * Se escucha en fase de captura para adelantarse a cualquier handler nativo o de React.
  *
  * Uso: pasar activo=false cuando ya hay un input con foco que captura el scanner directamente.
  */
@@ -40,7 +50,13 @@ export function useBarcodeScanner(
           codigo.length >= MIN_CHARS
           && times.length >= 2
           && (times[times.length - 1] - times[0]) / times.length < SCAN_INTERVAL_MS;
-        if (esEscaneo) onScan(codigo);
+        if (esEscaneo) {
+          // Evita que el Enter de la pistola active el botón/enlace enfocado
+          // (ej. "Exportar"), que de otro modo dispararía su acción nativa (descarga).
+          e.preventDefault();
+          e.stopPropagation();
+          onScan(codigo);
+        }
         resetBuffer();
         if (timeoutRef.current) clearTimeout(timeoutRef.current);
         return;
@@ -55,9 +71,9 @@ export function useBarcodeScanner(
       timeoutRef.current = setTimeout(resetBuffer, RESET_MS);
     };
 
-    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keydown', onKeyDown, true);
     return () => {
-      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keydown', onKeyDown, true);
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
   }, [activo, onScan, resetBuffer]);

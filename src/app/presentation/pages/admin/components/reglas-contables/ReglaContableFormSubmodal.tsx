@@ -28,13 +28,14 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import InventarioCodigoPresetField from '../inventario-ajuste/InventarioCodigoPresetField';
+import ReglaProductosMatriz from './ReglaProductosMatriz';
 import AmbitoReglaContableModal from './AmbitoReglaContableModal';
 import AmbitoReglaContableSelect from './AmbitoReglaContableSelect';
 import TipoReglaContableModal from './TipoReglaContableModal';
 import TipoReglaContableSelect from './TipoReglaContableSelect';
 import TarifaReglaContableModal from './TarifaReglaContableModal';
 import TarifaReglaContableSelect from './TarifaReglaContableSelect';
-import { BASES_CALCULO_REGLA, PRESETS_REGLA_CONTABLE } from './reglasContablesConstants';
+import { BASES_CALCULO_REGLA } from './reglasContablesConstants';
 import { reglasContablesUi } from './reglasContablesUi';
 
 type ReglaContableFormSubmodalProps = {
@@ -63,6 +64,7 @@ type DraftRegla = {
   aplicaEn: AplicaEnRegla;
   aplicaEnCarrito: boolean;
   categoriasAplicacion: string[];
+  productosAplicacion: string[];
   orden: string;
   codigoDian: string;
   estado: boolean;
@@ -80,6 +82,7 @@ const draftInicial: DraftRegla = {
   aplicaEn: 'VENTA',
   aplicaEnCarrito: false,
   categoriasAplicacion: [],
+  productosAplicacion: [],
   orden: '0',
   codigoDian: '',
   estado: true,
@@ -97,6 +100,7 @@ const draftDesdeRegistro = (registro: ReglaContable): DraftRegla => ({
   aplicaEn: registro.aplicaEn,
   aplicaEnCarrito: registro.aplicaEnCarrito === true,
   categoriasAplicacion: (registro.categoriasAplicacion || []).map((categoria) => String(categoria)),
+  productosAplicacion: [],
   orden: String(registro.orden ?? 0),
   codigoDian: registro.codigoDian ?? '',
   estado: registro.estado !== false,
@@ -136,6 +140,7 @@ export default function ReglaContableFormSubmodal({
   const [ambitosKeyLocal, setAmbitosKeyLocal] = useState(0);
   const [tarifasKeyLocal, setTarifasKeyLocal] = useState(0);
   const [categorias, setCategorias] = useState<BackendCategoria[]>([]);
+  const [presetsDinamicos, setPresetsDinamicos] = useState<ReglaContable[]>([]);
 
   useEffect(() => {
     if (!open) return;
@@ -151,6 +156,13 @@ export default function ReglaContableFormSubmodal({
         setCategorias([]);
       });
   }, [open]);
+
+  useEffect(() => {
+    if (!open || esEdicion) return;
+    reglasContablesService.listarAdmin()
+      .then((data) => setPresetsDinamicos(data))
+      .catch(() => setPresetsDinamicos([]));
+  }, [open, esEdicion]);
 
   const guardar = async (): Promise<void> => {
     if (!draft.codigo.trim() || !draft.nombre.trim()) {
@@ -169,6 +181,7 @@ export default function ReglaContableFormSubmodal({
         aplicaEn: draft.aplicaEn,
         aplicaEnCarrito: draft.aplicaEnCarrito,
         categoriasAplicacion: draft.aplicaEnCarrito ? draft.categoriasAplicacion : [],
+        productosEspecificos: draft.aplicaEnCarrito ? draft.productosAplicacion : [],
         orden: Number(draft.orden) || 0,
         codigoDian: draft.codigoDian.trim(),
         estado: draft.estado,
@@ -206,7 +219,7 @@ export default function ReglaContableFormSubmodal({
       const actual = new Set(prev.categoriasAplicacion);
       if (checked) actual.add(categoriaId);
       else actual.delete(categoriaId);
-      return { ...prev, categoriasAplicacion: Array.from(actual) };
+      return { ...prev, categoriasAplicacion: Array.from(actual), productosAplicacion: [] };
     });
   };
 
@@ -225,10 +238,10 @@ export default function ReglaContableFormSubmodal({
 
         <div className={reglasContablesUi.section}>
           {!esEdicion ? (
-            <InventarioCodigoPresetField
+            <InventarioCodigoPresetField<ReglaContable>
               value={draft.codigo}
               onChange={(codigo) => setDraft((prev) => ({ ...prev, codigo }))}
-              presets={PRESETS_REGLA_CONTABLE}
+              presets={presetsDinamicos}
               disabled={submitting || saving}
               label="Código"
               onPresetPick={(preset) =>
@@ -237,10 +250,13 @@ export default function ReglaContableFormSubmodal({
                   codigo: preset.codigo,
                   nombre: preset.nombre,
                   tipo: preset.tipo,
-                  tarifa: String(preset.tarifa),
+                  tarifa: String(preset.tarifa ?? 0),
+                  montoFijo: String(preset.montoFijo ?? 0),
                   baseCalculo: preset.baseCalculo,
                   aplicaEn: preset.aplicaEn,
-                  aplicaEnCarrito: preset.tipo === 'IVA' && preset.aplicaEn === 'VENTA',
+                  codigoDian: preset.codigoDian ?? '',
+                  orden: String(preset.orden ?? 0),
+                  aplicaEnCarrito: preset.aplicaEnCarrito === true,
                   categoriasAplicacion: [],
                 }))
               }
@@ -421,6 +437,15 @@ export default function ReglaContableFormSubmodal({
                     );
                   })}
                 </div>
+              )}
+              {draft.categoriasAplicacion.length > 0 && (
+                <ReglaProductosMatriz
+                  codigo={draft.codigo || (registro?.codigo ?? '')}
+                  categorias={draft.categoriasAplicacion}
+                  selectedIds={draft.productosAplicacion}
+                  onChange={(ids) => setDraft((prev) => ({ ...prev, productosAplicacion: ids }))}
+                  disabled={submitting || saving}
+                />
               )}
             </div>
           ) : null}

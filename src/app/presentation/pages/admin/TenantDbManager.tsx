@@ -1,5 +1,6 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { toast } from 'react-toastify';
+import { swalFire as Swal } from '@/lib/sweetalert';
 import {
   Database,
   Plus,
@@ -56,6 +57,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Separator } from '@/components/ui/separator';
+import { BTN_ROW_EDIT, BTN_ROW_PROBE, BTN_ROW_DELETE } from '@/app/utils/buttonStyles';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -174,8 +176,8 @@ function ContenedorSelect({
         }}
       >
         <option value="">Selecciona un contenedor u opción manual...</option>
-        {contenedores.map(c => (
-          <option key={c.iud} value={c.iud}>
+        {contenedores.map((c, idx) => (
+          <option key={c.iud || `contenedor-${idx}`} value={c.iud}>
             {getContenedorTreeLabel(c)}
           </option>
         ))}
@@ -245,6 +247,8 @@ export default function TenantDbManager() {
   // ── Tenant seleccionado para sync ──
   const [tenantSeleccionado, setTenantSeleccionado] = useState<TenantDbConfig | null>(null);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  // Filtro por nombre de colección en la tabla de sync (una entrada por config, key = cfg.iud)
+  const [syncFiltroPorConfig, setSyncFiltroPorConfig] = useState<Record<string, string>>({});
 
   // ── Dialog sync ──
   const [dlgSync, setDlgSync] = useState(false);
@@ -282,6 +286,30 @@ export default function TenantDbManager() {
   // ── Pool ──
   const [pool, setPool] = useState<{ pool: Record<string, { readyState: number; nombre: string }>; watchersActivos: string[] } | null>(null);
   const [poolLoading, setPoolLoading] = useState(false);
+
+  // KPIs de la migración: agregados sobre todas las conexiones/colecciones, no solo el pool en memoria.
+  const metricasMigracion = useMemo(() => {
+    const coleccionesTodas = configs.flatMap(cfg => cfg.coleccionesSync ?? []);
+    const coleccionesActivas = coleccionesTodas.filter(c => c.estado);
+    const enVivo = coleccionesActivas.filter(c => c.autoSync).length;
+    const ultimoSyncMs = coleccionesActivas.reduce((max, c) => {
+      if (!c.ultimoSyncAt) return max;
+      const t = new Date(c.ultimoSyncAt).getTime();
+      return Number.isFinite(t) && t > max ? t : max;
+    }, 0);
+
+    return {
+      totalConexiones: configs.length,
+      conexionesActivas: configs.filter(c => c.estado).length,
+      coleccionesSincronizadas: coleccionesActivas.length,
+      enVivo,
+      manual: coleccionesActivas.length - enVivo,
+      migracionesFallidas: configs.filter(c => c.migrationStatus === 'fallida').length,
+      migracionesPendientes: configs.filter(c => c.migrationStatus === 'pendiente' || c.migrationStatus === 'en_proceso').length,
+      watchersActivos: pool?.watchersActivos.length ?? 0,
+      ultimoSyncAt: ultimoSyncMs ? new Date(ultimoSyncMs) : null,
+    };
+  }, [configs, pool]);
 
   // ── Scope: solo tenantSuperAdmin puede operar este módulo ──
   const [esSuperAdmin, setEsSuperAdmin] = useState(false);
@@ -393,49 +421,52 @@ export default function TenantDbManager() {
         }
       }
 
-      const preview = await tenantDbService.obtenerTenantConContenedores(tenantGlobalId);
-      const contenedoresPreview = Array.isArray(preview?.data?.contenedores)
-        ? preview.data.contenedores
-        : [];
+      // Sin tenantGlobal (empresa aun no vinculada) no hay id valido para previsualizar/listar por tenant.
+      if (tenantGlobalId) {
+        const preview = await tenantDbService.obtenerTenantConContenedores(tenantGlobalId);
+        const contenedoresPreview = Array.isArray(preview?.data?.contenedores)
+          ? preview.data.contenedores
+          : [];
 
-      if (DEBUG_CONTENEDORES) {
-        console.log(`${debugPrefix} preview tenant`, {
-          tenantGlobalId,
-          total: contenedoresPreview.length,
-          contenedores: contenedoresPreview,
-        });
-      }
-
-      if (contenedoresPreview.length > 0) {
-        setContenedoresPorTenant((prev) => new Map(prev).set(tenantGlobalId, contenedoresPreview));
         if (DEBUG_CONTENEDORES) {
-          toast.info(`Debug contenedores: preview tenant devolvio ${contenedoresPreview.length}`);
+          console.log(`${debugPrefix} preview tenant`, {
+            tenantGlobalId,
+            total: contenedoresPreview.length,
+            contenedores: contenedoresPreview,
+          });
         }
-        return;
-      }
 
-      const listado = await tenantDbService.listarContenedores(tenantGlobalId, true);
-      const contenedoresListado = Array.isArray(listado?.data) ? listado.data : [];
-      if (DEBUG_CONTENEDORES) {
-        console.log(`${debugPrefix} listado tenant`, {
-          tenantGlobalId,
-          total: contenedoresListado.length,
-          contenedores: contenedoresListado,
-        });
-      }
-      if (contenedoresListado.length > 0) {
-        setContenedoresPorTenant((prev) => {
-          const next = new Map(prev);
-          next.set(tenantGlobalId, contenedoresListado);
-          if (corporativoId) {
-            next.set(buildCorporativoMapKey(corporativoId), contenedoresListado);
+        if (contenedoresPreview.length > 0) {
+          setContenedoresPorTenant((prev) => new Map(prev).set(tenantGlobalId, contenedoresPreview));
+          if (DEBUG_CONTENEDORES) {
+            toast.info(`Debug contenedores: preview tenant devolvio ${contenedoresPreview.length}`);
           }
-          return next;
-        });
-        if (DEBUG_CONTENEDORES) {
-          toast.info(`Debug contenedores: listado tenant devolvio ${contenedoresListado.length}`);
+          return;
         }
-        return;
+
+        const listado = await tenantDbService.listarContenedores(tenantGlobalId, true);
+        const contenedoresListado = Array.isArray(listado?.data) ? listado.data : [];
+        if (DEBUG_CONTENEDORES) {
+          console.log(`${debugPrefix} listado tenant`, {
+            tenantGlobalId,
+            total: contenedoresListado.length,
+            contenedores: contenedoresListado,
+          });
+        }
+        if (contenedoresListado.length > 0) {
+          setContenedoresPorTenant((prev) => {
+            const next = new Map(prev);
+            next.set(tenantGlobalId, contenedoresListado);
+            if (corporativoId) {
+              next.set(buildCorporativoMapKey(corporativoId), contenedoresListado);
+            }
+            return next;
+          });
+          if (DEBUG_CONTENEDORES) {
+            toast.info(`Debug contenedores: listado tenant devolvio ${contenedoresListado.length}`);
+          }
+          return;
+        }
       }
 
       if (corporativoId) {
@@ -697,26 +728,35 @@ export default function TenantDbManager() {
     setDlgParametrizacion(true);
   };
 
-  const contenedoresActualesTenant = tenantParaParametrizar
-    ? (
-      contenedoresVisibles.length > 0
-        ? contenedoresVisibles
-        : (
-          contenedoresPorTenant.get(tenantParaParametrizar.iud)
-          ?? contenedoresPorTenant.get(buildCorporativoMapKey(tenantParaParametrizar.corporativo?.iud))
-          ?? []
-        )
-    )
-    : [];
+  // useMemo: evita que estos arrays cambien de referencia en cada render — si no,
+  // el useEffect de abajo (que los lista como dependencia) se dispara en bucle infinito
+  // cada vez que cargarContenedoresVisibles/cargarContenedoresTenant actualizan el estado.
+  const contenedoresActualesTenant = useMemo(() => (
+    tenantParaParametrizar
+      ? (
+        contenedoresVisibles.length > 0
+          ? contenedoresVisibles
+          : (
+            contenedoresPorTenant.get(tenantParaParametrizar.iud)
+            ?? contenedoresPorTenant.get(buildCorporativoMapKey(tenantParaParametrizar.corporativo?.iud))
+            ?? []
+          )
+      )
+      : []
+  ), [tenantParaParametrizar, contenedoresVisibles, contenedoresPorTenant]);
 
-  const nombresExistentesTenant = Array.from(
+  const nombresExistentesTenant = useMemo(() => Array.from(
     new Set(
       contenedoresActualesTenant
         .map((c) => String(c.nombre || '').trim())
         .filter(Boolean)
     )
-  );
+  ), [contenedoresActualesTenant]);
 
+  // Dispara el fetch SOLO cuando se abre el modal o cambia el tenant seleccionado.
+  // No depende de los datos que el propio fetch produce (contenedoresVisibles/contenedoresPorTenant
+  // cambian de referencia en cada respuesta, aunque el contenido sea el mismo) — si esos datos
+  // estuvieran en las dependencias, cada respuesta dispararía el efecto de nuevo (bucle infinito).
   useEffect(() => {
     if (!dlgParametrizacion || !tenantParaParametrizar) return;
 
@@ -728,6 +768,11 @@ export default function TenantDbManager() {
 
       await cargarContenedoresTenant(tenantParaParametrizar.iud, tenantParaParametrizar.corporativo?.iud);
     })();
+  }, [dlgParametrizacion, tenantParaParametrizar, cargarContenedoresVisibles, cargarContenedoresTenant]);
+
+  // Reacciona a los datos ya cargados (autoseleccionar nombre de contenedor) sin volver a pedirlos.
+  useEffect(() => {
+    if (!dlgParametrizacion || !tenantParaParametrizar) return;
 
     if (DEBUG_CONTENEDORES) {
       console.log('[TenantDbManager][contenedores] estado modal', {
@@ -754,8 +799,6 @@ export default function TenantDbManager() {
     nombresExistentesTenant,
     nombreContenedorSeleccionado,
     formContenedor.nombre,
-    cargarContenedoresTenant,
-    cargarContenedoresVisibles,
     contenedoresActualesTenant,
   ]);
 
@@ -867,6 +910,14 @@ export default function TenantDbManager() {
     ? configs.filter((cfg) => resolverConfigId(cfg) !== resolverConfigId(tenantSeleccionado) && cfg.estado)
     : [];
 
+  // Colecciones que YA están guardadas en el sync de este tenant (para diferenciar "lo existente" de "lo nuevo").
+  const coleccionesYaSincronizadas = new Set(
+    (tenantSeleccionado?.coleccionesSync ?? [])
+      .filter((c) => c.estado)
+      .map((c) => c.coleccion)
+  );
+  const coleccionesNuevasDetectadas = syncCollections.filter((c) => !coleccionesYaSincronizadas.has(c));
+
   useEffect(() => {
     if (!form.contenedorId) {
       if (form.parentTenantDbConfigId) {
@@ -920,7 +971,15 @@ export default function TenantDbManager() {
   }, [form.corporativoId, form.contenedorId, tenantsDisponibles, contenedoresPorTenant]);
 
   const handleDesactivar = async (configId: string) => {
-    if (!window.confirm('¿Desactivar esta conexión? Se cerrará el pool del corporativo.')) return;
+    const confirmacion = await Swal({
+      title: '¿Desactivar esta conexión?',
+      text: 'Se cerrará el pool del corporativo. Podrás reactivarla creando la conexión de nuevo.',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Sí, desactivar',
+      cancelButtonText: 'Cancelar',
+    });
+    if (!confirmacion.isConfirmed) return;
     try {
       await tenantDbService.desactivar(configId);
       toast.success('Conexión desactivada');
@@ -1133,6 +1192,7 @@ export default function TenantDbManager() {
 
     const targetConfigId = resolverConfigId(tenantSeleccionado);
     let coleccionesObjetivo = [...syncForm.colecciones];
+    let omitidasPorExistentes = 0;
 
     setSyncSaving(true);
     try {
@@ -1143,14 +1203,22 @@ export default function TenantDbManager() {
           disponibles = Array.isArray(res.data) ? res.data : [];
           setSyncCollections(disponibles);
         }
-        coleccionesObjetivo = disponibles;
+        // Full = "traer lo nuevo del padre": valida contra lo ya guardado y NO reprocesa
+        // lo existente (evita reiniciar watchers y resetear el preview de 200+ colecciones).
+        const yaSincronizadas = new Set(
+          (tenantSeleccionado.coleccionesSync ?? []).filter((c) => c.estado).map((c) => c.coleccion)
+        );
+        coleccionesObjetivo = disponibles.filter((c) => !yaSincronizadas.has(c));
+        omitidasPorExistentes = disponibles.length - coleccionesObjetivo.length;
       }
 
       coleccionesObjetivo = Array.from(new Set(coleccionesObjetivo.filter(Boolean)));
       if (!coleccionesObjetivo.length) {
         toast.warning(
           syncForm.modo === 'full'
-            ? 'No se encontraron colecciones en la BD padre'
+            ? (omitidasPorExistentes > 0
+              ? `No hay colecciones nuevas en la BD padre; ya tienes las ${omitidasPorExistentes} sincronizadas.`
+              : 'No se encontraron colecciones en la BD padre')
             : 'Selecciona una o varias colecciones'
         );
         return;
@@ -1168,7 +1236,7 @@ export default function TenantDbManager() {
 
       toast.success(
         syncForm.modo === 'full'
-          ? `Se configuraron ${coleccionesObjetivo.length} colecciones del padre`
+          ? `Se agregaron ${coleccionesObjetivo.length} colecciones nuevas del padre${omitidasPorExistentes > 0 ? ` (${omitidasPorExistentes} ya estaban sincronizadas)` : ''}`
           : `Se guardaron ${coleccionesObjetivo.length} sincronizaciones selectivas`
       );
       setDlgSync(false);
@@ -1388,7 +1456,7 @@ export default function TenantDbManager() {
                       const id = resolverConfigId(cfg);
                       const isCheckingConnectivity = connectivityLoadingId === id;
                       return (
-                        <TableRow key={cfg.iud}>
+                        <TableRow key={cfg.iud || cfg.dbName || resolverConfigId(cfg)}>
                           <TableCell className="font-medium text-sm max-w-[160px] truncate" title={cfg.poolName}>
                             {cfg.poolName || <span className="opacity-40 font-mono text-xs">{id.slice(0, 12)}…</span>}
                           </TableCell>
@@ -1438,8 +1506,10 @@ export default function TenantDbManager() {
                           </TableCell>
                           <TableCell className="text-right space-x-2">
                             <Button
+                              id={`tenant-db-editar-${id}`}
                               variant="outline"
                               size="icon"
+                              className={BTN_ROW_EDIT}
                               title="Editar conexión"
                               onClick={() => void abrirDlgEditarConexion(cfg)}
                               disabled={!esSuperAdmin}
@@ -1447,8 +1517,10 @@ export default function TenantDbManager() {
                               <Pencil className="w-4 h-4" />
                             </Button>
                             <Button
+                              id={`tenant-db-probar-${id}`}
                               variant="outline"
                               size="icon"
+                              className={BTN_ROW_PROBE}
                               title="Probar conectividad de la BD"
                               onClick={() => void handleProbarConectividad(cfg)}
                               disabled={isCheckingConnectivity}
@@ -1459,12 +1531,14 @@ export default function TenantDbManager() {
                               }
                             </Button>
                             <Button
+                              id={`tenant-db-eliminar-${id}`}
                               variant="outline"
                               size="icon"
+                              className={BTN_ROW_DELETE}
                               title="Desactivar conexión"
                               onClick={() => handleDesactivar(id)}
                             >
-                              <Trash2 className="w-4 h-4 text-destructive" />
+                              <Trash2 className="w-4 h-4" />
                             </Button>
                           </TableCell>
                         </TableRow>
@@ -1487,14 +1561,18 @@ export default function TenantDbManager() {
               </CardContent>
             </Card>
           ) : (
-            configs.map(cfg => {
+            configs.map((cfg, cfgIdx) => {
               const id = resolverConfigId(cfg);
               const expanded = expandedRows.has(cfg.iud);
               const colsActivas = cfg.coleccionesSync?.filter(c => c.estado) ?? [];
               const isCheckingConnectivity = connectivityLoadingId === id;
+              const syncFiltroTexto = syncFiltroPorConfig[cfg.iud] ?? '';
+              const colsFiltradas = syncFiltroTexto.trim()
+                ? colsActivas.filter(c => c.coleccion.toLowerCase().includes(syncFiltroTexto.trim().toLowerCase()))
+                : colsActivas;
 
               return (
-                <Card key={cfg.iud}>
+                <Card key={cfg.iud || cfg.dbName || `cfg-${cfgIdx}`}>
                   <CardHeader
                     className="cursor-pointer select-none"
                     onClick={() => toggleExpand(cfg.iud)}
@@ -1510,20 +1588,14 @@ export default function TenantDbManager() {
                       </div>
                       <div className="hidden flex-1 px-4 lg:block">
                         {colsActivas.length > 0 ? (
-                          <div className="space-y-1">
-                            <p className="text-xs font-medium text-muted-foreground">Sincronizaciones de datos</p>
-                            <div className="flex flex-wrap gap-2">
-                              {colsActivas.slice(0, 4).map((col) => (
-                                <Badge key={`${cfg.iud}:${col.coleccion}`} variant="secondary" className="text-[11px]">
-                                  {col.coleccion}
-                                </Badge>
-                              ))}
-                              {colsActivas.length > 4 && (
-                                <Badge variant="outline" className="text-[11px]">
-                                  +{colsActivas.length - 4} mas
-                                </Badge>
-                              )}
-                            </div>
+                          <div className="space-y-1" onClick={e => e.stopPropagation()}>
+                            <p className="text-xs font-medium text-muted-foreground">Filtrar por nombre de colección</p>
+                            <Input
+                              value={syncFiltroTexto}
+                              onChange={e => setSyncFiltroPorConfig(prev => ({ ...prev, [cfg.iud]: e.target.value }))}
+                              placeholder="Ej: acciones, inventario..."
+                              className="h-8 text-xs max-w-xs"
+                            />
                           </div>
                         ) : (
                           <p className="text-xs text-muted-foreground">Sin sincronizaciones de datos guardadas.</p>
@@ -1550,6 +1622,10 @@ export default function TenantDbManager() {
                           <p className="text-sm text-muted-foreground py-4 text-center">
                             No hay sincronizaciones guardadas para esta conexión. Usa el botón de arriba para traer las colecciones reales del padre.
                           </p>
+                      ) : colsFiltradas.length === 0 ? (
+                          <p className="text-sm text-muted-foreground py-4 text-center">
+                            Ninguna colección coincide con &quot;{syncFiltroTexto}&quot;.
+                          </p>
                       ) : (
                         <Table>
                           <TableHeader>
@@ -1562,7 +1638,7 @@ export default function TenantDbManager() {
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {colsActivas.map(col => {
+                            {colsFiltradas.map(col => {
                               const syncKey = `${id}:${col.coleccion}`;
                               const isSyncing = syncManualLoading === syncKey;
                               return (
@@ -1639,6 +1715,58 @@ export default function TenantDbManager() {
             </Button>
           </div>
 
+          {/* KPIs de la migración */}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+            <Card>
+              <CardContent className="p-3">
+                <p className="text-xs text-muted-foreground">Conexiones activas</p>
+                <p className="text-xl font-semibold">{metricasMigracion.conexionesActivas}<span className="text-sm text-muted-foreground">/{metricasMigracion.totalConexiones}</span></p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-3">
+                <p className="text-xs text-muted-foreground">Colecciones sincronizadas</p>
+                <p className="text-xl font-semibold">{metricasMigracion.coleccionesSincronizadas}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-3">
+                <p className="text-xs text-muted-foreground flex items-center gap-1"><CircleDot className="w-3 h-3 text-green-500" /> En vivo</p>
+                <p className="text-xl font-semibold">{metricasMigracion.enVivo}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-3">
+                <p className="text-xs text-muted-foreground flex items-center gap-1"><Clock className="w-3 h-3" /> Manual</p>
+                <p className="text-xl font-semibold">{metricasMigracion.manual}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-3">
+                <p className="text-xs text-muted-foreground flex items-center gap-1"><Radio className="w-3 h-3" /> Watchers activos</p>
+                <p className="text-xl font-semibold">{metricasMigracion.watchersActivos}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-3">
+                <p className="text-xs text-muted-foreground flex items-center gap-1">
+                  {metricasMigracion.migracionesFallidas > 0
+                    ? <XCircle className="w-3 h-3 text-destructive" />
+                    : <CheckCircle2 className="w-3 h-3 text-green-500" />}
+                  Migraciones fallidas
+                </p>
+                <p className={`text-xl font-semibold ${metricasMigracion.migracionesFallidas > 0 ? 'text-destructive' : ''}`}>
+                  {metricasMigracion.migracionesFallidas}
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+          {metricasMigracion.ultimoSyncAt && (
+            <p className="text-xs text-muted-foreground">
+              Última sincronización registrada: {metricasMigracion.ultimoSyncAt.toLocaleString('es-CO')}
+            </p>
+          )}
+
           {poolLoading ? (
             <div className="flex justify-center py-10">
               <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
@@ -1665,17 +1793,32 @@ export default function TenantDbManager() {
                     <p className="text-sm text-muted-foreground">Sin conexiones en pool.</p>
                   ) : (
                     <ul className="space-y-3">
-                      {Object.entries(pool.pool).map(([tenantId, conn]) => (
-                        <li key={tenantId} className="flex items-center justify-between">
-                          <div>
-                            <p className="font-mono text-xs">{tenantId.slice(0, 20)}…</p>
-                            <p className="text-xs text-muted-foreground">{conn.nombre}</p>
-                          </div>
-                          <span className={`text-xs font-medium ${READY_STATE_COLOR[conn.readyState] ?? 'text-muted-foreground'}`}>
-                            {READY_STATE_LABEL[conn.readyState] ?? 'Desconocido'}
-                          </span>
-                        </li>
-                      ))}
+                      {Object.entries(pool.pool).map(([tenantId, conn]) => {
+                        const cfgDeEstaConexion = configs.find(c => resolverConfigId(c) === tenantId);
+                        return (
+                          <li key={tenantId} className="flex items-center justify-between gap-2">
+                            <div>
+                              <p className="font-mono text-xs">{tenantId.slice(0, 20)}…</p>
+                              <p className="text-xs text-muted-foreground">{conn.nombre}</p>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <span className={`text-xs font-medium ${READY_STATE_COLOR[conn.readyState] ?? 'text-muted-foreground'}`}>
+                                {READY_STATE_LABEL[conn.readyState] ?? 'Desconocido'}
+                              </span>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={!cfgDeEstaConexion}
+                                title={cfgDeEstaConexion ? 'Abrir modal de sincronización' : 'No se encontró la conexión asociada'}
+                                onClick={() => cfgDeEstaConexion && abrirDlgSync(cfgDeEstaConexion)}
+                              >
+                                <Radio className="w-3 h-3 mr-1" />
+                                Sincronizar
+                              </Button>
+                            </div>
+                          </li>
+                        );
+                      })}
                     </ul>
                   )}
                 </CardContent>
@@ -1694,8 +1837,10 @@ export default function TenantDbManager() {
                     <p className="text-sm text-muted-foreground">Sin watchers activos.</p>
                   ) : (
                     <ul className="space-y-2">
+                      {/* Clave real del backend: `${configId}:${sourceId}:${coleccion}` (3 partes) */}
                       {pool.watchersActivos.map(w => {
-                        const [tid, col] = w.split(':');
+                        const [tid, , ...colParts] = w.split(':');
+                        const col = colParts.join(':');
                         return (
                           <li key={w} className="flex items-center gap-2 text-sm">
                             <CircleDot className="w-3 h-3 text-green-500 shrink-0" />
@@ -1745,8 +1890,8 @@ export default function TenantDbManager() {
                   disabled={tenantsLoading}
                 >
                   <option value="">Selecciona una empresa...</option>
-                  {tenantsDisponibles.map(t => (
-                    <option key={t.corporativo?.iud ?? t.iud} value={t.corporativo?.iud ?? ''}>
+                  {tenantsDisponibles.map((t, idx) => (
+                    <option key={t.corporativo?.iud ?? t.iud ?? `tenant-${idx}`} value={t.corporativo?.iud ?? ''}>
                       {t.corporativo?.razon_social ?? `Empresa ${t.iud.slice(0, 8)}...`}
                       {!t.estado ? ' (inactivo)' : ''}
                     </option>
@@ -1804,8 +1949,8 @@ export default function TenantDbManager() {
                   {configsPadreDelContenedor.length === 0 && (
                     <option value="">Crear como nodo raíz ({contenedorSeleccionadoActual?.secuencia ?? 'auto'})</option>
                   )}
-                  {configsPadreDelContenedor.map((cfg) => (
-                    <option key={cfg.iud} value={cfg.iud}>
+                  {configsPadreDelContenedor.map((cfg, idx) => (
+                    <option key={cfg.iud || cfg.dbName || `cfg-padre-${idx}`} value={cfg.iud}>
                       {getConfigJerarquiaLabel(cfg)}
                     </option>
                   ))}
@@ -2048,8 +2193,8 @@ export default function TenantDbManager() {
                     }}
                 >
                   <option value="">Selecciona la BD padre...</option>
-                  {syncSourceCandidates.map(cfg => (
-                    <option key={cfg.iud} value={cfg.iud}>
+                  {syncSourceCandidates.map((cfg, idx) => (
+                    <option key={cfg.iud || cfg.dbName || `sync-src-${idx}`} value={cfg.iud}>
                       {cfg.poolName || cfg.dbName} | {getConfigJerarquiaLabel(cfg)} | {cfg.dbName}
                     </option>
                   ))}
@@ -2080,22 +2225,26 @@ export default function TenantDbManager() {
               {syncForm.modo === 'full' ? (
                 <div className="rounded-md border bg-muted px-3 py-3 text-sm space-y-2">
                   <div className="flex flex-wrap items-center gap-2">
-                    <p className="font-medium">Full migrara todas las colecciones detectadas en la BD padre.</p>
-                    <Badge variant="secondary">
-                      {syncCollectionsLoading ? 'Cargando...' : `${syncCollections.length} colecciones`}
-                    </Badge>
+                    <p className="font-medium">Full valida lo existente contra el padre y solo agrega lo nuevo.</p>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    {syncCollectionsLoading
-                      ? 'Consultando cuantas colecciones existen en la BD padre...'
-                      : syncCollections.length > 0
-                        ? `En este momento se sincronizaran ${syncCollections.length} colecciones del padre.`
-                        : 'Aun no se ha detectado ninguna coleccion para sincronizar.'}
-                  </p>
+                  {syncCollectionsLoading ? (
+                    <p className="text-xs text-muted-foreground">Consultando colecciones de la BD padre...</p>
+                  ) : (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant="secondary">{coleccionesYaSincronizadas.size} ya sincronizadas</Badge>
+                      <Badge variant={coleccionesNuevasDetectadas.length > 0 ? 'default' : 'outline'}>
+                        {coleccionesNuevasDetectadas.length} nuevas detectadas
+                      </Badge>
+                    </div>
+                  )}
                   <p className="text-xs text-muted-foreground">
                     {syncCollectionsLoading
                       ? 'Cargando colecciones del padre...'
-                      : 'Solo se mostrara la cantidad total a sincronizar en modo Full.'}
+                      : coleccionesNuevasDetectadas.length > 0
+                        ? `Se agregarán ${coleccionesNuevasDetectadas.length} colecciones nuevas; las ${coleccionesYaSincronizadas.size} existentes no se tocan.`
+                        : syncCollections.length > 0
+                          ? 'No hay colecciones nuevas en el padre: ya tienes todas sincronizadas.'
+                          : 'Aun no se ha detectado ninguna coleccion para sincronizar.'}
                   </p>
                 </div>
               ) : (
@@ -2133,6 +2282,11 @@ export default function TenantDbManager() {
                                 }}
                               />
                               <span>{coleccion}</span>
+                              {coleccionesYaSincronizadas.has(coleccion) && (
+                                <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                  ya sincronizada
+                                </span>
+                              )}
                             </label>
                           );
                         })}
@@ -2330,7 +2484,7 @@ export default function TenantDbManager() {
                         </p>
                         <div className="grid gap-2">
                           {syncPreview.muestraOrigen.slice(0, syncDataForm.modo === 'full' ? 6 : 8).map((doc, index) => {
-                            const rawId = String(doc?._id || '');
+                            const rawId = String(doc?._id || doc?.iud || '');
                             const checked = syncDataForm.selectedIds.includes(rawId);
                             const interactive = syncDataForm.modo === 'incremental';
                             const Tag = interactive ? 'button' : 'div';
@@ -2445,7 +2599,7 @@ export default function TenantDbManager() {
                               onClick={() => setSyncDataForm((prev) => ({
                                 ...prev,
                                 selectedIds: syncPreview.muestraOrigen
-                                  .map((doc) => String(doc?._id || '').trim())
+                                  .map((doc) => String(doc?._id || doc?.iud || '').trim())
                                   .filter(Boolean),
                               }))}
                             >
@@ -2467,34 +2621,36 @@ export default function TenantDbManager() {
                         </div>
                         <div className="max-h-56 overflow-auto rounded-md border bg-muted/20 p-3">
                           <div className="flex flex-wrap gap-2">
-                            {syncPreview.muestraOrigen.map((doc) => {
-                              const rawId = String(doc?._id || '');
+                            {syncPreview.muestraOrigen.map((doc, docIdx) => {
+                              const rawId = String(doc?._id || doc?.iud || '');
                               const checked = syncDataForm.selectedIds.includes(rawId);
+                              const codigo = String((doc as Record<string, unknown>)?.codigo || '');
+                              const secuencia = (doc as Record<string, unknown>)?.secuencia;
+                              const secuenciaLabel = secuencia !== undefined && secuencia !== null && secuencia !== ''
+                                ? `Seq: ${String(secuencia)}`
+                                : rawId.slice(-12);
                               return (
-                                <label
-                                  key={rawId}
-                                  className={`inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1.5 text-xs transition-colors ${
+                                <button
+                                  key={rawId || `orig-${docIdx}`}
+                                  type="button"
+                                  onClick={() => {
+                                    if (!rawId) return;
+                                    setSyncDataForm((prev) => ({
+                                      ...prev,
+                                      selectedIds: checked
+                                        ? prev.selectedIds.filter((id) => id !== rawId)
+                                        : Array.from(new Set([...prev.selectedIds, rawId])),
+                                    }));
+                                  }}
+                                  className={`inline-flex cursor-pointer flex-col items-start rounded-lg border px-3 py-1.5 text-xs transition-colors ${
                                     checked
                                       ? 'border-primary bg-primary/10 text-foreground'
                                       : 'border-border bg-background text-muted-foreground hover:border-primary/50'
                                   }`}
                                 >
-                                  <input
-                                    type="checkbox"
-                                    className="sr-only"
-                                    checked={checked}
-                                    onChange={(e) => {
-                                      const marcado = e.target.checked;
-                                      setSyncDataForm((prev) => ({
-                                        ...prev,
-                                        selectedIds: marcado
-                                          ? Array.from(new Set([...prev.selectedIds, rawId]))
-                                          : prev.selectedIds.filter((id) => id !== rawId),
-                                      }));
-                                    }}
-                                  />
-                                  <span className="font-mono">{rawId.slice(-12)}</span>
-                                </label>
+                                  {codigo && <span className="max-w-[160px] truncate font-medium text-foreground/80">{codigo}</span>}
+                                  <span className="font-mono text-[10px] opacity-70">{secuenciaLabel}</span>
+                                </button>
                               );
                             })}
                           </div>
@@ -2872,8 +3028,8 @@ export default function TenantDbManager() {
                     }))}
                   >
                     <option value={CONTENEDOR_RAIZ}>Crear como contenedor raíz</option>
-                    {contenedoresActualesTenant.map((contenedor) => (
-                      <option key={contenedor.iud} value={contenedor.iud}>
+                    {contenedoresActualesTenant.map((contenedor, idx) => (
+                      <option key={contenedor.iud || `cont-${idx}`} value={contenedor.iud}>
                         Crear debajo de: {getContenedorTreeLabel(contenedor)}
                       </option>
                     ))}
@@ -2952,8 +3108,8 @@ export default function TenantDbManager() {
                     onChange={e => setFormContenedor(f => ({ ...f, apisDominios: e.target.value }))}
                   >
                     <option value="">Selecciona un dominio registrado</option>
-                    {apisDominios.map((dominio) => (
-                      <option key={dominio.iud} value={dominio.iud}>
+                    {apisDominios.map((dominio, idx) => (
+                      <option key={dominio.iud || dominio.dominio || `dominio-${idx}`} value={dominio.iud}>
                         {dominio.etiquetas} - {dominio.dominio}
                       </option>
                     ))}
@@ -3001,9 +3157,9 @@ export default function TenantDbManager() {
                   </p>
                 ) : (
                   <div className="space-y-2 max-h-60 overflow-y-auto">
-                    {contenedoresActualesTenant.map(c => (
+                    {contenedoresActualesTenant.map((c, idx) => (
                       <div
-                        key={c.iud}
+                        key={c.iud || `cont-tree-${idx}`}
                         className="flex items-start justify-between p-2 border rounded-md"
                         style={{ marginLeft: `${Math.max(0, (Number(c.nivel || 1) - 1) * 20)}px` }}
                       >

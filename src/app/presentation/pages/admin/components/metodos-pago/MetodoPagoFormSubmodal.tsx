@@ -1,0 +1,155 @@
+import { useEffect, useState } from 'react';
+import { Pencil, Plus } from 'lucide-react';
+import { toast } from 'react-toastify';
+import metodoPagoService, { type MedioPagoDian, type MetodoPagoCatalogo } from '@/app/services/metodoPagoService';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { reglasContablesUi } from '../reglas-contables/reglasContablesUi';
+
+type Props = {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  saving?: boolean;
+  registro?: MetodoPagoCatalogo | null;
+  onGuardada?: () => void;
+};
+
+type Draft = {
+  codigo: string;
+  nombre: string;
+  descripcion: string;
+  medioPagoDian: MedioPagoDian;
+  estado: boolean;
+};
+
+const inicial: Draft = { codigo: '', nombre: '', descripcion: '', medioPagoDian: 'TARJETA', estado: true };
+
+const errMsg = (e: unknown, f: string): string => (e instanceof Error ? e.message.replace(/^\[\d+\]\s*/, '') : f);
+
+export default function MetodoPagoFormSubmodal({
+  open, onOpenChange, saving = false, registro = null, onGuardada,
+}: Props): React.ReactElement {
+  const esEdicion = Boolean(registro?.codigo);
+  const [draft, setDraft] = useState<Draft>(inicial);
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setDraft(
+      registro
+        ? {
+            codigo: registro.codigo,
+            nombre: registro.nombre,
+            descripcion: registro.descripcion ?? '',
+            medioPagoDian: registro.medioPagoDian ?? 'TARJETA',
+            estado: registro.estado !== false,
+          }
+        : inicial
+    );
+  }, [open, registro]);
+
+  const guardar = async (): Promise<void> => {
+    if (!draft.codigo.trim() || !draft.nombre.trim()) {
+      toast.error('Código y nombre son obligatorios.');
+      return;
+    }
+    try {
+      setSubmitting(true);
+      const body = {
+        nombre: draft.nombre.trim(),
+        descripcion: draft.descripcion.trim(),
+        medioPagoDian: draft.medioPagoDian,
+        estado: draft.estado,
+      };
+      if (esEdicion && registro) {
+        const { msg } = await metodoPagoService.actualizar(registro.codigo, body);
+        toast.success(msg || 'Método de pago actualizado.');
+      } else {
+        const { msg } = await metodoPagoService.crear({ codigo: draft.codigo.trim(), ...body });
+        toast.success(msg || 'Método de pago registrado.');
+      }
+      onGuardada?.();
+      onOpenChange(false);
+    } catch (e) {
+      toast.error(errMsg(e, 'No se pudo guardar el método de pago.'));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(n) => { if (!n) setDraft(inicial); onOpenChange(n); }}>
+      <DialogContent className={reglasContablesUi.dialogContentSm}>
+        <DialogHeader>
+          <DialogTitle>{esEdicion ? 'Editar método de pago' : 'Nuevo método de pago'}</DialogTitle>
+          <DialogDescription className={reglasContablesUi.description}>
+            Defina el método y a qué medio de pago DIAN (Lista 15A) mapea para la factura electrónica.
+          </DialogDescription>
+        </DialogHeader>
+        <div className={reglasContablesUi.section}>
+          <div className="space-y-2">
+            <Label>Código</Label>
+            <Input
+              className={reglasContablesUi.input}
+              value={draft.codigo}
+              disabled={esEdicion}
+              onChange={(e) => setDraft((p) => ({ ...p, codigo: e.target.value }))}
+              placeholder="Ej: NEQUI"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Nombre</Label>
+            <Input
+              className={reglasContablesUi.input}
+              value={draft.nombre}
+              onChange={(e) => setDraft((p) => ({ ...p, nombre: e.target.value }))}
+              placeholder="Ej: Nequi"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Descripción</Label>
+            <Input
+              className={reglasContablesUi.input}
+              value={draft.descripcion}
+              onChange={(e) => setDraft((p) => ({ ...p, descripcion: e.target.value }))}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Medio de pago DIAN</Label>
+            <Select
+              value={draft.medioPagoDian}
+              onValueChange={(value) => setDraft((p) => ({ ...p, medioPagoDian: value as MedioPagoDian }))}
+            >
+              <SelectTrigger className={reglasContablesUi.input}>
+                <SelectValue placeholder="Selecciona el medio DIAN" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="EFECTIVO">Efectivo</SelectItem>
+                <SelectItem value="TARJETA">Tarjeta</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="metodo-pago-activo"
+              checked={draft.estado}
+              onCheckedChange={(c) => setDraft((p) => ({ ...p, estado: c === true }))}
+            />
+            <Label htmlFor="metodo-pago-activo" className="font-normal cursor-pointer">Activo</Label>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
+          <Button type="button" className={reglasContablesUi.btnPrimary} onClick={() => void guardar()} disabled={submitting || saving}>
+            {esEdicion ? <Pencil className="mr-2 h-4 w-4" /> : <Plus className="mr-2 h-4 w-4" />}
+            Guardar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}

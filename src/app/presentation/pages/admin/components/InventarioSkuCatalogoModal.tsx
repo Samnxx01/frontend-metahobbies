@@ -113,6 +113,14 @@ export default function InventarioSkuCatalogoModal({
   const [confirmEliminarCodigo, setConfirmEliminarCodigo] = useState<BackendProducto[] | null>(null);
   const [eliminandoCodigo, setEliminandoCodigo] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
+  const filtroInputRef = useRef<HTMLInputElement>(null);
+
+  // Devuelve el foco al input de lectura tras cerrar un sub-diálogo o completar
+  // una acción de la barra (Actualizar/Exportar/Importar), para que la pistola
+  // láser no termine "presionando" un botón vecino en la siguiente lectura.
+  const refocarInputFiltro = (): void => {
+    requestAnimationFrame(() => filtroInputRef.current?.focus());
+  };
 
   useEffect(() => {
     if (open) {
@@ -162,7 +170,7 @@ export default function InventarioSkuCatalogoModal({
   const handleExportar = async (): Promise<void> => {
     if (!onExportarExcel || exportando) return;
     setExportando(true);
-    try { await onExportarExcel(); } finally { setExportando(false); }
+    try { await onExportarExcel(); } finally { setExportando(false); refocarInputFiltro(); }
   };
 
   const handleImportarArchivo = async (e: React.ChangeEvent<HTMLInputElement>): Promise<void> => {
@@ -176,6 +184,7 @@ export default function InventarioSkuCatalogoModal({
       setResultadoImport(result);
     } finally {
       setImportando(false);
+      refocarInputFiltro();
     }
   };
 
@@ -240,7 +249,7 @@ export default function InventarioSkuCatalogoModal({
     const productos = confirmEliminarCodigo;
     setConfirmEliminarCodigo(null);
     setEliminandoCodigo(true);
-    onEliminarCodigoBarras(productos).finally(() => setEliminandoCodigo(false));
+    onEliminarCodigoBarras(productos).finally(() => { setEliminandoCodigo(false); refocarInputFiltro(); });
   };
 
   // Calcula los códigos candidatos y muestra el preview antes de confirmar
@@ -266,7 +275,7 @@ export default function InventarioSkuCatalogoModal({
     const asignaciones = previewGeneracion.map(({ producto, codigoBarras }) => ({ producto, codigoBarras }));
     setPreviewGeneracion(null); // cierra el dialog de preview de inmediato
     setGenerandoCodigos(true);
-    onGenerarCodigosMasivo(asignaciones).finally(() => setGenerandoCodigos(false));
+    onGenerarCodigosMasivo(asignaciones).finally(() => { setGenerandoCodigos(false); refocarInputFiltro(); });
   };
 
   const aplicarUnico = (): void => {
@@ -300,6 +309,7 @@ export default function InventarioSkuCatalogoModal({
       // El padre ya muestra el toast de error
     } finally {
       setEliminando(false);
+      refocarInputFiltro();
     }
   };
 
@@ -332,6 +342,7 @@ export default function InventarioSkuCatalogoModal({
               <div className="relative flex-1">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
+                  ref={filtroInputRef}
                   autoFocus
                   value={filtro}
                   onChange={(event) => handleFiltroChange(event.target.value)}
@@ -378,7 +389,7 @@ export default function InventarioSkuCatalogoModal({
                     disabled={refrescando}
                     onClick={async () => {
                       setRefrescando(true);
-                      try { await onRefresh(); } finally { setRefrescando(false); }
+                      try { await onRefresh(); } finally { setRefrescando(false); refocarInputFiltro(); }
                     }}
                     title="Actualizar lista desde la base de datos"
                   >
@@ -659,7 +670,10 @@ export default function InventarioSkuCatalogoModal({
       </Dialog>
 
       {/* Dialog de detalles del SKU */}
-      <Dialog open={Boolean(barcodePreview)} onOpenChange={(nextOpen) => !nextOpen && setBarcodePreview(null)}>
+      <Dialog
+        open={Boolean(barcodePreview)}
+        onOpenChange={(nextOpen) => { if (!nextOpen) { setBarcodePreview(null); refocarInputFiltro(); } }}
+      >
         <DialogContent className="w-[calc(100%-2rem)] max-h-[90dvh] max-w-md overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -689,7 +703,7 @@ export default function InventarioSkuCatalogoModal({
               </div>
             </div>
             <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => setBarcodePreview(null)}>
+              <Button type="button" variant="outline" onClick={() => { setBarcodePreview(null); refocarInputFiltro(); }}>
                 Cerrar
               </Button>
               {barcodePreview ? (
@@ -706,7 +720,7 @@ export default function InventarioSkuCatalogoModal({
       {/* Dialog de confirmación de eliminación */}
       <AlertDialog
         open={Boolean(confirmEliminar)}
-        onOpenChange={(isOpen) => { if (!isOpen && !eliminando) setConfirmEliminar(null); }}
+        onOpenChange={(isOpen) => { if (!isOpen && !eliminando) { setConfirmEliminar(null); refocarInputFiltro(); } }}
       >
         <AlertDialogContent className="w-[calc(100%-2rem)] max-w-md">
           <AlertDialogHeader>
@@ -765,7 +779,7 @@ export default function InventarioSkuCatalogoModal({
       {/* Confirmación de eliminación de códigos de barras */}
       <AlertDialog
         open={Boolean(confirmEliminarCodigo)}
-        onOpenChange={(isOpen) => { if (!isOpen && !eliminandoCodigo) setConfirmEliminarCodigo(null); }}
+        onOpenChange={(isOpen) => { if (!isOpen && !eliminandoCodigo) { setConfirmEliminarCodigo(null); refocarInputFiltro(); } }}
       >
         <AlertDialogContent className="w-[calc(100%-2rem)] max-w-lg">
           <AlertDialogHeader>
@@ -823,7 +837,10 @@ export default function InventarioSkuCatalogoModal({
       </AlertDialog>
 
       {/* Preview de generación masiva de códigos */}
-      <AlertDialog open={Boolean(previewGeneracion)} onOpenChange={(o) => { if (!o) setPreviewGeneracion(null); }}>
+      <AlertDialog
+        open={Boolean(previewGeneracion)}
+        onOpenChange={(o) => { if (!o) { setPreviewGeneracion(null); refocarInputFiltro(); } }}
+      >
         <AlertDialogContent className="w-[calc(100%-2rem)] max-w-2xl">
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">

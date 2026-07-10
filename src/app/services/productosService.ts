@@ -100,6 +100,19 @@ export interface BackendProducto {
   } | null;
 }
 
+export interface StockDisponiblePorBodega {
+  bodega: string;
+  cantidadDisponible: number;
+  costoPromedioUnitario: number;
+}
+
+export interface ProductoConStock extends BackendProducto {
+  stockDisponible: {
+    total: number;
+    porBodega: StockDisponiblePorBodega[];
+  };
+}
+
 export interface ProductoVentaMedia {
   _id?: string;
   iud?: string;
@@ -363,6 +376,12 @@ const productosService = {
   async obtenerProductoAdmin(id: string): Promise<BackendProducto> {
     const resp = await apiFetch(`/api/productos/admin/${id}`, { method: 'GET' });
     return resp?.data as BackendProducto;
+  },
+
+  /** Detalle completo (producto + categoría + relación de venta + stock disponible) por código de barras escaneado. */
+  async buscarProductoPorCodigoBarras(codigoBarras: string): Promise<ProductoConStock> {
+    const resp = await apiFetch(`/api/productos/admin/buscar-por-codigo?codigoBarras=${encodeURIComponent(codigoBarras)}`, { method: 'GET' });
+    return resp?.data as ProductoConStock;
   },
 
   async crearProductoAdmin(payload: AdminProductoPayload): Promise<BackendProducto> {

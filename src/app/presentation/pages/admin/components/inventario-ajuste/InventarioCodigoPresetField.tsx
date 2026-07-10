@@ -10,17 +10,17 @@ export type CodigoPresetOption = {
   nombre: string;
 };
 
-type InventarioCodigoPresetFieldProps = {
+type InventarioCodigoPresetFieldProps<T extends CodigoPresetOption> = {
   value: string;
   onChange: (codigo: string) => void;
-  presets: CodigoPresetOption[];
+  presets: T[];
   disabled?: boolean;
   label?: string;
   manualPlaceholder?: string;
-  onPresetPick?: (preset: CodigoPresetOption) => void;
+  onPresetPick?: (preset: T) => void;
 };
 
-export default function InventarioCodigoPresetField({
+export default function InventarioCodigoPresetField<T extends CodigoPresetOption>({
   value,
   onChange,
   presets,
@@ -28,7 +28,7 @@ export default function InventarioCodigoPresetField({
   label = 'Código',
   manualPlaceholder = 'CODIGO_PERSONALIZADO',
   onPresetPick,
-}: InventarioCodigoPresetFieldProps): React.ReactElement {
+}: InventarioCodigoPresetFieldProps<T>): React.ReactElement {
   const [modoManual, setModoManual] = useState(() => {
     if (!value) return false;
     return !presets.some((p) => p.codigo === value);

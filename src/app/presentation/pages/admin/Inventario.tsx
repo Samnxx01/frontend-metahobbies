@@ -58,6 +58,7 @@ import InventarioOrdenCompraModal from './components/InventarioOrdenCompraModal'
 import InventarioOrdenComprasTab from './components/InventarioOrdenComprasTab';
 import InventarioProveedorModal, { type InventarioProveedorDraft } from './components/InventarioProveedorModal';
 import InventarioSkuCatalogoModal from './components/InventarioSkuCatalogoModal';
+import ProductoDetalleEscaneoModal from './components/ProductoDetalleEscaneoModal';
 import InventarioSkuModal, { type SkuForm } from './components/InventarioSkuModal';
 import InventarioTipoProductoModal, { type TipoProductoDraft } from './components/InventarioTipoProductoModal';
 import { generarCodigoBarrasDesdeSkú, getProductoId, normalizarCodigoBarrasAlfanumerico } from './inventario/inventarioBarcodeUtils';
@@ -295,6 +296,7 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
   const [skuModalOpen, setSkuModalOpen] = useState(false);
   const [skuCatalogoOpen, setSkuCatalogoOpen] = useState(false);
   const [filtroEscaner, setFiltroEscaner] = useState('');
+  const [codigoEscaneadoDetalle, setCodigoEscaneadoDetalle] = useState<string | null>(null);
   const [codigosRegistrados, setCodigosRegistrados] = useState<Set<string>>(new Set());
   const [skuEditandoId, setSkuEditandoId] = useState<string | null>(null);
   const [skuForm, setSkuForm] = useState<SkuForm>(skuFormInicial);
@@ -1495,10 +1497,15 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
       .catch(() => {});
   };
 
-  // Cuando la pistola escanea con el modal cerrado → abre el modal con el código pre-cargado
+  // Si el catálogo de SKU ya está abierto (flujo de registrar movimiento de kardex),
+  // el escaneo sigue alimentando su filtro como antes. Si no hay nada abierto, el
+  // escaneo es una consulta rápida: se renderiza el modal de detalle del producto.
   useBarcodeScanner((codigo) => {
-    setFiltroEscaner(codigo);
-    if (!skuCatalogoOpen) abrirModalSkuCatalogo();
+    if (skuCatalogoOpen) {
+      setFiltroEscaner(codigo);
+      return;
+    }
+    setCodigoEscaneadoDetalle(codigo);
   });
 
   const abrirModalCrearSku = (): void => {
@@ -2409,6 +2416,11 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
         }}
         onExportarExcel={exportarCatalogoExcel}
         onImportarExcel={puedeGestionarSku ? importarCatalogoExcel : undefined}
+      />
+
+      <ProductoDetalleEscaneoModal
+        codigoBarras={codigoEscaneadoDetalle}
+        onClose={() => setCodigoEscaneadoDetalle(null)}
       />
 
       <InventarioUnidadMedidaModal
