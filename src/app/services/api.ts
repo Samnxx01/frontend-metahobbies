@@ -1,4 +1,8 @@
 import { getGovernedLogoutPath } from '@/app/services/governedNavigation';
+import { reportarPeticionLentaFrontend } from '@/app/observability/newRelicBrowser';
+
+/** Umbral para reportar a New Relic una petición lenta (evento PeticionLentaFrontend). */
+const UMBRAL_PETICION_LENTA_MS = 60_000;
 
 export type ResponseType = 'raw' | string;
 export type ApiHeaders = Record<string, string>;
@@ -170,8 +174,12 @@ export const apiFetch = async (
         delete (requestOptions.headers as ApiHeaders)['Content-Type'];
     }
 
+    const inicioMs = performance.now();
+    let statusRespuesta: number | 'SIN_RESPUESTA' = 'SIN_RESPUESTA';
+
     try {
         const response: Response = await fetch(buildAbsoluteUrl(resolvedEndpoint), requestOptions as RequestInit);
+        statusRespuesta = response.status;
 
         // Verificar si es 401 Unauthorized en endpoints autenticados
         if (response.status === 401 && useAuth && logoutOn401) {
@@ -231,6 +239,17 @@ export const apiFetch = async (
     } catch (error: any) {
         console.error(`Error en fetch a ${endpoint}:`, error.message);
         throw error;
+    } finally {
+        const duracionMs = Math.round(performance.now() - inicioMs);
+        if (duracionMs >= UMBRAL_PETICION_LENTA_MS) {
+            reportarPeticionLentaFrontend({
+                endpoint: String(resolvedEndpoint).split('?')[0],
+                metodo: String(requestOptions.method || 'GET').toUpperCase(),
+                status: statusRespuesta,
+                duracionMs,
+                paginaSpa: typeof window !== 'undefined' ? String(window.location?.pathname || '') : '',
+            });
+        }
     }
 };
 

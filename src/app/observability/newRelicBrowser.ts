@@ -64,6 +64,18 @@ export const newRelicBrowser = enabled && licenseKey && applicationID
     })
   : null;
 
+/**
+ * Evento personalizado PageAction para peticiones que superan el umbral de lentitud.
+ * Consultable en New Relic con:
+ *   SELECT * FROM PageAction WHERE actionName = 'PeticionLentaFrontend'
+ */
+export function reportarPeticionLentaFrontend(
+  atributos: Record<string, string | number | boolean>,
+): void {
+  if (!newRelicBrowser) return;
+  newRelicBrowser.addPageAction('PeticionLentaFrontend', atributos);
+}
+
 export function reportarErrorFrontend(
   error: unknown,
   atributos: Record<string, string | number | boolean> = {},
