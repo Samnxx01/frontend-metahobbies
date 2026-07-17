@@ -19,12 +19,12 @@ export const labelEstadoComprobanteEntrada = (estado: string): string => {
 export const estadoComprobanteEntradaBadgeClass = (estado: string): string => {
   switch (normalizarEstado(estado)) {
     case 'PENDIENTE_APROBACION':
-      return 'border-amber-500/60 bg-amber-50 text-amber-950 dark:border-amber-400/50 dark:bg-amber-500/15 dark:text-amber-100';
+      return 'border-warning/60 bg-warning/10 text-warning dark:border-warning/50 dark:bg-warning/15 dark:text-warning';
     case 'APROBADA':
-      return 'border-emerald-500/50 bg-emerald-50 text-emerald-900 dark:border-emerald-400/40 dark:bg-emerald-500/15 dark:text-emerald-100';
+      return 'border-success/50 bg-success/10 text-success dark:border-success/40 dark:bg-success/15 dark:text-success';
     case 'ANULADA':
     case 'RECHAZADA':
-      return 'border-red-500/50 bg-red-50 text-red-900 dark:border-red-400/40 dark:bg-red-500/15 dark:text-red-100';
+      return 'border-destructive/50 bg-destructive/10 text-destructive dark:border-destructive/40 dark:bg-destructive/15 dark:text-destructive';
     default:
       return 'border-border bg-background text-foreground';
   }
@@ -36,12 +36,12 @@ export const labelEstadoKardexLinea = (estadoKardex?: string): string =>
 /** Badge kardex por línea (tabla detalle comprobante). */
 export const estadoKardexLineaBadgeClass = (estadoKardex?: string): string => {
   if (String(estadoKardex || '').toUpperCase() === 'CONFIRMADO') {
-    return 'border-emerald-500/50 bg-emerald-50 text-emerald-900 dark:border-emerald-400/40 dark:bg-emerald-500/15 dark:text-emerald-100';
+    return 'border-success/50 bg-success/10 text-success dark:border-success/40 dark:bg-success/15 dark:text-success';
   }
-  return 'border-amber-500/60 bg-amber-50 text-amber-950 dark:border-amber-400/50 dark:bg-amber-500/15 dark:text-amber-100';
+  return 'border-warning/60 bg-warning/10 text-warning dark:border-warning/50 dark:bg-warning/15 dark:text-warning';
 };
 
 export const salidaKardexComprobanteBadgeClass = (disponible: boolean): string =>
   disponible
-    ? 'border-emerald-500/50 bg-emerald-50 text-emerald-900 dark:border-emerald-400/40 dark:bg-emerald-500/15 dark:text-emerald-100'
-    : 'border-amber-500/60 bg-amber-50 text-amber-950 dark:border-amber-400/50 dark:bg-amber-500/15 dark:text-amber-100';
+    ? 'border-success/50 bg-success/10 text-success dark:border-success/40 dark:bg-success/15 dark:text-success'
+    : 'border-warning/60 bg-warning/10 text-warning dark:border-warning/50 dark:bg-warning/15 dark:text-warning';

@@ -105,10 +105,11 @@ export function normalizeImagenFondoAsset<T extends { id?: string; url?: string 
 type BrandingWidgets = {
   loginBackground?: { imageUrl?: string; enabled?: boolean };
   loadingBackground?: { imageUrl?: string; enabled?: boolean };
+  homeImage?: { imageUrl?: string; enabled?: boolean };
   [key: string]: unknown;
 };
 
-/** Normaliza imageUrl en branding (login / loading) para render y persistencia. */
+/** Normaliza imageUrl en branding para render y persistencia. */
 export function normalizeBrandingWidgetImages<T extends { widgets?: BrandingWidgets }>(
   branding: T
 ): T {
@@ -125,6 +126,12 @@ export function normalizeBrandingWidgetImages<T extends { widgets?: BrandingWidg
     widgets.loadingBackground = {
       ...widgets.loadingBackground,
       imageUrl: normalizeImageRenderUrl(widgets.loadingBackground.imageUrl),
+    };
+  }
+  if (widgets.homeImage?.imageUrl) {
+    widgets.homeImage = {
+      ...widgets.homeImage,
+      imageUrl: normalizeImageRenderUrl(widgets.homeImage.imageUrl),
     };
   }
 

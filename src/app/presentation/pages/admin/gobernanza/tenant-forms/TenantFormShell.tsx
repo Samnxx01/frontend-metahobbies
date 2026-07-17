@@ -21,7 +21,7 @@ export function TenantFormShell({
             {eyebrow}
           </Badge>
           {capabilities?.diosSoloLectura ? (
-            <Badge variant="outline" className="rounded-md border-amber-200 bg-amber-50 text-amber-900">
+            <Badge variant="outline" className="rounded-md border-warning/20 bg-warning/10 text-warning">
               Solo lectura
             </Badge>
           ) : null}

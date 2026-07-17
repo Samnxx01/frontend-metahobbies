@@ -374,7 +374,7 @@ export default function DatosFacturacionInvitadoModal({
               {validacionDocumento ? <p className="text-xs text-muted-foreground">{validacionDocumento.descripcion}</p> : null}
               {buscandoTercero ? <p className="text-xs text-muted-foreground">Consultando tercero...</p> : null}
               {terceroEncontrado && !bloqueadoPorPerfilCliente ? (
-                <p className="text-xs text-emerald-800">Tercero encontrado. Datos autocompletados.</p>
+                <p className="text-xs text-success">Tercero encontrado. Datos autocompletados.</p>
               ) : null}
               {bloqueadoPorPerfilCliente ? (
                 <p className="text-xs font-medium text-primary">

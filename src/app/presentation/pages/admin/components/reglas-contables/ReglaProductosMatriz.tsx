@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
-import reglasContablesService, { type ProductoEnCategoria } from '@/app/services/reglasContablesService';
+import reglasContablesService, {
+  type AplicaEnRegla,
+  type ProductoEnCategoria,
+} from '@/app/services/reglasContablesService';
 
 type ReglaProductosMatrizProps = {
   codigo: string;
@@ -9,6 +12,10 @@ type ReglaProductosMatrizProps = {
   selectedIds: string[];
   onChange: (ids: string[]) => void;
   disabled?: boolean;
+  /** Ámbito de la regla; `COMPRA` usa el catálogo general de productos en vez del catálogo de venta. */
+  ambito?: AplicaEnRegla;
+  /** Fuente explícita de productos: 'GENERAL' (catálogo completo, para resolver OC) o 'VENTA' (ProductoVentaRelacion). */
+  catalogo?: 'GENERAL' | 'VENTA';
 };
 
 const pid = (p: ProductoEnCategoria): string =>
@@ -23,30 +30,35 @@ export default function ReglaProductosMatriz({
   selectedIds,
   onChange,
   disabled = false,
+  ambito,
+  catalogo,
 }: ReglaProductosMatrizProps): React.ReactElement | null {
   const [productos, setProductos] = useState<ProductoEnCategoria[]>([]);
   const [loading, setLoading] = useState(false);
   const categoriasKey = categorias.slice().sort().join(',');
   const prevKey = useRef('');
+  /** El catálogo general de productos puede listarse sin filtrar por categoría. */
+  const permiteSinCategorias = catalogo === 'GENERAL' || (!catalogo && ambito === 'COMPRA');
 
   useEffect(() => {
-    if (!codigo || categorias.length === 0) {
+    if (!codigo || (categorias.length === 0 && !permiteSinCategorias)) {
       setProductos([]);
       prevKey.current = '';
       return;
     }
-    if (categoriasKey === prevKey.current) return;
-    prevKey.current = categoriasKey;
+    const key = `${categoriasKey}::${ambito ?? ''}::${catalogo ?? ''}`;
+    if (key === prevKey.current) return;
+    prevKey.current = key;
     setLoading(true);
     reglasContablesService
-      .listarProductosPorRegla(codigo, categorias)
+      .listarProductosPorRegla(codigo, categorias, ambito, catalogo)
       .then((data) => setProductos(data))
       .catch(() => setProductos([]))
       .finally(() => setLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [codigo, categoriasKey]);
+  }, [codigo, categoriasKey, ambito, catalogo, permiteSinCategorias]);
 
-  if (categorias.length === 0) return null;
+  if (categorias.length === 0 && !permiteSinCategorias) return null;
 
   if (loading) {
     return <p className="text-xs text-muted-foreground">Cargando productos…</p>;

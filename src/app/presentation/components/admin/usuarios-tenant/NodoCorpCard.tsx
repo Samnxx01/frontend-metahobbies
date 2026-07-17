@@ -15,7 +15,7 @@ const UsuarioRow = ({ usuario, tipo, onEdit }: UsuarioRowProps) => (
     <div className="flex items-center justify-between py-1.5 px-3 text-sm rounded transition-colors hover:bg-muted/50">
         <div className="flex items-center gap-2 min-w-0">
             <div className={`h-2 w-2 rounded-full flex-shrink-0 ${
-                usuario.estado === true || usuario.estado === 'activo' ? 'bg-green-500' : 'bg-gray-400'
+                usuario.estado === true || usuario.estado === 'activo' ? 'bg-success' : 'bg-gray-400'
             }`} />
             <span className="truncate text-muted-foreground">{usuario.correo}</span>
         </div>

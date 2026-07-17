@@ -184,7 +184,7 @@ export default function InventarioOrdenCompraDetallesModal({
             </div>
 
             {orden.comprobanteContable?.numero ? (
-              <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 p-3">
+              <div className="rounded-md border border-success/30 bg-success/5 p-3">
                 <p className="text-xs text-muted-foreground">Comprobante contable (orden de compra)</p>
                 <p className="font-mono text-sm font-semibold text-foreground">
                   {orden.comprobanteContable.tipo ? `${orden.comprobanteContable.tipo} · ` : ''}

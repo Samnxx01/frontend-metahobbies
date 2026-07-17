@@ -11,10 +11,10 @@ import {
 } from '@/app/presentation/utils/gestionRutasOrganigramaTree';
 
 const TIPO_STYLES: Record<GestionRutasOrganigramaTipo, string> = {
-  GRUPO: 'border-rose-200/80 bg-rose-50/50 dark:bg-rose-950/20',
-  SA_LIBRE: 'border-amber-200/80 bg-amber-50/40 dark:bg-amber-950/15',
-  TG: 'border-sky-200/80 bg-sky-50/40 dark:bg-sky-950/15',
-  CORP: 'border-violet-200/80 bg-violet-50/40 dark:bg-violet-950/15',
+  GRUPO: 'border-destructive/80 bg-destructive/50 dark:bg-destructive/20',
+  SA_LIBRE: 'border-warning/80 bg-warning/40 dark:bg-warning/15',
+  TG: 'border-info/80 bg-info/40 dark:bg-info/15',
+  CORP: 'border-info/80 bg-info/40 dark:bg-info/15',
   USUARIO: 'border-border bg-card',
 };
 
@@ -27,10 +27,10 @@ const TIPO_LABEL: Record<GestionRutasOrganigramaTipo, string> = {
 };
 
 function TipoIcon({ tipo }: { tipo: GestionRutasOrganigramaTipo }): React.ReactElement {
-  if (tipo === 'TG') return <Globe className="h-4 w-4 shrink-0 text-sky-600" />;
-  if (tipo === 'CORP' || tipo === 'SA_LIBRE') return <Building2 className="h-4 w-4 shrink-0 text-amber-700" />;
+  if (tipo === 'TG') return <Globe className="h-4 w-4 shrink-0 text-info" />;
+  if (tipo === 'CORP' || tipo === 'SA_LIBRE') return <Building2 className="h-4 w-4 shrink-0 text-warning" />;
   if (tipo === 'USUARIO') return <User className="h-4 w-4 shrink-0 text-muted-foreground" />;
-  return <ChevronRight className="h-4 w-4 shrink-0 text-rose-500" />;
+  return <ChevronRight className="h-4 w-4 shrink-0 text-destructive" />;
 }
 
 function NodoFila({
@@ -125,7 +125,7 @@ export function GestionRutasUsuariosOrganigrama({
   if (loading) {
     return (
       <div className="flex justify-center py-16">
-        <Loader2 className="h-7 w-7 animate-spin text-rose-500" />
+        <Loader2 className="h-7 w-7 animate-spin text-destructive" />
       </div>
     );
   }

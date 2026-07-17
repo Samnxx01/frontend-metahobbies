@@ -43,15 +43,15 @@ type GenericSelectOption = {
 };
 
 const METHOD_STYLE: Record<HttpMethod, string> = {
-  GET: 'bg-blue-100 text-blue-700 border-blue-200',
-  POST: 'bg-emerald-100 text-emerald-700 border-emerald-200',
-  PUT: 'bg-amber-100 text-amber-700 border-amber-200',
-  DELETE: 'bg-red-100 text-red-700 border-red-200',
+  GET: 'bg-info/10 text-info border-info/20',
+  POST: 'bg-success/10 text-success border-success/20',
+  PUT: 'bg-warning/10 text-warning border-warning/20',
+  DELETE: 'bg-destructive/10 text-destructive border-destructive/20',
 };
 
 const ACTOR_STYLE: Record<EndpointActor, string> = {
-  tenantSuperAdmin: 'bg-purple-100 text-purple-700 border-purple-200',
-  tenantGlobal: 'bg-rose-100 text-rose-700 border-rose-200',
+  tenantSuperAdmin: 'bg-info/10 text-info border-info/20',
+  tenantGlobal: 'bg-destructive/10 text-destructive border-destructive/20',
   ambos: 'bg-slate-100 text-slate-700 border-slate-200',
 };
 
@@ -511,7 +511,7 @@ const TenantCorporativo: React.FC = () => {
 
   return (
     <div className="space-y-6 p-4 md:p-6">
-      <Card className="border-rose-100">
+      <Card className="border-destructive/10">
         <CardHeader>
           <CardTitle className="text-slate-900">Tenant Corporativo</CardTitle>
           <CardDescription>
@@ -531,13 +531,13 @@ const TenantCorporativo: React.FC = () => {
         const sectionEndpoints = endpointGroups[section];
         if (!sectionEndpoints.length) return null;
         return (
-          <Card key={section} className="border-rose-100">
+          <Card key={section} className="border-destructive/10">
             <CardHeader>
               <CardTitle className="text-xl">{SECTION_LABEL[section]}</CardTitle>
             </CardHeader>
             <CardContent className="grid gap-4 md:grid-cols-2">
               {sectionEndpoints.map((endpoint) => (
-                <div key={endpoint.id} className="rounded-xl border border-rose-100 bg-white p-4">
+                <div key={endpoint.id} className="rounded-xl border border-destructive/10 bg-white p-4">
                   <div className="mb-2 flex items-center justify-between gap-2 flex-wrap">
                     <Badge className={METHOD_STYLE[endpoint.method]}>{endpoint.method}</Badge>
                     <Badge className={ACTOR_STYLE[endpoint.actor]}>{endpoint.actor}</Badge>
@@ -573,17 +573,17 @@ const TenantCorporativo: React.FC = () => {
                   <Badge className={ACTOR_STYLE[endpointModal.actor]}>{endpointModal.actor}</Badge>
                   <code className="rounded bg-slate-100 px-2 py-1 text-xs">{endpointModal.path}</code>
                 </div>
-                <div className="mt-2 flex items-start gap-2 rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-800">
-                  <HelpCircle className="mt-0.5 h-4 w-4 shrink-0 text-blue-500" />
+                <div className="mt-2 flex items-start gap-2 rounded-md border border-info/10 bg-info/10 px-3 py-2 text-xs text-info">
+                  <HelpCircle className="mt-0.5 h-4 w-4 shrink-0 text-info" />
                   <span>{endpointModal.description}</span>
                 </div>
               </DialogHeader>
 
               <div className="space-y-4">
                 {endpointModal.id === 'perm-corporativo-guardar-catalogo' && (
-                  <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 space-y-3 text-xs">
+                  <div className="rounded-md border border-success/20 bg-success/10 p-3 space-y-3 text-xs">
                     <div className="flex items-center justify-between gap-2">
-                      <p className="text-emerald-800 font-medium">
+                      <p className="text-success font-medium">
                         CLIENTE y EMPLEADO se crean automáticamente al guardar si aún no existen.
                       </p>
                       <Button

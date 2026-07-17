@@ -124,7 +124,7 @@ const abreviarCorreo = (correo: string, maxLen = 28): string =>
 
 function EstadoBadge({ activa }: { activa: boolean }) {
     return activa ? (
-        <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300">
+        <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-success/10 dark:bg-success/30 text-success dark:text-success">
             <CheckCircle2 className="w-2.5 h-2.5" /> Activa
         </span>
     ) : (
@@ -308,7 +308,7 @@ export default function KPIUsuarioMembresia({
                             </CardTitle>
                             <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
                                 <span className="flex items-center gap-1">
-                                    <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
+                                    <span className="w-2 h-2 rounded-full bg-success inline-block" />
                                     {metricas.activas} activas
                                 </span>
                                 <span className="flex items-center gap-1">

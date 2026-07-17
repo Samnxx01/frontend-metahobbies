@@ -331,7 +331,7 @@ export function DiosReglaAlcanceTenantsPanel({
 
             {!selectedUsers.length ? (
 
-              <p className="mt-1 text-xs text-amber-700">
+              <p className="mt-1 text-xs text-warning">
 
                 Este tenant tiene varios usuarios: elige al menos uno antes de guardar.
 

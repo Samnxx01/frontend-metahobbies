@@ -2269,6 +2269,7 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
             esTenantSuperAdmin={esUsuarioTenantSuperAdmin}
             config={config}
             nombreCorporativo={nombreCorporativoImpresion}
+            onIrAParametrizacionReglas={() => setActiveTab('trm')}
           />
         </TabsContent>
 

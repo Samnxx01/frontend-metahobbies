@@ -37,9 +37,9 @@ type Props = {
 type HttpMethod = 'GET' | 'PUT' | 'POST';
 
 const METHOD_STYLES: Record<HttpMethod, string> = {
-  GET: 'border-emerald-500/40 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300',
-  POST: 'border-blue-500/40 bg-blue-500/10 text-blue-800 dark:text-blue-300',
-  PUT: 'border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-300',
+  GET: 'border-success/40 bg-success/10 text-success dark:text-success',
+  POST: 'border-info/40 bg-info/10 text-info dark:text-info',
+  PUT: 'border-warning/40 bg-warning/10 text-warning dark:text-warning',
 };
 
 function HttpMethodBadge({ method }: { method: HttpMethod }): React.ReactElement {
@@ -102,7 +102,7 @@ function CodeBlock({
         >
           {copied ? (
             <>
-              <Check className="h-3.5 w-3.5 text-emerald-400" />
+              <Check className="h-3.5 w-3.5 text-success" />
               <span className="text-[10px]">Copiado</span>
             </>
           ) : (

@@ -33,7 +33,7 @@ export function HerenciaClienteRelacionCard({
           <Badge variant="secondary">counter → herencia {counter.herenciaId?.slice(-6) ?? '—'}</Badge>
         ) : null}
         {permisosSincronizados ? (
-          <Badge className="bg-green-600/90">sync OK</Badge>
+          <Badge className="bg-success/90">sync OK</Badge>
         ) : enlazado ? (
           <Badge variant="outline">enlazado</Badge>
         ) : (

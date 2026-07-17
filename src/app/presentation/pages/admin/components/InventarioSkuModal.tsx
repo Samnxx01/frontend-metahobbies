@@ -131,7 +131,7 @@ export default function InventarioSkuModal({
 
           {/* Panel de ayuda colapsable */}
           {ayudaVisible && (
-            <div className="mb-5 rounded-md border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+            <div className="mb-5 rounded-md border border-info/20 bg-info/10 p-4 text-sm text-info">
               <p className="mb-3 font-semibold">Guia de campos</p>
               <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
                 {[
@@ -146,7 +146,7 @@ export default function InventarioSkuModal({
                 ].map(({ titulo, desc }) => (
                   <div key={titulo}>
                     <p className="font-medium">{titulo}</p>
-                    <p className="text-xs leading-relaxed text-blue-700">{desc}</p>
+                    <p className="text-xs leading-relaxed text-info">{desc}</p>
                   </div>
                 ))}
               </div>

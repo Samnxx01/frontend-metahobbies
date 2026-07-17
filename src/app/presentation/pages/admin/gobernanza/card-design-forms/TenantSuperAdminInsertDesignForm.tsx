@@ -18,9 +18,9 @@ export function TenantSuperAdminInsertDesignForm({
 
   return (
     <div className="space-y-6">
-      <div className="rounded-lg border border-dashed border-fuchsia-300/60 bg-fuchsia-50/40 p-4 dark:bg-fuchsia-950/20">
+      <div className="rounded-lg border border-dashed border-info/60 bg-info/40 p-4 dark:bg-info/20">
         <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="outline" className="rounded-md border-fuchsia-400/50">
+          <Badge variant="outline" className="rounded-md border-info/50">
             {meta.eyebrow}
           </Badge>
         </div>

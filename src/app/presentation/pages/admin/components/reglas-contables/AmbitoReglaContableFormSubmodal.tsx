@@ -2,6 +2,14 @@ import { useEffect, useState } from 'react';
 import { Pencil, Plus } from 'lucide-react';
 import { toast } from 'react-toastify';
 import reglasContablesService, { type AmbitoReglaContable } from '@/app/services/reglasContablesService';
+import { useTiposReglaContable } from '@/app/hooks/useTiposReglaContable';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -14,9 +22,9 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import InventarioCodigoPresetField from '../inventario-ajuste/InventarioCodigoPresetField';
-import { PRESETS_AMBITO_REGLA } from './ambitoReglaContableConstants';
 import { reglasContablesUi } from './reglasContablesUi';
+
+type TenantOption = { value: string; label: string };
 
 type AmbitoReglaContableFormSubmodalProps = {
   open: boolean;
@@ -30,7 +38,7 @@ type DraftAmbito = {
   codigo: string;
   nombre: string;
   descripcion: string;
-  orden: string;
+  tipoReglaCodigo: string;
   estado: boolean;
 };
 
@@ -38,15 +46,17 @@ const draftInicial: DraftAmbito = {
   codigo: '',
   nombre: '',
   descripcion: '',
-  orden: '0',
+  tipoReglaCodigo: '',
   estado: true,
 };
+
+const SIN_TIPO = '__SIN_TIPO__';
 
 const draftDesdeRegistro = (registro: AmbitoReglaContable): DraftAmbito => ({
   codigo: registro.codigo,
   nombre: registro.nombre,
   descripcion: registro.descripcion ?? '',
-  orden: String(registro.orden ?? 0),
+  tipoReglaCodigo: registro.tipoReglaCodigo ?? '',
   estado: registro.estado !== false,
 });
 
@@ -63,11 +73,25 @@ export default function AmbitoReglaContableFormSubmodal({
   const esEdicion = Boolean(registro?.codigo);
   const [draft, setDraft] = useState<DraftAmbito>(draftInicial);
   const [submitting, setSubmitting] = useState(false);
+  const [tenantOptions, setTenantOptions] = useState<TenantOption[]>([]);
+  const [tenantsSel, setTenantsSel] = useState<string[]>([]);
+  const { tipos } = useTiposReglaContable({ enabled: open });
 
   useEffect(() => {
     if (!open) return;
     setDraft(registro ? draftDesdeRegistro(registro) : draftInicial);
+    setTenantsSel([]);
+    if (!registro) {
+      // Tenants de la rama del JWT (tenantjerarquiacounters). Sin selección aplica al tenant actual.
+      reglasContablesService.listarTenantsAutorizables()
+        .then((data) => setTenantOptions(data.map((t) => ({ value: t.tenantId, label: t.label }))))
+        .catch(() => setTenantOptions([]));
+    }
   }, [open, registro]);
+
+  const toggleTenant = (id: string): void => {
+    setTenantsSel((prev) => (prev.includes(id) ? prev.filter((t) => t !== id) : [...prev, id]));
+  };
 
   const guardar = async (): Promise<void> => {
     if (!draft.codigo.trim() || !draft.nombre.trim()) {
@@ -79,7 +103,7 @@ export default function AmbitoReglaContableFormSubmodal({
       const payload = {
         nombre: draft.nombre.trim(),
         descripcion: draft.descripcion.trim(),
-        orden: Number(draft.orden) || 0,
+        tipoReglaCodigo: draft.tipoReglaCodigo,
         estado: draft.estado,
       };
       if (esEdicion && registro) {
@@ -89,6 +113,7 @@ export default function AmbitoReglaContableFormSubmodal({
         const { msg } = await reglasContablesService.crearAmbito({
           codigo: draft.codigo.trim(),
           ...payload,
+          ...(tenantsSel.length > 0 ? { tenantIds: tenantsSel } : {}),
         });
         toast.success(msg || `Ámbito "${draft.codigo}" registrado.`);
       }
@@ -121,23 +146,16 @@ export default function AmbitoReglaContableFormSubmodal({
         </DialogHeader>
 
         <div className={reglasContablesUi.section}>
-          {!esEdicion ? (
-            <InventarioCodigoPresetField
+          <div className="space-y-2">
+            <Label>Código del ámbito</Label>
+            <Input
+              className={reglasContablesUi.input}
               value={draft.codigo}
-              onChange={(codigo) => setDraft((prev) => ({ ...prev, codigo }))}
-              presets={PRESETS_AMBITO_REGLA}
-              disabled={submitting || saving}
-              label="Código del ámbito"
-              onPresetPick={(preset) =>
-                setDraft((prev) => ({ ...prev, codigo: preset.codigo, nombre: preset.nombre }))
-              }
+              onChange={(e) => setDraft((prev) => ({ ...prev, codigo: e.target.value }))}
+              placeholder="Ej: EXPORTACION"
+              disabled={esEdicion || submitting || saving}
             />
-          ) : (
-            <div className="space-y-2">
-              <Label>Código</Label>
-              <Input className={reglasContablesUi.input} value={draft.codigo} disabled />
-            </div>
-          )}
+          </div>
           <div className="space-y-2">
             <Label>Nombre visible</Label>
             <Input
@@ -156,14 +174,29 @@ export default function AmbitoReglaContableFormSubmodal({
             />
           </div>
           <div className="space-y-2">
-            <Label>Orden</Label>
-            <Input
-              type="number"
-              min={0}
-              className={reglasContablesUi.input}
-              value={draft.orden}
-              onChange={(e) => setDraft((prev) => ({ ...prev, orden: e.target.value }))}
-            />
+            <Label>Tipo de regla (catálogo)</Label>
+            <Select
+              value={draft.tipoReglaCodigo || SIN_TIPO}
+              onValueChange={(v) => setDraft((prev) => ({ ...prev, tipoReglaCodigo: v === SIN_TIPO ? '' : v }))}
+            >
+              <SelectTrigger className={reglasContablesUi.input}>
+                <SelectValue placeholder="Selecciona un tipo del catálogo" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={SIN_TIPO}>— Sin tipo asociado —</SelectItem>
+                {tipos.map((t) => (
+                  <SelectItem key={t.codigo} value={t.codigo}>
+                    {t.codigo} — {t.nombre}
+                  </SelectItem>
+                ))}
+                {draft.tipoReglaCodigo && !tipos.some((t) => t.codigo === draft.tipoReglaCodigo) && (
+                  <SelectItem value={draft.tipoReglaCodigo}>{draft.tipoReglaCodigo} — (no está en el catálogo)</SelectItem>
+                )}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Relación dinámica con tiporeglacontablecatalogos. Al autorizar varios tenants, el tipo debe existir activo en el catálogo de cada uno.
+            </p>
           </div>
           <div className="flex items-center gap-2">
             <Checkbox
@@ -176,6 +209,33 @@ export default function AmbitoReglaContableFormSubmodal({
               Activo en catálogo
             </Label>
           </div>
+
+          {!esEdicion && tenantOptions.length > 0 && (
+            <div className="space-y-2">
+              <Label>Tenants autorizados</Label>
+              <p className="text-xs text-muted-foreground">
+                Selecciona a quién se le autoriza este ámbito. Sin selección, aplica solo a tu tenant actual.
+              </p>
+              <div className="max-h-40 space-y-2 overflow-y-auto rounded-md border p-3">
+                {tenantOptions.map((option) => (
+                  <div key={option.value} className="flex items-center gap-2">
+                    <Checkbox
+                      id={`ambito-tenant-${option.value}`}
+                      checked={tenantsSel.includes(option.value)}
+                      onCheckedChange={() => toggleTenant(option.value)}
+                      disabled={submitting || saving}
+                    />
+                    <Label htmlFor={`ambito-tenant-${option.value}`} className="cursor-pointer font-normal">
+                      {option.label}
+                    </Label>
+                  </div>
+                ))}
+              </div>
+              {tenantsSel.length > 0 && (
+                <p className="text-xs text-muted-foreground">{tenantsSel.length} tenant(s) seleccionado(s).</p>
+              )}
+            </div>
+          )}
         </div>
 
         <DialogFooter className="gap-2 sm:gap-0">

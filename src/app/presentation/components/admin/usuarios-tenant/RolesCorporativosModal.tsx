@@ -148,7 +148,7 @@ export const RolesCorporativosModal = ({ open, onClose }: RolesCorporativosModal
                                     <Loader2 className="h-4 w-4 animate-spin" /> Cargando tenant globales…
                                 </div>
                             ) : tenantGlobales.length === 0 ? (
-                                <p className="text-xs text-amber-700 dark:text-amber-500 rounded-md border border-dashed border-amber-200 bg-amber-50/50 dark:bg-amber-950/20 px-2 py-2">
+                                <p className="text-xs text-warning dark:text-warning rounded-md border border-dashed border-warning/20 bg-warning/50 dark:bg-warning/20 px-2 py-2">
                                     No hay tenant globales en tu alcance, o el servidor usará el corporativo de tu sesión si aplica.
                                 </p>
                             ) : (

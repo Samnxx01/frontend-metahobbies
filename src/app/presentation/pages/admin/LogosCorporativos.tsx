@@ -387,7 +387,7 @@ export default function LogosCorporativos() {
           <div className="flex items-center gap-2">
             <span>{logo.nombre_documento || logo.nombre || 'Sin nombre'}</span>
             {logo.estadoActivo && (
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-semibold">
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-success/10 text-success font-semibold">
                 Activo
               </span>
             )}
@@ -402,7 +402,7 @@ export default function LogosCorporativos() {
                   Perfil corporativo: {logo.perfilCorporativoLabel}
                 </div>
               ) : (
-                <div className="text-[11px] text-amber-700/90">Sin perfil corporativo en el archivo</div>
+                <div className="text-[11px] text-warning/90">Sin perfil corporativo en el archivo</div>
               )}
             </div>
           </td>
@@ -422,7 +422,7 @@ export default function LogosCorporativos() {
             <span
               className={`px-2 py-1 rounded-full text-[10px] font-bold ${
                 logo.estadoPublico
-                  ? 'bg-sky-100 text-sky-700'
+                  ? 'bg-info/10 text-info'
                   : 'bg-slate-100 text-slate-600'
               }`}
             >
@@ -671,7 +671,7 @@ export default function LogosCorporativos() {
                 <span
                   className={`px-2 py-1 rounded-full text-[10px] font-bold ${
                     selectedLogo?.estadoPublico
-                      ? 'bg-sky-100 text-sky-700'
+                      ? 'bg-info/10 text-info'
                       : 'bg-slate-100 text-slate-600'
                   }`}
                 >
@@ -682,7 +682,7 @@ export default function LogosCorporativos() {
             <div className="mt-3 flex items-center justify-center gap-3">
               {selectedLogo?.estadoActivo ? (
                 <>
-                  <span className="inline-flex items-center gap-1 text-emerald-600 text-sm font-medium">
+                  <span className="inline-flex items-center gap-1 text-success text-sm font-medium">
                     <CheckCircle2 className="h-4 w-4" /> Logo activo en navbar
                   </span>
                   {isTenantGlobal && !isTenantSuperAdmin && (

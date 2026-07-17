@@ -159,10 +159,10 @@ type NvlSequenceState = {
 // ESTILOS
 // ─────────────────────────────────────────────────────────────────
 const METHOD_STYLE: Record<HttpMethod, string> = {
-  GET:    'bg-blue-100 text-blue-700 border-blue-200',
-  POST:   'bg-emerald-100 text-emerald-700 border-emerald-200',
-  PUT:    'bg-amber-100 text-amber-700 border-amber-200',
-  DELETE: 'bg-red-100 text-red-700 border-red-200',
+  GET:    'bg-info/10 text-info border-info/20',
+  POST:   'bg-success/10 text-success border-success/20',
+  PUT:    'bg-warning/10 text-warning border-warning/20',
+  DELETE: 'bg-destructive/10 text-destructive border-destructive/20',
 };
 const METHOD_ICON: Record<HttpMethod, React.ReactNode> = {
   GET:    <List    className="h-3 w-3" />,
@@ -182,15 +182,15 @@ const SECTION_ICON: Record<EndpointSection, React.ReactNode> = {
   'governance':      <Lock      className="h-4 w-4" />,
 };
 const SECTION_COLOR: Record<EndpointSection, string> = {
-  'catalogos':       'text-violet-600',
-  'nvl-global':      'text-sky-600',
-  'nvl-corporativo': 'text-emerald-600',
-  'roles':           'text-indigo-600',
-  'catalogo-corp':   'text-pink-600',
-  'reglas':          'text-amber-600',
-  'rutas':           'text-teal-600',
-  'dominios':        'text-orange-600',
-  'governance':      'text-rose-600',
+  'catalogos':       'text-info',
+  'nvl-global':      'text-info',
+  'nvl-corporativo': 'text-success',
+  'roles':           'text-info',
+  'catalogo-corp':   'text-primary',
+  'reglas':          'text-warning',
+  'rutas':           'text-success',
+  'dominios':        'text-warning',
+  'governance':      'text-destructive',
 };
 const SECTION_LABEL: Record<EndpointSection, string> = {
   'catalogos':       'Catalogos base',
@@ -869,7 +869,7 @@ function NavItem({ endpoint, isActive, onClick }: {
       onClick={onClick}
       className={cn(
         'w-full flex items-start gap-2.5 px-3 py-2 rounded-lg text-left transition-colors',
-        isActive ? 'bg-rose-50 text-rose-900 ring-1 ring-rose-200' : 'hover:bg-slate-100 text-slate-700'
+        isActive ? 'bg-destructive/10 text-destructive ring-1 ring-destructive/20' : 'hover:bg-slate-100 text-slate-700'
       )}
     >
       <span className="mt-0.5 shrink-0"><MethodBadge method={endpoint.method} size="sm" /></span>
@@ -890,12 +890,12 @@ function FieldRow({ field, renderField }: {
       <div className="flex items-center gap-2 flex-wrap">
         <Label className="text-sm font-medium text-slate-800">
           {field.label}
-          {field.required && <span className="text-rose-500 ml-1">*</span>}
+          {field.required && <span className="text-destructive ml-1">*</span>}
         </Label>
         {field.pathParam && <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">path param</Badge>}
         {field.type === 'boolean' && <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-slate-500">boolean</Badge>}
         {field.type === 'number'  && <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-slate-500">number</Badge>}
-        {field.type === 'id'      && <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-violet-600">ObjectId</Badge>}
+        {field.type === 'id'      && <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-info">ObjectId</Badge>}
       </div>
       {renderField()}
       {field.hint && <p className="text-xs text-slate-500 leading-snug">{field.hint}</p>}
@@ -1857,10 +1857,10 @@ const ParametrizacionCatologTenant: React.FC = () => {
                   <CardTitle className="text-2xl">{nvlSequenceState?.current ?? 0}</CardTitle>
                 </CardHeader>
               </Card>
-              <Card className="border-rose-200 bg-rose-50">
+              <Card className="border-destructive/20 bg-destructive/10">
                 <CardHeader className="pb-2">
                   <CardDescription>Proxima secuencia</CardDescription>
-                  <CardTitle className="text-2xl text-rose-700">{nvlSequenceState?.next ?? 1}</CardTitle>
+                  <CardTitle className="text-2xl text-destructive">{nvlSequenceState?.next ?? 1}</CardTitle>
                 </CardHeader>
               </Card>
               <Card className="border-slate-200 bg-white">
@@ -1970,7 +1970,7 @@ const ParametrizacionCatologTenant: React.FC = () => {
                                       type="button"
                                       variant="outline"
                                       size="sm"
-                                      className="gap-1 text-red-600"
+                                      className="gap-1 text-destructive"
                                       onClick={() => void handleDeleteSequenceConfig(item)}
                                       disabled={nvlSequenceActionId === String(item?.iud || item?._id || '')}
                                     >
@@ -2022,7 +2022,7 @@ const ParametrizacionCatologTenant: React.FC = () => {
                     <button
                       key={`nvl-catalog-${item?.iud || item?._id || item?.nvl}`}
                       type="button"
-                      className="rounded-lg border border-slate-200 bg-white p-3 text-left transition-colors hover:border-rose-300 hover:bg-rose-50"
+                      className="rounded-lg border border-slate-200 bg-white p-3 text-left transition-colors hover:border-destructive/30 hover:bg-destructive/10"
                       onClick={() =>
                         setNvlModalState({
                           nvl: String(item?.nvl ?? ''),
@@ -2254,7 +2254,7 @@ const ParametrizacionCatologTenant: React.FC = () => {
       <aside className="w-72 shrink-0 border-r bg-white flex flex-col shadow-sm">
         <div className="px-4 py-4 border-b space-y-3">
           <div className="flex items-center gap-2">
-            <Settings2 className="h-5 w-5 text-rose-500" />
+            <Settings2 className="h-5 w-5 text-destructive" />
             <span className="font-semibold text-slate-900 text-sm">Catalogo Tenant</span>
             <Badge variant="outline" className="ml-auto text-[10px]">{ENDPOINTS.length}</Badge>
           </div>
@@ -2330,7 +2330,7 @@ const ParametrizacionCatologTenant: React.FC = () => {
               </code>
               <p className="text-sm text-slate-600">{selectedEndpoint.description}</p>
               {isSelectedEndpointBlocked && (
-                <p className="text-sm font-medium text-amber-700">
+                <p className="text-sm font-medium text-warning">
                   Solo el scope `tenantSuperAdmin` del JWT puede guardar o ejecutar esta accion. `tenantGlobal` y `tenantCorporativo` quedan sin accion.
                 </p>
               )}
@@ -2506,7 +2506,7 @@ const ParametrizacionCatologTenant: React.FC = () => {
                                 <div className="grid gap-3 sm:grid-cols-2">
                                   <div className="rounded-xl border border-slate-200 bg-white px-3 py-3">
                                     <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Acceso libre</p>
-                                    <p className={`mt-2 text-sm font-semibold ${item?.securityPlatform ? 'text-emerald-600' : 'text-amber-600'}`}>
+                                    <p className={`mt-2 text-sm font-semibold ${item?.securityPlatform ? 'text-success' : 'text-warning'}`}>
                                       {item?.securityPlatform ? 'true' : 'false'}
                                     </p>
                                   </div>
@@ -2526,7 +2526,7 @@ const ParametrizacionCatologTenant: React.FC = () => {
                                       <Button type="button" variant="outline" size="sm" onClick={() => void handleDeactivateNvlGlobal(item)} disabled={busy || item?.estado === false}>
                                         {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Desactivar'}
                                       </Button>
-                                      <Button type="button" variant="outline" size="sm" className="gap-1 text-red-600" onClick={() => void handleDeleteNvlGlobal(item)} disabled={busy}>
+                                      <Button type="button" variant="outline" size="sm" className="gap-1 text-destructive" onClick={() => void handleDeleteNvlGlobal(item)} disabled={busy}>
                                         <Trash2 className="h-3.5 w-3.5" />
                                         Eliminar
                                       </Button>

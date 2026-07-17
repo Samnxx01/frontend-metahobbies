@@ -717,7 +717,7 @@ export default function MembershipDashboard(): React.ReactElement {
                                 {vouchersSinReferidoEnLista.length > 0 && (
                                     <AccordionItem
                                         value="__vouchers_sin_ref"
-                                        className="overflow-hidden rounded-xl border border-amber-500/30 bg-amber-500/[0.04]"
+                                        className="overflow-hidden rounded-xl border border-warning/30 bg-warning/[0.04]"
                                     >
                                         <AccordionTrigger className="px-4 py-4 hover:no-underline">
                                             <div className="flex w-full flex-col gap-1 text-left sm:flex-row sm:items-center sm:justify-between">

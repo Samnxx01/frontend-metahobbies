@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Search, FileText, Send, CheckCircle2, XCircle, Loader2, Copy, RefreshCw, FileSearch, ScanLine, X, Camera } from 'lucide-react';
+import { Search, FileText, Send, CheckCircle2, XCircle, Loader2, Copy, RefreshCw, FileSearch, ScanLine, X, Camera, History, HelpCircle } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,15 +8,24 @@ import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { DataTable } from '@/app/presentation/components/admin/DataTable';
 import {
   consultarCufe,
   consultarDesdeXml,
   enviarFacturaPrueba,
   consultarEstadoZip,
+  listarTrazabilidadTenant,
+  listarTrazabilidadPorFactura,
+  listarTrazabilidadPorCufe,
+  reenviarTransmisionDian,
   type DianConsultaCufeResponse,
   type DianConsultaXmlResponse,
   type DianEnvioResponse,
   type DianZipEstadoResponse,
+  type DianTrazabilidadEvento,
+  type DianTrazabilidadTipoEvento,
 } from '@/app/services/dianService';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -165,8 +174,8 @@ function QrScannerModal({ onCufeDetectado, onClose }: QrScannerModalProps) {
         </div>
 
         {error ? (
-          <div className="p-6 text-center text-sm text-red-400 space-y-2">
-            <XCircle className="h-8 w-8 mx-auto text-red-500" />
+          <div className="p-6 text-center text-sm text-destructive space-y-2">
+            <XCircle className="h-8 w-8 mx-auto text-destructive" />
             <p>{error}</p>
             <Button size="sm" variant="outline" onClick={handleClose} className="mt-2">Cerrar</Button>
           </div>
@@ -181,12 +190,12 @@ function QrScannerModal({ onCufeDetectado, onClose }: QrScannerModalProps) {
             {/* Marco de escaneo */}
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <div className="w-52 h-52 relative">
-                <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-green-400 rounded-tl-md" />
-                <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-green-400 rounded-tr-md" />
-                <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-green-400 rounded-bl-md" />
-                <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-green-400 rounded-br-md" />
+                <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-success/50 rounded-tl-md" />
+                <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-success/50 rounded-tr-md" />
+                <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-success/50 rounded-bl-md" />
+                <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-success/50 rounded-br-md" />
                 {detectando && (
-                  <div className="absolute top-0 left-0 right-0 h-0.5 bg-green-400 animate-bounce" style={{ animationDuration: '1.5s' }} />
+                  <div className="absolute top-0 left-0 right-0 h-0.5 bg-success/50 animate-bounce" style={{ animationDuration: '1.5s' }} />
                 )}
               </div>
             </div>
@@ -231,11 +240,11 @@ function RespuestaJson({ data, label }: { data: unknown; label: string }) {
 
 function EstadoBadge({ esValida }: { esValida: boolean }) {
   return esValida ? (
-    <Badge className="gap-1 bg-green-100 text-green-800 hover:bg-green-100">
+    <Badge className="gap-1 bg-success/10 text-success hover:bg-success/10">
       <CheckCircle2 className="h-3.5 w-3.5" /> Válida ante DIAN
     </Badge>
   ) : (
-    <Badge className="gap-1 bg-red-100 text-red-800 hover:bg-red-100">
+    <Badge className="gap-1 bg-destructive/10 text-destructive hover:bg-destructive/10">
       <XCircle className="h-3.5 w-3.5" /> No válida / Error
     </Badge>
   );
@@ -309,7 +318,7 @@ function TabConsultarCufe() {
           </Button>
         </div>
         <p className="text-xs text-muted-foreground">
-          Caracteres ingresados: <span className={cufe.length === 96 ? 'text-green-600 font-semibold' : 'text-muted-foreground'}>{cufe.length}/96</span>
+          Caracteres ingresados: <span className={cufe.length === 96 ? 'text-success font-semibold' : 'text-muted-foreground'}>{cufe.length}/96</span>
           {' · '}
           <button
             type="button"
@@ -345,7 +354,7 @@ function TabConsultarCufe() {
             </div>
           </div>
           {resultado.data?.mensajeError && (
-            <div className="rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
+            <div className="rounded-md bg-warning/10 border border-warning/20 px-3 py-2 text-xs text-warning">
               <strong>Error DIAN:</strong> {resultado.data.mensajeError}
             </div>
           )}
@@ -436,7 +445,7 @@ function TabConsultarXml() {
             </div>
           </div>
           {resultado.data?.mensajeError && (
-            <div className="rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
+            <div className="rounded-md bg-warning/10 border border-warning/20 px-3 py-2 text-xs text-warning">
               <strong>Error DIAN:</strong> {resultado.data.mensajeError}
             </div>
           )}
@@ -547,9 +556,9 @@ function TabEnviarPrueba() {
           </div>
 
           {zipKey && (
-            <div className="rounded-md border bg-green-50 border-green-200 px-3 py-3 space-y-2">
-              <p className="text-xs text-green-800 font-medium">ZipKey recibido — úsalo para consultar el estado:</p>
-              <p className="font-mono text-xs break-all text-green-900">{zipKey}</p>
+            <div className="rounded-md border bg-success/10 border-success/20 px-3 py-3 space-y-2">
+              <p className="text-xs text-success font-medium">ZipKey recibido — úsalo para consultar el estado:</p>
+              <p className="font-mono text-xs break-all text-success">{zipKey}</p>
               <Button
                 size="sm"
                 variant="outline"
@@ -580,6 +589,330 @@ function TabEnviarPrueba() {
   );
 }
 
+// ── Tab 4 — Trazabilidad ──────────────────────────────────────────────────────
+
+const TIPO_EVENTO_INFO: Record<DianTrazabilidadTipoEvento, { label: string; icon: typeof Send; className: string }> = {
+  ENVIO_INICIADO: { label: 'Envío iniciado', icon: Send, className: 'bg-info/10 text-info' },
+  REINTENTO: { label: 'Reintento', icon: RefreshCw, className: 'bg-warning/10 text-warning' },
+  ENVIO_EXITOSO: { label: 'Envío exitoso', icon: CheckCircle2, className: 'bg-success/10 text-success' },
+  ENVIO_FALLIDO: { label: 'Envío fallido', icon: XCircle, className: 'bg-destructive/10 text-destructive' },
+  ACEPTADA_DIAN: { label: 'Aceptada DIAN', icon: CheckCircle2, className: 'bg-success/10 text-success' },
+  RECHAZADA_DIAN: { label: 'Rechazada DIAN', icon: XCircle, className: 'bg-destructive/10 text-destructive' },
+  CONSULTA_ESTADO: { label: 'Consulta estado', icon: Search, className: 'bg-slate-100 text-slate-800' },
+  CONSULTA_CUFE: { label: 'Consulta CUFE', icon: Search, className: 'bg-slate-100 text-slate-800' },
+};
+
+function EventoBadge({ tipoEvento }: { tipoEvento: DianTrazabilidadTipoEvento }) {
+  const info = TIPO_EVENTO_INFO[tipoEvento] || {
+    label: tipoEvento,
+    icon: HelpCircle,
+    className: 'bg-slate-100 text-slate-800',
+  };
+  const Icon = info.icon;
+  return (
+    <Badge className={`gap-1 whitespace-nowrap hover:${info.className} ${info.className}`}>
+      <Icon className="h-3.5 w-3.5" /> {info.label}
+    </Badge>
+  );
+}
+
+function formatearFecha(iso: string): string {
+  return new Date(iso).toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' });
+}
+
+/** Diálogo de detalle: mensaje completo + respuesta cruda de un evento (drill-down desde la tabla). */
+function EventoDetalleDialog({ evento, onClose }: { evento: DianTrazabilidadEvento | null; onClose: () => void }) {
+  return (
+    <Dialog open={Boolean(evento)} onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            {evento && <EventoBadge tipoEvento={evento.tipoEvento} />}
+            <span className="text-sm font-normal text-muted-foreground">
+              {evento && formatearFecha(evento.createdAt)}
+            </span>
+          </DialogTitle>
+        </DialogHeader>
+        {evento && (
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              {evento.invoiceNumber && (
+                <div><span className="text-muted-foreground">Factura: </span>{evento.invoiceNumber}</div>
+              )}
+              {evento.cufe && (
+                <div className="truncate col-span-2"><span className="text-muted-foreground">CUFE: </span><span className="font-mono">{evento.cufe}</span></div>
+              )}
+              {evento.estadoAnterior && (
+                <div><span className="text-muted-foreground">Estado anterior: </span>{evento.estadoAnterior}</div>
+              )}
+              {evento.estadoNuevo && (
+                <div><span className="text-muted-foreground">Estado nuevo: </span>{evento.estadoNuevo}</div>
+              )}
+              <div><span className="text-muted-foreground">Origen: </span>{evento.origen}</div>
+              {evento.zipKey && (
+                <div className="truncate col-span-2"><span className="text-muted-foreground">ZipKey: </span><span className="font-mono">{evento.zipKey}</span></div>
+              )}
+            </div>
+            {evento.mensaje && (
+              <div className="rounded-md bg-warning/10 border border-warning/20 px-3 py-2 text-xs text-warning">
+                {evento.mensaje}
+              </div>
+            )}
+            {evento.rawResponse != null && (
+              <RespuestaJson data={evento.rawResponse} label="Respuesta cruda DIAN" />
+            )}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+type ModoBusquedaTrazabilidad = 'factura' | 'cufe' | 'tenant';
+
+function TabTrazabilidad() {
+  const [modo, setModo] = useState<ModoBusquedaTrazabilidad>('factura');
+  const [electronicInvoiceId, setElectronicInvoiceId] = useState('');
+  const [cufe, setCufe] = useState('');
+  const [tipoEventoFiltro, setTipoEventoFiltro] = useState<string>('TODOS');
+  const [loading, setLoading] = useState(false);
+  const [eventos, setEventos] = useState<DianTrazabilidadEvento[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [reenviando, setReenviando] = useState(false);
+  const [reenvioMsg, setReenvioMsg] = useState<string | null>(null);
+  const [eventoSeleccionado, setEventoSeleccionado] = useState<DianTrazabilidadEvento | null>(null);
+
+  const columnas = [
+    {
+      field: 'tipoEvento',
+      headerName: 'Evento',
+      minWidth: 170,
+      render: (row: DianTrazabilidadEvento) => <EventoBadge tipoEvento={row.tipoEvento} />,
+    },
+    {
+      field: 'createdAt',
+      headerName: 'Fecha',
+      minWidth: 150,
+      render: (row: DianTrazabilidadEvento) => (
+        <span className="text-xs text-muted-foreground">{formatearFecha(row.createdAt)}</span>
+      ),
+    },
+    {
+      field: 'invoiceNumber',
+      headerName: 'Factura',
+      minWidth: 130,
+      render: (row: DianTrazabilidadEvento) => row.invoiceNumber || '—',
+    },
+    {
+      field: 'cufe',
+      headerName: 'CUFE',
+      minWidth: 140,
+      render: (row: DianTrazabilidadEvento) => (
+        row.cufe ? <span className="font-mono text-xs">{row.cufe.slice(0, 12)}...</span> : '—'
+      ),
+    },
+    {
+      field: 'estado',
+      headerName: 'Estado',
+      minWidth: 160,
+      render: (row: DianTrazabilidadEvento) => (
+        <span className="text-xs">
+          {row.estadoAnterior || '—'} <span className="text-muted-foreground">→</span> {row.estadoNuevo || '—'}
+        </span>
+      ),
+    },
+    {
+      field: 'origen',
+      headerName: 'Origen',
+      minWidth: 100,
+      render: (row: DianTrazabilidadEvento) => (
+        <Badge variant="outline" className="text-xs font-normal">{row.origen}</Badge>
+      ),
+    },
+    {
+      field: 'mensaje',
+      headerName: 'Detalle',
+      minWidth: 220,
+      render: (row: DianTrazabilidadEvento) => (
+        <span className="text-xs text-muted-foreground truncate block max-w-56" title={row.mensaje || ''}>
+          {row.mensaje || '—'}
+        </span>
+      ),
+    },
+    {
+      field: 'actions',
+      headerName: '',
+      minWidth: 90,
+      align: 'center' as const,
+      render: (row: DianTrazabilidadEvento) => (
+        <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => setEventoSeleccionado(row)}>
+          Ver detalle
+        </Button>
+      ),
+    },
+  ];
+
+  const handleBuscar = async () => {
+    setError(null);
+    setReenvioMsg(null);
+    setLoading(true);
+    try {
+      let res;
+      if (modo === 'factura') {
+        if (!electronicInvoiceId.trim()) {
+          setError('Ingresa el id de la factura electrónica.');
+          setLoading(false);
+          return;
+        }
+        res = await listarTrazabilidadPorFactura(electronicInvoiceId.trim());
+      } else if (modo === 'cufe') {
+        if (!cufe.trim()) {
+          setError('Ingresa el CUFE a consultar.');
+          setLoading(false);
+          return;
+        }
+        res = await listarTrazabilidadPorCufe(cufe.trim());
+      } else {
+        res = await listarTrazabilidadTenant(
+          tipoEventoFiltro !== 'TODOS' ? { tipoEvento: tipoEventoFiltro } : {},
+        );
+      }
+      setEventos(res.data);
+    } catch (err: any) {
+      setError(err?.message || 'Error consultando la trazabilidad');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleReenviar = async () => {
+    if (!electronicInvoiceId.trim()) {
+      setError('Ingresa el id de la factura electrónica para reenviar.');
+      return;
+    }
+    setReenviando(true);
+    setReenvioMsg(null);
+    setError(null);
+    try {
+      const res = await reenviarTransmisionDian(electronicInvoiceId.trim());
+      setReenvioMsg(
+        res.msg || `Reenvío solicitado. Estado: ${res.data?.transmission?.status || 'PENDING'}.`,
+      );
+      await handleBuscar();
+    } catch (err: any) {
+      setError(err?.message || 'Error solicitando el reenvío a la DIAN');
+    } finally {
+      setReenviando(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-end gap-2">
+        <div className="space-y-1.5">
+          <Label>Buscar por</Label>
+          <Select value={modo} onValueChange={(v) => setModo(v as ModoBusquedaTrazabilidad)}>
+            <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="factura">Factura (id)</SelectItem>
+              <SelectItem value="cufe">CUFE</SelectItem>
+              <SelectItem value="tenant">Todas (tenant)</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {modo === 'factura' && (
+          <div className="space-y-1.5 flex-1 min-w-48">
+            <Label htmlFor="traza-invoice-id">Id de la factura electrónica</Label>
+            <Input
+              id="traza-invoice-id"
+              value={electronicInvoiceId}
+              onChange={(e) => setElectronicInvoiceId(e.target.value)}
+              placeholder="iud de invoiceElectronic"
+              className="font-mono text-xs"
+            />
+          </div>
+        )}
+
+        {modo === 'cufe' && (
+          <div className="space-y-1.5 flex-1 min-w-48">
+            <Label htmlFor="traza-cufe">CUFE</Label>
+            <Input
+              id="traza-cufe"
+              value={cufe}
+              onChange={(e) => setCufe(e.target.value)}
+              placeholder="96 caracteres hex"
+              className="font-mono text-xs"
+              maxLength={96}
+            />
+          </div>
+        )}
+
+        {modo === 'tenant' && (
+          <div className="space-y-1.5">
+            <Label>Tipo de evento</Label>
+            <Select value={tipoEventoFiltro} onValueChange={setTipoEventoFiltro}>
+              <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="TODOS">Todos</SelectItem>
+                {Object.keys(TIPO_EVENTO_INFO).map((tipo) => (
+                  <SelectItem key={tipo} value={tipo}>{TIPO_EVENTO_INFO[tipo as DianTrazabilidadTipoEvento].label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
+        <Button onClick={handleBuscar} disabled={loading}>
+          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <History className="h-4 w-4" />}
+          <span className="ml-2">{loading ? 'Buscando...' : 'Buscar historial'}</span>
+        </Button>
+
+        {modo === 'factura' && (
+          <Button
+            variant="outline"
+            onClick={handleReenviar}
+            disabled={reenviando || !electronicInvoiceId.trim()}
+            title="Solicita un nuevo envío a la DIAN de esta factura electrónica"
+          >
+            {reenviando ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            <span className="ml-2">{reenviando ? 'Reenviando...' : 'Reenviar a DIAN'}</span>
+          </Button>
+        )}
+      </div>
+
+      {error && (
+        <div className="rounded-md border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+          {error}
+        </div>
+      )}
+
+      {reenvioMsg && (
+        <div className="rounded-md border border-info/20 bg-info/10 px-4 py-3 text-sm text-info">
+          {reenvioMsg} El resultado final (aceptado/rechazado) llega de forma asíncrona — vuelve a
+          buscar el historial en unos segundos para verlo.
+        </div>
+      )}
+
+      {eventos && (
+        <div className="space-y-3">
+          <Separator />
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium">Historial ({eventos.length})</span>
+          </div>
+          <DataTable
+            data={eventos.map((e) => ({ ...e, id: e.iud }))}
+            columns={columnas}
+            minWidth="820px"
+          />
+        </div>
+      )}
+
+      <EventoDetalleDialog evento={eventoSeleccionado} onClose={() => setEventoSeleccionado(null)} />
+    </div>
+  );
+}
+
 // ── Componente principal ──────────────────────────────────────────────────────
 
 const DianConsulta = (): React.ReactElement => {
@@ -587,8 +920,8 @@ const DianConsulta = (): React.ReactElement => {
     <div className="p-6 max-w-4xl mx-auto space-y-6">
       <div>
         <div className="flex items-center gap-3">
-          <div className="rounded-lg bg-blue-100 p-2">
-            <FileText className="h-6 w-6 text-blue-700" />
+          <div className="rounded-lg bg-info/10 p-2">
+            <FileText className="h-6 w-6 text-info" />
           </div>
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Consultor DIAN</h1>
@@ -600,7 +933,7 @@ const DianConsulta = (): React.ReactElement => {
       </div>
 
       <Tabs defaultValue="cufe" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="cufe" className="gap-2 text-xs sm:text-sm">
             <Search className="h-4 w-4" />
             <span className="hidden sm:inline">Consultar por </span>CUFE
@@ -612,6 +945,10 @@ const DianConsulta = (): React.ReactElement => {
           <TabsTrigger value="enviar" className="gap-2 text-xs sm:text-sm">
             <Send className="h-4 w-4" />
             <span className="hidden sm:inline">Enviar </span>Prueba
+          </TabsTrigger>
+          <TabsTrigger value="trazabilidad" className="gap-2 text-xs sm:text-sm">
+            <History className="h-4 w-4" />
+            Trazabilidad
           </TabsTrigger>
         </TabsList>
 
@@ -657,6 +994,21 @@ const DianConsulta = (): React.ReactElement => {
             </CardHeader>
             <CardContent>
               <TabEnviarPrueba />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="trazabilidad">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Trazabilidad de envío a la DIAN</CardTitle>
+              <CardDescription>
+                Historial completo de eventos (envíos, reintentos, consultas) de una factura electrónica.
+                Desde aquí también puedes solicitar un reenvío a la DIAN.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <TabTrazabilidad />
             </CardContent>
           </Card>
         </TabsContent>

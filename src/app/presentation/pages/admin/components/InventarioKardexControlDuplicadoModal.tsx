@@ -73,9 +73,9 @@ export function InventarioKardexControlDuplicadoAyudaDialog({
             </ul>
           </section>
 
-          <section className="rounded-lg border border-amber-200 bg-amber-50/80 p-4 space-y-2">
-            <p className="font-medium text-amber-950">omitirControlDuplicado = true</p>
-            <ul className="list-disc space-y-1 pl-5 text-amber-900/90">
+          <section className="rounded-lg border border-warning/20 bg-warning/80 p-4 space-y-2">
+            <p className="font-medium text-warning">omitirControlDuplicado = true</p>
+            <ul className="list-disc space-y-1 pl-5 text-warning/90">
               <li>Omite la validación de duplicados en kardex.</li>
               <li>
                 Permite registrar <strong>otra salida o entrada</strong> con el mismo documento, SKU y bodega,

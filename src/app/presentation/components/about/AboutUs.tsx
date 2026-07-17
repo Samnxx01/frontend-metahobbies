@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { CheckCircle } from 'lucide-react';
 import type { AboutUsConfig, PuntoClaveItemProps } from "@/types/components";
-import { obtenerAboutImageUrl, ABOUT_IMAGE_SEED } from '@/app/services/brandingWidget';
+import { obtenerHomeImageUrl } from '@/app/services/brandingWidget';
 
 const TITULO_SECUNDARIO: string = 'Desbloquea nuestra experiencia para impulsar el éxito en diversas industrias.';
 const TEXTO_DESCRIPCION: string = 'En Mabs by Gabs, creemos firmemente que el maquillaje es una extensión de tu personalidad y una herramienta poderosa para expresar tu individualidad. Desde la base perfecta hasta el labial audaz, cada producto está seleccionado para realzar tu belleza natural y potenciar tu confianza. Nuestra misión es ofrecerte no solo productos de alta calidad, sino también inspiración y alegría en cada aplicación. ¡Descubre la magia de Mabs by Gabs y atrévete a brillar con luz propia!';
@@ -27,10 +27,21 @@ const PuntoClaveItem: React.FC<PuntoClaveItemProps> = ({ punto, index }) => (
 );
 
 export default function AboutUs(): React.ReactElement {
-    const [imagenUrl, setImagenUrl] = useState<string>(ABOUT_IMAGE_SEED);
+    const [imagenUrl, setImagenUrl] = useState<string>('');
 
     useEffect(() => {
-        obtenerAboutImageUrl().then(setImagenUrl).catch(() => { /* mantiene semilla */ });
+        let activo = true;
+        obtenerHomeImageUrl()
+            .then((url) => {
+                if (activo) setImagenUrl(url);
+            })
+            .catch(() => {
+                if (activo) setImagenUrl('');
+            });
+
+        return () => {
+            activo = false;
+        };
     }, []);
 
     const aboutConfig: AboutUsConfig = {
@@ -48,11 +59,18 @@ export default function AboutUs(): React.ReactElement {
                     {/* Sección de la Imagen (Columna 1) */}
                     <div className="md:col-span-4 order-1 md:order-2 flex justify-center">
                         <div className="rounded-md overflow-hidden shadow-lg w-full max-w-sm bg-card h-[350px] sm:h-[550px]">
-                            <img
-                                src={aboutConfig.imagen}
-                                alt="Logo Mabs by Gabs"
-                                className="w-full h-full object-contain p-3 block"
-                            />
+                            {aboutConfig.imagen ? (
+                                <img
+                                    src={aboutConfig.imagen}
+                                    alt="Imagen parametrizada del Home"
+                                    className="w-full h-full object-contain p-3 block"
+                                    onError={() => setImagenUrl('')}
+                                />
+                            ) : (
+                                <div className="flex h-full w-full items-center justify-center p-6 text-center text-muted-foreground">
+                                    No hay imagen cargada
+                                </div>
+                            )}
                         </div>
                     </div>
 

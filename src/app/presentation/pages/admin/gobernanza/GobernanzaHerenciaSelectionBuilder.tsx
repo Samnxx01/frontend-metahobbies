@@ -64,9 +64,9 @@ export const GobernanzaHerenciaSelectionBuilder: React.FC<{ endpoint: EndpointSp
       ].some((value) => String(value || '').toLowerCase().includes(vistaSearch));
     };
     return (
-      <div className="rounded-xl border border-emerald-100 bg-card/80 p-3">
+      <div className="rounded-xl border border-success/10 bg-card/80 p-3">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <p className="text-xs font-medium text-emerald-700">
+          <p className="text-xs font-medium text-success">
             {soloConsultaReglasGlobales
               ? 'Vistas y permisos parametrizados en tu rama (solo consulta)'
               : 'Elige la vista que quieres cambiarle los permisos'}
@@ -107,7 +107,7 @@ export const GobernanzaHerenciaSelectionBuilder: React.FC<{ endpoint: EndpointSp
           </div>
         </div>
         {endpoint.id === 'perm-admin-tenant-global' || PERM_ADMIN_TENANT_GLOBAL_ACTUALIZAR_IDS.has(endpoint.id) ? (
-          <div className="mb-3 flex flex-wrap items-center gap-2 border-t border-emerald-100/80 pt-3">
+          <div className="mb-3 flex flex-wrap items-center gap-2 border-t border-success/80 pt-3">
             <Button
               type="button"
               size="sm"
@@ -164,21 +164,21 @@ export const GobernanzaHerenciaSelectionBuilder: React.FC<{ endpoint: EndpointSp
             }
             if (esActualizar && tgSel && !ruleSel) {
               return (
-                <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                <div className="rounded-md border border-warning/20 bg-warning/10 p-3 text-xs text-warning">
                   Elige la regla (x-regla-id) del tenant para ver vistas y permisos actuales.
                 </div>
               );
             }
             if (esActualizar && loadingDelta) {
               return (
-                <div className="rounded-md border border-sky-200 bg-sky-50 p-3 text-xs text-sky-800 flex items-center gap-2">
+                <div className="rounded-md border border-info/20 bg-info/10 p-3 text-xs text-info flex items-center gap-2">
                   <Loader2 className="h-3 w-3 animate-spin shrink-0" />
                   Calculando vistas y delta de la regla seleccionada…
                 </div>
               );
             }
             return (
-              <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+              <div className="rounded-md border border-warning/20 bg-warning/10 p-3 text-xs text-warning">
                 No hay vistas resueltas para este tenant en el catalogo actual.
                 <Button className="ml-2 h-7 px-2 text-xs" type="button" variant="outline" onClick={() => void hydrateData({ force: true })} disabled={loadingData}>
                   Recargar datos
@@ -302,10 +302,10 @@ export const GobernanzaHerenciaSelectionBuilder: React.FC<{ endpoint: EndpointSp
                   return (
                     <div key={getEntityId(suite)} className="mb-2">
                       {!suiteNodo && (
-                        <div className="mb-2 flex items-center gap-2 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-1.5">
-                          <span className="text-[11px] font-bold uppercase tracking-widest text-emerald-800">{suite.name}</span>
+                        <div className="mb-2 flex items-center gap-2 rounded-md border border-success/30 bg-success/10 px-3 py-1.5">
+                          <span className="text-[11px] font-bold uppercase tracking-widest text-success">{suite.name}</span>
                           <span
-                            className="ml-auto rounded-full bg-emerald-200 px-2 py-0.5 text-[10px] font-semibold text-emerald-800"
+                            className="ml-auto rounded-full bg-success/20 px-2 py-0.5 text-[10px] font-semibold text-success"
                             title="Marcadas en formulario / vistas del catálogo asignadas a esta suite (por id o path en árbol de rutas)"
                           >
                             {parametrizadasEnSuite}/{totalCatalogEnSuite}
@@ -336,10 +336,10 @@ export const GobernanzaHerenciaSelectionBuilder: React.FC<{ endpoint: EndpointSp
                           const totalModulo =
                             catalogModulo.total > 0 ? catalogModulo.total : formularios.length;
                           return (
-                            <div key={getEntityId(modulo)} className="rounded-md border border-emerald-200 bg-card">
+                            <div key={getEntityId(modulo)} className="rounded-md border border-success/20 bg-card">
                               <button
                                 type="button"
-                                className="flex w-full items-center justify-between px-3 py-2 text-xs font-semibold text-emerald-800 hover:bg-emerald-50"
+                                className="flex w-full items-center justify-between px-3 py-2 text-xs font-semibold text-success hover:bg-success/10"
                                 onClick={() =>
                                   setExpandedModulos((prev) => {
                                     const next = new Set(prev);
@@ -356,7 +356,7 @@ export const GobernanzaHerenciaSelectionBuilder: React.FC<{ endpoint: EndpointSp
                                 <span className="text-muted-foreground/90 font-normal">{selectedCount}/{totalModulo} {isExpanded ? '▲' : '▼'}</span>
                               </button>
                               {isExpanded && (
-                                <div className="border-t border-emerald-100 p-1.5 space-y-0.5">
+                                <div className="border-t border-success/10 p-1.5 space-y-0.5">
                                   {(() => {
                                     const formularioIds = new Set(formularios.map((f) => getEntityId(f)));
                                     const hasVisibleDescendant = (node: any): boolean => {
@@ -380,7 +380,7 @@ export const GobernanzaHerenciaSelectionBuilder: React.FC<{ endpoint: EndpointSp
                                             <label className={`flex items-start gap-2 rounded px-1.5 py-1 text-xs border-l-2 ${soloConsultaReglasGlobales ? 'opacity-90' : 'cursor-pointer hover:bg-muted/50'} ${isSubForm ? 'border-border' : 'border-input'}`}>
                                               <input
                                                 type="checkbox"
-                                                className="mt-0.5 shrink-0 accent-emerald-600"
+                                                className="mt-0.5 shrink-0 accent-success"
                                                 checked={catalogItemSelected('vistas', nid)}
                                                 disabled={soloConsultaReglasGlobales}
                                                 onChange={(e) => toggleCatalogItem(endpoint.id, 'vistas', nid, e.target.checked)}
@@ -391,11 +391,11 @@ export const GobernanzaHerenciaSelectionBuilder: React.FC<{ endpoint: EndpointSp
                                                 )}
                                                 <span className={isSubForm ? 'text-muted-foreground' : 'text-foreground font-medium'}>{nodo.name}</span>
                                                 {nodo.path && <span className="text-muted-foreground/90">({nodo.path})</span>}
-                                                {!enCatalogo && <span className="text-amber-500">[fuera de regla]</span>}
+                                                {!enCatalogo && <span className="text-warning">[fuera de regla]</span>}
                                               </span>
                                             </label>
                                           ) : (
-                                            <p className="mt-1 mb-0.5 rounded border-l-2 border-blue-300 bg-blue-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-700">
+                                            <p className="mt-1 mb-0.5 rounded border-l-2 border-info/30 bg-info/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-info">
                                               {nodo.name}
                                             </p>
                                           )}
@@ -526,7 +526,7 @@ export const GobernanzaHerenciaSelectionBuilder: React.FC<{ endpoint: EndpointSp
                             >
                               <input
                                 type="checkbox"
-                                className="accent-emerald-600"
+                                className="accent-success"
                                 checked={catalogItemSelected('vistas', vista.id)}
                                 onChange={(e) =>
                                   toggleCatalogItem(endpoint.id, 'vistas', vista.id, e.target.checked)
@@ -543,8 +543,8 @@ export const GobernanzaHerenciaSelectionBuilder: React.FC<{ endpoint: EndpointSp
                         </div>
                       ) : null}
                       {mostrarHuerfanosCatalogo && !arbolSinCheckboxes ? (
-                        <div className="mt-2 rounded-md border border-amber-200 bg-amber-50/90 p-2">
-                          <p className="mb-2 text-[11px] font-semibold text-amber-950">
+                        <div className="mt-2 rounded-md border border-warning/20 bg-warning/90 p-2">
+                          <p className="mb-2 text-[11px] font-semibold text-warning">
                             Vistas del catálogo (regla/herencia) aún sin nodo en el árbol de suites — puedes marcarlas aquí
                             {' '}
                             (
@@ -559,11 +559,11 @@ export const GobernanzaHerenciaSelectionBuilder: React.FC<{ endpoint: EndpointSp
                             {vistasFueraArbol.filter(matchesVistaSearch).map((vista) => (
                               <label
                                 key={vista.id}
-                                className="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 text-xs hover:bg-amber-100/80"
+                                className="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 text-xs hover:bg-warning/80"
                               >
                                 <input
                                   type="checkbox"
-                                  className="accent-emerald-600"
+                                  className="accent-success"
                                   checked={catalogItemSelected('vistas', vista.id)}
                                   onChange={(e) =>
                                     toggleCatalogItem(endpoint.id, 'vistas', vista.id, e.target.checked)
@@ -581,8 +581,8 @@ export const GobernanzaHerenciaSelectionBuilder: React.FC<{ endpoint: EndpointSp
                         </div>
                       ) : null}
                       {endpoint.id === 'perm-usuario-tenant-global' && vistasSinCatResueltas.length > 0 ? (
-                        <div className="mt-2 rounded-md border border-rose-200 bg-rose-50/90 p-2">
-                          <p className="mb-2 text-[11px] font-semibold text-rose-950">
+                        <div className="mt-2 rounded-md border border-destructive/20 bg-destructive/90 p-2">
+                          <p className="mb-2 text-[11px] font-semibold text-destructive">
                             Vistas en herencia no incluidas en el catálogo del formulario ({vistasSinCatResueltas.length}
                             {vistaSearch && vistasIdsSinFilaCatalogo.length !== vistasSinCatResueltas.length
                               ? ` de ${vistasIdsSinFilaCatalogo.length}`
@@ -596,17 +596,17 @@ export const GobernanzaHerenciaSelectionBuilder: React.FC<{ endpoint: EndpointSp
                               return (
                                 <label
                                   key={vid}
-                                  className="flex cursor-pointer items-start gap-2 rounded px-1 py-0.5 text-xs hover:bg-rose-100/80"
+                                  className="flex cursor-pointer items-start gap-2 rounded px-1 py-0.5 text-xs hover:bg-destructive/80"
                                 >
                                   <input
                                     type="checkbox"
-                                    className="accent-rose-600 mt-0.5 shrink-0"
+                                    className="accent-destructive mt-0.5 shrink-0"
                                     checked={catalogItemSelected('vistas', vid)}
                                     onChange={(e) =>
                                       toggleCatalogItem(endpoint.id, 'vistas', vid, e.target.checked)
                                     }
                                   />
-                                  <span className="min-w-0 leading-snug text-rose-950">
+                                  <span className="min-w-0 leading-snug text-destructive">
                                     {!sinRutaSeguridad ? (
                                       <>
                                         <span className="font-medium text-foreground">{meta.label}</span>
@@ -620,7 +620,7 @@ export const GobernanzaHerenciaSelectionBuilder: React.FC<{ endpoint: EndpointSp
                                     ) : (
                                       <>
                                         <span className="font-mono text-[11px] font-medium text-foreground">{vid}</span>
-                                        <span className="mt-0.5 block text-[10px] text-amber-800">
+                                        <span className="mt-0.5 block text-[10px] text-warning">
                                           No aparece en vistas/contexto ni en el árbol de rutas cargado — sincroniza «Recargar datos» o quita el permiso si el id es obsoleto.
                                         </span>
                                       </>

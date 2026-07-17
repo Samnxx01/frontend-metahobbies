@@ -18,7 +18,7 @@ export function TenantCrearGlobalUsuarioDesignForm({
 }: GobernanzaEndpointDesignFormProps): React.ReactElement {
   return (
     <div className="space-y-6">
-      <div className="rounded-lg border border-dashed border-sky-300/60 bg-sky-50/40 p-4 dark:bg-sky-950/20">
+      <div className="rounded-lg border border-dashed border-info/60 bg-info/40 p-4 dark:bg-info/20">
         <p className="text-xs font-semibold text-foreground">Tarjeta principal · flujo tenantGlobal</p>
         <p className="mt-1 text-xs text-muted-foreground">
           Encabezado ancho completo, etiqueta «Descendencia» y bloque de ruta del POST{' '}
@@ -28,7 +28,7 @@ export function TenantCrearGlobalUsuarioDesignForm({
 
       <CardDesignPreview
         endpoint={endpoint}
-        badges={<Badge className="rounded-md border-sky-200 bg-sky-50 text-sky-800">Descendencia</Badge>}
+        badges={<Badge className="rounded-md border-info/20 bg-info/10 text-info">Descendencia</Badge>}
       />
       <CardDesignControls endpointId={endpoint.id} value={value} onChange={onChange} readOnly={readOnly} />
       {embeddedApiForm ? <EmbeddedApiFormSection>{embeddedApiForm}</EmbeddedApiFormSection> : null}

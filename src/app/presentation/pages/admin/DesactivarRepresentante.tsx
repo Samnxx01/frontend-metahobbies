@@ -150,7 +150,7 @@ export default function DesactivarRepresentante({
     return (
         <div className="space-y-3">
             {scopeInfo.showDescription && (
-                <div className="rounded-md border border-purple-200 bg-purple-50 px-3 py-2 text-xs text-purple-700">
+                <div className="rounded-md border border-info/20 bg-info/10 px-3 py-2 text-xs text-info">
                     <div className="font-medium">Scope activo: tenantSuperAdmin</div>
                     <div className="mt-1">Puede desactivar o eliminar representantes visibles dentro de la parametrizacion corporativa.</div>
                 </div>
@@ -192,7 +192,7 @@ export default function DesactivarRepresentante({
                             <div className={`grid gap-2 ${scopeInfo.canDelete ? 'sm:grid-cols-2' : 'sm:grid-cols-1'}`}>
                                 <button
                                     type="button"
-                                    className={`rounded-md border px-3 py-3 text-left text-sm ${selectedAction === 'DESACTIVAR' ? 'border-blue-300 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white text-slate-600'}`}
+                                    className={`rounded-md border px-3 py-3 text-left text-sm ${selectedAction === 'DESACTIVAR' ? 'border-info/30 bg-info/10 text-info' : 'border-slate-200 bg-white text-slate-600'}`}
                                     onClick={() => setSelectedAction('DESACTIVAR')}
                                 >
                                     <div className="font-medium">Desactivar</div>
@@ -201,7 +201,7 @@ export default function DesactivarRepresentante({
                                 {scopeInfo.canDelete && (
                                     <button
                                         type="button"
-                                        className={`rounded-md border px-3 py-3 text-left text-sm ${selectedAction === 'ELIMINAR' ? 'border-rose-300 bg-rose-50 text-rose-700' : 'border-slate-200 bg-white text-slate-600'}`}
+                                        className={`rounded-md border px-3 py-3 text-left text-sm ${selectedAction === 'ELIMINAR' ? 'border-destructive/30 bg-destructive/10 text-destructive' : 'border-slate-200 bg-white text-slate-600'}`}
                                         onClick={() => setSelectedAction('ELIMINAR')}
                                     >
                                         <div className="font-medium">Eliminar</div>
@@ -219,7 +219,7 @@ export default function DesactivarRepresentante({
                         <Button
                             type="button"
                             variant={selectedAction === 'ELIMINAR' ? 'destructive' : 'default'}
-                            className={selectedAction === 'DESACTIVAR' ? 'bg-blue-600 hover:bg-blue-700' : ''}
+                            className={selectedAction === 'DESACTIVAR' ? 'bg-info hover:bg-info' : ''}
                             disabled={!selectedRepresentativeId || isSubmitting}
                             onClick={() => setConfirmOpen(true)}
                         >
@@ -249,7 +249,7 @@ export default function DesactivarRepresentante({
                             onClick={executeAction}
                             className={selectedAction === 'ELIMINAR'
                                 ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90'
-                                : 'bg-blue-600 text-white hover:bg-blue-700'}
+                                : 'bg-info text-white hover:bg-info'}
                             disabled={isSubmitting}
                         >
                             {isSubmitting

@@ -52,7 +52,7 @@ function filterAlcances(
 
 function AlcanceBadge({ activo }: { activo: boolean }): React.ReactElement {
   return activo ? (
-    <Badge className="bg-emerald-600/90 hover:bg-emerald-600">
+    <Badge className="bg-success/90 hover:bg-success">
       <CheckCircle2 className="mr-1 h-3 w-3" />
       Bypass activo
     </Badge>
@@ -489,7 +489,7 @@ export function PoliticaBypassPanel({ className, compact = false }: PoliticaBypa
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
             {sesion.jwtPolicyStale ? (
-              <div className="flex items-center gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-amber-900 dark:text-amber-100">
+              <div className="flex items-center gap-2 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-warning dark:text-warning">
                 <AlertTriangle className="h-4 w-4 shrink-0" />
                 <span className="text-xs">
                   El token traía política desactualizada; el servidor ya recalculó desde BD en esta sesión.

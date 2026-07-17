@@ -50,7 +50,7 @@ export function GobernanzaModuloInlinePanel({
               Tu sesión no tiene permiso para ejecutar esta acción. El formulario es solo referencia.
             </p>
           ) : soloLectura ? (
-            <Badge variant="outline" className="rounded-md border-amber-200 bg-amber-50 text-amber-900">
+            <Badge variant="outline" className="rounded-md border-warning/20 bg-warning/10 text-warning">
               Solo lectura
             </Badge>
           ) : null}
@@ -72,7 +72,7 @@ export function GobernanzaModuloInlinePanel({
                   Solo referencia
                 </Badge>
               ) : soloLectura ? (
-                <Badge variant="outline" className="rounded-md border-amber-200 bg-amber-50 text-amber-900">
+                <Badge variant="outline" className="rounded-md border-warning/20 bg-warning/10 text-warning">
                   Solo lectura
                 </Badge>
               ) : null}
@@ -86,12 +86,12 @@ export function GobernanzaModuloInlinePanel({
           {endpoint.path}
         </p>
         {capabilities.diosSoloLectura ? (
-          <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
+          <p className="rounded-md border border-warning/20 bg-warning/10 px-3 py-2 text-xs font-medium text-warning">
             Tu jerarquía tiene corporativo en counters: puedes revisar datos pero no ejecutar cambios desde esta
             pantalla.
           </p>
         ) : !capabilities.scopeDisponible ? (
-          <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
+          <p className="rounded-md border border-warning/20 bg-warning/10 px-3 py-2 text-xs font-medium text-warning">
             Tu sesión actual no tiene permiso para ejecutar esta acción. El formulario se muestra solo como referencia.
           </p>
         ) : null}

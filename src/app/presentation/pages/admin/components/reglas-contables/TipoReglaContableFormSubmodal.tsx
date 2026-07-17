@@ -1,14 +1,22 @@
 import { useEffect, useState } from 'react';
 import { Pencil, Plus } from 'lucide-react';
 import { toast } from 'react-toastify';
-import reglasContablesService, { type TipoReglaContableCatalogo } from '@/app/services/reglasContablesService';
+import reglasContablesService, {
+  type CatalogoCodigo,
+  type TipoReglaContableCatalogo,
+} from '@/app/services/reglasContablesService';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import InventarioCodigoPresetField from '../inventario-ajuste/InventarioCodigoPresetField';
-import { PRESETS_TIPO_REGLA } from './tipoReglaContableConstants';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { reglasContablesUi } from './reglasContablesUi';
 
 type Props = {
@@ -19,9 +27,11 @@ type Props = {
   onGuardada?: () => void;
 };
 
-type Draft = { codigo: string; nombre: string; descripcion: string; orden: string; estado: boolean };
+type Draft = { codigo: string; nombre: string; descripcion: string; codigoDian: string; estado: boolean };
 
-const inicial: Draft = { codigo: '', nombre: '', descripcion: '', orden: '0', estado: true };
+const inicial: Draft = { codigo: '', nombre: '', descripcion: '', codigoDian: '', estado: true };
+
+const SIN_DIAN = '__SIN_DIAN__';
 
 const errMsg = (e: unknown, f: string) => (e instanceof Error ? e.message.replace(/^\[\d+\]\s*/, '') : f);
 
@@ -30,6 +40,7 @@ export default function TipoReglaContableFormSubmodal({
 }: Props): React.ReactElement {
   const esEdicion = Boolean(registro?.codigo);
   const [draft, setDraft] = useState<Draft>(inicial);
+  const [codigosDian, setCodigosDian] = useState<CatalogoCodigo[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -40,12 +51,19 @@ export default function TipoReglaContableFormSubmodal({
             codigo: registro.codigo,
             nombre: registro.nombre,
             descripcion: registro.descripcion ?? '',
-            orden: String(registro.orden ?? 0),
+            codigoDian: registro.codigoDian ?? '',
             estado: registro.estado !== false,
           }
         : inicial
     );
   }, [open, registro]);
+
+  useEffect(() => {
+    if (!open) return;
+    reglasContablesService.listarCatalogoCodigos('DIAN_TRIBUTOS')
+      .then((data) => setCodigosDian(data))
+      .catch(() => setCodigosDian([]));
+  }, [open]);
 
   const guardar = async (): Promise<void> => {
     if (!draft.codigo.trim() || !draft.nombre.trim()) {
@@ -57,7 +75,7 @@ export default function TipoReglaContableFormSubmodal({
       const body = {
         nombre: draft.nombre.trim(),
         descripcion: draft.descripcion.trim(),
-        orden: Number(draft.orden) || 0,
+        codigoDian: draft.codigoDian,
         estado: draft.estado,
       };
       if (esEdicion && registro) {
@@ -86,21 +104,16 @@ export default function TipoReglaContableFormSubmodal({
           </DialogDescription>
         </DialogHeader>
         <div className={reglasContablesUi.section}>
-          {!esEdicion ? (
-            <InventarioCodigoPresetField
+          <div className="space-y-2">
+            <Label>Código</Label>
+            <Input
+              className={reglasContablesUi.input}
               value={draft.codigo}
-              onChange={(c) => setDraft((p) => ({ ...p, codigo: c }))}
-              presets={PRESETS_TIPO_REGLA}
-              disabled={submitting || saving}
-              label="Código"
-              onPresetPick={(p) => setDraft((prev) => ({ ...prev, codigo: p.codigo, nombre: p.nombre }))}
+              onChange={(e) => setDraft((p) => ({ ...p, codigo: e.target.value }))}
+              placeholder="Ej: IVA"
+              disabled={esEdicion || submitting || saving}
             />
-          ) : (
-            <div className="space-y-2">
-              <Label>Código</Label>
-              <Input className={reglasContablesUi.input} value={draft.codigo} disabled />
-            </div>
-          )}
+          </div>
           <div className="space-y-2">
             <Label>Nombre</Label>
             <Input className={reglasContablesUi.input} value={draft.nombre} onChange={(e) => setDraft((p) => ({ ...p, nombre: e.target.value }))} />
@@ -110,8 +123,30 @@ export default function TipoReglaContableFormSubmodal({
             <Input className={reglasContablesUi.input} value={draft.descripcion} onChange={(e) => setDraft((p) => ({ ...p, descripcion: e.target.value }))} />
           </div>
           <div className="space-y-2">
-            <Label>Orden</Label>
-            <Input type="number" min={0} className={reglasContablesUi.input} value={draft.orden} onChange={(e) => setDraft((p) => ({ ...p, orden: e.target.value }))} />
+            <Label>Código DIAN (catálogo)</Label>
+            <Select
+              value={draft.codigoDian || SIN_DIAN}
+              onValueChange={(v) => setDraft((p) => ({ ...p, codigoDian: v === SIN_DIAN ? '' : v }))}
+            >
+              <SelectTrigger className={reglasContablesUi.input}>
+                <SelectValue placeholder="Selecciona un código del catálogo DIAN" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={SIN_DIAN}>— Sin efecto DIAN —</SelectItem>
+                {codigosDian.map((item) => (
+                  <SelectItem key={item.codigo} value={item.codigo}>
+                    {item.codigo} — {item.nombre}
+                    {item.metadata?.chargeIndicator === false ? ' (retención)' : ''}
+                  </SelectItem>
+                ))}
+                {draft.codigoDian && !codigosDian.some((c) => c.codigo === draft.codigoDian) && (
+                  <SelectItem value={draft.codigoDian}>{draft.codigoDian} — (no está en el catálogo)</SelectItem>
+                )}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Relaciona el tipo con el tributo del catálogo DIAN (Anexo 20). Se guarda en tiporeglacontablecatalogos.
+            </p>
           </div>
           <div className="flex items-center gap-2">
             <Checkbox id="tipo-activo" checked={draft.estado} onCheckedChange={(c) => setDraft((p) => ({ ...p, estado: c === true }))} />

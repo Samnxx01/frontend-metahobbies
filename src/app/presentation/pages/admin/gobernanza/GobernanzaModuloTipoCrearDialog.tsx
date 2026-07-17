@@ -194,7 +194,7 @@ export function GobernanzaModuloTipoCrearDialog({
                 {sections.length} section(s) en BD: {sections.join(', ')}
               </p>
             ) : (
-              <p className="text-[11px] text-amber-800">
+              <p className="text-[11px] text-warning">
                 No hay sections en BD aún. Usa «+ Nueva section…» para crear la primera.
               </p>
             )}

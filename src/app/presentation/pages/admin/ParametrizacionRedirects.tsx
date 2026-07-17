@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Save, RefreshCw, Route } from 'lucide-react';
+import { Save, RefreshCw, Route, Link2 } from 'lucide-react';
 import {
   BrandingConfig,
   guardarBrandingPrivadoConRespuesta,
@@ -37,6 +37,7 @@ interface RedirectFormState {
   register: RedirectEntryState;
   forgotPassword: RedirectEntryState;
   publicHome: RedirectEntryState;
+  reglasContablesCompleta: RedirectEntryState;
   allowedPathsJson: string;
 }
 
@@ -60,6 +61,7 @@ const EMPTY_FORM: RedirectFormState = {
   register: { path: '', enabled: true },
   forgotPassword: { path: '', enabled: true },
   publicHome: { path: '', enabled: true },
+  reglasContablesCompleta: { path: '', enabled: true },
   allowedPathsJson: '[]',
 };
 
@@ -74,6 +76,7 @@ const REDIRECT_FIELDS: Array<{
   { key: 'register',       label: 'Registro',         description: 'Destino usado por pantallas que envian al registro.' },
   { key: 'forgotPassword', label: 'Recuperar clave',  description: 'Destino para flujos de recuperacion de contrasena.' },
   { key: 'publicHome',     label: 'Home publica',     description: 'Fallback seguro cuando una ruta privada no aplica.' },
+  { key: 'reglasContablesCompleta', label: 'Reglas contables (completa)', description: 'Destino del boton «Parametrizacion completa» del modal de reglas contables en Inventario.' },
 ];
 
 const parseAllowedPaths = (value: string): string[] => {
@@ -138,6 +141,7 @@ export default function ParametrizacionRedirects({
       register:       { path: String(navigation?.register?.path       || ''), enabled: navigation?.register?.enabled       !== false, rutaSeguridadId: getRedirectRouteId(navigation?.register) },
       forgotPassword: { path: String(navigation?.forgotPassword?.path || ''), enabled: navigation?.forgotPassword?.enabled !== false, rutaSeguridadId: getRedirectRouteId(navigation?.forgotPassword) },
       publicHome:     { path: String(navigation?.publicHome?.path     || ''), enabled: navigation?.publicHome?.enabled     !== false, rutaSeguridadId: getRedirectRouteId(navigation?.publicHome) },
+      reglasContablesCompleta: { path: String(navigation?.reglasContablesCompleta?.path || ''), enabled: navigation?.reglasContablesCompleta?.enabled !== false, rutaSeguridadId: getRedirectRouteId(navigation?.reglasContablesCompleta) },
       allowedPathsJson: JSON.stringify(allowedPaths, null, 2),
     });
   };
@@ -199,13 +203,13 @@ export default function ParametrizacionRedirects({
 
   // Fusiona los paths actualmente configurados en los 6 campos de redirect con la whitelist existente.
   // Elimina el drift entre lo que está configurado y lo que está permitido.
-  const buildAllowedPathsForSave = (): string[] => {
+  const buildAllowedPathsForSave = (formData: RedirectFormState = form): string[] => {
     const configuredPaths = REDIRECT_FIELDS
-      .map((field) => String(form[field.key].path || '').trim())
+      .map((field) => String(formData[field.key].path || '').trim())
       .filter((path) => path.startsWith('/') && path !== '/');
 
     const existingPaths: string[] = (() => {
-      try { return parseAllowedPaths(form.allowedPathsJson); } catch { return []; }
+      try { return parseAllowedPaths(formData.allowedPathsJson); } catch { return []; }
     })();
 
     return Array.from(new Set([...existingPaths, ...configuredPaths])).sort((a, b) => a.localeCompare(b));
@@ -222,15 +226,15 @@ export default function ParametrizacionRedirects({
     }
   };
 
-  const handleSave = async (): Promise<void> => {
+  const handleSave = async (formData: RedirectFormState = form): Promise<void> => {
     if (!branding) return;
 
     try {
       setSaving(true);
-      const allowedPaths = buildAllowedPathsForSave();
+      const allowedPaths = buildAllowedPathsForSave(formData);
 
       // Ningún redirect puede apuntar a "/" (raíz), ya que rompe el flujo de navegación
-      const invalidField = REDIRECT_FIELDS.find((field) => form[field.key].path.trim() === '/');
+      const invalidField = REDIRECT_FIELDS.find((field) => formData[field.key].path.trim() === '/');
       if (invalidField) {
         throw new Error(`La accion ${invalidField.label} no puede apuntar a "/". Usa una ruta especifica del modulo.`);
       }
@@ -240,12 +244,13 @@ export default function ParametrizacionRedirects({
         widgets: {
           ...(branding.widgets || {}),
           navigation: {
-            login:          form.login,
-            postLogin:      form.postLogin,
-            logout:         form.logout,
-            register:       form.register,
-            forgotPassword: form.forgotPassword,
-            publicHome:     form.publicHome,
+            login:          formData.login,
+            postLogin:      formData.postLogin,
+            logout:         formData.logout,
+            register:       formData.register,
+            forgotPassword: formData.forgotPassword,
+            publicHome:     formData.publicHome,
+            reglasContablesCompleta: formData.reglasContablesCompleta,
             etiqueta: 'navegacion',
             allowedPaths,
           },
@@ -268,6 +273,40 @@ export default function ParametrizacionRedirects({
     } finally {
       setSaving(false);
     }
+  };
+
+  /**
+   * Re-vincula cada redirect guardado con su rutaSeguridadId vigente (documentos legacy
+   * guardados antes de la normalización, o rutas recreadas con nuevo id). Valida contra
+   * el catálogo activo y persiste; el backend re-valida existencia en la transacción.
+   */
+  const handleSincronizarIds = async (): Promise<void> => {
+    const faltantes: string[] = [];
+    let vinculados = 0;
+    const synced: RedirectFormState = { ...form };
+
+    REDIRECT_FIELDS.forEach((field) => {
+      const entry = form[field.key];
+      const path = String(entry.path || '').trim();
+      if (!path) return;
+
+      const rutaId = resolveRutaSeguridadIdByPath(path);
+      if (!rutaId) {
+        faltantes.push(`${field.label} (${path})`);
+        return;
+      }
+      if (entry.rutaSeguridadId !== rutaId) vinculados += 1;
+      synced[field.key] = { ...entry, rutaSeguridadId: rutaId };
+    });
+
+    if (faltantes.length > 0) {
+      toast.error(`Sin rutaSeguridad activa para: ${faltantes.join(', ')}. Corrige esos paths antes de sincronizar.`);
+      return;
+    }
+
+    setForm(synced);
+    toast.info(`${vinculados} redirect(s) re-vinculados al id de rutasSeguridad. Guardando...`);
+    await handleSave(synced);
   };
 
   if (!isTenantSuperAdmin) {
@@ -384,9 +423,17 @@ export default function ParametrizacionRedirects({
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <Button onClick={handleSave} disabled={saving}>
+          <Button onClick={() => void handleSave()} disabled={saving}>
             {saving ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
             {saving ? 'Guardando...' : 'Guardar redirects'}
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => void handleSincronizarIds()}
+            disabled={saving}
+          >
+            <Link2 className="h-4 w-4 mr-2" />
+            Sincronizar IDs rutasSeguridad
           </Button>
           <Button
             variant="outline"

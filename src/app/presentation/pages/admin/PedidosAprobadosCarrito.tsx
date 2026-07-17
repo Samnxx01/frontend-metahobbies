@@ -234,10 +234,10 @@ export default function PedidosAprobadosCarrito(): React.ReactElement {
                         {pedido.cantidadTotalUnidades}
                       </TableCell>
                       <TableCell className="text-right text-sm">
-                        <div className="font-semibold text-emerald-700">
+                        <div className="font-semibold text-success">
                           {formatCOP(pedido.resumenMargen?.margenTotal ?? 0)}
                         </div>
-                        <div className="text-xs font-medium text-emerald-800">
+                        <div className="text-xs font-medium text-success">
                           {formatPorcentaje(pedido.resumenMargen?.margenPorcentaje)}
                         </div>
                       </TableCell>
@@ -276,9 +276,9 @@ export default function PedidosAprobadosCarrito(): React.ReactElement {
                               </div>
                               <div>
                                 <span className="text-muted-foreground">Margen: </span>
-                                <span className="font-semibold text-emerald-700">
+                                <span className="font-semibold text-success">
                                   {formatCOP(pedido.resumenMargen?.margenTotal ?? 0)}{' '}
-                                  <span className="text-emerald-800">
+                                  <span className="text-success">
                                     ({formatPorcentaje(pedido.resumenMargen?.margenPorcentaje)})
                                   </span>
                                 </span>
@@ -324,10 +324,10 @@ export default function PedidosAprobadosCarrito(): React.ReactElement {
                                       {formatCOP(item.costoUnitarioSku)}
                                     </TableCell>
                                     <TableCell className="text-right whitespace-nowrap">
-                                      <div className="font-semibold text-emerald-700">
+                                      <div className="font-semibold text-success">
                                         {formatCOP(item.margenTotal)}
                                       </div>
-                                      <div className="text-xs font-medium text-emerald-800">
+                                      <div className="text-xs font-medium text-success">
                                         {formatCOP(item.margenUnitario)} / ud ·{' '}
                                         {formatPorcentaje(item.margenPorcentaje)}
                                       </div>

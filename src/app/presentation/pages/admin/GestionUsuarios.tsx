@@ -103,8 +103,8 @@ export const GestionUsuarios = (): React.ReactElement => {
                     <Badge
                         variant={isActive ? 'default' : 'outline'}
                         className={`font-semibold text-xs py-1 px-2 rounded-full ${isActive
-                                ? 'bg-green-100 text-green-600 hover:bg-green-100'
-                                : 'bg-red-100 text-red-600 border-red-300 hover:bg-red-100'
+                                ? 'bg-success/10 text-success hover:bg-success/10'
+                                : 'bg-destructive/10 text-destructive border-destructive/30 hover:bg-destructive/10'
                             }`}
                     >
                         {isActive ? <Check className="w-3 h-3 mr-1" /> : <X className="w-3 h-3 mr-1" />}
@@ -173,7 +173,7 @@ export const GestionUsuarios = (): React.ReactElement => {
                 </div>
 
                 {errorList && (
-                    <div className="p-3 mb-4 bg-red-100 text-red-700 border border-red-300 rounded-lg text-sm">
+                    <div className="p-3 mb-4 bg-destructive/10 text-destructive border border-destructive/30 rounded-lg text-sm">
                         {`Error al cargar usuarios: ${errorList.message}`}
                     </div>
                 )}

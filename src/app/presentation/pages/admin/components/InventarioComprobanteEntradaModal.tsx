@@ -322,7 +322,7 @@ export default function InventarioComprobanteEntradaModal({
                   </p>
                 ) : null}
                 {pendienteConfirmacion ? (
-                  <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
+                  <p className="mt-1 text-xs text-warning dark:text-warning">
                     {recepcionAutomatica
                       ? 'Al confirmar se aprueba el comprobante de entrada, se genera el comprobante contable (COMPROBANTE_ENTRADA) y se registra el kardex.'
                       : 'Al confirmar se aprueba el comprobante de entrada y se genera el comprobante contable (COMPROBANTE_ENTRADA). El kardex físico se registra después en Movimientos.'}

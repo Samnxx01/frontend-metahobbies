@@ -37,8 +37,8 @@ function StatusBadge({ status }: { status: 'ok' | 'error' | 'degraded' }) {
         <Badge
             className={
                 isOk
-                    ? 'bg-green-100 text-green-700 border-green-200'
-                    : 'bg-red-100 text-red-700 border-red-200'
+                    ? 'bg-success/10 text-success border-success/20'
+                    : 'bg-destructive/10 text-destructive border-destructive/20'
             }
         >
             {isOk ? (
@@ -165,11 +165,11 @@ export default function EstadoSistema(): React.ReactElement {
 
             {/* Banner: backend caído pero hay caché */}
             {isBackendDown && cachedAt && (
-                <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
-                    <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+                <div className="flex items-start gap-3 rounded-lg border border-warning/20 bg-warning/10 px-4 py-3">
+                    <AlertTriangle className="w-4 h-4 text-warning mt-0.5 shrink-0" />
                     <div className="text-sm">
-                        <p className="font-medium text-amber-800">Backend no disponible</p>
-                        <p className="text-amber-700 mt-0.5">
+                        <p className="font-medium text-warning">Backend no disponible</p>
+                        <p className="text-warning mt-0.5">
                             Mostrando último estado conocido registrado el{' '}
                             {new Date(cachedAt).toLocaleString('es-CO', {
                                 dateStyle: 'medium',
@@ -186,8 +186,8 @@ export default function EstadoSistema(): React.ReactElement {
                     loading
                         ? 'border-muted'
                         : globalStatus === 'ok'
-                          ? 'border-green-200 bg-green-50/40'
-                          : 'border-red-200 bg-red-50/40'
+                          ? 'border-success/20 bg-success/40'
+                          : 'border-destructive/20 bg-destructive/40'
                 }
             >
                 <CardHeader className="pb-2">
@@ -203,7 +203,7 @@ export default function EstadoSistema(): React.ReactElement {
                             Verificando...
                         </div>
                     ) : isHardError ? (
-                        <p className="text-sm text-red-600">{error}</p>
+                        <p className="text-sm text-destructive">{error}</p>
                     ) : (
                         <div className="flex items-center justify-between">
                             <StatusBadge status={globalStatus} />
@@ -299,7 +299,7 @@ export default function EstadoSistema(): React.ReactElement {
                                     </div>
                                 </div>
                                 {pingResult && (
-                                    <div className={`rounded-md p-3 text-xs font-mono ${pingResult.ok ? 'bg-green-50 border border-green-200 text-green-800' : 'bg-red-50 border border-red-200 text-red-800'}`}>
+                                    <div className={`rounded-md p-3 text-xs font-mono ${pingResult.ok ? 'bg-success/10 border border-success/20 text-success' : 'bg-destructive/10 border border-destructive/20 text-destructive'}`}>
                                         <p className="font-semibold mb-1">
                                             {pingResult.ok ? '✓ DIAN respondió correctamente' : '✗ Error en ping DIAN'}
                                             {pingResult.latencyMs > 0 && (

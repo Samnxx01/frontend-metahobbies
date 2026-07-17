@@ -126,7 +126,7 @@ export function ConfiguracionNominaPanel({ onConfigChange }: Props) {
                   <span>Vigencia: {String(c.vigenciaDesde).slice(0, 10)}</span>
                   {c.vigenciaHasta && <span> — {String(c.vigenciaHasta).slice(0, 10)}</span>}
                 </div>
-                <span className={c.estado !== false ? 'text-emerald-600' : 'text-muted-foreground'}>
+                <span className={c.estado !== false ? 'text-success' : 'text-muted-foreground'}>
                   {c.estado !== false ? 'Activa' : 'Inactiva'}
                 </span>
               </div>

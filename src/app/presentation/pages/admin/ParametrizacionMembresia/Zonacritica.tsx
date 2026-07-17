@@ -167,8 +167,8 @@ export default function ZonaCritica() {
                     <div className={`
                         flex items-start gap-2.5 px-3 py-2.5 rounded-lg text-xs border
                         ${mensaje.tipo === 'success'
-                            ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800'
-                            : 'bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800'
+                            ? 'bg-success/10 dark:bg-success/30 text-success dark:text-success border-success/20 dark:border-success'
+                            : 'bg-destructive/10 dark:bg-destructive/30 text-destructive dark:text-destructive border-destructive/20 dark:border-destructive'
                         }
                     `}>
                         {mensaje.tipo === 'success'
@@ -223,7 +223,7 @@ export default function ZonaCritica() {
                                 <Button
                                     size="sm" variant="outline"
                                     disabled={!idDesactivar || loadingDesactivar}
-                                    className="gap-2 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30"
+                                    className="gap-2 border-warning/30 dark:border-warning text-warning dark:text-warning hover:bg-warning/10 dark:hover:bg-warning/30"
                                 >
                                     {loadingDesactivar
                                         ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -247,7 +247,7 @@ export default function ZonaCritica() {
                                     <AlertDialogCancel>Cancelar</AlertDialogCancel>
                                     <AlertDialogAction
                                         onClick={handleDesactivar}
-                                        className="bg-amber-600 hover:bg-amber-700 text-white"
+                                        className="bg-warning hover:bg-warning text-white"
                                     >
                                         Sí, desactivar
                                     </AlertDialogAction>
@@ -439,14 +439,14 @@ function AccionCritica({
 }) {
     const colors = {
         amber: {
-            border: 'border-amber-200/70 dark:border-amber-800/40',
-            bg: 'bg-amber-50/50 dark:bg-amber-950/10',
-            icon: 'text-amber-600 dark:text-amber-400',
-            title: 'text-amber-800 dark:text-amber-300',
+            border: 'border-warning/70 dark:border-warning/40',
+            bg: 'bg-warning/50 dark:bg-warning/10',
+            icon: 'text-warning dark:text-warning',
+            title: 'text-warning dark:text-warning',
         },
         red: {
             border: 'border-destructive/20',
-            bg: 'bg-red-50/50 dark:bg-red-950/10',
+            bg: 'bg-destructive/50 dark:bg-destructive/10',
             icon: 'text-destructive',
             title: 'text-destructive',
         },

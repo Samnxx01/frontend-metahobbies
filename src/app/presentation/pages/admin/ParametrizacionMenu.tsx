@@ -1145,7 +1145,7 @@ export default function ParametrizacionMenu() {
                         return <Badge variant="secondary">General</Badge>;
                       })()}
                       {tag.permitirSinTenant && (
-                        <Badge variant="secondary" className="bg-amber-100 text-amber-800 border-amber-300">
+                        <Badge variant="secondary" className="bg-warning/10 text-warning border-warning/30">
                           Sin tenant
                         </Badge>
                       )}
@@ -1339,7 +1339,7 @@ export default function ParametrizacionMenu() {
                       </div>
 
                       {!isHybridPublicRoute(selectedVisibilityRoute) && (
-                        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                        <div className="rounded-lg border border-warning/20 bg-warning/10 px-3 py-2 text-xs text-warning">
                           Esta ruta no es HYBRID. Puedes activar solo uno de los dos estados al tiempo.
                         </div>
                       )}

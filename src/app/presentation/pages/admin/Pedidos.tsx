@@ -71,13 +71,13 @@ export default function Pedidos(): React.ReactElement {
     const getStatusClasses = (status: string): string => {
         switch (status) {
             case 'Pendiente':
-                return 'bg-blue-100 text-blue-600 border border-blue-200 hover:bg-blue-200';
+                return 'bg-info/10 text-info border border-info/20 hover:bg-info/20';
             case 'Procesado':
-                return 'bg-amber-100 text-amber-600 border border-amber-200 hover:bg-amber-200';
+                return 'bg-warning/10 text-warning border border-warning/20 hover:bg-warning/20';
             case 'Entregado':
-                return 'bg-green-100 text-green-600 border border-green-200 hover:bg-green-200';
+                return 'bg-success/10 text-success border border-success/20 hover:bg-success/20';
             case 'Cancelado':
-                return 'bg-red-100 text-red-600 border border-red-200 hover:bg-red-200';
+                return 'bg-destructive/10 text-destructive border border-destructive/20 hover:bg-destructive/20';
             default:
                 return 'bg-gray-100 text-gray-600';
         }

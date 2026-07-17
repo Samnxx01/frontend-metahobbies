@@ -278,7 +278,7 @@ export default function InventarioUnidadMedidaModal({
                         </SelectContent>
                       </Select>
                     ) : (
-                      <p className="rounded-md border border-dashed border-amber-500/40 bg-amber-500/5 px-3 py-2 text-xs text-amber-900 dark:text-amber-100">
+                      <p className="rounded-md border border-dashed border-warning/40 bg-warning/5 px-3 py-2 text-xs text-warning dark:text-warning">
                         No hay otra unidad marcada como base activa para este tipo. Cree o active una unidad base del mismo
                         tipo primero.
                       </p>
@@ -353,7 +353,7 @@ export default function InventarioUnidadMedidaModal({
                           type="button"
                           variant="ghost"
                           size="sm"
-                          className="h-8 gap-1 px-2 text-muted-foreground hover:text-amber-700"
+                          className="h-8 gap-1 px-2 text-muted-foreground hover:text-warning"
                           title="Inactivar unidad"
                           disabled={saving || !unidad.estado}
                           onClick={() => void onInactivate(unidad)}

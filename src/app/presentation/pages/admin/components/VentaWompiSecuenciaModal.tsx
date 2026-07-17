@@ -833,7 +833,7 @@ export default function VentaWompiSecuenciaModal({
         }
       }}
     >
-      <DialogContent className="w-[min(520px,calc(100vw-2rem))] max-w-none border-rose-200 bg-white">
+      <DialogContent className="w-[min(520px,calc(100vw-2rem))] max-w-none border-destructive/20 bg-white">
         <DialogHeader>
           <DialogTitle className="text-slate-900">
             {nuevoTipoDraft.codigoOriginal ? 'Editar o duplicar tipo' : 'Nuevo tipo de referencia'}
@@ -922,7 +922,7 @@ export default function VentaWompiSecuenciaModal({
                 type="button"
                 variant="outline"
                 size="sm"
-                className="h-8 border-rose-300 px-2 text-rose-800 hover:bg-rose-50"
+                className="h-8 border-destructive/30 px-2 text-destructive hover:bg-destructive/10"
                 onClick={() => {
                   setAgregarClasificacionOpen((prev) => {
                     const next = !prev;
@@ -977,7 +977,7 @@ export default function VentaWompiSecuenciaModal({
               </p>
             ) : null}
             {agregarClasificacionOpen ? (
-              <div className="space-y-3 rounded-md border border-dashed border-rose-200 bg-rose-50/40 p-3">
+              <div className="space-y-3 rounded-md border border-dashed border-destructive/20 bg-destructive/40 p-3">
                 <p className="text-xs text-muted-foreground">
                   Completa nombre y etiqueta y pulsa Guardar. El id (#1, #2…) se asigna solo al guardar; no se crea ningún registro hasta entonces.
                 </p>
@@ -1036,9 +1036,9 @@ export default function VentaWompiSecuenciaModal({
               autoComplete="off"
             />
           </div>
-          <div className="rounded-md border border-rose-100 bg-rose-50/60 px-3 py-2">
+          <div className="rounded-md border border-destructive/10 bg-destructive/60 px-3 py-2">
             <p className="text-xs text-muted-foreground">Vista previa</p>
-            <p className="font-mono text-sm font-semibold text-rose-950">{previewModalTipo}</p>
+            <p className="font-mono text-sm font-semibold text-destructive">{previewModalTipo}</p>
           </div>
         </div>
         <DialogFooter className="gap-2">
@@ -1126,7 +1126,7 @@ export default function VentaWompiSecuenciaModal({
                         <tr
                           key={fila.codigo}
                           className={`cursor-pointer border-t border-slate-200/80 transition-colors ${
-                            activa ? 'bg-sky-50/80' : 'bg-white hover:bg-slate-50'
+                            activa ? 'bg-info/80' : 'bg-white hover:bg-slate-50'
                           }`}
                           onClick={() => handleCambioTipoReferencia(fila.codigo)}
                         >
@@ -1146,7 +1146,7 @@ export default function VentaWompiSecuenciaModal({
           ) : null}
 
           {codigoSeleccionadoFormulario ? (
-            <div className="rounded-md border border-sky-200 bg-sky-50/60 px-3 py-2 text-xs text-sky-950">
+            <div className="rounded-md border border-info/20 bg-info/60 px-3 py-2 text-xs text-info">
               <p className="font-semibold">
                 Editando:
                 {' '}
@@ -1156,7 +1156,7 @@ export default function VentaWompiSecuenciaModal({
                 <span className="font-mono">{codigoSeleccionadoFormulario}</span>
                 )
               </p>
-              <p className="mt-1 text-sky-900/80">
+              <p className="mt-1 text-info/80">
                 Guardar, reset y recalcular aplican solo a esta fila.
                 Usa los botones del resumen para operar sobre todas las secuencias.
               </p>
@@ -1180,7 +1180,7 @@ export default function VentaWompiSecuenciaModal({
           ) : null}
 
           {sinTipoSeleccionado && !sinTiposConfigurados ? (
-            <div className="rounded-md border border-amber-400/50 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+            <div className="rounded-md border border-warning/50 bg-warning/10 px-4 py-3 text-sm text-warning">
               Selecciona un <span className="font-semibold">tipo de referencia</span> en el formulario para guardar la parametrización.
             </div>
           ) : null}
@@ -1385,7 +1385,7 @@ export default function VentaWompiSecuenciaModal({
           </div>
 
           {limiteAlcanzado ? (
-            <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-900 dark:text-amber-100">
+            <div className="rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-warning dark:text-warning">
               Este tipo alcanzó el máximo de {maxRegistrosEfectivo} registros configurados. Aumenta el límite o cambia a sin límite para seguir emitiendo.
             </div>
           ) : null}
@@ -1525,7 +1525,7 @@ export default function VentaWompiSecuenciaModal({
           </AlertDialogTitle>
           <AlertDialogDescription asChild>
             <div className="space-y-4 text-sm text-muted-foreground">
-              <div className="rounded-md border border-amber-400/40 bg-amber-50 px-3 py-2 text-xs text-amber-950">
+              <div className="rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning">
                 <p className="font-semibold">
                   Solo esta secuencia:
                   {' '}

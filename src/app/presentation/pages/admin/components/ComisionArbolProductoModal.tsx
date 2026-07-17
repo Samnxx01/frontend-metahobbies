@@ -40,10 +40,10 @@ const normalizeLevels = (levels: EditableLevel[]): PipelineBLevel[] =>
         .sort((a, b) => a.gen - b.gen);
 
 const GEN_STYLES: Record<number, string> = {
-    1: 'border-emerald-200 bg-emerald-50 text-emerald-900',
-    2: 'border-sky-200 bg-sky-50 text-sky-900',
-    3: 'border-violet-200 bg-violet-50 text-violet-900',
-    4: 'border-amber-200 bg-amber-50 text-amber-900',
+    1: 'border-success/20 bg-success/10 text-success',
+    2: 'border-info/20 bg-info/10 text-info',
+    3: 'border-info/20 bg-info/10 text-info',
+    4: 'border-warning/20 bg-warning/10 text-warning',
 };
 
 const GEN_LABEL: Record<number, string> = {
@@ -159,10 +159,10 @@ export default function ComisionArbolProductoModal({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-h-[92vh] w-[min(920px,calc(100vw-2rem))] max-w-none overflow-y-auto border-violet-200 bg-gradient-to-b from-violet-50/80 via-white to-white">
+            <DialogContent className="max-h-[92vh] w-[min(920px,calc(100vw-2rem))] max-w-none overflow-y-auto border-info/20 bg-gradient-to-b from-info/80 via-white to-white">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2 text-slate-900">
-                        <Network className="h-5 w-5 text-violet-600" />
+                        <Network className="h-5 w-5 text-info" />
                         Parametrizar comisiones por árbol de referidos
                     </DialogTitle>
                     <DialogDescription className="text-slate-600">
@@ -173,9 +173,9 @@ export default function ComisionArbolProductoModal({
 
                 <div className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
                     <div className="space-y-4">
-                        <div className="rounded-2xl border border-violet-200 bg-violet-50/70 p-4">
+                        <div className="rounded-2xl border border-info/20 bg-info/70 p-4">
                             <div className="flex flex-wrap items-center justify-between gap-2">
-                                <div className="flex items-center gap-2 text-sm font-medium text-violet-900">
+                                <div className="flex items-center gap-2 text-sm font-medium text-info">
                                     <Users className="h-4 w-4" />
                                     Árbol por referido / sponsor
                                 </div>
@@ -187,7 +187,7 @@ export default function ComisionArbolProductoModal({
                                           : 'Sin configuración guardada'}
                                 </Badge>
                             </div>
-                            <p className="mt-1 text-xs text-violet-800/80">
+                            <p className="mt-1 text-xs text-info/80">
                                 No se configura por producto. El motor sube refeClient desde el comprador:
                                 Gen1 = sponsor directo, Gen2 = sponsor del sponsor, etc.
                             </p>
@@ -276,13 +276,13 @@ export default function ComisionArbolProductoModal({
                                                     <Badge variant="secondary">{level.percent}%</Badge>
                                                 </div>
                                             </div>
-                                            <div className="my-1 h-5 w-px bg-violet-300" />
+                                            <div className="my-1 h-5 w-px bg-info/30" />
                                         </div>
                                     ))}
 
                                     <div className="rounded-2xl border border-slate-300 bg-white px-4 py-3">
                                         <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-                                            <UserRound className="h-4 w-4 text-violet-600" />
+                                            <UserRound className="h-4 w-4 text-info" />
                                             Comprador (referidoId)
                                         </div>
                                         <p className="mt-1 text-xs text-slate-500">
@@ -290,12 +290,12 @@ export default function ComisionArbolProductoModal({
                                         </p>
                                     </div>
 
-                                    <div className="rounded-2xl border border-dashed border-violet-200 bg-violet-50/50 px-4 py-3 text-xs text-violet-900">
+                                    <div className="rounded-2xl border border-dashed border-info/20 bg-info/50 px-4 py-3 text-xs text-info">
                                         <div className="flex items-center gap-2 font-medium">
                                             <GitBranch className="h-3.5 w-3.5" />
                                             Alcance global de ventas referidas
                                         </div>
-                                        <p className="mt-1 text-violet-800/80">
+                                        <p className="mt-1 text-info/80">
                                             originType={VENTA_REFERIDO_ARBOL.originType} · cualquier producto con sponsor válido
                                         </p>
                                     </div>
@@ -303,7 +303,7 @@ export default function ComisionArbolProductoModal({
                             )}
                         </div>
 
-                        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-950">
+                        <div className="rounded-2xl border border-warning/20 bg-warning/10 p-4 text-xs text-warning">
                             El disparo exige: pago APPROVED, comprador con tercero + invoice CONFIRMADA (FAC-*),
                             referidoId en auditoría y sponsor válido en refeClient.
                         </div>

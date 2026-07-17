@@ -3,7 +3,7 @@ import { apiFetch } from '@/app/services/api';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Loader2, Building2, Users, CheckCircle2, XCircle } from 'lucide-react';
+import { Loader2, Building2, Users, CheckCircle2, XCircle, Pencil, Trash2 } from 'lucide-react';
 import { toast } from 'react-toastify';
 
 interface SectorEmpresa {
@@ -46,16 +46,15 @@ const SectorIndustriaEmpresa = () => {
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({ sector_empresarial: '', numero_empleados: '' });
   const [formLoading, setFormLoading] = useState(false);
+  const [editando, setEditando] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   // 🔍 CARGAR SECTOR EXISTENTE
   const fetchSectorEmpresarial = async () => {
-    console.log('🔄 Intentando cargar sector empresarial...');
     try {
       const data = await apiFetch('/api/configuracion/listar/sectores/sociedades', {
         method: 'GET'
       });
-
-      console.log('✅ Respuesta de sectores empresariales:', data);
 
       if (data?.sectores && Array.isArray(data.sectores) && data.sectores.length > 0) {
         const sector = data.sectores[0];
@@ -65,8 +64,7 @@ const SectorIndustriaEmpresa = () => {
       } else {
         setSectorExistente(null);
       }
-    } catch (err: any) {
-      console.error('❌ Error al cargar sector:', err);
+    } catch {
       setSectorExistente(null);
     }
   };
@@ -88,9 +86,7 @@ const SectorIndustriaEmpresa = () => {
       } else {
         setPerfiles([]);
       }
-    } catch (err: any) {
-      console.error('❌ Error al cargar datos:', err);
-      console.error('❌ Mensaje de error:', err.message);
+    } catch {
       toast.error('Error al cargar información corporativa');
       setPerfiles([]);
     } finally {
@@ -117,19 +113,26 @@ const SectorIndustriaEmpresa = () => {
         numero_empleados: Number(form.numero_empleados),
       };
 
-      const res = await apiFetch('/api/configuracion/parametrizacion/sector-industria-empresa', {
-        method: 'POST',
-        body: payload,
-      });
+      if (editando && sectorExistente) {
+        await apiFetch(`/api/configuracion/parametrizacion/sector-industria-empresa/${sectorExistente._id}`, {
+          method: 'PUT',
+          body: payload,
+        });
+        toast.success('Sector empresarial actualizado correctamente');
+      } else {
+        await apiFetch('/api/configuracion/parametrizacion/sector-industria-empresa', {
+          method: 'POST',
+          body: payload,
+        });
+        toast.success('Sector empresarial registrado correctamente');
+      }
 
-      toast.success('✅ Sector empresarial registrado correctamente');
       setForm({ sector_empresarial: '', numero_empleados: '' });
+      setEditando(false);
 
       await fetchSectorEmpresarial();
       await fetchPerfiles();
     } catch (err: any) {
-      console.error('❌ Error al guardar sector:', err);
-
       if (err.message?.includes('Ya tienes registrado')) {
         toast.error('Ya tienes un sector empresarial registrado');
         await fetchSectorEmpresarial();
@@ -138,6 +141,41 @@ const SectorIndustriaEmpresa = () => {
       }
     } finally {
       setFormLoading(false);
+    }
+  };
+
+  const iniciarEdicion = () => {
+    if (!sectorExistente) return;
+    setForm({
+      sector_empresarial: sectorExistente.sector_empresarial,
+      numero_empleados: String(sectorExistente.numero_empleados),
+    });
+    setEditando(true);
+  };
+
+  const cancelarEdicion = () => {
+    setForm({ sector_empresarial: '', numero_empleados: '' });
+    setEditando(false);
+  };
+
+  const handleEliminar = async () => {
+    if (!sectorExistente) return;
+    if (!window.confirm(`¿Eliminar el sector "${sectorExistente.sector_empresarial}"? Esta acción lo desactiva de forma lógica.`)) return;
+
+    setDeleteLoading(true);
+    try {
+      await apiFetch(`/api/configuracion/parametrizacion/sector-industria-empresa/${sectorExistente._id}`, {
+        method: 'DELETE',
+      });
+      toast.success('Sector empresarial eliminado correctamente');
+      setSectorExistente(null);
+      setForm({ sector_empresarial: '', numero_empleados: '' });
+      setEditando(false);
+      await fetchPerfiles();
+    } catch (err: any) {
+      toast.error(err.message || 'Error al eliminar el sector empresarial');
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -154,17 +192,17 @@ const SectorIndustriaEmpresa = () => {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {sectorExistente ? (
+          {sectorExistente && !editando ? (
             /* MOSTRAR SECTOR EXISTENTE */
             <div className="space-y-4">
               <div className="bg-muted/30 rounded-lg p-4 border">
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-5 w-5 text-green-600" />
+                    <CheckCircle2 className="h-5 w-5 text-success" />
                     <h3 className="font-semibold text-lg">Sector Registrado</h3>
                   </div>
                   {sectorExistente.estado && (
-                    <span className="px-3 py-1 bg-green-100 text-green-800 text-xs font-medium rounded-full">
+                    <span className="px-3 py-1 bg-success/10 text-success text-xs font-medium rounded-full">
                       Activo
                     </span>
                   )}
@@ -192,19 +230,41 @@ const SectorIndustriaEmpresa = () => {
                 </div>
               </div>
 
-              <div className="text-sm text-muted-foreground text-center">
-                Ya tienes un sector empresarial registrado. Contacta al administrador para modificarlo.
+              <div className="flex justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={iniciarEdicion}
+                  disabled={deleteLoading}
+                >
+                  <Pencil className="mr-2 h-4 w-4" />
+                  Modificar
+                </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  onClick={handleEliminar}
+                  disabled={deleteLoading}
+                >
+                  {deleteLoading ? (
+                    <Loader2 className="animate-spin mr-2 h-4 w-4" />
+                  ) : (
+                    <Trash2 className="mr-2 h-4 w-4" />
+                  )}
+                  Eliminar
+                </Button>
               </div>
             </div>
           ) : (
             /* FORMULARIO DE REGISTRO */
-            <form onSubmit={handleFormSubmit} className="space-y-4">
+            <form id="form-sector-empresarial" onSubmit={handleFormSubmit} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">
+                  <label htmlFor="sector-empresarial" className="text-sm font-medium">
                     Sector Empresarial *
                   </label>
                   <Input
+                    id="sector-empresarial"
                     name="sector_empresarial"
                     value={form.sector_empresarial}
                     onChange={handleFormChange}
@@ -214,11 +274,12 @@ const SectorIndustriaEmpresa = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-sm font-medium flex items-center gap-1">
+                  <label htmlFor="numero-empleados" className="text-sm font-medium flex items-center gap-1">
                     <Users className="h-4 w-4" />
                     Número de Empleados *
                   </label>
                   <Input
+                    id="numero-empleados"
                     name="numero_empleados"
                     value={form.numero_empleados}
                     onChange={handleFormChange}
@@ -230,20 +291,34 @@ const SectorIndustriaEmpresa = () => {
                 </div>
               </div>
 
-              <Button
-                type="submit"
-                className="w-auto"
-                disabled={formLoading || yaExisteSector}
-              >
-                {formLoading ? (
-                  <>
-                    <Loader2 className="animate-spin mr-2 h-4 w-4" />
-                    Guardando...
-                  </>
-                ) : (
-                  'Registrar Sector Empresarial'
+              <div className="flex gap-2">
+                <Button
+                  type="submit"
+                  className="w-auto"
+                  disabled={formLoading || (yaExisteSector && !editando)}
+                >
+                  {formLoading ? (
+                    <>
+                      <Loader2 className="animate-spin mr-2 h-4 w-4" />
+                      Guardando...
+                    </>
+                  ) : editando ? (
+                    'Actualizar Sector Empresarial'
+                  ) : (
+                    'Registrar Sector Empresarial'
+                  )}
+                </Button>
+                {editando && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={cancelarEdicion}
+                    disabled={formLoading}
+                  >
+                    Cancelar
+                  </Button>
                 )}
-              </Button>
+              </div>
             </form>
           )}
         </CardContent>
@@ -285,9 +360,9 @@ const SectorIndustriaEmpresa = () => {
                         </div>
                       </div>
                       {sector.estado ? (
-                        <CheckCircle2 className="h-5 w-5 text-green-600 flex-shrink-0" />
+                        <CheckCircle2 className="h-5 w-5 text-success flex-shrink-0" />
                       ) : (
-                        <XCircle className="h-5 w-5 text-red-600 flex-shrink-0" />
+                        <XCircle className="h-5 w-5 text-destructive flex-shrink-0" />
                       )}
                     </div>
 

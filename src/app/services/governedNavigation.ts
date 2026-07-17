@@ -9,7 +9,8 @@ export type GovernedNavigationAction =
   | 'logout'
   | 'register'
   | 'forgotPassword'
-  | 'publicHome';
+  | 'publicHome'
+  | 'reglasContablesCompleta';
 
 export interface GovernedNavigationEntry {
   path?: string;
@@ -23,6 +24,7 @@ export interface GovernedNavigationConfig {
   register?: GovernedNavigationEntry;
   forgotPassword?: GovernedNavigationEntry;
   publicHome?: GovernedNavigationEntry;
+  reglasContablesCompleta?: GovernedNavigationEntry;
   allowedPaths?: string[];
 }
 
@@ -33,6 +35,7 @@ const DEFAULT_PATHS: Record<GovernedNavigationAction, string> = {
   register: '/public/render/registro-cliente',
   forgotPassword: '/recuperar-contrasena',
   publicHome: '/public/render/home',
+  reglasContablesCompleta: '',
 };
 
 const resolveDefaultFallback = (action: GovernedNavigationAction): string => {
@@ -103,6 +106,7 @@ export const getGovernedLogoutPath = (): string => getGovernedPath('logout');
 export const getGovernedRegisterPath = (): string => getGovernedPath('register');
 export const getGovernedForgotPasswordPath = (): string => getGovernedPath('forgotPassword');
 export const getGovernedPublicHomePath = (): string => getGovernedPath('publicHome');
+export const getGovernedReglasContablesCompletaPath = (): string => getGovernedPath('reglasContablesCompleta');
 
 // Retorna true solo cuando el backend tiene un path explícito y válido para la acción.
 // Úsalo para decidir si el governed path debe tener prioridad sobre rutas derivadas (ej. adminHomeRoute).

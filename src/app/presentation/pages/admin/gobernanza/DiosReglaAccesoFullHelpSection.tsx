@@ -21,12 +21,12 @@ export function DiosReglaAccesoFullHelpSection({
     <div className="mt-3 space-y-2 border-t border-border pt-3">
       <p className="text-xs font-semibold text-foreground">Tenant SuperAdmin y acceso al sistema</p>
       {jwtSaTieneCorporativo === false || jwtScopeFullValidado ? (
-        <p className="text-[11px] leading-relaxed text-emerald-800">
+        <p className="text-[11px] leading-relaxed text-success">
           Tu sesión JWT califica para acceso full: tenant SuperAdmin sin corporativo en{' '}
-          <code className="rounded bg-emerald-50 px-1">tenantJerarquiaCounter</code>.
+          <code className="rounded bg-success/10 px-1">tenantJerarquiaCounter</code>.
         </p>
       ) : jwtSaTieneCorporativo === true ? (
-        <p className="text-[11px] leading-relaxed text-amber-800">
+        <p className="text-[11px] leading-relaxed text-warning">
           Tu JWT tiene corporativo en counters: crear/sincronizar totales está bloqueado; solo referencia de regla.
         </p>
       ) : (
@@ -35,15 +35,15 @@ export function DiosReglaAccesoFullHelpSection({
 
       {full.length > 0 ? (
         <div className="space-y-1">
-          <p className="text-[11px] font-medium text-emerald-900">Acceso full (parametrizar regla DIOS)</p>
+          <p className="text-[11px] font-medium text-success">Acceso full (parametrizar regla DIOS)</p>
           <ul className="list-none space-y-1 pl-0">
             {full.map((r) => (
               <li
                 key={r.id}
-                className="rounded border border-emerald-200 bg-emerald-50/80 px-2 py-1 text-[11px] text-emerald-950"
+                className="rounded border border-success/20 bg-success/80 px-2 py-1 text-[11px] text-success"
               >
                 <span className="font-medium">{r.label}</span>
-                {r.esJwt ? <span className="ml-1 text-emerald-700">· JWT</span> : null}
+                {r.esJwt ? <span className="ml-1 text-success">· JWT</span> : null}
               </li>
             ))}
           </ul>
@@ -52,15 +52,15 @@ export function DiosReglaAccesoFullHelpSection({
 
       {acotados.length > 0 ? (
         <div className="space-y-1">
-          <p className="text-[11px] font-medium text-amber-900">Alcance acotado (con corporativo en counters)</p>
+          <p className="text-[11px] font-medium text-warning">Alcance acotado (con corporativo en counters)</p>
           <ul className="list-none space-y-1 pl-0">
             {acotados.map((r) => (
               <li
                 key={r.id}
-                className="rounded border border-amber-200 bg-amber-50/80 px-2 py-1 text-[11px] text-amber-950"
+                className="rounded border border-warning/20 bg-warning/80 px-2 py-1 text-[11px] text-warning"
               >
                 <span className="font-medium">{r.label}</span>
-                {r.esJwt ? <span className="ml-1 text-amber-700">· JWT</span> : null}
+                {r.esJwt ? <span className="ml-1 text-warning">· JWT</span> : null}
               </li>
             ))}
           </ul>

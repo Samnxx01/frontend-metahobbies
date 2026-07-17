@@ -80,7 +80,7 @@ export function GobernanzaModuloAccionesSelector({
             : 'Cargando operaciones del formulario…'}
         </p>
       ) : acciones.length === 0 ? (
-        <p className="text-xs text-amber-800">
+        <p className="text-xs text-warning">
           {origen === 'ruta'
             ? 'Sin acciones HTTP en la vista (rutaseguridads). Agrega al menos un GET en Seguridad → Rutas.'
             : 'Sin acciones activas en la colección acciones. Revise Seguridad → Rutas → acciones.'}

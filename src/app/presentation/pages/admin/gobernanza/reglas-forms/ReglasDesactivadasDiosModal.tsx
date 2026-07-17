@@ -39,13 +39,13 @@ function ActivarConfirmPanel({
   onCancelar: () => void;
 }): React.ReactElement {
   return (
-    <div className="mt-2 rounded-md border border-emerald-400/40 bg-emerald-50 p-3 space-y-2">
-      <p className="text-sm font-medium text-emerald-700">¿Confirmas reactivar esta regla?</p>
+    <div className="mt-2 rounded-md border border-success/40 bg-success/10 p-3 space-y-2">
+      <p className="text-sm font-medium text-success">¿Confirmas reactivar esta regla?</p>
       <p className="font-mono text-xs text-muted-foreground break-all">{confirm.reglaId}</p>
       <div className="flex gap-2">
         <Button
           size="sm"
-          className="bg-emerald-600 hover:bg-emerald-700 text-white"
+          className="bg-success hover:bg-success text-white"
           onClick={onConfirmar}
           disabled={fase === 'loading'}
         >
@@ -197,9 +197,9 @@ function ModalContent(): React.ReactElement {
           ) : faseReglas === 'error' ? (
             <p className="text-xs text-destructive">{errorReglas}</p>
           ) : reglas.length === 0 ? (
-            <div className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-6 text-center">
-              <p className="text-sm text-emerald-700 font-medium">Sin reglas desactivadas</p>
-              <p className="text-xs text-emerald-600 mt-1">Todas las reglas DIOS de este tenant están activas.</p>
+            <div className="rounded-md border border-success/20 bg-success/10 px-4 py-6 text-center">
+              <p className="text-sm text-success font-medium">Sin reglas desactivadas</p>
+              <p className="text-xs text-success mt-1">Todas las reglas DIOS de este tenant están activas.</p>
             </div>
           ) : (
             <>
@@ -216,7 +216,7 @@ function ModalContent(): React.ReactElement {
                   const actionBtn = (
                     <Button
                       size="sm"
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white shrink-0"
+                      className="bg-success hover:bg-success text-white shrink-0"
                       onClick={() => {
                         setActivando({ reglaId: rid, tenantId: tenantSelId });
                         setErrorActivar(null);
@@ -250,9 +250,9 @@ function ModalContent(): React.ReactElement {
 
       {/* Feedback de activaciones */}
       {activadas.length > 0 && (
-        <div className="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 space-y-1">
+        <div className="rounded-md border border-success/30 bg-success/10 px-3 py-2 space-y-1">
           {activadas.map((aid, i) => (
-            <p key={i} className="text-sm text-emerald-800">
+            <p key={i} className="text-sm text-success">
               Regla <span className="font-mono">{aid.slice(0, 8)}…</span> reactivada.
             </p>
           ))}
@@ -275,7 +275,7 @@ export function ReglasDesactivadasDiosModal({
       <DialogTrigger asChild>
         {trigger ?? (
           <Button variant="outline" size="sm" className="gap-1.5">
-            <span className="text-amber-600">●</span> Ver reglas desactivadas
+            <span className="text-warning">●</span> Ver reglas desactivadas
           </Button>
         )}
       </DialogTrigger>
@@ -283,7 +283,7 @@ export function ReglasDesactivadasDiosModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             Reglas DIOS desactivadas
-            <Badge variant="outline" className="text-[11px] border-amber-400 text-amber-700 bg-amber-50">
+            <Badge variant="outline" className="text-[11px] border-warning/50 text-warning bg-warning/10">
               Reactivar
             </Badge>
           </DialogTitle>

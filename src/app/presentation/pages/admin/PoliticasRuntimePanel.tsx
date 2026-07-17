@@ -2574,7 +2574,7 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
             </div>
           </div>
           {esPoliticaBypassLike(tipo, codigo) ? (
-            <div className="space-y-3 rounded-md border border-amber-500/30 bg-amber-500/5 p-3 md:col-span-3">
+            <div className="space-y-3 rounded-md border border-warning/30 bg-warning/5 p-3 md:col-span-3">
               <p className="text-xs font-medium text-foreground">Bypass dinamico por motor evento y JWT</p>
               <div className="space-y-1">
                 <Label className="text-xs">Motor evento (por etiqueta)</Label>

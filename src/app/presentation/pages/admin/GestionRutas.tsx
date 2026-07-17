@@ -4322,7 +4322,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
             <div className="space-y-3 py-2 text-sm">
               <div className="grid grid-cols-2 gap-2">
                 <div className="rounded-md bg-muted p-3 text-center">
-                  <p className="text-2xl font-bold text-green-600">{migracionResult.actualizadas}</p>
+                  <p className="text-2xl font-bold text-success">{migracionResult.actualizadas}</p>
                   <p className="text-xs text-muted-foreground">Actualizadas</p>
                 </div>
                 <div className="rounded-md bg-muted p-3 text-center">

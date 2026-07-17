@@ -33,7 +33,7 @@ export function CalculoNominaResultado({ resultado }: Props) {
             <CardTitle className="text-sm font-medium text-muted-foreground">Total devengado</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold text-emerald-600">{formatCOP(resultado.totalDevengado)}</p>
+            <p className="text-2xl font-bold text-success">{formatCOP(resultado.totalDevengado)}</p>
           </CardContent>
         </Card>
         <Card>
@@ -41,7 +41,7 @@ export function CalculoNominaResultado({ resultado }: Props) {
             <CardTitle className="text-sm font-medium text-muted-foreground">Total descuentos</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold text-amber-600">{formatCOP(resultado.totalDescuentos)}</p>
+            <p className="text-2xl font-bold text-warning">{formatCOP(resultado.totalDescuentos)}</p>
           </CardContent>
         </Card>
         <Card className="border-primary/30 bg-primary/5">

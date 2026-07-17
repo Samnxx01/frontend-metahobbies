@@ -246,7 +246,7 @@ export default function DocumentosCorporativos() {
                 <img src={selectedDoc.url} alt="Vista previa" className="max-w-full max-h-full object-contain rounded shadow-md" />
               ) : (
                 <div className="text-center p-10 bg-white rounded shadow">
-                  <p className="text-red-500 font-medium">Formato no soportado para vista previa</p>
+                  <p className="text-destructive font-medium">Formato no soportado para vista previa</p>
                   <p className="text-sm text-muted-foreground mt-2">Tipo: {selectedDoc.mimetype}</p>
                 </div>
               )

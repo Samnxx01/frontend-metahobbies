@@ -5653,7 +5653,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
                         Políticas runtime faltantes ({diffPadreData.totalFaltantes})
                       </p>
                       {diffPadreData.faltanEnHijo.length === 0 ? (
-                        <p className="text-xs text-green-600">El hijo ya tiene todas las políticas del padre.</p>
+                        <p className="text-xs text-success">El hijo ya tiene todas las políticas del padre.</p>
                       ) : (
                         <>
                           <div className="flex gap-2 mb-1">
@@ -5683,7 +5683,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
                                 <span>
                                   <strong>{p.codigo || p.id}</strong>
                                   {p.dominio && <span className="text-muted-foreground"> · {p.dominio}</span>}
-                                  {p.efecto && <span className={p.efecto === 'ALLOW' ? ' text-green-600' : ' text-red-500'}> · {p.efecto}</span>}
+                                  {p.efecto && <span className={p.efecto === 'ALLOW' ? ' text-success' : ' text-destructive'}> · {p.efecto}</span>}
                                 </span>
                               </label>
                             ))}
@@ -5698,7 +5698,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
                         Vistas faltantes en regla del hijo ({diffPadreData.totalVistasHijoLeFaltan ?? 0})
                       </p>
                       {(diffPadreData.faltanVistas ?? []).length === 0 ? (
-                        <p className="text-xs text-green-600">El hijo ya tiene todas las vistas del padre.</p>
+                        <p className="text-xs text-success">El hijo ya tiene todas las vistas del padre.</p>
                       ) : (
                         <>
                           <div className="flex gap-2 mb-1">
@@ -6284,7 +6284,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
                       <CardDescription className="line-clamp-2">{endpoint.description}</CardDescription>
                     </div>
                     {!disponible ? (
-                      <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700">
+                      <p className="rounded-md border border-warning/20 bg-warning/10 px-3 py-2 text-xs font-medium text-warning">
                         Este bloque pertenece a otro scope y queda disponible solo como referencia.
                       </p>
                     ) : null}

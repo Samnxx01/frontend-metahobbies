@@ -166,9 +166,9 @@ function KPICard({
 }) {
     const ring = {
         default: 'bg-primary/10 text-primary',
-        success: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400',
-        warning: 'bg-amber-100  dark:bg-amber-900/30  text-amber-600  dark:text-amber-400',
-        danger: 'bg-red-100    dark:bg-red-900/30    text-red-600    dark:text-red-400',
+        success: 'bg-success/10 dark:bg-success/30 text-success dark:text-success',
+        warning: 'bg-warning/10  dark:bg-warning/30  text-warning  dark:text-warning',
+        danger: 'bg-destructive/10    dark:bg-destructive/30    text-destructive    dark:text-destructive',
     }[accent];
 
     return (

@@ -135,12 +135,12 @@ export function SaJerarquiaUsuariosPanel({ meta, indice = [] }: Props) {
           {codigo}
         </span>
         {meta.rolNombre ? (
-          <span className="rounded-full border border-sky-300/60 bg-sky-50 px-2 py-0.5 text-[10px] font-medium text-sky-900">
+          <span className="rounded-full border border-info/60 bg-info/10 px-2 py-0.5 text-[10px] font-medium text-info">
             {meta.rolNombre}
           </span>
         ) : null}
         {esAdminPlataforma ? (
-          <span className="rounded-full border border-violet-300/60 bg-violet-50 px-2 py-0.5 text-[10px] font-medium text-violet-800">
+          <span className="rounded-full border border-info/60 bg-info/10 px-2 py-0.5 text-[10px] font-medium text-info">
             Administrador SuperAdmin
           </span>
         ) : meta.coporativoNombre ? (
@@ -178,16 +178,16 @@ export function SaJerarquiaUsuariosPanel({ meta, indice = [] }: Props) {
                   ) : null}
                   <div className="mt-1 flex flex-wrap gap-1">
                     {u.tienePerfil ? (
-                      <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] text-emerald-800">
+                      <span className="rounded bg-success/10 px-1.5 py-0.5 text-[10px] text-success">
                         Perfil creado
                       </span>
                     ) : (
-                      <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] text-amber-800">
+                      <span className="rounded bg-warning/10 px-1.5 py-0.5 text-[10px] text-warning">
                         Sin perfilSuperAdmin
                       </span>
                     )}
                     {u.esAsignadoTenant ? (
-                      <span className="rounded bg-sky-50 px-1.5 py-0.5 text-[10px] text-sky-800">
+                      <span className="rounded bg-info/10 px-1.5 py-0.5 text-[10px] text-info">
                         Asignado al tenant
                       </span>
                     ) : null}

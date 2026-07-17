@@ -181,7 +181,7 @@ export default function InventarioConciliacionTab(): React.ReactElement {
                 )}
                 {result.documentoTipo ? (
                   validacionTone === 'success' ? (
-                    <Badge variant="default" className="bg-emerald-600 hover:bg-emerald-600">
+                    <Badge variant="default" className="bg-success hover:bg-success">
                       <ShieldCheck className="mr-1 h-3 w-3" /> Validada · {result.estadoValidacion}
                     </Badge>
                   ) : validacionTone === 'warning' ? (
@@ -206,7 +206,7 @@ export default function InventarioConciliacionTab(): React.ReactElement {
               </div>
             ) : null}
             {result.mensajeValidacion ? (
-              <div className="rounded-md border border-amber-300/50 bg-amber-50/40 px-3 py-2 text-xs text-amber-900 dark:border-amber-700/50 dark:bg-amber-900/20 dark:text-amber-200">
+              <div className="rounded-md border border-warning/50 bg-warning/40 px-3 py-2 text-xs text-warning dark:border-warning/50 dark:bg-warning/20 dark:text-warning">
                 {result.mensajeValidacion}
               </div>
             ) : null}

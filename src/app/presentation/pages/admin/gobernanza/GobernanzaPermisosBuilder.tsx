@@ -48,9 +48,9 @@ export const GobernanzaPermisosBuilder: React.FC<{ endpoint: EndpointSpec }> = (
       : rows.reduce((acc, row) => acc + row.accionId.length, 0);
     const combinacionesInsertarCount = accionesInsertarCount;
     return (
-      <div className="rounded-xl border border-rose-100 bg-card/80 p-3">
+      <div className="rounded-xl border border-destructive/10 bg-card/80 p-3">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <p className="text-xs font-medium text-rose-600">Vistas activas + acciones activas</p>
+          <p className="text-xs font-medium text-destructive">Vistas activas + acciones activas</p>
           <div className="flex flex-wrap gap-2">
             <label className="flex items-center gap-2 rounded-md border border-border px-2 py-1 text-xs text-foreground">
               <input
@@ -84,7 +84,7 @@ export const GobernanzaPermisosBuilder: React.FC<{ endpoint: EndpointSpec }> = (
           </div>
         </div>
         {!vistasCatalogo.length && loadingDeltaByEndpoint[endpoint.id] ? (
-          <div className="rounded-md border border-sky-200 bg-sky-50 p-3 text-xs text-sky-800 flex items-center gap-2">
+          <div className="rounded-md border border-info/20 bg-info/10 p-3 text-xs text-info flex items-center gap-2">
             <Loader2 className="h-3 w-3 animate-spin shrink-0" />
             Calculando vistas faltantes para esta regla…
           </div>
@@ -93,7 +93,7 @@ export const GobernanzaPermisosBuilder: React.FC<{ endpoint: EndpointSpec }> = (
             Selecciona una regla para ver las vistas disponibles.
           </div>
         ) : !vistasCatalogo.length ? (
-          <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+          <div className="rounded-md border border-warning/20 bg-warning/10 p-3 text-xs text-warning">
             Faltan datos para construir permisos.
             <Button className="ml-2 h-7 px-2 text-xs" type="button" variant="outline" onClick={() => void hydrateData({ force: true })} disabled={loadingData}>
               Recargar datos
@@ -101,7 +101,7 @@ export const GobernanzaPermisosBuilder: React.FC<{ endpoint: EndpointSpec }> = (
           </div>
         ) : null}
         {isTenantReglasEndpoint && allViewsWithAllActionsSelected ? (
-          <div className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900">
+          <div className="mb-3 rounded-lg border border-success/20 bg-success/10 p-3 text-xs text-success">
             Modo masivo activo. Se insertarÃ¡n todas las vistas con todas las acciones.
           </div>
         ) : null}

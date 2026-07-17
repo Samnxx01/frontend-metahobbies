@@ -132,8 +132,8 @@ export default function GestionMonedas() {
                     <div className={`
                         flex items-start gap-2.5 px-3 py-2.5 rounded-lg text-xs border
                         ${mensaje.tipo === 'success'
-                            ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800'
-                            : 'bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800'
+                            ? 'bg-success/10 dark:bg-success/30 text-success dark:text-success border-success/20 dark:border-success'
+                            : 'bg-destructive/10 dark:bg-destructive/30 text-destructive dark:text-destructive border-destructive/20 dark:border-destructive'
                         }
                     `}>
                         {mensaje.tipo === 'success'

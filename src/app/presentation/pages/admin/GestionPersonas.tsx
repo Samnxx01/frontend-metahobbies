@@ -101,9 +101,9 @@ const EMPTY_FORM: PersonaForm = {
 
 const scopeBadge = (actor: TenantActor | null) => {
   if (!actor) return null;
-  if (actor.tenantSuperAdminId) return <Badge className="bg-purple-100 text-purple-700 border-purple-200">Proveedor de Software</Badge>;
-  if (actor.tenantGlobalId && !actor.tenantCorporativoId) return <Badge className="bg-blue-100 text-blue-700 border-blue-200">Licencia Global</Badge>;
-  if (actor.tenantCorporativoId) return <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200">Corporativo</Badge>;
+  if (actor.tenantSuperAdminId) return <Badge className="bg-info/10 text-info border-info/20">Proveedor de Software</Badge>;
+  if (actor.tenantGlobalId && !actor.tenantCorporativoId) return <Badge className="bg-info/10 text-info border-info/20">Licencia Global</Badge>;
+  if (actor.tenantCorporativoId) return <Badge className="bg-success/10 text-success border-success/20">Corporativo</Badge>;
   return null;
 };
 
@@ -400,21 +400,21 @@ export default function GestionPersonas() {
             {/* Info box multi-tenant */}
             <div className="mt-3 grid grid-cols-1 gap-2 rounded-xl border border-slate-100 bg-white p-3 text-xs sm:grid-cols-3">
               <div className="flex items-start gap-2">
-                <div className="mt-0.5 rounded bg-purple-100 p-1"><Shield className="h-3 w-3 text-purple-600" /></div>
+                <div className="mt-0.5 rounded bg-info/10 p-1"><Shield className="h-3 w-3 text-info" /></div>
                 <div>
                   <p className="font-semibold text-slate-700">Proveedor (SuperAdmin)</p>
                   <p className="text-slate-500">Gestiona el software. Puede crear personas en cualquier árbol.</p>
                 </div>
               </div>
               <div className="flex items-start gap-2">
-                <div className="mt-0.5 rounded bg-blue-100 p-1"><Building2 className="h-3 w-3 text-blue-600" /></div>
+                <div className="mt-0.5 rounded bg-info/10 p-1"><Building2 className="h-3 w-3 text-info" /></div>
                 <div>
                   <p className="font-semibold text-slate-700">Licencia (TenantGlobal)</p>
                   <p className="text-slate-500">Dueño de la licencia. Crea personas en sus corporativos.</p>
                 </div>
               </div>
               <div className="flex items-start gap-2">
-                <div className="mt-0.5 rounded bg-emerald-100 p-1"><User className="h-3 w-3 text-emerald-600" /></div>
+                <div className="mt-0.5 rounded bg-success/10 p-1"><User className="h-3 w-3 text-success" /></div>
                 <div>
                   <p className="font-semibold text-slate-700">Corporativo</p>
                   <p className="text-slate-500">Área o división. Sus empleados y clientes se gestionan aquí.</p>
@@ -451,7 +451,7 @@ export default function GestionPersonas() {
               <CardContent className="pt-4">
                 <SectionHeader
                   id="tenant"
-                  icon={<Building2 className="h-4 w-4 text-blue-500" />}
+                  icon={<Building2 className="h-4 w-4 text-info" />}
                   title="Asignación Tenant"
                   hint="Define en qué árbol organizacional queda la persona"
                 />
@@ -461,7 +461,7 @@ export default function GestionPersonas() {
                     <div className="space-y-1">
                       <Label className="flex items-center gap-1">
                         Licencia (TenantGlobal)
-                        {actor?.tenantGlobalId && !actor.tenantSuperAdminId && <Badge className="ml-1 text-xs bg-blue-100 text-blue-700">Pre-asignado</Badge>}
+                        {actor?.tenantGlobalId && !actor.tenantSuperAdminId && <Badge className="ml-1 text-xs bg-info/10 text-info">Pre-asignado</Badge>}
                       </Label>
                       {actor?.tenantSuperAdminId ? (
                         <Select
@@ -494,7 +494,7 @@ export default function GestionPersonas() {
                     <div className="space-y-1">
                       <Label className="flex items-center gap-1">
                         Corporativo / Área *
-                        {actor?.tenantCorporativoId && <Badge className="ml-1 text-xs bg-emerald-100 text-emerald-700">Pre-asignado</Badge>}
+                        {actor?.tenantCorporativoId && <Badge className="ml-1 text-xs bg-success/10 text-success">Pre-asignado</Badge>}
                       </Label>
                       {actor?.tenantCorporativoId ? (
                         <Input
@@ -677,9 +677,9 @@ export default function GestionPersonas() {
 
             {/* Resumen de asignación */}
             {(form.tenantGlobal || actor?.tenantGlobalId) && (
-              <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm">
-                <p className="mb-2 font-semibold text-emerald-800">Resumen de asignación</p>
-                <div className="grid gap-1 text-xs text-emerald-700">
+              <div className="rounded-xl border border-success/20 bg-success/10 p-4 text-sm">
+                <p className="mb-2 font-semibold text-success">Resumen de asignación</p>
+                <div className="grid gap-1 text-xs text-success">
                   <p>• <strong>Licencia (TG):</strong> {form.tenantGlobal || actor?.tenantGlobalId || '—'}</p>
                   <p>• <strong>Corporativo (TC):</strong> {
                     actor?.tenantCorporativoId
@@ -769,7 +769,7 @@ export default function GestionPersonas() {
                             {p.tenantCorporativoId ? `${String(p.tenantCorporativoId).slice(0, 8)}…` : '—'}
                           </td>
                           <td className="px-4 py-3 text-center">
-                            <Badge className={p.estado ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-red-100 text-red-700 border-red-200'}>
+                            <Badge className={p.estado ? 'bg-success/10 text-success border-success/20' : 'bg-destructive/10 text-destructive border-destructive/20'}>
                               {p.estado ? 'Activo' : 'Inactivo'}
                             </Badge>
                           </td>

@@ -165,6 +165,10 @@ export interface EstadoOrdenCompraConfig {
 export interface InventarioComprasConfig {
   recepcionAutomatica: boolean;
   estadosOrdenCompra?: EstadoOrdenCompraConfig[];
+  /** Códigos de ámbito cuyas reglas de impuesto aplican a las OC. Vacío = dinámico (todas las reglas IVA activas). */
+  ambitosReglaImpuesto?: string[];
+  /** Tributo activo de DIAN_TRIBUTOS para la OC. 01 = IVA. */
+  codigoDianImpuesto?: string;
 }
 
 /** false = validar duplicados (recomendado); true = omitir validación. */
@@ -373,6 +377,8 @@ export interface UbicacionInventario {
 
 export interface OrdenCompraItemLinea {
   sku: string;
+  /** Referencia al catálogo de productos; se resuelve desde el SKU si no se envía. */
+  productoId?: string | null;
   nombreProducto?: string;
   descripcion?: string;
   cantidadOrdenada: number;
@@ -381,6 +387,8 @@ export interface OrdenCompraItemLinea {
   descuento?: number;
   impuestoPorcentaje?: number;
   impuestos?: number;
+  /** Código de la ReglaContable usada para autocompletar `impuestoPorcentaje`; null si fue manual. */
+  codigoReglaImpuesto?: string | null;
   subtotal?: number;
   bodega: string;
   ubicacion?: UbicacionInventario;
@@ -498,7 +506,7 @@ export interface InventarioOrdenCompra {
   concepto?: string;
   justificacion?: string;
   fechaOrden?: string;
-  proveedor: { nombre: string; nit: string };
+  proveedor: { id?: string; nombre: string; nit: string };
   documentoLegalCompra: { tipo: string; numero: string; fecha: string };
   estado: string;
   nRecepciones?: number;
@@ -1452,6 +1460,29 @@ const inventarioService = {
     return listaDesdeResp<InventarioProveedor>(resp);
   },
 
+  /** Responsabilidades fiscales DIAN (Lista 48 del RUT) asignadas al proveedor. */
+  async listarResponsabilidadesProveedor(
+    proveedorId: string
+  ): Promise<Array<{ responsabilidadCodigo: string; nombre: string }>> {
+    const resp = await apiFetch(
+      `/api/inventario/compras/proveedores/${encodeURIComponent(proveedorId)}/responsabilidades`,
+      { method: 'GET' }
+    );
+    return (resp?.data ?? []) as Array<{ responsabilidadCodigo: string; nombre: string }>;
+  },
+
+  /** Reemplaza el set de responsabilidades fiscales DIAN del proveedor (códigos del catálogo). */
+  async guardarResponsabilidadesProveedor(
+    proveedorId: string,
+    responsabilidades: string[]
+  ): Promise<{ msg?: string }> {
+    const resp = await apiFetch(
+      `/api/inventario/compras/proveedores/${encodeURIComponent(proveedorId)}/responsabilidades`,
+      { method: 'PUT', body: { responsabilidades } }
+    );
+    return { msg: resp?.msg };
+  },
+
   async listarTiposProveedor(): Promise<InventarioTipoProveedor[]> {
     const resp = await apiFetch('/api/inventario/compras/proveedores/tipos', { method: 'GET' });
     return (resp?.data ?? []) as InventarioTipoProveedor[];
@@ -1505,7 +1536,7 @@ const inventarioService = {
     numeroFacturaElectronico?: string;
     concepto: string;
     justificacion?: string;
-    proveedor: { nombre: string; nit: string };
+    proveedor: { id?: string; nombre: string; nit: string };
     items: OrdenCompraItemLinea[];
   }): Promise<InventarioOrdenCompra> {
     const resp = await apiFetch('/api/inventario/compras/ordenes', { method: 'POST', body: payload });

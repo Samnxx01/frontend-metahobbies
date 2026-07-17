@@ -18,7 +18,7 @@ export function TenantActualizarGlobalDesignForm({
 }: GobernanzaEndpointDesignFormProps): React.ReactElement {
   return (
     <div className="space-y-6">
-      <div className="rounded-lg border border-dashed border-amber-300/60 bg-amber-50/40 p-4 dark:bg-amber-950/20">
+      <div className="rounded-lg border border-dashed border-warning/60 bg-warning/40 p-4 dark:bg-warning/20">
         <p className="text-xs font-semibold text-foreground">Operación PUT · edición por id</p>
         <p className="mt-1 text-xs text-muted-foreground">
           Ajusta cómo se percibe la tarjeta de actualización frente a DELETE (misma fila visual).
@@ -28,7 +28,7 @@ export function TenantActualizarGlobalDesignForm({
       <CardDesignPreview
         endpoint={endpoint}
         badges={
-          <Badge variant="outline" className="rounded-md border-amber-200 bg-amber-50 text-amber-950">
+          <Badge variant="outline" className="rounded-md border-warning/20 bg-warning/10 text-warning">
             tenantSuperAdmin (DIOS)
           </Badge>
         }

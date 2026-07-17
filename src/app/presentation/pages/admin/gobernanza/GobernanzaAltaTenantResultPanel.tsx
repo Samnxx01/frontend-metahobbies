@@ -103,12 +103,12 @@ export function GobernanzaAltaTenantResultPanel({
   }
 
   return (
-    <div className="overflow-hidden rounded-xl border border-emerald-200 bg-gradient-to-b from-emerald-50 to-white shadow-sm">
-      <div className="flex flex-wrap items-start gap-3 border-b border-emerald-100 px-4 py-3">
-        <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" aria-hidden />
+    <div className="overflow-hidden rounded-xl border border-success/20 bg-gradient-to-b from-success/10 to-white shadow-sm">
+      <div className="flex flex-wrap items-start gap-3 border-b border-success/10 px-4 py-3">
+        <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-success" aria-hidden />
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-emerald-950">{view.msg}</p>
-          <p className="text-xs text-emerald-800/80">{view.tipoDestino} registrado en el sistema</p>
+          <p className="text-sm font-semibold text-success">{view.msg}</p>
+          <p className="text-xs text-success/80">{view.tipoDestino} registrado en el sistema</p>
         </div>
         <Badge variant={view.estado ? 'default' : 'destructive'} className="shrink-0">
           {view.estado ? 'Activo' : 'Inactivo'}
@@ -117,7 +117,7 @@ export function GobernanzaAltaTenantResultPanel({
 
       <div className="px-4 py-4">
         <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">Código jerárquico</p>
-        <p className="font-mono text-2xl font-bold tracking-tight text-emerald-900">{view.codigoJerarquia}</p>
+        <p className="font-mono text-2xl font-bold tracking-tight text-success">{view.codigoJerarquia}</p>
         {(view.codigoPadre || view.secuenciaJerarquia != null) && (
           <p className="mt-1 text-xs text-muted-foreground">
             {view.codigoPadre ? <>Padre: <span className="font-mono font-medium">{view.codigoPadre}</span></> : null}
@@ -138,14 +138,14 @@ export function GobernanzaAltaTenantResultPanel({
         ) : null}
       </div>
 
-      <div className="border-t border-emerald-100 px-4 py-3">
+      <div className="border-t border-success/10 px-4 py-3">
         <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
           Acciones parametrizadas ({view.acciones.length})
         </p>
         {view.acciones.length ? (
           <div className="flex flex-wrap gap-1.5">
             {view.acciones.map((a) => (
-              <Badge key={a.id} variant="outline" className="border-emerald-200 bg-white text-xs font-normal">
+              <Badge key={a.id} variant="outline" className="border-success/20 bg-white text-xs font-normal">
                 {a.label}
               </Badge>
             ))}
@@ -156,7 +156,7 @@ export function GobernanzaAltaTenantResultPanel({
       </div>
 
       {fallbackJson ? (
-        <div className="border-t border-emerald-100 px-4 py-2">
+        <div className="border-t border-success/10 px-4 py-2">
           <Button
             type="button"
             variant="ghost"

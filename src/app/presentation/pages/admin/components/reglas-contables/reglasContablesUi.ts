@@ -12,5 +12,5 @@ export const reglasContablesUi = {
   tableRowHover: 'hover:bg-primary/5',
   linkAction: 'text-xs font-medium text-primary underline-offset-2 hover:underline',
   btnPrimary: BTN_ACTION,
-  badgeSistema: 'border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-200',
+  badgeSistema: 'border-warning/40 bg-warning/10 text-warning dark:text-warning',
 } as const;

@@ -7,6 +7,7 @@ import inventarioService, {
   type InventarioProveedor,
 } from '@/app/services/inventarioService';
 import type { BackendProducto } from '@/app/services/productosService';
+import reglasContablesService from '@/app/services/reglasContablesService';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -36,11 +37,16 @@ type LineId = string;
 type OcLineDraft = {
   id: LineId;
   sku: string;
+  /** Referencia al catálogo de productos; se resuelve al elegir el SKU. */
+  productoId: string;
   nombreProducto: string;
   cantidad: string;
   precioUnitario: string;
   descuento: string;
   impuestoPorcentaje: string;
+  /** Código de la regla contable usada para autocompletar el % de impuesto; null si fue editado a mano. */
+  codigoReglaImpuesto: string | null;
+  /** true si la última resolución de tarifa (por SKU) no encontró regla específica por producto o categoría. */
   bodega: string;
 };
 
@@ -87,6 +93,8 @@ export type InventarioOrdenCompraModalProps = {
   /** Al pulsar «Nueva orden» desde el trigger (limpia modo edición). */
   onAntesNuevaOrden?: () => void;
   recepcionAutomatica?: boolean;
+  /** Códigos de ámbito cuyas reglas de impuesto aplican a la OC (config compras.ambitosReglaImpuesto). */
+  ambitosReglaImpuesto?: string[];
 };
 
 export default function InventarioOrdenCompraModal({
@@ -102,12 +110,22 @@ export default function InventarioOrdenCompraModal({
   triggerClassName = '',
   onAntesNuevaOrden,
   recepcionAutomatica = false,
+  ambitosReglaImpuesto,
 }: InventarioOrdenCompraModalProps): React.ReactElement {
-  const bodegasActivas = useMemo(() => bodegas.filter((b) => b.estado !== false), [bodegas]);
-  const productosConSku = useMemo(
-    () => [...productos].filter((p) => p.sku).sort((a, b) => String(a.sku).localeCompare(String(b.sku))),
-    [productos]
-  );
+  const bodegasActivas = useMemo(() => Array.from(
+    new Map(
+      bodegas
+        .filter((b) => b.estado !== false && String(b.nombre || '').trim())
+        .map((b) => [String(b.nombre).trim().toUpperCase(), b])
+    ).values()
+  ), [bodegas]);
+  const productosConSku = useMemo(() => Array.from(
+    new Map(
+      productos
+        .filter((p) => String(p.sku || '').trim())
+        .map((p) => [String(p.sku).trim().toUpperCase(), p])
+    ).values()
+  ).sort((a, b) => String(a.sku).localeCompare(String(b.sku))), [productos]);
 
   const [numeroRemision, setNumeroRemision] = useState('');
   const [numeroFacturaElectronico, setNumeroFacturaElectronico] = useState('');
@@ -133,6 +151,7 @@ export default function InventarioOrdenCompraModal({
       const itemLines = (oc.items || []).map((it) => ({
         id: newLineId(),
         sku: String(it.sku || ''),
+        productoId: String(it.productoId || ''),
         nombreProducto: String(it.nombreProducto || ''),
         cantidad: String(it.cantidadOrdenada ?? 1),
         precioUnitario: String(it.costoUnitario ?? 0),
@@ -160,9 +179,10 @@ export default function InventarioOrdenCompraModal({
               return baseN > 0 && imp > 0 ? Math.round(((imp / baseN) * 100 + Number.EPSILON) * 100) / 100 : 0;
             })()
         ),
+        codigoReglaImpuesto: it.codigoReglaImpuesto ?? null,
         bodega: String(it.bodega || b0),
       }));
-      setLines(itemLines.length ? itemLines : [{ id: newLineId(), sku: '', nombreProducto: '', cantidad: '1', precioUnitario: '0', descuento: '0', impuestoPorcentaje: '0', bodega: b0 }]);
+      setLines(itemLines.length ? itemLines : [{ id: newLineId(), sku: '', productoId: '', nombreProducto: '', cantidad: '1', precioUnitario: '0', descuento: '0', impuestoPorcentaje: '0', codigoReglaImpuesto: null, bodega: b0 }]);
     } else {
       setNumeroRemision('');
       setNumeroFacturaElectronico('');
@@ -173,11 +193,13 @@ export default function InventarioOrdenCompraModal({
         {
           id: newLineId(),
           sku: '',
+          productoId: '',
           nombreProducto: '',
           cantidad: '1',
           precioUnitario: '0',
           descuento: '0',
           impuestoPorcentaje: '0',
+          codigoReglaImpuesto: null,
           bodega: b0,
         },
       ]);
@@ -225,11 +247,13 @@ export default function InventarioOrdenCompraModal({
       {
         id: newLineId(),
         sku: '',
+        productoId: '',
         nombreProducto: '',
         cantidad: '1',
         precioUnitario: '0',
         descuento: '0',
         impuestoPorcentaje: '0',
+        codigoReglaImpuesto: null,
         bodega: b0,
       },
     ]);
@@ -243,18 +267,114 @@ export default function InventarioOrdenCompraModal({
     setLines((prev) => prev.map((l) => (l.id === id ? { ...l, ...patch } : l)));
   };
 
-  const onSkuChange = (lineId: LineId, sku: string): void => {
-    const prod = productosConSku.find((p) => String(p.sku) === sku);
+  /**
+   * Consulta la tarifa de IVA parametrizada en "Reglas contables" para compras (aplicaEn=COMPRA,
+   * tipo=IVA) y autocompleta el campo "Imp. %" de la línea (junto con el código de la regla usada,
+   * para trazabilidad). Sigue siendo editable manualmente después; si el usuario lo edita a mano, el
+   * código de regla se limpia. Si no hay regla aplicable, deja el campo en 0.
+   */
+  const aplicarTarifaImpuestoAutomatica = async (
+    lineId: LineId,
+    sku: string,
+    productoId?: string,
+    proveedorResolverId: string = proveedorId
+  ): Promise<void> => {
+    if (!proveedorResolverId) {
+      return;
+    }
+    try {
+      const resultadoTarifa = await reglasContablesService.obtenerTarifaAplicable({
+        // Alcance parametrizable (config compras.ambitosReglaImpuesto); sin config es dinámico:
+        // '*' = todas las reglas de IVA activas del tenant, sin filtrar por ámbito.
+        aplicaEn: ambitosReglaImpuesto?.length ? ambitosReglaImpuesto.join(',') : '*',
+        proveedorId: proveedorResolverId || undefined,
+      });
+      const { tarifa, codigo, esGeneral, sinReglas } = resultadoTarifa;
+      if (sinReglas || (esGeneral && !codigo)) {
+        // Modo libre: sin reglas activas del alcance de compras, o ninguna regla resuelve
+        // para este producto — no se autocompleta ni se bloquea; el impuesto queda manual.
+        updateLine(lineId, { codigoReglaImpuesto: null });
+        return;
+      }
+      // Regla activa del alcance: aplica su tarifa (la específica gana; la general es el
+      // fallback del ámbito). El backend recalcula igual al guardar.
+      updateLine(lineId, {
+        impuestoPorcentaje: String(tarifa ?? 0),
+        codigoReglaImpuesto: codigo ?? null,
+      });
+    } catch (error) {
+      console.error('Error resolviendo tarifa de IVA aplicable a la compra:', error);
+    }
+  };
+
+  const cambiarProveedor = (id: string): void => {
+    setProveedorId(id);
+    setLines((prev) => prev.map((linea) => linea.codigoReglaImpuesto
+      ? { ...linea, impuestoPorcentaje: '0', codigoReglaImpuesto: null }
+      : linea
+    ));
+    for (const linea of lines) {
+      void aplicarTarifaImpuestoAutomatica(linea.id, linea.sku, linea.productoId, id);
+    }
+  };
+
+  /**
+   * Asigna el SKU (y su producto asociado) a una línea. Si el producto ya está en otra línea de la
+   * orden, fusiona: suma la cantidad a la línea existente y descarta la línea actual (fusión de
+   * duplicados por producto en la misma OC), en vez de dejar dos filas separadas.
+   */
+  const asignarProductoALinea = (lineId: LineId, skuRaw: string): void => {
+    const sku = skuRaw.trim().toUpperCase();
+    if (!sku) return;
+    const prod = productosConSku.find((p) => String(p.sku).toUpperCase() === sku);
+    const productoId = prod ? String(prod._id || prod.iud || '') : '';
+    const currentLine = lines.find((l) => l.id === lineId);
+    const existing = lines.find(
+      (l) => l.id !== lineId && String(l.sku || '').trim().toUpperCase() === sku
+    );
+
+    if (existing && currentLine) {
+      const cantidadActual = Number(currentLine.cantidad) || 0;
+      const cantidadASumar = cantidadActual > 0 ? cantidadActual : 1;
+      setLines((prev) => {
+        const merged = prev.map((l) =>
+          l.id === existing.id
+            ? { ...l, cantidad: String((Number(l.cantidad) || 0) + cantidadASumar) }
+            : l
+        );
+        const sinDuplicada = merged.filter((l) => l.id !== lineId);
+        return sinDuplicada.length ? sinDuplicada : merged;
+      });
+      toast.info(`El producto ${sku} ya estaba en la orden; se sumó la cantidad a esa línea.`);
+      return;
+    }
+
     updateLine(lineId, {
       sku,
-      nombreProducto: prod?.nombre ?? '',
-      precioUnitario: prod ? String(Math.max(0, Number(prod.precio) || 0)) : '0',
+      productoId,
+      nombreProducto: prod?.nombre ?? currentLine?.nombreProducto ?? '',
+      precioUnitario: prod ? String(Math.max(0, Number(prod.precio) || 0)) : (currentLine?.precioUnitario ?? '0'),
     });
+    void aplicarTarifaImpuestoAutomatica(lineId, sku, productoId);
+  };
+
+  const onSkuChange = (lineId: LineId, sku: string): void => {
+    asignarProductoALinea(lineId, sku);
   };
 
   const totalOrden = useMemo(() => lines.reduce((acc, l) => acc + calcSubtotalLinea(l), 0), [lines]);
 
   const guardar = async (): Promise<void> => {
+    // Aviso informativo (no bloquea): líneas con impuesto manual, sin regla específica parametrizada.
+    const lineasImpuestoManual = lines.filter(
+      (l) => String(l.sku || '').trim() && !l.codigoReglaImpuesto && Number(l.impuestoPorcentaje) > 0
+    );
+    if (lineasImpuestoManual.length > 0) {
+      toast.info(
+        `Impuesto manual (sin regla contable específica) en ${lineasImpuestoManual.length} línea(s): ` +
+        lineasImpuestoManual.map((l) => String(l.sku || '').trim().toUpperCase()).join(', ')
+      );
+    }
     if (!proveedorId) {
       toast.error('Selecciona un proveedor.');
       return;
@@ -297,12 +417,14 @@ export default function InventarioOrdenCompraModal({
         const bod = String(l.bodega || '').trim();
         return {
           sku,
+          productoId: l.productoId || null,
           nombreProducto: String(l.nombreProducto || '').trim(),
           cantidadOrdenada: cant,
           costoUnitario: precio,
           descuento: descuentoCop,
           descuentoPorcentaje: 0,
           impuestoPorcentaje,
+          codigoReglaImpuesto: l.codigoReglaImpuesto || null,
           bodega: bod,
         };
       })
@@ -321,7 +443,7 @@ export default function InventarioOrdenCompraModal({
           justificacion: j,
           ...(tieneRem ? { numeroRemision: rem } : {}),
           ...(tieneFac ? { numeroFacturaElectronico: factura } : {}),
-          proveedor: { nombre: prov.nombre.trim(), nit: prov.nit.trim() },
+          proveedor: { id: proveedorId, nombre: prov.nombre.trim(), nit: prov.nit.trim() },
           items,
         });
         toast.success('Orden de compra actualizada.');
@@ -330,7 +452,7 @@ export default function InventarioOrdenCompraModal({
           concepto: c,
           ...(tieneRem ? { numeroRemision: rem } : {}),
           ...(tieneFac ? { numeroFacturaElectronico: factura } : {}),
-          proveedor: { nombre: prov.nombre.trim(), nit: prov.nit.trim() },
+          proveedor: { id: proveedorId, nombre: prov.nombre.trim(), nit: prov.nit.trim() },
           items,
         });
         const estado = String(ordenResultado.estado || '').toUpperCase();
@@ -419,7 +541,7 @@ export default function InventarioOrdenCompraModal({
             </div>
             <div className="space-y-2 sm:col-span-2 lg:col-span-1">
               <Label>Proveedor *</Label>
-              <Select value={proveedorId || undefined} onValueChange={setProveedorId}>
+              <Select value={proveedorId || undefined} onValueChange={cambiarProveedor}>
                 <SelectTrigger className="border-input bg-background">
                   <SelectValue placeholder={proveedores.length ? 'Selecciona proveedor' : 'Sin proveedores'} />
                 </SelectTrigger>
@@ -501,7 +623,10 @@ export default function InventarioOrdenCompraModal({
                           </SelectTrigger>
                           <SelectContent className="max-h-60 border-border bg-popover">
                             {productosConSku.map((p) => (
-                              <SelectItem key={p.iud} value={String(p.sku)}>
+                              <SelectItem
+                                key={String(p.iud || p._id || p.sku)}
+                                value={String(p.sku)}
+                              >
                                 {p.sku}
                               </SelectItem>
                             ))}
@@ -511,6 +636,7 @@ export default function InventarioOrdenCompraModal({
                           className="mt-1 h-8 border-input bg-background px-2 text-xs"
                           value={line.sku}
                           onChange={(e) => updateLine(line.id, { sku: e.target.value.toUpperCase() })}
+                          onBlur={(e) => asignarProductoALinea(line.id, e.target.value)}
                           placeholder="O escribe SKU"
                         />
                       </TableCell>
@@ -549,7 +675,18 @@ export default function InventarioOrdenCompraModal({
                           step={1}
                           className="border-input bg-background px-2 text-right"
                           value={line.descuento}
-                          onChange={(e) => updateLine(line.id, { descuento: e.target.value })}
+                          onChange={(e) => {
+                            // Clamp visible: el descuento nunca supera el bruto de la línea
+                            // (misma regla del backend, pero explícita para el usuario).
+                            const bruto = round2((Number(line.cantidad) || 0) * (Number(line.precioUnitario) || 0));
+                            const digitado = Number(e.target.value) || 0;
+                            if (bruto > 0 && digitado > bruto) {
+                              toast.info(`El descuento no puede superar el bruto de la línea (${moneyCo(bruto)}); se ajustó al máximo.`);
+                              updateLine(line.id, { descuento: String(Math.floor(bruto)) });
+                              return;
+                            }
+                            updateLine(line.id, { descuento: e.target.value });
+                          }}
                         />
                       </TableCell>
                       <TableCell className="align-top">
@@ -559,7 +696,9 @@ export default function InventarioOrdenCompraModal({
                           step="any"
                           className="border-input bg-background px-2 text-right"
                           value={line.impuestoPorcentaje}
-                          onChange={(e) => updateLine(line.id, { impuestoPorcentaje: e.target.value })}
+                          onChange={(e) =>
+                            updateLine(line.id, { impuestoPorcentaje: e.target.value, codigoReglaImpuesto: null })
+                          }
                           placeholder="%"
                         />
                         <p className="mt-1 text-right text-[10px] text-muted-foreground">
@@ -578,7 +717,10 @@ export default function InventarioOrdenCompraModal({
                           </SelectTrigger>
                           <SelectContent className="max-h-60 border-border bg-popover">
                             {bodegasActivas.map((b) => (
-                              <SelectItem key={b._id} value={b.nombre}>
+                              <SelectItem
+                                key={String(b._id || b.iud || b.nombre)}
+                                value={b.nombre}
+                              >
                                 {b.nombre}
                               </SelectItem>
                             ))}
@@ -607,7 +749,11 @@ export default function InventarioOrdenCompraModal({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={saving || enviando}>
               Cancelar
             </Button>
-            <Button type="button" onClick={() => void guardar()} disabled={saving || enviando}>
+            <Button
+              type="button"
+              onClick={() => void guardar()}
+              disabled={saving || enviando}
+            >
               <Save className="mr-2 h-4 w-4" />
               {esEdicion ? 'Guardar cambios' : 'Guardar orden'}
             </Button>

@@ -1337,7 +1337,7 @@ export default function InventarioFormulariosTenantModal({
           </AlertDescription>
         </Alert>
       ) : esDios ? (
-        <Alert className="shrink-0 border-amber-500/50 bg-amber-50/80 py-2 text-amber-950 dark:bg-amber-950/20 dark:text-amber-100">
+        <Alert className="shrink-0 border-warning/50 bg-warning/80 py-2 text-warning dark:bg-warning/20 dark:text-warning">
           <AlertTitle className="text-xs font-medium">Sin alcance en sesion</AlertTitle>
           <AlertDescription className="text-[11px] leading-relaxed">
             Abre Parametrizacion menu desde una tarjeta de ConfigInventario o con un JWT que incluya tenantSuperAdmin.
@@ -1363,10 +1363,10 @@ export default function InventarioFormulariosTenantModal({
                     : 'Sin coincidencia en listado';
               const estadoClass =
                 item.matchKind === 'none'
-                  ? 'text-amber-700 dark:text-amber-300'
+                  ? 'text-warning dark:text-warning'
                   : item.matchKind === 'fuzzy'
-                    ? 'text-sky-700 dark:text-sky-300'
-                    : 'text-emerald-700 dark:text-emerald-400';
+                    ? 'text-info dark:text-info'
+                    : 'text-success dark:text-success';
               const mid = `modulo-param-${idx}`;
               const marcado = moduloParametrizarPath === item.path;
               return (
@@ -1393,7 +1393,7 @@ export default function InventarioFormulariosTenantModal({
                           Posible fila en listado: {item.route.path}
                         </span>
                       ) : (
-                        <span className="mt-0.5 block text-[10px] text-amber-700 dark:text-amber-300">
+                        <span className="mt-0.5 block text-[10px] text-warning dark:text-warning">
                           Sin coincidencia automatica: busca y marca el formulario correcto en el listado de abajo.
                         </span>
                       )}
@@ -1408,7 +1408,7 @@ export default function InventarioFormulariosTenantModal({
       ) : null}
 
       {modules.length > 0 && !moduloParametrizarPath ? (
-        <Alert className="shrink-0 border-amber-500/50 bg-amber-50/80 py-2 text-amber-950 dark:bg-amber-950/20 dark:text-amber-100">
+        <Alert className="shrink-0 border-warning/50 bg-warning/80 py-2 text-warning dark:bg-warning/20 dark:text-warning">
           <AlertTitle className="text-xs font-medium">Falta elegir modulo</AlertTitle>
           <AlertDescription className="text-[11px] leading-relaxed">
             Marca un modulo arriba para poder guardar la parametrizacion del menu.
@@ -1417,7 +1417,7 @@ export default function InventarioFormulariosTenantModal({
       ) : null}
 
       {modules.length > 0 && moduloParametrizarPath && !moduloParametrizarTieneRuta ? (
-        <Alert className="shrink-0 border-amber-500/50 bg-amber-50/80 py-2 text-amber-950 dark:bg-amber-950/20 dark:text-amber-100">
+        <Alert className="shrink-0 border-warning/50 bg-warning/80 py-2 text-warning dark:bg-warning/20 dark:text-warning">
           <AlertTitle className="text-xs font-medium">Sin coincidencia automatica de ruta</AlertTitle>
           <AlertDescription className="text-[11px] leading-relaxed">
             El path del catalogo no coincide con ninguna fila del listado. Usa el buscador de abajo, marca el
@@ -1433,11 +1433,11 @@ export default function InventarioFormulariosTenantModal({
             <span className="font-medium text-foreground">{moduloParametrizarInfo.title}</span>
             <span className="block break-all font-mono text-[10px] text-muted-foreground">{moduloParametrizarInfo.path}</span>
             {tarjetaModuloActiva ? (
-              <span className="block text-[10px] text-emerald-700 dark:text-emerald-400">
+              <span className="block text-[10px] text-success dark:text-success">
                 Tarjeta en menu: registrada (id {tarjetaModuloActiva.id.slice(-8)}).
               </span>
             ) : (
-              <span className="block text-[10px] text-amber-800 dark:text-amber-300">
+              <span className="block text-[10px] text-warning dark:text-warning">
                 Sin tarjeta en menu: guarda parametrizacion aqui; luego autoriza usuarios en Autorizacion de formulario.
               </span>
             )}
@@ -1527,7 +1527,7 @@ export default function InventarioFormulariosTenantModal({
         </div>
       </ScrollArea>
       {meta?.ayuda ? (
-        <Alert variant="default" className="border-amber-500/50 bg-amber-50/80 text-amber-950 dark:bg-amber-950/20 dark:text-amber-100">
+        <Alert variant="default" className="border-warning/50 bg-warning/80 text-warning dark:bg-warning/20 dark:text-warning">
           <AlertTitle className="text-sm">Como asociar rutas</AlertTitle>
           <AlertDescription className="text-xs leading-relaxed">{meta.ayuda}</AlertDescription>
         </Alert>
@@ -1611,14 +1611,14 @@ export default function InventarioFormulariosTenantModal({
           </div>
         </ScrollArea>
         {tarjetaSeleccionadaAutorizacion ? (
-          <p className="text-[10px] text-emerald-700 dark:text-emerald-400">
+          <p className="text-[10px] text-success dark:text-success">
             Tarjeta activa: {tarjetaSeleccionadaAutorizacion.titulo} (id …{tarjetaSeleccionadaAutorizacion.id.slice(-8)})
           </p>
         ) : null}
       </div>
 
       {!rutaIdsMarcados.length ? (
-        <Alert className="shrink-0 border-amber-500/50 bg-amber-50/80 py-2 text-amber-950 dark:bg-amber-950/20 dark:text-amber-100">
+        <Alert className="shrink-0 border-warning/50 bg-warning/80 py-2 text-warning dark:bg-warning/20 dark:text-warning">
           <AlertTitle className="text-xs font-medium">Sin formularios seleccionados</AlertTitle>
           <AlertDescription className="text-[11px] leading-relaxed">
             Elige una tarjeta guardada arriba (aplica ruta y alcance) o abre{' '}
@@ -1669,7 +1669,7 @@ export default function InventarioFormulariosTenantModal({
       ) : null}
 
       {meta?.requiereParametrizacionTenantSuperAdmin ? (
-                <Alert className="border-amber-500/50 bg-amber-50/80 text-amber-950 dark:bg-amber-950/20 dark:text-amber-100">
+                <Alert className="border-warning/50 bg-warning/80 text-warning dark:bg-warning/20 dark:text-warning">
                   <AlertTitle className="text-sm">Parametrizar tenantSuperAdmin</AlertTitle>
                   <AlertDescription className="text-xs leading-relaxed">
                     Rol DIOS sin ancla en el token. Elige un tenantSuperAdmin para cargar la rama de
@@ -1958,21 +1958,21 @@ export default function InventarioFormulariosTenantModal({
                       </span>
                     ) : null}
                     {meta?.herenciaVistasVacias ? (
-                      <span className="ml-1 text-amber-800 dark:text-amber-300">
+                      <span className="ml-1 text-warning dark:text-warning">
                         · Sin vistas en herencia para esta rama; se muestra catalogo inventario completo.
                       </span>
                     ) : null}
                     {meta?.ejecutorBypassHerencia ? (
-                      <span className="ml-1 text-emerald-700 dark:text-emerald-400">
+                      <span className="ml-1 text-success dark:text-success">
                         · Ejecutor con bypass de herencia (politicas runtime / counters).
                       </span>
                     ) : null}
                     {meta?.tenantGlobalJerarquiaOk ? (
-                      <span className="mt-1 block text-emerald-700 dark:text-emerald-400">
+                      <span className="mt-1 block text-success dark:text-success">
                         Jerarquia tenant global: con filas en al menos una rama marcada.
                       </span>
                     ) : (
-                      <span className="mt-1 block text-amber-800 dark:text-amber-300">
+                      <span className="mt-1 block text-warning dark:text-warning">
                         {saIdsMarcados.length > 1
                           ? 'Sin tenant global en ninguna de las ramas SA marcadas (revisa counters por SA).'
                           : 'Sin tenant global en la rama del SA seleccionado (revisa tenantJerarquiaCountersGlobal).'}
@@ -2057,7 +2057,7 @@ export default function InventarioFormulariosTenantModal({
                       {meta?.jwtTenantSuperAdminCanonicoId?.slice(-12) || meta?.tenantSuperAdminAnclaId?.slice(-12) || '—'}
                     </code>
                     {meta?.jwtSaDesincronizado ? (
-                      <span className="text-amber-700 dark:text-amber-300"> · JWT SA desincronizado (corregido en canónico)</span>
+                      <span className="text-warning dark:text-warning"> · JWT SA desincronizado (corregido en canónico)</span>
                     ) : null}
                   </p>
                   <p>
@@ -2071,9 +2071,9 @@ export default function InventarioFormulariosTenantModal({
                     {' · '}
                     Rol sesión: {meta?.rolSesionNombre || '—'}
                     {meta?.rolParametrizadoCoincideSesion ? (
-                      <span className="text-emerald-700 dark:text-emerald-400"> · coincide</span>
+                      <span className="text-success dark:text-success"> · coincide</span>
                     ) : meta?.tenantSuperAdminRolParametrizado?.id ? (
-                      <span className="text-amber-700 dark:text-amber-300"> · no coincide con sesión</span>
+                      <span className="text-warning dark:text-warning"> · no coincide con sesión</span>
                     ) : null}
                   </p>
                   {meta?.diagnosticoRamaUsuarios ? (
@@ -2150,7 +2150,7 @@ export default function InventarioFormulariosTenantModal({
                               Rol: {u.rol || '—'} · SA: {u.tenantSuperAdmin || '—'}
                               {u.tenantGlobal ? ` · TG: ${u.tenantGlobal}` : ''}
                               {(u as { bypassHerencia?: boolean }).bypassHerencia ? (
-                                <span className="ml-1 text-emerald-700 dark:text-emerald-400">· bypass herencia</span>
+                                <span className="ml-1 text-success dark:text-success">· bypass herencia</span>
                               ) : null}
                             </span>
                           </span>

@@ -30,6 +30,15 @@
     --input: 343 79% 92%;
     --ring: 335 57% 49%;
     --radius: 0.5rem;
+
+    /* Estados semánticos — mapeados a la paleta (success→ACCENT, warning→SUNSET, info→LIGHT).
+       aplicarPaletaEnApp los sobreescribe cuando el tenant parametriza su paleta. */
+    --success: 336 81% 73%;               /* COLOR_ACCENT */
+    --success-foreground: 220 39% 16%;    /* COLOR_TEXT */
+    --warning: 35 79% 77%;                /* COLOR_SUNSET */
+    --warning-foreground: 220 39% 16%;    /* COLOR_TEXT */
+    --info: 343 79% 92%;                  /* COLOR_LIGHT */
+    --info-foreground: 220 39% 16%;       /* COLOR_TEXT */
     
     --tickle-pink: 335 57% 49%;
     --champagne: 34 67% 95%;
@@ -61,7 +70,15 @@
     --border: 328 25% 25%;
     --input: 328 25% 25%;
     --ring: 335 55% 70%;
-    
+
+    /* Estados semánticos en dark — mismos mapeos de paleta en tono oscuro */
+    --success: 335 55% 50%;               /* ACCENT dark */
+    --success-foreground: 345 100% 95%;
+    --warning: 30 60% 45%;                /* SUNSET dark */
+    --warning-foreground: 345 100% 95%;
+    --info: 328 25% 20%;                  /* LIGHT dark */
+    --info-foreground: 345 100% 95%;
+
     /* Colores adicionales para dark mode */
     --tickle-pink: 328 78% 54%;
     --champagne: 14 50% 35%; /* Versión más oscura */

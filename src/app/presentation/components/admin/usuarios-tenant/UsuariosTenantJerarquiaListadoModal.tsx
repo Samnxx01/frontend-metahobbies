@@ -32,19 +32,19 @@ const NIVEL_META: Record<
     label: 'Super Admin (SA)',
     short: 'SA',
     icon: <Shield className="h-4 w-4" />,
-    badgeClass: 'border-violet-500/30 bg-violet-500/10 text-violet-800 dark:text-violet-300',
+    badgeClass: 'border-info/30 bg-info/10 text-info dark:text-info',
   },
   TG: {
     label: 'Tenant global (TG)',
     short: 'TG',
     icon: <Globe className="h-4 w-4" />,
-    badgeClass: 'border-blue-500/30 bg-blue-500/10 text-blue-800 dark:text-blue-300',
+    badgeClass: 'border-info/30 bg-info/10 text-info dark:text-info',
   },
   TC: {
     label: 'Tenant corporativo (TC)',
     short: 'TC',
     icon: <Building2 className="h-4 w-4" />,
-    badgeClass: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300',
+    badgeClass: 'border-success/30 bg-success/10 text-success dark:text-success',
   },
 };
 

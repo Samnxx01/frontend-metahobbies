@@ -264,7 +264,7 @@ export default function ConfiguracionMembresia() {
                 <CardContent className="px-6 py-5 space-y-6">
                     {/* Error inline */}
                     {errorMsg && (
-                        <div className="flex items-start gap-2.5 px-4 py-3 rounded-lg text-xs border bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800">
+                        <div className="flex items-start gap-2.5 px-4 py-3 rounded-lg text-xs border bg-destructive/10 dark:bg-destructive/30 text-destructive dark:text-destructive border-destructive/20 dark:border-destructive">
                             <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
                             <span>{errorMsg}</span>
                         </div>
@@ -501,7 +501,7 @@ export default function ConfiguracionMembresia() {
                                                     </td>
                                                     <td className="px-4 py-3 text-center">
                                                         {m.esPrecioDefault ? (
-                                                            <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+                                                            <span className="inline-flex items-center gap-1 text-success dark:text-success">
                                                                 <CheckCircle2 className="w-3.5 h-3.5" />
                                                                 <span className="text-[11px] font-medium">Sincronizado</span>
                                                             </span>

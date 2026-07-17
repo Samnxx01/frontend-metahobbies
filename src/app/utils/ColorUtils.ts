@@ -115,6 +115,15 @@ export function aplicarPaletaEnApp(colores: ColoresPaleta): void {
     root.style.setProperty('--destructive', hsl('COLOR_PRIMARY'));
     root.style.setProperty('--destructive-foreground', '0 0% 100%');
 
+    // Estados semánticos — mapeados a la paleta para que nada quede quemado:
+    // success→ACCENT, warning→SUNSET, info→LIGHT; texto de estado con COLOR_TEXT.
+    root.style.setProperty('--success', hsl('COLOR_ACCENT'));
+    root.style.setProperty('--success-foreground', hsl('COLOR_TEXT'));
+    root.style.setProperty('--warning', hsl('COLOR_SUNSET'));
+    root.style.setProperty('--warning-foreground', hsl('COLOR_TEXT'));
+    root.style.setProperty('--info', hsl('COLOR_LIGHT'));
+    root.style.setProperty('--info-foreground', hsl('COLOR_TEXT'));
+
     // Persistir en localStorage para restaurar al recargar
     localStorage.setItem('mabs_paleta_activa', JSON.stringify(colores));
 }
@@ -152,6 +161,9 @@ export function limpiarPaletaApp(): void {
         '--card',
         '--popover',
         '--destructive', '--destructive-foreground',
+        '--success', '--success-foreground',
+        '--warning', '--warning-foreground',
+        '--info', '--info-foreground',
     ];
     vars.forEach(v => root.style.removeProperty(v));
     localStorage.removeItem('mabs_paleta_activa');

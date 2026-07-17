@@ -60,7 +60,7 @@ export function ParametrosGobernanzaModalFormLayout({
       {children}
       {extraToolbar ? <div className="flex flex-wrap items-center gap-2">{extraToolbar}</div> : null}
       {executeDisabledReason && disponible && executeDisabled ? (
-        <p className="text-xs font-medium text-amber-700">{executeDisabledReason}</p>
+        <p className="text-xs font-medium text-warning">{executeDisabledReason}</p>
       ) : null}
       <div className="flex flex-wrap items-center gap-2 border-t border-border/60 pt-4">
         <Button
@@ -85,7 +85,7 @@ export function ParametrosGobernanzaModalFormLayout({
         ) : null}
       </div>
       {!disponible && showApiPath ? (
-        <p className="text-xs font-medium text-amber-600">
+        <p className="text-xs font-medium text-warning">
           Visible solo como referencia. Este flujo se habilita cuando el JWT corresponda al scope `{actorLabel}`.
         </p>
       ) : null}

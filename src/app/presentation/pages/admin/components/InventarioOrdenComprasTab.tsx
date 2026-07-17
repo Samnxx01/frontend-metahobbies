@@ -11,7 +11,8 @@
  * Otros GET de órdenes (servicio `inventarioService`): `siguiente-numero`, `ordenes/:id`, `ordenes/:id/conciliacion`.
  */
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, FileText, Settings2, ShoppingCart, Trash2 } from 'lucide-react';
+import { AlertTriangle, FileText, Percent, Settings2, ShoppingCart, Trash2 } from 'lucide-react';
+import { getGovernedPath, isGovernedPathConfigured } from '@/app/services/governedNavigation';
 import {
   ParameterizedActionBar,
   buildOrdenCompraRowActionCatalog,
@@ -49,6 +50,7 @@ import { getOrdenCompraId } from '@/app/presentation/pages/admin/utils/ordenComp
 import InventarioComprobanteEntradaModal from './InventarioComprobanteEntradaModal';
 import InventarioComprobanteEntradaParamModal from './InventarioComprobanteEntradaParamModal';
 import InventarioProveedorModal, { type InventarioProveedorDraft } from './InventarioProveedorModal';
+import ReglasContablesModal from './ReglasContablesModal';
 import { totalLineaOrdenCompra } from '@/app/presentation/pages/admin/utils/ordenCompraLineaCalculo';
 import { ordenCompraTienePendienteRecepcion } from './InventarioComprobanteEntradaParamModal';
 
@@ -92,6 +94,8 @@ type InventarioOrdenComprasTabProps = {
   /** Config inventario (recepcion automatica al guardar OC). */
   config?: InventarioConfig | null;
   nombreCorporativo?: string;
+  /** Cambia a la pestaña "Configuracion TRM" (donde vive la parametrización completa de reglas contables). */
+  onIrAParametrizacionReglas?: () => void;
 };
 
 export default function InventarioOrdenComprasTab({
@@ -118,6 +122,7 @@ export default function InventarioOrdenComprasTab({
   esTenantSuperAdmin = false,
   config = null,
   nombreCorporativo,
+  onIrAParametrizacionReglas,
 }: InventarioOrdenComprasTabProps): React.ReactElement {
   const moneyFmt = money ?? DEFAULT_MONEY;
   const sumSubtotalOrdenCompra = sumSubtotalProp ?? sumSubtotalOrdenCompraDefault;
@@ -133,6 +138,7 @@ export default function InventarioOrdenComprasTab({
   const [comprobanteParamOpen, setComprobanteParamOpen] = useState(false);
   const [comprobanteDoc, setComprobanteDoc] = useState<{ tipo: string; numero: string } | null>(null);
   const [estadosOrdenOpen, setEstadosOrdenOpen] = useState(false);
+  const [reglasContablesOpen, setReglasContablesOpen] = useState(false);
   const [estadosOrden, setEstadosOrden] = useState<EstadoOrdenCompraConfig[]>([]);
   const [localOrdenes, setLocalOrdenes] = useState<InventarioOrdenCompra[]>([]);
   const [localProveedores, setLocalProveedores] = useState<InventarioProveedor[]>([]);
@@ -300,8 +306,8 @@ export default function InventarioOrdenComprasTab({
   return (
     <div className="space-y-4">
       {!recepcionAutomatica ? (
-        <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-foreground">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+        <div className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-foreground">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
           <div className="space-y-1">
             <p className="font-medium">Flujo en 3 pasos (recepción manual)</p>
             <ol className="list-decimal space-y-0.5 pl-4 text-muted-foreground">
@@ -355,6 +361,17 @@ export default function InventarioOrdenComprasTab({
                 <FileText className="mr-2 h-4 w-4" />
                 Comprobante entrada
               </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="shrink-0"
+                disabled={saving || eliminando}
+                onClick={() => setReglasContablesOpen(true)}
+              >
+                <Percent className="mr-2 h-4 w-4" />
+                Reglas contables
+              </Button>
               <InventarioProveedorModal
                 open={proveedorModalOpen}
                 saving={saving}
@@ -372,6 +389,7 @@ export default function InventarioOrdenComprasTab({
                 productos={productosSku}
                 ordenEdicion={ordenEdicion}
                 recepcionAutomatica={recepcionAutomatica}
+                ambitosReglaImpuesto={config?.compras?.ambitosReglaImpuesto}
                 onCreated={(orden) => {
                   if (!orden) return;
                   const id = getOrdenCompraId(orden);
@@ -541,6 +559,28 @@ export default function InventarioOrdenComprasTab({
         open={estadosOrdenOpen}
         onOpenChange={setEstadosOrdenOpen}
         onSaved={(saved) => setEstadosOrden(saved)}
+      />
+
+      <ReglasContablesModal
+        open={reglasContablesOpen}
+        onOpenChange={setReglasContablesOpen}
+        saving={saving}
+        modoResumen
+        onIrACompleta={
+          onIrAParametrizacionReglas || isGovernedPathConfigured('reglasContablesCompleta')
+            ? () => {
+                setReglasContablesOpen(false);
+                // Redirect gobernado: parametrizable en Dashboard admin → Redirects dinámicos.
+                // Abre el destino en una pestaña nueva del navegador; si no está
+                // configurado, cae al comportamiento local (pestaña interna de parametrización).
+                if (isGovernedPathConfigured('reglasContablesCompleta')) {
+                  window.open(getGovernedPath('reglasContablesCompleta'), '_blank', 'noopener');
+                  return;
+                }
+                onIrAParametrizacionReglas?.();
+              }
+            : undefined
+        }
       />
 
       <InventarioOrdenCompraDetallesModal

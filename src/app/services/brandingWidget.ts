@@ -39,7 +39,7 @@ export interface BrandingConfig {
       imageUrl?: string;
       enabled?: boolean;
     };
-    aboutImage?: {
+    homeImage?: {
       imageUrl?: string;
       enabled?: boolean;
     };
@@ -51,6 +51,7 @@ export interface BrandingConfig {
       register?: { path?: string; enabled?: boolean; rutaSeguridadId?: string | null };
       forgotPassword?: { path?: string; enabled?: boolean; rutaSeguridadId?: string | null };
       publicHome?: { path?: string; enabled?: boolean; rutaSeguridadId?: string | null };
+      reglasContablesCompleta?: { path?: string; enabled?: boolean; rutaSeguridadId?: string | null };
       allowedPaths?: string[];
     };
     [key: string]: unknown;
@@ -219,19 +220,23 @@ export const eliminarImagenFondo = async (id: string): Promise<void> => {
   });
 };
 
-export const ABOUT_IMAGE_SEED = '/assets/logo.png';
+/** Acepta exclusivamente imágenes administradas por la parametrización en BD. */
+export const normalizeConfiguredHomeImageUrl = (value: unknown): string => {
+  const normalized = normalizeImageRenderUrl(value);
+  return /\/api\/front\/imgFondo\/ver\/[^/?#]+/i.test(normalized) ? normalized : '';
+};
 
-export const obtenerAboutImageUrl = async (): Promise<string> => {
+export const obtenerHomeImageUrl = async (): Promise<string> => {
   try {
     const branding = await obtenerBrandingPublico();
-    const aboutImage = branding?.widgets?.aboutImage;
-    if (aboutImage?.enabled !== false && aboutImage?.imageUrl) {
-      return normalizeImageRenderUrl(aboutImage.imageUrl) || ABOUT_IMAGE_SEED;
+    const homeImage = branding?.widgets?.homeImage;
+    if (homeImage?.enabled !== false && homeImage?.imageUrl) {
+      return normalizeConfiguredHomeImageUrl(homeImage.imageUrl);
     }
   } catch {
-    /* falla silenciosa, retorna semilla */
+    /* falla silenciosa; la vista no renderiza una imagen */
   }
-  return ABOUT_IMAGE_SEED;
+  return '';
 };
 
 export const obtenerAccionesWidgetPublico = async (): Promise<AccionBackend[]> => {

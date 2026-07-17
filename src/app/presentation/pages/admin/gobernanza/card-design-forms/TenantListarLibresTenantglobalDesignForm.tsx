@@ -18,7 +18,7 @@ export function TenantListarLibresTenantglobalDesignForm({
 }: GobernanzaEndpointDesignFormProps): React.ReactElement {
   return (
     <div className="space-y-6">
-      <div className="rounded-lg border border-dashed border-violet-300/60 bg-violet-50/40 p-4 dark:bg-violet-950/20">
+      <div className="rounded-lg border border-dashed border-info/60 bg-info/40 p-4 dark:bg-info/20">
         <p className="text-xs font-semibold text-foreground">Tarjeta GET ancha · referencia tenantGlobal</p>
         <p className="mt-1 text-xs text-muted-foreground">
           Ocupa más columnas en la rejilla; útil afinar sombras y contraste del bloque de ruta largo.
@@ -28,7 +28,7 @@ export function TenantListarLibresTenantglobalDesignForm({
       <CardDesignPreview
         endpoint={endpoint}
         badges={
-          <Badge variant="outline" className="rounded-md border-violet-200 bg-violet-50 text-violet-900">
+          <Badge variant="outline" className="rounded-md border-info/20 bg-info/10 text-info">
             tenantGlobal (ADMIN)
           </Badge>
         }

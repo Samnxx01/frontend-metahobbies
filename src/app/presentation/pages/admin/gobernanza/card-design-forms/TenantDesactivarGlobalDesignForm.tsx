@@ -18,7 +18,7 @@ export function TenantDesactivarGlobalDesignForm({
 }: GobernanzaEndpointDesignFormProps): React.ReactElement {
   return (
     <div className="space-y-6">
-      <div className="rounded-lg border border-dashed border-red-300/50 bg-red-50/30 p-4 dark:bg-red-950/15">
+      <div className="rounded-lg border border-dashed border-destructive/50 bg-destructive/30 p-4 dark:bg-destructive/15">
         <p className="text-xs font-semibold text-foreground">Acción destructiva suave</p>
         <p className="mt-1 text-xs text-muted-foreground">
           Puedes usar acento rosa o borde mínimo para diferenciar visualmente de «Eliminar» definitivo.
@@ -28,7 +28,7 @@ export function TenantDesactivarGlobalDesignForm({
       <CardDesignPreview
         endpoint={endpoint}
         badges={
-          <Badge variant="outline" className="rounded-md border-red-200 bg-red-50 text-red-900">
+          <Badge variant="outline" className="rounded-md border-destructive/20 bg-destructive/10 text-destructive">
             tenantSuperAdmin (DIOS)
           </Badge>
         }

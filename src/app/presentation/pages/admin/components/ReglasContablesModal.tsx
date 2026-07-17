@@ -15,6 +15,10 @@ type ReglasContablesModalProps = {
   onReglasActualizadas?: () => void;
   title?: string;
   description?: string;
+  /** Oculta "Parametrizar tipos/ámbitos/tarifas" y "Agregar regla"; deja solo Recargar + botón a la parametrización completa. */
+  modoResumen?: boolean;
+  /** Callback del botón "Ir a parametrización completa" (visible solo si se pasa junto con `modoResumen`). */
+  onIrACompleta?: () => void;
 };
 
 export default function ReglasContablesModal({
@@ -24,6 +28,8 @@ export default function ReglasContablesModal({
   onReglasActualizadas,
   title = 'Parametrización de reglas contables',
   description = 'Configure impuestos, retenciones, márgenes y reglas comerciales por tenant. Las reglas activas se usan al calcular precios y totales de productos.',
+  modoResumen = false,
+  onIrACompleta,
 }: ReglasContablesModalProps): React.ReactElement {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -36,6 +42,8 @@ export default function ReglasContablesModal({
           embedded
           saving={saving}
           onReglasActualizadas={onReglasActualizadas}
+          modoResumen={modoResumen}
+          onIrACompleta={onIrACompleta}
         />
       </DialogContent>
     </Dialog>

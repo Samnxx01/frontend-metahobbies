@@ -160,7 +160,7 @@ export const GobernanzaFormFieldsInner: React.FC<{
 
   return (    <>
       {(PERM_ADMIN_TENANT_GLOBAL_ACTUALIZAR_IDS.has(endpoint.id) || endpoint.id === 'perm-admin-tenant-global') ? (
-        <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900">
+        <div className="rounded-md border border-info/20 bg-info/10 p-3 text-xs text-info">
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <Button
               type="button"
@@ -200,7 +200,7 @@ export const GobernanzaFormFieldsInner: React.FC<{
                   <span className="font-semibold">{pendientes}</span>
                 </p>
                 {rows.length ? (
-                  <div className="max-h-36 overflow-auto rounded border border-blue-200 bg-card p-2 text-[11px] text-foreground">
+                  <div className="max-h-36 overflow-auto rounded border border-info/20 bg-card p-2 text-[11px] text-foreground">
                     {rows.map((r: any, idx: number) => (
                       <div key={`${r?.tenantGlobal || 'tg'}-${r?.tenantCorporativo || 'tc'}-${idx}`} className="mb-2 border-b border-border/80 pb-1 last:mb-0 last:border-b-0">
                         <p>
@@ -302,7 +302,7 @@ export const GobernanzaFormFieldsInner: React.FC<{
                   ))}
                 </select>
                 {tenantCorpError ? (
-                  <p className="mt-1 text-xs text-rose-700">
+                  <p className="mt-1 text-xs text-destructive">
                     Error cargando herencias: {tenantCorpError}
                   </p>
                 ) : null}
@@ -459,9 +459,9 @@ export const GobernanzaFormFieldsInner: React.FC<{
         );
       })() : null}
       {endpoint.id === 'corp-crear-catalogo' ? (
-        <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 space-y-3 text-xs">
+        <div className="rounded-md border border-success/20 bg-success/10 p-3 space-y-3 text-xs">
           <div className="flex items-center justify-between gap-2">
-            <p className="text-emerald-800 font-medium">
+            <p className="text-success font-medium">
               CLIENTE y EMPLEADO se crean automÃ¡ticamente al guardar si aÃºn no existen.
             </p>
             <Button
@@ -682,7 +682,7 @@ export const GobernanzaFormFieldsInner: React.FC<{
                       >
                         <input
                           type="checkbox"
-                          className="accent-emerald-600 mt-0.5 shrink-0"
+                          className="accent-success mt-0.5 shrink-0"
                           checked={seleccionadas.some(
                             (sid) => sid === id || idsPermisoRefsCoinciden(sid, id),
                           )}
@@ -897,7 +897,7 @@ export const GobernanzaFormFieldsInner: React.FC<{
             if (usarComboJerarquiaUnificado) {
               return (
                 <div key={field.name} className="space-y-3">
-                  <div className="rounded-lg border border-emerald-200/80 bg-emerald-50/50 p-3">
+                  <div className="rounded-lg border border-success/80 bg-success/50 p-3">
                     <Label className="text-foreground">Tenant global / rama SuperAdmin</Label>
                     <p className="mb-2 text-[11px] text-muted-foreground">
                       Elige la rama Tenant SuperAdmin (sesión DIOS) o un tenant global. Al seleccionar se listan herencias
@@ -921,7 +921,7 @@ export const GobernanzaFormFieldsInner: React.FC<{
                     </p>
                   ) : null}
                   {!loadingData && tenantOptions.length === 0 ? (
-                    <p className="text-xs text-amber-700">
+                    <p className="text-xs text-warning">
                       No hay opciones de tenant cargadas. Pulsa Recargar datos API.
                     </p>
                   ) : null}
@@ -931,7 +931,7 @@ export const GobernanzaFormFieldsInner: React.FC<{
             return (
               <div key={field.name} className="space-y-4">
                 {scopeOpts.length > 0 && !ocultarSelectorSuperAdmin ? (
-                  <div className="rounded-lg border border-amber-200/80 bg-amber-50/50 p-3">
+                  <div className="rounded-lg border border-warning/80 bg-warning/50 p-3">
                     <Label className="text-foreground">Tenant SuperAdmin (jerarquía)</Label>
                     <p className="mb-2 text-[11px] text-muted-foreground">
                       Cada opción es un tenantSuperTenant del árbol; el usuario RegisUsu enlazado usa perfilSuperAdmin (metadatos en counters).
@@ -962,7 +962,7 @@ export const GobernanzaFormFieldsInner: React.FC<{
                     })()}
                   </div>
                 ) : null}
-                <div className="rounded-lg border border-emerald-200/80 bg-emerald-50/50 p-3">
+                <div className="rounded-lg border border-success/80 bg-success/50 p-3">
                   <Label className="text-foreground">Tenant global (empresa)</Label>
                   <p className="mb-2 text-[11px] text-muted-foreground">
                     Documentos tenantGlobal; al seleccionar se listan herencias y en el detalle: usuario, perfilGlobal y perfilSuperAdmin cuando existan.
@@ -984,7 +984,7 @@ export const GobernanzaFormFieldsInner: React.FC<{
                   </p>
                 ) : null}
                 {!loadingData && tenantOptions.length === 0 ? (
-                  <p className="text-xs text-amber-700">
+                  <p className="text-xs text-warning">
                     No hay opciones de tenant cargadas. Pulsa Recargar datos API.
                   </p>
                 ) : null}
@@ -1059,14 +1059,14 @@ export const GobernanzaFormFieldsInner: React.FC<{
                   const soloConsulta = !endpointDisponibleParaScope(endpoint);
                   if (esTgReal) {
                     return (
-                      <div className="mt-2 space-y-1 rounded-md border border-violet-100 bg-violet-50/70 px-2 py-1.5">
-                        <p className="text-[11px] font-semibold text-violet-900">
+                      <div className="mt-2 space-y-1 rounded-md border border-info/10 bg-info/70 px-2 py-1.5">
+                        <p className="text-[11px] font-semibold text-info">
                           Usuarios en la rama de este tenant global
                           {soloConsulta ? (
                             <span className="ml-1 font-normal text-muted-foreground">(solo consulta)</span>
                           ) : null}
                         </p>
-                        <p className="text-[11px] text-violet-950/90">
+                        <p className="text-[11px] text-info/90">
                           {cargandoLoc && listaLoc.length === 0
                             ? 'Sincronizando lista con el organigrama…'
                             : `${listaLoc.length} usuario${listaLoc.length === 1 ? '' : 's'} de tenant global en esta rama (sin rama SuperAdmin del árbol ni roles DIOS/SuperAdmin). Nombre/apellidos si hay perfil en jerarquía; si no, correo.`}
@@ -1120,8 +1120,8 @@ export const GobernanzaFormFieldsInner: React.FC<{
                     const opcionesReglas = getReglasFiltradasPorTenant(endpoint.id);
                     const plantillaVal = getFieldValue(endpoint.id, 'reglaPlantillaId').trim();
                     return (
-                      <div className="mt-2 space-y-1 rounded-md border border-sky-100 bg-sky-50/70 px-2 py-2">
-                        <Label className="text-xs font-semibold text-sky-950">
+                      <div className="mt-2 space-y-1 rounded-md border border-info/10 bg-info/70 px-2 py-2">
+                        <Label className="text-xs font-semibold text-info">
                           Reglas ya creadas para este tenant global
                         </Label>
                         <select
@@ -1158,7 +1158,7 @@ export const GobernanzaFormFieldsInner: React.FC<{
                   })()
                 : null}
               {!loadingData && tenantOptions.length === 0 ? (
-                <p className="mt-1 text-xs text-amber-700">
+                <p className="mt-1 text-xs text-warning">
                   No hay tenants globales cargados. Pulsa "Recargar datos API".
                 </p>
               ) : null}
@@ -1301,7 +1301,7 @@ export const GobernanzaFormFieldsInner: React.FC<{
                 Opcional. Si seleccionas tenant corporativo, se usa bajo el tenant global elegido.
               </p>
               {tenantCorpError ? (
-                <p className="mt-1 text-xs text-rose-700">
+                <p className="mt-1 text-xs text-destructive">
                   Error cargando corporativos: {tenantCorpError}
                 </p>
               ) : null}
@@ -1351,7 +1351,7 @@ export const GobernanzaFormFieldsInner: React.FC<{
                 </p>
               ) : null}
               {soloContextoViewTenant && opcionesCtx.length === 0 ? (
-                <p className="mt-1 text-xs text-amber-700">
+                <p className="mt-1 text-xs text-warning">
                   No hay contextos «view» activos. Comprueba parametrización de contextos o recarga datos API.
                 </p>
               ) : null}
@@ -1387,7 +1387,7 @@ export const GobernanzaFormFieldsInner: React.FC<{
                   : 'El listado se resuelve desde tu scope actual.'}
               </p>
               {!loadingData && !tenantUpdateTargets.length ? (
-                <p className="mt-1 text-xs text-amber-700">
+                <p className="mt-1 text-xs text-warning">
                   No hay tenants disponibles para actualizar con tu scope actual.
                 </p>
               ) : null}
@@ -1456,7 +1456,7 @@ export const GobernanzaFormFieldsInner: React.FC<{
             if (!autoCorpLabel) return null;
             return (
               <div key={field.name}>
-                <p className="mt-1 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
+                <p className="mt-1 rounded-md border border-success/20 bg-success/10 px-3 py-2 text-xs text-success">
                   Se usará: <span className="font-medium">{autoCorpLabel}</span>
                 </p>
               </div>
@@ -1596,7 +1596,7 @@ export const GobernanzaFormFieldsInner: React.FC<{
                 <select
                   className={`mt-1 h-11 w-full rounded-xl border px-3 text-sm shadow-sm transition-colors ${
                     field.name === 'nvlGeneracionTenant'
-                      ? 'border-rose-300 bg-rose-50/60 font-medium text-foreground focus:border-rose-400'
+                      ? 'border-destructive/30 bg-destructive/60 font-medium text-foreground focus:border-destructive/50'
                       : 'border-input bg-card'
                   }`}
                   value={getFieldValue(endpoint.id, field.name)}
@@ -1630,7 +1630,7 @@ export const GobernanzaFormFieldsInner: React.FC<{
                 </select>
               )}
               {field.name === 'nvlGeneracionTenant' ? (
-                <p className="mt-1 text-xs text-rose-700">
+                <p className="mt-1 text-xs text-destructive">
                   Modelo 3:3 — una config activa por catálogo NVL (0/1/2) en{' '}
                   <span className="font-semibold">generacionglobalnvlrolesconfigs</span>.
                   {!selectsLoading ? (
@@ -1643,7 +1643,7 @@ export const GobernanzaFormFieldsInner: React.FC<{
               ) : null}
               {isAccionUsuarioMulti ? <p className="mt-1 text-xs text-muted-foreground">Selecciona una o varias acciones.</p> : null}
               {!selectsLoading && optionsRender.length === 0 ? (
-                <p className="mt-1 text-xs text-amber-700">
+                <p className="mt-1 text-xs text-warning">
                   {field.name === 'nvlGeneracionTenant'
                     ? (tenantGlobalSelects.nvlGeneracionTenant || []).length === 0
                       ? 'No hay filas activas en generacionglobalnvlrolesconfigs. Ve a Parametrización → NVL jerarquía global, crea NVL 0/1/2, pulsa Parametrizar en cada uno y luego Recargar datos API aquí.'
@@ -1662,7 +1662,7 @@ export const GobernanzaFormFieldsInner: React.FC<{
                 </p>
               ) : null}
               {field.name === 'coporativo' && nvlMetaEsCero && actorEsTenantSuperAdminScope && optionsRender.length > 0 ? (
-                <p className="mt-1 text-xs text-emerald-800">
+                <p className="mt-1 text-xs text-success">
                   NVL 0: corporativo opcional. Si eliges uno, debe ser coherente con tu rama; el alta sigue validando codigo de jerarquia en backend según scope.
                 </p>
               ) : null}
@@ -1672,12 +1672,12 @@ export const GobernanzaFormFieldsInner: React.FC<{
                 </p>
               ) : null}
               {field.name === 'tenantGlobalRef' && actorEsTenantGlobalPuro ? (
-                <p className="mt-1 text-xs text-sky-700">
+                <p className="mt-1 text-xs text-info">
                   Flujo puro <span className="font-semibold">tenantGlobal</span>: la referencia queda amarrada a tu propio tenantGlobal y solo afecta tu rama descendente.
                 </p>
               ) : null}
               {field.name === 'tenantGlobalRef' && actorEsTenantSuperAdminScope ? (
-                <p className="mt-1 text-xs text-fuchsia-700">
+                <p className="mt-1 text-xs text-info">
                   Flujo <span className="font-semibold">tenantSuperAdmin -&gt; tenantGlobal</span>: puedes parametrizar sobre tenantGlobales visibles dentro de tu jerarquÃ­a.
                 </p>
               ) : null}
@@ -1862,7 +1862,7 @@ export const GobernanzaFormFieldsInner: React.FC<{
                     ))}
                   </select>
                   {tenantFiltro && !reglasFiltradas.length ? (
-                    <p className="mt-1 text-xs text-amber-800">
+                    <p className="mt-1 text-xs text-warning">
                       No hay reglas con contexto view para este tenant en tu alcance JWT. Sincroniza jerarquía o crea la regla primero.
                     </p>
                   ) : null}
@@ -1918,7 +1918,7 @@ export const GobernanzaFormFieldsInner: React.FC<{
                     ))}
                   </select>
                   {!loadingData && !opcionesTenantGlobal.length ? (
-                    <p className="mt-1 text-xs text-amber-800">
+                    <p className="mt-1 text-xs text-warning">
                       Sin tenants en tu alcance JWT. Pulsa «Recargar datos API».
                     </p>
                   ) : null}
@@ -1948,7 +1948,7 @@ export const GobernanzaFormFieldsInner: React.FC<{
                     ))}
                   </select>
                   {tenantFiltro && !reglasFiltradas.length ? (
-                    <p className="mt-1 text-xs text-amber-800">
+                    <p className="mt-1 text-xs text-warning">
                       No hay reglas con contexto view para este tenant en tu alcance JWT. Sincroniza jerarquía o crea la regla primero.
                     </p>
                   ) : null}
@@ -2110,7 +2110,7 @@ export const GobernanzaFormFieldsInner: React.FC<{
                   {tgId && (
                     <button
                       type="button"
-                      className="text-xs text-blue-600 hover:underline disabled:opacity-50"
+                      className="text-xs text-info hover:underline disabled:opacity-50"
                       disabled={loadingCorp}
                       onClick={() => fetchTenantCorporativosByGlobal(endpoint.id, tgId)}
                     >
@@ -2134,7 +2134,7 @@ export const GobernanzaFormFieldsInner: React.FC<{
                   </option>
                   {corporativosDelTG.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
                 </select>
-                {corpError && <p className="mt-1 text-xs text-red-500">{corpError}</p>}
+                {corpError && <p className="mt-1 text-xs text-destructive">{corpError}</p>}
               </div>
             </div>
           );
@@ -2160,15 +2160,15 @@ export const GobernanzaFormFieldsInner: React.FC<{
 
         if (!scopeId) return null;
         return (
-          <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-3 space-y-2">
+          <div className="rounded-xl border border-info/10 bg-info/60 p-3 space-y-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-xs font-semibold text-blue-700">
+              <p className="text-xs font-semibold text-info">
                 Usuarios destino ({seleccionados.length}/{disponibles.length})
               </p>
               <div className="flex gap-2">
                 <button
                   type="button"
-                  className="rounded border border-blue-300 bg-card px-2 py-1 text-xs text-blue-700 hover:bg-blue-50"
+                  className="rounded border border-info/30 bg-card px-2 py-1 text-xs text-info hover:bg-info/10"
                   onClick={() => setUsuariosDestinoSel((prev) => ({ ...prev, [endpointId]: disponibles.map((u) => u.id) }))}
                   disabled={cargando}
                 >Seleccionar todos</button>
@@ -2189,11 +2189,11 @@ export const GobernanzaFormFieldsInner: React.FC<{
               </div>
             </div>
             {cargando ? (
-              <p className="text-xs text-blue-500">Cargando usuarios...</p>
+              <p className="text-xs text-info">Cargando usuarios...</p>
             ) : disponibles.length === 0 ? (
               <p className="text-xs text-muted-foreground">No hay usuarios disponibles.</p>
             ) : (
-              <div className="max-h-48 overflow-auto rounded-md border border-blue-200 bg-card p-2 space-y-2">
+              <div className="max-h-48 overflow-auto rounded-md border border-info/20 bg-card p-2 space-y-2">
                 {disponibles.map((u) => {
                   const herenciasUsu = herenciasDelTG.filter(
                     (h: any) => String(h?.usuarioId?._id || h?.usuarioId || '').trim() === u.id
@@ -2215,7 +2215,7 @@ export const GobernanzaFormFieldsInner: React.FC<{
                         />
                         <span className="flex-1 text-foreground">{u.label}</span>
                         {tieneHerencia && (
-                          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+                          <span className="rounded-full bg-warning/10 px-2 py-0.5 text-[10px] font-medium text-warning">
                             {herenciasUsu.length} herencia{herenciasUsu.length > 1 ? 's' : ''}
                           </span>
                         )}
@@ -2238,13 +2238,13 @@ export const GobernanzaFormFieldsInner: React.FC<{
                         if (loadingUsu) return <p className="ml-5 text-[10px] text-muted-foreground/90">Validando tenants...</p>;
                         if (!tgsUsu.length) return null;
                         return (
-                          <div className="ml-5 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1.5 space-y-1">
-                            <p className="text-[10px] font-semibold text-emerald-700 uppercase tracking-wide">
+                          <div className="ml-5 rounded-md border border-success/20 bg-success/10 px-2 py-1.5 space-y-1">
+                            <p className="text-[10px] font-semibold text-success uppercase tracking-wide">
                               Parametrizado en {tgsUsu.length} tenantGlobal{tgsUsu.length > 1 ? 'es' : ''}
                             </p>
                             {tgsUsu.map((tg) => (
-                              <div key={tg.id} className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-emerald-800">
-                                <span className="font-mono text-emerald-500">{tg.id.slice(-8)}</span>
+                              <div key={tg.id} className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-success">
+                                <span className="font-mono text-success">{tg.id.slice(-8)}</span>
                                 <span className="flex-1 truncate">{tg.label !== tg.id ? tg.label : ''}</span>
                                 <span>V:<strong>{tg.vistas}</strong></span>
                                 <span>A:<strong>{tg.acciones}</strong></span>
@@ -2254,8 +2254,8 @@ export const GobernanzaFormFieldsInner: React.FC<{
                         );
                       })()}
                       {tieneHerencia && seleccionados.includes(u.id) && (
-                        <div className="ml-5 rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 space-y-1">
-                          <p className="text-[10px] font-semibold text-amber-700 uppercase tracking-wide">Herencias existentes</p>
+                        <div className="ml-5 rounded-md border border-warning/20 bg-warning/10 px-2 py-1.5 space-y-1">
+                          <p className="text-[10px] font-semibold text-warning uppercase tracking-wide">Herencias existentes</p>
                           {herenciasUsu.map((h: any) => {
                             const hId = String(h?.iud || h?._id || '');
                             const vistas = Array.isArray(h?.vistas) ? h.vistas.length : 0;
@@ -2263,12 +2263,12 @@ export const GobernanzaFormFieldsInner: React.FC<{
                             const tgRef = String(h?.tenantGlobal?.label || h?.tenantGlobal?.correo || h?.tenantGlobal || '');
                             const tcRef = String(h?.tenantCorporativo?.label || h?.tenantCorporativo?.correo || h?.tenantCorporativo || '');
                             return (
-                              <div key={hId} className="text-[10px] text-amber-800 flex flex-wrap gap-x-3 gap-y-0.5">
+                              <div key={hId} className="text-[10px] text-warning flex flex-wrap gap-x-3 gap-y-0.5">
                                 <span>Vistas: <strong>{vistas}</strong></span>
                                 <span>Acciones: <strong>{acciones}</strong></span>
                                 {tgRef && <span>TG: <strong>{tgRef}</strong></span>}
                                 {tcRef && <span>TC: <strong>{tcRef}</strong></span>}
-                                <span className="text-amber-500 font-mono">{hId.slice(-6)}</span>
+                                <span className="text-warning font-mono">{hId.slice(-6)}</span>
                               </div>
                             );
                           })}
@@ -2280,7 +2280,7 @@ export const GobernanzaFormFieldsInner: React.FC<{
               </div>
             )}
             {seleccionados.length > 1 && (
-              <p className="text-xs text-blue-600 font-medium">
+              <p className="text-xs text-info font-medium">
                 Se crearan {seleccionados.length} documentos de herencia (uno por usuario).
               </p>
             )}
@@ -2432,18 +2432,18 @@ export const GobernanzaFormFieldsInner: React.FC<{
         return (
           <div className="space-y-2">
             {soloLecturaDios ? (
-              <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              <div className="rounded-md border border-warning/20 bg-warning/10 px-3 py-2 text-xs text-warning">
                 <span className="font-semibold">Modo referencia (jerarquía con corporativo): </span>
                 vistas y acciones acotadas a la regla DIOS parametrizada para tu tenantSuperAdmin. Ejecutar está deshabilitado; el servidor también bloquea crear/sincronizar totales en este perfil.
               </div>
             ) : scopeJwtSaAlcanceJerarquiaValidado ? (
-              <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
+              <div className="rounded-md border border-success/20 bg-success/10 px-3 py-2 text-xs text-success">
                 Alcance JWT validado en{' '}
                 <code className="rounded bg-white/80 px-1">tenantJerarquiaCounter</code>. Puedes crear la regla DIOS y
                 usar &quot;Sincronizar regla DIOS&quot; para alinear todas las vistas activas (el servidor valida configs NVL y rama).
               </div>
             ) : esJwtSoloTenantSuperAdmin ? (
-              <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              <div className="rounded-md border border-warning/20 bg-warning/10 px-3 py-2 text-xs text-warning">
                 {saJerarquiaTieneCorporativoEnCountersEfectivo === undefined
                   ? 'Validando scope JWT… Recarga datos API si los botones no se habilitan.'
                   : 'Jerarquía con corporativo en counters: botones deshabilitados (solo referencia de la regla parametrizada).'}

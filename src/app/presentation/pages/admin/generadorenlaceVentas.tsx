@@ -141,7 +141,7 @@ export default function GeneradorEnlaceVentas({
                         </div>
                     </div>
 
-                    <Alert className="border-violet-200 bg-violet-50 text-violet-950">
+                    <Alert className="border-info/20 bg-info/10 text-info">
                         <Sparkles className="h-4 w-4" />
                         <AlertTitle>Navigate parametrizado</AlertTitle>
                         <AlertDescription>
@@ -220,7 +220,7 @@ export default function GeneradorEnlaceVentas({
         <div className="flex-1 space-y-8 bg-gradient-to-b from-slate-50 via-white to-slate-100 p-4 md:p-6 lg:p-8">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
                 <div className="space-y-2">
-                    <div className="inline-flex items-center gap-2 rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-xs font-medium uppercase tracking-[0.2em] text-violet-700">
+                    <div className="inline-flex items-center gap-2 rounded-full border border-info/20 bg-info/10 px-3 py-1 text-xs font-medium uppercase tracking-[0.2em] text-info">
                         <Orbit className="h-3.5 w-3.5" />
                         Attribution
                     </div>

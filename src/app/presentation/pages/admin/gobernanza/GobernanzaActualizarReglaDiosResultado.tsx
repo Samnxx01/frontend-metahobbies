@@ -54,13 +54,13 @@ export const GobernanzaActualizarReglaDiosResultado: React.FC = () => {
     return (
       <div className="space-y-3">
         {respuestaMsg ? (
-          <div className="rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-900">{respuestaMsg}</div>
+          <div className="rounded border border-success/20 bg-success/10 px-3 py-2 text-xs font-medium text-success">{respuestaMsg}</div>
         ) : null}
         <div className="grid gap-2 text-xs md:grid-cols-2">
-          <div className="rounded border border-emerald-200 bg-emerald-50 p-2">
+          <div className="rounded border border-success/20 bg-success/10 p-2">
             Vistas faltantes detectadas: <span className="font-semibold">{Number(sync?.vistasFaltantesTotal || 0)}</span>
           </div>
-          <div className="rounded border border-emerald-200 bg-emerald-50 p-2">
+          <div className="rounded border border-success/20 bg-success/10 p-2">
             Acciones faltantes detectadas: <span className="font-semibold">{Number(sync?.accionesFaltantesTotal || 0)}</span>
           </div>
           <div className="rounded border border-border bg-muted/50 p-2">

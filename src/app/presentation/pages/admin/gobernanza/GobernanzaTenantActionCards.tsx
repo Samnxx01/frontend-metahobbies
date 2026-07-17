@@ -124,7 +124,7 @@ function TenantActionCardBase({
           <CardDescription>{description || endpoint.description}</CardDescription>
         </div>
         {!disponible ? (
-          <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700">
+          <p className="rounded-md border border-warning/20 bg-warning/10 px-3 py-2 text-xs font-medium text-warning">
             {unavailableText || 'Este bloque pertenece a otro scope y queda disponible solo como referencia.'}
           </p>
         ) : null}

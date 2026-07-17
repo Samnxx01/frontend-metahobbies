@@ -30,10 +30,10 @@ interface PoliticasMarcoModalProps {
 }
 
 const EFECTO_COLORS: Record<string, string> = {
-  ALLOW: 'bg-green-100 text-green-800',
-  DENY: 'bg-red-100 text-red-800',
-  BYPASS_RUNTIME: 'bg-blue-100 text-blue-800',
-  REQUIRE_TECHO: 'bg-orange-100 text-orange-800',
+  ALLOW: 'bg-success/10 text-success',
+  DENY: 'bg-destructive/10 text-destructive',
+  BYPASS_RUNTIME: 'bg-info/10 text-info',
+  REQUIRE_TECHO: 'bg-warning/10 text-warning',
 };
 
 export const PoliticasMarcoModal = ({

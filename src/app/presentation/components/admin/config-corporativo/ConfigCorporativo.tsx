@@ -113,8 +113,8 @@ const PARAM_TIPOS: Array<{ value: ParametrizacionEmpleadoTipo; label: string }> 
 
 const formatActorBadge = (actor: ActorScope | null) => {
   if (!actor) return null;
-  if (actor.tenantSuperAdminId) return { label: 'tenantSuperAdmin', className: 'border-fuchsia-200 bg-fuchsia-50 text-fuchsia-700' };
-  if (actor.tenantGlobalId) return { label: 'tenantGlobal', className: 'border-sky-200 bg-sky-50 text-sky-700' };
+  if (actor.tenantSuperAdminId) return { label: 'tenantSuperAdmin', className: 'border-info/20 bg-info/10 text-info' };
+  if (actor.tenantGlobalId) return { label: 'tenantGlobal', className: 'border-info/20 bg-info/10 text-info' };
   return { label: actor.rol || 'sin scope', className: 'border-slate-200 bg-slate-50 text-slate-700' };
 };
 
@@ -585,7 +585,7 @@ export default function ConfigCorporativo() {
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <Card className="border-white/10 bg-white/10 text-white shadow-none">
               <CardContent className="flex items-center gap-3 p-4">
-                <Users className="h-5 w-5 text-emerald-200" />
+                <Users className="h-5 w-5 text-success" />
                 <div>
                   <p className="text-xs uppercase tracking-[0.18em] text-slate-300">Empleados</p>
                   <p className="text-2xl font-semibold">{empleados.length}</p>
@@ -594,7 +594,7 @@ export default function ConfigCorporativo() {
             </Card>
             <Card className="border-white/10 bg-white/10 text-white shadow-none">
               <CardContent className="flex items-center gap-3 p-4">
-                <BadgeCheck className="h-5 w-5 text-sky-200" />
+                <BadgeCheck className="h-5 w-5 text-info" />
                 <div>
                   <p className="text-xs uppercase tracking-[0.18em] text-slate-300">Activos</p>
                   <p className="text-2xl font-semibold">{totalActivos}</p>
@@ -603,7 +603,7 @@ export default function ConfigCorporativo() {
             </Card>
             <Card className="border-white/10 bg-white/10 text-white shadow-none">
               <CardContent className="flex items-center gap-3 p-4">
-                <Building2 className="h-5 w-5 text-fuchsia-200" />
+                <Building2 className="h-5 w-5 text-info" />
                 <div>
                   <p className="text-xs uppercase tracking-[0.18em] text-slate-300">Corporativos</p>
                   <p className="text-2xl font-semibold">{corporativosDisponibles.length}</p>
@@ -620,7 +620,7 @@ export default function ConfigCorporativo() {
             <div className="flex items-start justify-between gap-4">
               <div>
                 <CardTitle className="flex items-center gap-2 text-slate-900">
-                  <UserPlus className="h-5 w-5 text-emerald-600" />
+                  <UserPlus className="h-5 w-5 text-success" />
                   Alta guiada de empleado
                 </CardTitle>
                 <CardDescription>
@@ -798,7 +798,7 @@ export default function ConfigCorporativo() {
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <CardTitle className="flex items-center gap-2 text-slate-900">
-                    <BriefcaseBusiness className="h-5 w-5 text-fuchsia-600" />
+                    <BriefcaseBusiness className="h-5 w-5 text-info" />
                     Parametrizacion
                   </CardTitle>
                   <CardDescription>Configura los catalogos que usa esta alta guiada.</CardDescription>
@@ -897,7 +897,7 @@ export default function ConfigCorporativo() {
         <DialogContent className="max-h-[90vh] overflow-auto sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <BriefcaseBusiness className="h-5 w-5 text-fuchsia-600" />
+              <BriefcaseBusiness className="h-5 w-5 text-info" />
               Roles corporativos
             </DialogTitle>
           </DialogHeader>
@@ -980,7 +980,7 @@ export default function ConfigCorporativo() {
         <DialogContent className="max-h-[90vh] overflow-auto sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Settings2 className="h-5 w-5 text-fuchsia-600" />
+              <Settings2 className="h-5 w-5 text-info" />
               Parametrizacion de empleado
             </DialogTitle>
           </DialogHeader>

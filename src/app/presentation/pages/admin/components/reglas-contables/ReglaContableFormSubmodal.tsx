@@ -38,6 +38,8 @@ import TarifaReglaContableSelect from './TarifaReglaContableSelect';
 import { BASES_CALCULO_REGLA } from './reglasContablesConstants';
 import { reglasContablesUi } from './reglasContablesUi';
 
+type TenantOption = { value: string; label: string };
+
 type ReglaContableFormSubmodalProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -66,7 +68,6 @@ type DraftRegla = {
   categoriasAplicacion: string[];
   productosAplicacion: string[];
   orden: string;
-  codigoDian: string;
   estado: boolean;
 };
 
@@ -75,7 +76,7 @@ const draftInicial: DraftRegla = {
   nombre: '',
   descripcion: '',
   tipo: 'IVA',
-  tarifaCodigo: '',
+  tarifaCodigo: registro.tarifaCodigo ?? '',
   tarifa: '0',
   montoFijo: '0',
   baseCalculo: 'SUBTOTAL_COMERCIAL',
@@ -84,7 +85,6 @@ const draftInicial: DraftRegla = {
   categoriasAplicacion: [],
   productosAplicacion: [],
   orden: '0',
-  codigoDian: '',
   estado: true,
 };
 
@@ -99,10 +99,11 @@ const draftDesdeRegistro = (registro: ReglaContable): DraftRegla => ({
   baseCalculo: registro.baseCalculo,
   aplicaEn: registro.aplicaEn,
   aplicaEnCarrito: registro.aplicaEnCarrito === true,
-  categoriasAplicacion: (registro.categoriasAplicacion || []).map((categoria) => String(categoria)),
+  // Se completan aparte desde `listarAplicacionesRegla` (colección ReglaContableAplicacion) en el
+  // useEffect de abajo; ya no vienen embebidos en el registro de ReglaContable.
+  categoriasAplicacion: [],
   productosAplicacion: [],
   orden: String(registro.orden ?? 0),
-  codigoDian: registro.codigoDian ?? '',
   estado: registro.estado !== false,
 });
 
@@ -141,11 +142,35 @@ export default function ReglaContableFormSubmodal({
   const [tarifasKeyLocal, setTarifasKeyLocal] = useState(0);
   const [categorias, setCategorias] = useState<BackendCategoria[]>([]);
   const [presetsDinamicos, setPresetsDinamicos] = useState<ReglaContable[]>([]);
+  const [tenantOptions, setTenantOptions] = useState<TenantOption[]>([]);
+  const [tenantsSel, setTenantsSel] = useState<string[]>([]);
 
   useEffect(() => {
     if (!open) return;
     setDraft(registro ? draftDesdeRegistro(registro) : draftInicial);
+    setTenantsSel([]);
+    if (!registro) {
+      // Tenants de la rama del JWT (tenantjerarquiacounters). Sin selección aplica al tenant actual.
+      reglasContablesService.listarTenantsAutorizables()
+        .then((data) => setTenantOptions(data.map((t) => ({ value: t.tenantId, label: t.label }))))
+        .catch(() => setTenantOptions([]));
+    }
   }, [open, registro]);
+
+  const toggleTenant = (id: string): void => {
+    setTenantsSel((prev) => (prev.includes(id) ? prev.filter((t) => t !== id) : [...prev, id]));
+  };
+
+  useEffect(() => {
+    if (!open || !registro?.codigo) return;
+    reglasContablesService.listarAplicacionesRegla(registro.codigo)
+      .then(({ categoriasAplicacion, productosAplicacion }) => {
+        setDraft((prev) => ({ ...prev, categoriasAplicacion, productosAplicacion }));
+      })
+      .catch(() => {
+        // Sin aplicaciones parametrizadas aún; el draft queda con los arrays vacíos del estado inicial.
+      });
+  }, [open, registro?.codigo]);
 
   useEffect(() => {
     if (!open) return;
@@ -164,6 +189,7 @@ export default function ReglaContableFormSubmodal({
       .catch(() => setPresetsDinamicos([]));
   }, [open, esEdicion]);
 
+
   const guardar = async (): Promise<void> => {
     if (!draft.codigo.trim() || !draft.nombre.trim()) {
       toast.error('Código y nombre son obligatorios.');
@@ -171,30 +197,50 @@ export default function ReglaContableFormSubmodal({
     }
     try {
       setSubmitting(true);
+      const mostrarSelectorProductos = draft.aplicaEnCarrito || draft.aplicaEn === 'COMPRA';
+      const categoriasAplicacion = mostrarSelectorProductos ? draft.categoriasAplicacion : [];
+      const productosAplicacion = draft.aplicaEn === 'COMPRA' ? draft.productosAplicacion : [];
+      // PUT/POST normal de la regla: sin categoriasAplicacion/productosAplicacion (esos campos ya no
+      // se persisten en ReglaContable, viven en ReglaContableAplicacion). `categoriasAplicacion` es la
+      // única excepción: se sigue enviando aquí de forma transitoria para que el backend sincronice
+      // ProductoVentaRelacion (venta masiva) cuando aplicaEnCarrito está activo.
       const payloadBase = {
         nombre: draft.nombre.trim(),
         descripcion: draft.descripcion.trim(),
         tipo: draft.tipo,
+        tarifaCodigo: draft.tarifaCodigo,
         tarifa: Number(draft.tarifa) || 0,
         montoFijo: Number(draft.montoFijo) || 0,
         baseCalculo: draft.baseCalculo,
         aplicaEn: draft.aplicaEn,
         aplicaEnCarrito: draft.aplicaEnCarrito,
-        categoriasAplicacion: draft.aplicaEnCarrito ? draft.categoriasAplicacion : [],
+        categoriasAplicacion,
+        // Mecanismo de venta/carrito (ProductoVentaRelacion); solo aplica cuando aplicaEnCarrito.
         productosEspecificos: draft.aplicaEnCarrito ? draft.productosAplicacion : [],
-        orden: Number(draft.orden) || 0,
-        codigoDian: draft.codigoDian.trim(),
         estado: draft.estado,
       };
+      let codigoFinal = registro?.codigo || draft.codigo.trim();
       if (esEdicion && registro) {
         const { msg } = await reglasContablesService.actualizar(registro.codigo, payloadBase);
         toast.success(msg || `Regla "${registro.codigo}" actualizada.`);
       } else {
+        codigoFinal = draft.codigo.trim();
         const { msg } = await reglasContablesService.crear({
-          codigo: draft.codigo.trim(),
+          codigo: codigoFinal,
           ...payloadBase,
+          ...(tenantsSel.length > 0 ? { tenantIds: tenantsSel } : {}),
         });
         toast.success(msg || `Regla "${draft.codigo}" registrada.`);
+      }
+      // Segunda llamada: reemplaza el set de categorías/productos en ReglaContableAplicacion (fuente
+      // de verdad que consume resolverTarifaAplicable, principalmente en ámbito COMPRA).
+      // En creación sin selección no hay nada que reemplazar (y evita fallar si el tenant actual
+      // no quedó incluido en los tenants autorizados).
+      if (esEdicion || categoriasAplicacion.length > 0 || productosAplicacion.length > 0) {
+        await reglasContablesService.reemplazarAplicacionesRegla(codigoFinal, {
+          categoriasAplicacion,
+          productosAplicacion,
+        });
       }
       setDraft(draftInicial);
       onGuardada?.();
@@ -254,7 +300,6 @@ export default function ReglaContableFormSubmodal({
                   montoFijo: String(preset.montoFijo ?? 0),
                   baseCalculo: preset.baseCalculo,
                   aplicaEn: preset.aplicaEn,
-                  codigoDian: preset.codigoDian ?? '',
                   orden: String(preset.orden ?? 0),
                   aplicaEnCarrito: preset.aplicaEnCarrito === true,
                   categoriasAplicacion: [],
@@ -293,7 +338,14 @@ export default function ReglaContableFormSubmodal({
             />
             <AmbitoReglaContableSelect
               value={draft.aplicaEn}
-              onChange={(codigo) => setDraft((prev) => ({ ...prev, aplicaEn: codigo }))}
+              onChange={(codigo) =>
+                setDraft((prev) => ({
+                  ...prev,
+                  aplicaEn: codigo,
+                  categoriasAplicacion: [],
+                  productosAplicacion: [],
+                }))
+              }
               disabled={submitting || saving}
               label="Ámbito (compra / venta)"
               refreshKey={ambitosRefreshKey + ambitosKeyLocal}
@@ -353,27 +405,11 @@ export default function ReglaContableFormSubmodal({
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <Label>Orden de aplicación</Label>
-              <Input
-                type="number"
-                min={0}
-                className={reglasContablesUi.input}
-                value={draft.orden}
-                onChange={(e) => setDraft((prev) => ({ ...prev, orden: e.target.value }))}
-              />
-            </div>
           </div>
 
-          <div className="space-y-2">
-            <Label>Código DIAN (opcional)</Label>
-            <Input
-              className={reglasContablesUi.input}
-              value={draft.codigoDian}
-              onChange={(e) => setDraft((prev) => ({ ...prev, codigoDian: e.target.value }))}
-              placeholder="01"
-            />
-          </div>
+          <p className="text-xs text-muted-foreground">
+            El código DIAN, su lista y si suma o resta al total se heredan del <span className="font-medium">tipo de regla</span> seleccionado (parametrízalo en «Parametrizar tipos»).
+          </p>
 
           <div className="space-y-2">
             <Label>Descripción</Label>
@@ -383,6 +419,34 @@ export default function ReglaContableFormSubmodal({
               onChange={(e) => setDraft((prev) => ({ ...prev, descripcion: e.target.value }))}
             />
           </div>
+
+          {!esEdicion && tenantOptions.length > 0 && (
+            <div className="space-y-2">
+              <Label>Tenants autorizados</Label>
+              <p className="text-xs text-muted-foreground">
+                Selecciona a quién se le autoriza esta regla. Sin selección, aplica solo a tu tenant actual.
+                Cada tenant debe tener el tipo y el ámbito activos en su catálogo.
+              </p>
+              <div className="max-h-40 space-y-2 overflow-y-auto rounded-md border p-3">
+                {tenantOptions.map((option) => (
+                  <div key={option.value} className="flex items-center gap-2">
+                    <Checkbox
+                      id={`regla-tenant-${option.value}`}
+                      checked={tenantsSel.includes(option.value)}
+                      onCheckedChange={() => toggleTenant(option.value)}
+                      disabled={submitting || saving}
+                    />
+                    <Label htmlFor={`regla-tenant-${option.value}`} className="cursor-pointer font-normal">
+                      {option.label}
+                    </Label>
+                  </div>
+                ))}
+              </div>
+              {tenantsSel.length > 0 && (
+                <p className="text-xs text-muted-foreground">{tenantsSel.length} tenant(s) seleccionado(s).</p>
+              )}
+            </div>
+          )}
 
           <div className="flex items-center gap-2">
             <Checkbox
@@ -408,12 +472,14 @@ export default function ReglaContableFormSubmodal({
             </Label>
           </div>
 
-          {draft.aplicaEnCarrito ? (
+          {draft.aplicaEnCarrito || draft.aplicaEn === 'COMPRA' ? (
             <div className="space-y-2 rounded-md border border-border p-3">
               <div>
                 <Label>Categorias de aplicacion</Label>
                 <p className={reglasContablesUi.description}>
-                  Si no seleccionas categorias, se aplica a todos los productos de venta.
+                  {draft.aplicaEn === 'COMPRA'
+                    ? 'Si no seleccionas categorias, se aplica a todos los productos del catálogo.'
+                    : 'Si no seleccionas categorias, se aplica a todos los productos de venta.'}
                 </p>
               </div>
               {categorias.length === 0 ? (
@@ -438,13 +504,15 @@ export default function ReglaContableFormSubmodal({
                   })}
                 </div>
               )}
-              {draft.categoriasAplicacion.length > 0 && (
+              {(draft.aplicaEn === 'COMPRA' || draft.categoriasAplicacion.length > 0) && (
                 <ReglaProductosMatriz
                   codigo={draft.codigo || (registro?.codigo ?? '')}
                   categorias={draft.categoriasAplicacion}
                   selectedIds={draft.productosAplicacion}
                   onChange={(ids) => setDraft((prev) => ({ ...prev, productosAplicacion: ids }))}
                   disabled={submitting || saving}
+                  ambito={draft.aplicaEn}
+                  catalogo={draft.aplicaEnCarrito ? 'VENTA' : 'GENERAL'}
                 />
               )}
             </div>

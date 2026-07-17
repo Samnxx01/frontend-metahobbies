@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { toast } from 'react-toastify';
-import { Building2, Mail, MapPin, Phone, RefreshCcw, Search } from 'lucide-react';
+import { Building2, Mail, MapPin, Phone, RefreshCcw, Search, ShieldCheck } from 'lucide-react';
 import inventarioService, { type InventarioProveedor } from '@/app/services/inventarioService';
 import InventarioProveedorModal, { type InventarioProveedorDraft } from './components/InventarioProveedorModal';
+import ProveedorResponsabilidadesModal from './components/ProveedorResponsabilidadesModal';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -13,6 +14,7 @@ export default function Proveedores(): React.ReactElement {
   const [saving, setSaving] = useState<boolean>(false);
   const [modalOpen, setModalOpen] = useState<boolean>(false);
   const [search, setSearch] = useState<string>('');
+  const [proveedorResponsabilidades, setProveedorResponsabilidades] = useState<InventarioProveedor | null>(null);
 
   const cargarProveedores = async (): Promise<void> => {
     try {
@@ -194,12 +196,32 @@ export default function Proveedores(): React.ReactElement {
                       </p>
                     ) : null}
                   </div>
+
+                  <div className="mt-4">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setProveedorResponsabilidades(proveedor)}
+                    >
+                      <ShieldCheck className="mr-2 h-4 w-4" />
+                      Responsabilidades DIAN
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>
           )}
         </CardContent>
       </Card>
+
+      <ProveedorResponsabilidadesModal
+        open={Boolean(proveedorResponsabilidades)}
+        onOpenChange={(open) => {
+          if (!open) setProveedorResponsabilidades(null);
+        }}
+        proveedor={proveedorResponsabilidades}
+      />
     </div>
   );
 }

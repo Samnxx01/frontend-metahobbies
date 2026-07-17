@@ -47,9 +47,9 @@ function ConfirmPanel({
   const esEliminar = confirmar.accion === 'eliminar';
   return (
     <div className={`mt-2 rounded-md border p-3 space-y-2 ${
-      esEliminar ? 'border-destructive/40 bg-destructive/5' : 'border-amber-400/40 bg-amber-50'
+      esEliminar ? 'border-destructive/40 bg-destructive/5' : 'border-warning/40 bg-warning/10'
     }`}>
-      <p className={`text-sm font-medium ${esEliminar ? 'text-destructive' : 'text-amber-700'}`}>
+      <p className={`text-sm font-medium ${esEliminar ? 'text-destructive' : 'text-warning'}`}>
         {esEliminar
           ? '¿Confirmas eliminar permanentemente esta regla?'
           : '¿Confirmas desactivar esta regla?'}
@@ -61,7 +61,7 @@ function ConfirmPanel({
           size="sm"
           onClick={onConfirmar}
           disabled={faseAccion === 'loading'}
-          className={!esEliminar ? 'border-amber-400 text-amber-700' : ''}
+          className={!esEliminar ? 'border-warning/50 text-warning' : ''}
         >
           {faseAccion === 'loading'
             ? `${esEliminar ? 'Eliminando' : 'Desactivando'}…`
@@ -376,7 +376,7 @@ function ReglasEliminarDiosFormContent(): React.ReactElement {
                       size="sm"
                       onClick={() => { setConfirmar({ id: rid, accion: 'desactivar' }); setErrorAccion(null); salirModoVistas(); }}
                       disabled={faseAccion === 'loading' || faseVistas === 'loading'}
-                      className="border-amber-400 text-amber-700 hover:bg-amber-50"
+                      className="border-warning/50 text-warning hover:bg-warning/10"
                     >
                       Desactivar
                     </Button>
@@ -442,9 +442,9 @@ function ReglasEliminarDiosFormContent(): React.ReactElement {
 
       {/* Resultados exitosos */}
       {resultados.length > 0 && (
-        <div className="rounded-md border border-green-300 bg-green-50 px-3 py-2 space-y-1">
+        <div className="rounded-md border border-success/30 bg-success/10 px-3 py-2 space-y-1">
           {resultados.map((r, i) => (
-            <p key={i} className="text-sm text-green-800">
+            <p key={i} className="text-sm text-success">
               Regla <span className="font-mono">{r.id.slice(0, 8)}…</span>{' '}
               {r.accion}.
             </p>

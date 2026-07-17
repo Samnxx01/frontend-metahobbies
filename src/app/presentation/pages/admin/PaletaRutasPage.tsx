@@ -29,9 +29,9 @@ import {
     obtenerBrandingPrivado,
     reemplazarImagenFondo,
     subirImagenFondoLogin,
+    normalizeConfiguredHomeImageUrl,
     type ImagenFondo,
     type BrandingConfig,
-    ABOUT_IMAGE_SEED,
 } from '@/app/services/brandingWidget';
 import { normalizeImageRenderUrl } from '@/app/utils/normalizeImageRenderUrl';
 import { apiFetch } from '@/app/services/api';
@@ -149,13 +149,14 @@ export default function PaletaRutasPage() {
     const [loginBackgroundEnabled, setLoginBackgroundEnabled] = useState(true);
     const [loadingBackgroundUrl, setLoadingBackgroundUrl] = useState('');
     const [loadingBackgroundEnabled, setLoadingBackgroundEnabled] = useState(true);
-    const [backgroundTarget, setBackgroundTarget] = useState<'login' | 'loading'>('login');
+    const [backgroundTarget, setBackgroundTarget] = useState<'login' | 'loading' | 'home'>('login');
     const [imagenesFondo, setImagenesFondo] = useState<ImagenFondo[]>([]);
     const [imagenesLoading, setImagenesLoading] = useState(false);
     const [loginBackgroundUploading, setLoginBackgroundUploading] = useState(false);
     const [loginBackgroundSaving, setLoginBackgroundSaving] = useState(false);
-    const [aboutImageUrl, setAboutImageUrl] = useState(ABOUT_IMAGE_SEED);
-    const [aboutImageEnabled, setAboutImageEnabled] = useState(true);
+    const [homeImageUrl, setHomeImageUrl] = useState('');
+    const [homeImageEnabled, setHomeImageEnabled] = useState(false);
+    const [homeImagePickerOpen, setHomeImagePickerOpen] = useState(false);
     const [logoUrl, setLogoUrl] = useState<string | null>(null);
     const [logoFetchDone, setLogoFetchDone] = useState(false);
     const [logoUploading, setLogoUploading] = useState(false);
@@ -191,15 +192,16 @@ export default function PaletaRutasPage() {
                 const brandingData = await obtenerBrandingPrivado();
                 const loginBackground = brandingData?.widgets?.loginBackground;
                 const loadingBackground = brandingData?.widgets?.loadingBackground;
-                const aboutImage = brandingData?.widgets?.aboutImage;
+                const homeImage = brandingData?.widgets?.homeImage;
 
                 setBranding(brandingData || {});
                 setLoginBackgroundUrl(normalizeImageRenderUrl(loginBackground?.imageUrl));
                 setLoginBackgroundEnabled(loginBackground?.enabled !== false);
                 setLoadingBackgroundUrl(normalizeImageRenderUrl(loadingBackground?.imageUrl));
                 setLoadingBackgroundEnabled(loadingBackground?.enabled !== false);
-                setAboutImageUrl(normalizeImageRenderUrl(aboutImage?.imageUrl) || ABOUT_IMAGE_SEED);
-                setAboutImageEnabled(aboutImage?.enabled !== false);
+                const configuredHomeImageUrl = normalizeConfiguredHomeImageUrl(homeImage?.imageUrl);
+                setHomeImageUrl(configuredHomeImageUrl);
+                setHomeImageEnabled(homeImage?.enabled !== false && Boolean(configuredHomeImageUrl));
             } catch (error) {
                 console.error(error);
                 toast.error('No se pudo cargar la configuracion del fondo de login.');
@@ -308,12 +310,15 @@ export default function PaletaRutasPage() {
             if (backgroundTarget === 'loading') {
                 setLoadingBackgroundUrl(uploaded.url);
                 setLoadingBackgroundEnabled(true);
+            } else if (backgroundTarget === 'home') {
+                setHomeImageUrl(uploaded.url);
+                setHomeImageEnabled(true);
             } else {
                 setLoginBackgroundUrl(uploaded.url);
                 setLoginBackgroundEnabled(true);
             }
             await cargarImagenesFondo();
-            toast.success('Imagen subida. Guarda la configuracion para publicarla en login.');
+            toast.success('Imagen subida. Guarda los fondos para publicarla.');
         } catch (error: any) {
             toast.error(error?.message || 'No se pudo subir la imagen de fondo.');
         } finally {
@@ -324,6 +329,7 @@ export default function PaletaRutasPage() {
     const guardarFondoLogin = async (): Promise<void> => {
         setLoginBackgroundSaving(true);
         try {
+            const normalizedHomeImageUrl = normalizeConfiguredHomeImageUrl(homeImageUrl.trim());
             const payload: BrandingConfig = {
                 ...(branding || {}),
                 widgets: {
@@ -336,18 +342,18 @@ export default function PaletaRutasPage() {
                         imageUrl: normalizeImageRenderUrl(loadingBackgroundUrl.trim()),
                         enabled: loadingBackgroundEnabled,
                     },
-                    aboutImage: {
-                        imageUrl: normalizeImageRenderUrl(aboutImageUrl.trim()) || ABOUT_IMAGE_SEED,
-                        enabled: aboutImageEnabled,
+                    homeImage: {
+                        imageUrl: normalizedHomeImageUrl,
+                        enabled: homeImageEnabled && Boolean(normalizedHomeImageUrl),
                     },
                 },
             };
 
             const saved = await guardarBrandingPrivado(payload);
             setBranding(saved || payload);
-            toast.success('Fondo de login guardado correctamente.');
+            toast.success('Fondos guardados correctamente.');
         } catch (error: any) {
-            toast.error(error?.message || 'No se pudo guardar el fondo de login.');
+            toast.error(error?.message || 'No se pudieron guardar los fondos.');
         } finally {
             setLoginBackgroundSaving(false);
         }
@@ -357,6 +363,11 @@ export default function PaletaRutasPage() {
         if (backgroundTarget === 'loading') {
             setLoadingBackgroundUrl(url);
             setLoadingBackgroundEnabled(true);
+            return;
+        }
+        if (backgroundTarget === 'home') {
+            setHomeImageUrl(url);
+            setHomeImageEnabled(true);
             return;
         }
 
@@ -369,6 +380,10 @@ export default function PaletaRutasPage() {
             await eliminarImagenFondo(imagen.id);
             if (loginBackgroundUrl === imagen.url) setLoginBackgroundUrl('');
             if (loadingBackgroundUrl === imagen.url) setLoadingBackgroundUrl('');
+            if (homeImageUrl === imagen.url) {
+                setHomeImageUrl('');
+                setHomeImageEnabled(false);
+            }
             await cargarImagenesFondo();
             toast.success('Imagen eliminada correctamente.');
         } catch (error: any) {
@@ -387,6 +402,7 @@ export default function PaletaRutasPage() {
 
             if (loginBackgroundUrl === imagen.url) setLoginBackgroundUrl(updated.url);
             if (loadingBackgroundUrl === imagen.url) setLoadingBackgroundUrl(updated.url);
+            if (homeImageUrl === imagen.url) setHomeImageUrl(updated.url);
             await cargarImagenesFondo();
             toast.success('Imagen reemplazada correctamente.');
         } catch (error: any) {
@@ -542,6 +558,14 @@ export default function PaletaRutasPage() {
                             >
                                 Pantalla de carga
                             </Button>
+                            <Button
+                                type="button"
+                                variant={backgroundTarget === 'home' ? 'default' : 'outline'}
+                                size="sm"
+                                onClick={() => setBackgroundTarget('home')}
+                            >
+                                Home
+                            </Button>
                             <Button asChild type="button" variant="outline" size="sm" disabled={loginBackgroundUploading}>
                                 <label className="cursor-pointer">
                                     {loginBackgroundUploading ? (
@@ -574,7 +598,7 @@ export default function PaletaRutasPage() {
                         </div>
                     </div>
                     <p className="text-sm text-muted-foreground">
-                        Parametriza imagenes para el login, la pantalla de carga y la seccion "Sobre nosotros". La imagen de "Sobre nosotros" tiene semilla <code className="text-xs font-mono">/assets/logo.png</code>.
+                        Parametriza imagenes para el login, la pantalla de carga y el Home. Si el Home no tiene imagen habilitada, esa seccion no se renderiza.
                     </p>
                 </CardHeader>
                 <CardContent className="space-y-5">
@@ -582,6 +606,7 @@ export default function PaletaRutasPage() {
                         {[
                             {
                                 title: 'Login',
+                                target: 'login' as const,
                                 url: loginBackgroundUrl,
                                 enabled: loginBackgroundEnabled,
                                 setUrl: setLoginBackgroundUrl,
@@ -590,6 +615,7 @@ export default function PaletaRutasPage() {
                             },
                             {
                                 title: 'Pantalla de carga',
+                                target: 'loading' as const,
                                 url: loadingBackgroundUrl,
                                 enabled: loadingBackgroundEnabled,
                                 setUrl: setLoadingBackgroundUrl,
@@ -597,17 +623,31 @@ export default function PaletaRutasPage() {
                                 seed: undefined as string | undefined,
                             },
                             {
-                                title: 'Imagen "Sobre nosotros"',
-                                url: aboutImageUrl,
-                                enabled: aboutImageEnabled,
-                                setUrl: setAboutImageUrl,
-                                setEnabled: setAboutImageEnabled,
-                                seed: ABOUT_IMAGE_SEED,
+                                title: 'Imagen del Home',
+                                target: 'home' as const,
+                                url: homeImageUrl,
+                                enabled: homeImageEnabled,
+                                setUrl: setHomeImageUrl,
+                                setEnabled: setHomeImageEnabled,
+                                seed: undefined as string | undefined,
                             },
                         ].map((item) => (
                             <div key={item.title} className="rounded-lg border border-border p-3 space-y-3">
                                 <div
-                                    className="flex h-44 items-center justify-center overflow-hidden rounded-md border border-border bg-muted"
+                                    className="flex h-44 cursor-pointer items-center justify-center overflow-hidden rounded-md border border-border bg-muted transition-opacity hover:opacity-90"
+                                    role="button"
+                                    tabIndex={0}
+                                    onClick={() => {
+                                        setBackgroundTarget(item.target);
+                                        setHomeImagePickerOpen(true);
+                                    }}
+                                    onKeyDown={(event) => {
+                                        if (event.key !== 'Enter' && event.key !== ' ') return;
+                                        event.preventDefault();
+                                        setBackgroundTarget(item.target);
+                                        setHomeImagePickerOpen(true);
+                                    }}
+                                    aria-label={`Seleccionar imagen para ${item.title}`}
                                     style={{
                                         backgroundImage: item.url
                                             ? `url("${normalizeImageRenderUrl(item.url)}")`
@@ -644,12 +684,26 @@ export default function PaletaRutasPage() {
                                         type="button"
                                         variant="ghost"
                                         size="sm"
-                                        onClick={() => item.setUrl('')}
+                                        onClick={() => {
+                                            item.setUrl('');
+                                            item.setEnabled(false);
+                                        }}
                                         disabled={!item.url || (!!item.seed && item.url === item.seed)}
                                     >
                                         <X className="mr-2 h-4 w-4" />
                                         Quitar
                                     </Button>
+                                    {item.title === 'Imagen del Home' && (
+                                        <Button
+                                            type="button"
+                                            size="sm"
+                                            onClick={() => void guardarFondoLogin()}
+                                            disabled={loginBackgroundSaving}
+                                        >
+                                            {loginBackgroundSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                            Guardar imagen
+                                        </Button>
+                                    )}
                                     {item.seed && item.url !== item.seed && (
                                         <Button
                                             type="button"
@@ -707,7 +761,11 @@ export default function PaletaRutasPage() {
                                                     )
                                                 }
                                             >
-                                                Usar en {backgroundTarget === 'login' ? 'login' : 'carga'}
+                                                Usar en {backgroundTarget === 'login'
+                                                    ? 'login'
+                                                    : backgroundTarget === 'loading'
+                                                        ? 'carga'
+                                                        : 'Home'}
                                             </Button>
                                             <Button asChild type="button" variant="outline" size="sm">
                                                 <label className="cursor-pointer">
@@ -735,6 +793,89 @@ export default function PaletaRutasPage() {
                     </div>
                 </CardContent>
             </Card>
+
+            <Dialog open={homeImagePickerOpen} onOpenChange={setHomeImagePickerOpen}>
+                <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle>
+                            Seleccionar imagen para {backgroundTarget === 'login'
+                                ? 'Login'
+                                : backgroundTarget === 'loading'
+                                    ? 'Pantalla de carga'
+                                    : 'Home'}
+                        </DialogTitle>
+                        <DialogDescription>
+                            Elige una imagen existente de la base de datos o sube una nueva.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                        <Button asChild type="button" disabled={loginBackgroundUploading}>
+                            <label className="cursor-pointer">
+                                {loginBackgroundUploading ? (
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                ) : (
+                                    <Upload className="mr-2 h-4 w-4" />
+                                )}
+                                {loginBackgroundUploading ? 'Subiendo...' : 'Subir nueva imagen'}
+                                <input
+                                    type="file"
+                                    accept="image/png,image/jpeg,image/jpg"
+                                    className="hidden"
+                                    onChange={(event) => {
+                                        const file = event.target.files?.[0];
+                                        event.target.value = '';
+                                        void subirFondoLogin(file);
+                                    }}
+                                />
+                            </label>
+                        </Button>
+                        <Button type="button" variant="outline" onClick={() => void cargarImagenesFondo()} disabled={imagenesLoading}>
+                            {imagenesLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            Recargar
+                        </Button>
+                    </div>
+
+                    {imagenesLoading ? (
+                        <div className="flex justify-center py-12">
+                            <Loader2 className="h-7 w-7 animate-spin text-primary" />
+                        </div>
+                    ) : imagenesFondo.length === 0 ? (
+                        <div className="rounded-md border border-dashed p-10 text-center text-muted-foreground">
+                            No hay imágenes guardadas. Puedes subir una nueva.
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                            {imagenesFondo.map((imagen) => (
+                                <button
+                                    key={imagen.id}
+                                    type="button"
+                                    className="space-y-2 rounded-lg border border-border p-3 text-left transition-colors hover:border-primary hover:bg-muted/50"
+                                    onClick={() => {
+                                        seleccionarImagenFondo(normalizeImageRenderUrl(imagen.url));
+                                        setHomeImagePickerOpen(false);
+                                    }}
+                                >
+                                    <span
+                                        className="block h-36 w-full rounded-md border border-border bg-muted bg-cover bg-center"
+                                        style={{ backgroundImage: `url("${normalizeImageRenderUrl(imagen.url)}")` }}
+                                    />
+                                    <span className="block truncate text-sm font-medium">{imagen.nombre}</span>
+                                    <span className="block text-xs text-muted-foreground">
+                                        {Math.round((imagen.size || 0) / 1024)} KB
+                                    </span>
+                                </button>
+                            ))}
+                        </div>
+                    )}
+
+                    <DialogFooter>
+                        <Button type="button" variant="outline" onClick={() => setHomeImagePickerOpen(false)}>
+                            Cerrar
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
 
             <Dialog open={paletaModalOpen} onOpenChange={(open) => { if (!open) cerrarModalPaleta(); }}>
                 <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">

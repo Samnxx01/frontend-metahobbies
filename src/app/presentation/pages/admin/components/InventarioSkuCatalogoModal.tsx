@@ -371,7 +371,7 @@ export default function InventarioSkuCatalogoModal({
                   placeholder="Escanea codigo de barras o escribe nombre/SKU"
                 />
                 {scannerActivo && (
-                  <span className="pointer-events-none absolute right-3 top-1/2 flex -translate-y-1/2 items-center gap-1 rounded-full border border-green-500 bg-green-50 px-2 py-0.5 text-[10px] font-medium text-green-700">
+                  <span className="pointer-events-none absolute right-3 top-1/2 flex -translate-y-1/2 items-center gap-1 rounded-full border border-success bg-success/10 px-2 py-0.5 text-[10px] font-medium text-success">
                     <Zap className="h-3 w-3 animate-pulse" />
                     Escaneando...
                   </span>
@@ -440,7 +440,7 @@ export default function InventarioSkuCatalogoModal({
             </div>
 
             {resultadoImport && (
-              <div className={`rounded-md border px-4 py-3 text-sm ${resultadoImport.errores.length > 0 ? 'border-amber-300 bg-amber-50 text-amber-900' : 'border-green-300 bg-green-50 text-green-900'}`}>
+              <div className={`rounded-md border px-4 py-3 text-sm ${resultadoImport.errores.length > 0 ? 'border-warning/30 bg-warning/10 text-warning' : 'border-success/30 bg-success/10 text-success'}`}>
                 <p className="font-semibold">
                   Importacion completada: {resultadoImport.insertados} de {resultadoImport.total} insertados
                 </p>

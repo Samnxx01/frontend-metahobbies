@@ -5,11 +5,11 @@ import type { ReglaDios, RecursoVista, AccionUsu, ContextoDefi } from '@/app/ser
 type Tab = 'vistas' | 'acciones' | 'contexto';
 
 const METHOD_STYLES: Record<string, string> = {
-  GET:    'bg-emerald-100 text-emerald-800 border-emerald-300',
-  POST:   'bg-blue-100 text-blue-800 border-blue-300',
-  PUT:    'bg-orange-100 text-orange-800 border-orange-300',
-  PATCH:  'bg-amber-100 text-amber-800 border-amber-300',
-  DELETE: 'bg-red-100 text-red-800 border-red-300',
+  GET:    'bg-success/10 text-success border-success/30',
+  POST:   'bg-info/10 text-info border-info/30',
+  PUT:    'bg-warning/10 text-warning border-warning/30',
+  PATCH:  'bg-warning/10 text-warning border-warning/30',
+  DELETE: 'bg-destructive/10 text-destructive border-destructive/30',
 };
 
 function methodStyle(method?: string) {
@@ -241,7 +241,7 @@ export function ReglaDetailPanel({ regla, actions, vistaSelection }: ReglaDetail
         ? 'border-destructive/50 ring-1 ring-destructive/20'
         : activa
           ? 'border-border'
-          : 'border-amber-300'
+          : 'border-warning/30'
     } bg-background shadow-sm overflow-hidden`}>
       {/* Header de la regla */}
       <div className={`flex flex-wrap items-start justify-between gap-3 px-4 py-3 ${
@@ -249,7 +249,7 @@ export function ReglaDetailPanel({ regla, actions, vistaSelection }: ReglaDetail
           ? 'bg-destructive/5'
           : activa
             ? 'bg-muted/30'
-            : 'bg-amber-50/60'
+            : 'bg-warning/60'
       }`}>
         <div className="space-y-1.5 min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
@@ -260,7 +260,7 @@ export function ReglaDetailPanel({ regla, actions, vistaSelection }: ReglaDetail
               {rid}
             </code>
             {!activa && (
-              <Badge variant="outline" className="text-[10px] border-amber-400 text-amber-700 bg-amber-50">
+              <Badge variant="outline" className="text-[10px] border-warning/50 text-warning bg-warning/10">
                 desactivada
               </Badge>
             )}
@@ -272,7 +272,7 @@ export function ReglaDetailPanel({ regla, actions, vistaSelection }: ReglaDetail
           </div>
           <div className="flex flex-wrap gap-1.5">
             {regla.securityPlatform && (
-              <Badge variant="outline" className="text-[10px] border-blue-300 text-blue-800 bg-blue-50">
+              <Badge variant="outline" className="text-[10px] border-info/30 text-info bg-info/10">
                 securityPlatform
               </Badge>
             )}

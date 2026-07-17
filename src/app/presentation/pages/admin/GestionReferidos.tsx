@@ -157,7 +157,7 @@ const ReferralChain = ({ chain }: { chain: ReferralChainNode[] }) => {
                                     ${node.isDestino
                                         ? 'bg-primary text-primary-foreground shadow-sm shadow-primary/30'
                                         : node.isOrigen
-                                            ? 'bg-green-700 text-white shadow-sm shadow-green-700/30'
+                                            ? 'bg-success text-white shadow-sm shadow-success/30'
                                             : 'bg-muted-foreground/15 text-muted-foreground'
                                     }
                                 `}
@@ -172,7 +172,7 @@ const ReferralChain = ({ chain }: { chain: ReferralChainNode[] }) => {
                                     ${node.isDestino
                                         ? 'bg-primary/5 border-primary/20'
                                         : node.isOrigen
-                                            ? 'bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800'
+                                            ? 'bg-success/10 dark:bg-success/20 border-success/20 dark:border-success'
                                             : 'bg-background border-border/50'
                                     }
                                 `}
@@ -196,7 +196,7 @@ const ReferralChain = ({ chain }: { chain: ReferralChainNode[] }) => {
                                         ${node.isDestino
                                             ? 'bg-primary/10 text-primary border-primary/25'
                                             : node.isOrigen
-                                                ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 border-green-300 dark:border-green-700'
+                                                ? 'bg-success/10 dark:bg-success/30 text-success dark:text-success border-success/30 dark:border-success'
                                                 : 'bg-muted/60 text-muted-foreground border-border/60'
                                         }
                                     `}
@@ -573,8 +573,8 @@ function GestionReferidos(): React.ReactElement {
                         <CardContent className="p-4 md:p-6">
                             <div className="space-y-2">
                                 <div className="flex items-center justify-between">
-                                    <TrendingUp className="h-5 w-5 text-green-600" />
-                                    <Badge variant="secondary" className="text-xs bg-green-100 text-green-700 border-green-200">
+                                    <TrendingUp className="h-5 w-5 text-success" />
+                                    <Badge variant="secondary" className="text-xs bg-success/10 text-success border-success/20">
                                         Comisiones
                                     </Badge>
                                 </div>
@@ -592,8 +592,8 @@ function GestionReferidos(): React.ReactElement {
                         <CardContent className="p-4 md:p-6">
                             <div className="space-y-2">
                                 <div className="flex items-center justify-between">
-                                    <Clock className="h-5 w-5 text-amber-600" />
-                                    <Badge variant="secondary" className="text-xs bg-amber-100 text-amber-700 border-amber-200">
+                                    <Clock className="h-5 w-5 text-warning" />
+                                    <Badge variant="secondary" className="text-xs bg-warning/10 text-warning border-warning/20">
                                         Pendiente
                                     </Badge>
                                 </div>
@@ -665,13 +665,13 @@ function GestionReferidos(): React.ReactElement {
                                         <p className="text-xs text-muted-foreground mb-1">Saldo Actual</p>
                                         <p className="text-sm font-bold text-primary">{formatCurrency(totales.saldoActual)}</p>
                                     </div>
-                                    <div className="p-3 rounded-lg bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-900">
+                                    <div className="p-3 rounded-lg bg-success/10 dark:bg-success/30 border border-success/20 dark:border-success">
                                         <p className="text-xs text-muted-foreground mb-1">Pagado</p>
-                                        <p className="text-sm font-semibold text-green-600">{formatCurrency(totales.totalPagado)}</p>
+                                        <p className="text-sm font-semibold text-success">{formatCurrency(totales.totalPagado)}</p>
                                     </div>
-                                    <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900">
+                                    <div className="p-3 rounded-lg bg-warning/10 dark:bg-warning/30 border border-warning/20 dark:border-warning">
                                         <p className="text-xs text-muted-foreground mb-1">Pendiente</p>
-                                        <p className="text-sm font-semibold text-amber-600">{formatCurrency(totales.totalPendiente)}</p>
+                                        <p className="text-sm font-semibold text-warning">{formatCurrency(totales.totalPendiente)}</p>
                                     </div>
                                 </div>
 
@@ -702,8 +702,8 @@ function GestionReferidos(): React.ReactElement {
                                                                             variant="secondary"
                                                                             className={
                                                                                 voucher.status === 'pagado'
-                                                                                    ? 'bg-green-100 text-green-700 border-green-300 dark:bg-green-950 dark:text-green-400'
-                                                                                    : 'bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-950 dark:text-amber-400'
+                                                                                    ? 'bg-success/10 text-success border-success/30 dark:bg-success dark:text-success'
+                                                                                    : 'bg-warning/10 text-warning border-warning/30 dark:bg-warning dark:text-warning'
                                                                             }
                                                                         >
                                                                             {voucher.status === 'pagado' ? (
@@ -854,8 +854,8 @@ function GestionReferidos(): React.ReactElement {
                                     {/* Flujo puntual generado */}
                                     <div className="space-y-4">
                                         <div className="flex items-start gap-4">
-                                            <div className="mt-1 bg-green-100 p-2 rounded-full">
-                                                <ArrowUpRight className="w-4 h-4 text-green-700" />
+                                            <div className="mt-1 bg-success/10 p-2 rounded-full">
+                                                <ArrowUpRight className="w-4 h-4 text-success" />
                                             </div>
                                             <div>
                                                 <p className="text-xs text-muted-foreground font-semibold uppercase">
@@ -880,8 +880,8 @@ function GestionReferidos(): React.ReactElement {
                                         <div className="pl-5 ml-4 border-l-2 border-dashed h-4 border-muted-foreground/30" />
 
                                         <div className="flex items-start gap-4">
-                                            <div className="mt-1 bg-blue-100 p-2 rounded-full">
-                                                <ArrowDownLeft className="w-4 h-4 text-blue-700" />
+                                            <div className="mt-1 bg-info/10 p-2 rounded-full">
+                                                <ArrowDownLeft className="w-4 h-4 text-info" />
                                             </div>
                                             <div>
                                                 <p className="text-xs text-muted-foreground font-semibold uppercase">

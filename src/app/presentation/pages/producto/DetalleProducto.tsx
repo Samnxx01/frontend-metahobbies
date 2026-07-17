@@ -240,7 +240,7 @@ export default function DetalleProducto(): React.ReactElement {
                 onClick={() => { void handleAddToCart(); }}
                 size="lg"
                 className={`flex-1 py-2 text-base font-semibold transition-all duration-300 ${
-                  isAdded ? 'bg-green-600 hover:bg-green-700 text-white' : ''
+                  isAdded ? 'bg-success hover:bg-success text-white' : ''
                 }`}
                 disabled={isAdded || isAdding}
               >

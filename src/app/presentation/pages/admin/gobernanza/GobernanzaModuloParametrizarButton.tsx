@@ -124,7 +124,7 @@ export function GobernanzaModuloParametrizarButton({
             </div>
             <div className="flex min-w-0 flex-1 flex-col items-end gap-1.5 sm:flex-none">
               {parametrizar.guardarBloqueadoPor ? (
-                <p className="max-w-sm text-right text-[11px] text-amber-800">{parametrizar.guardarBloqueadoPor}</p>
+                <p className="max-w-sm text-right text-[11px] text-warning">{parametrizar.guardarBloqueadoPor}</p>
               ) : null}
               <div className="flex gap-2">
                 <Button type="button" variant="outline" onClick={() => setOpen(false)}>

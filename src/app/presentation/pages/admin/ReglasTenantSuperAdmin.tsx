@@ -20,7 +20,7 @@ export function ReglasTenantSuperAdminOperaciones() {
     <Card>
       <CardHeader className="space-y-1">
         <CardTitle className="flex items-center gap-2 text-lg">
-          <Crown className="h-5 w-5 text-amber-600" />
+          <Crown className="h-5 w-5 text-warning" />
           Reglas tenant super admin (DIOS)
         </CardTitle>
         <CardDescription>

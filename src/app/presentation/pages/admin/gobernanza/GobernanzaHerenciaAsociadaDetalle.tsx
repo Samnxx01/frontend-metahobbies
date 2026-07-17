@@ -115,7 +115,7 @@ export const GobernanzaHerenciaAsociadaDetalle: React.FC<{ endpointId: string }>
     const bloquePerfil = (p: Record<string, unknown> | null | undefined, titulo: string) =>
       p && Object.keys(p).length ? (
         <div className="rounded border border-border bg-background/90 px-2 py-1.5">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-violet-700">{titulo}</p>
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-info">{titulo}</p>
           <p className="font-medium text-foreground">
             {[p.nombre, p.apellido].filter(Boolean).join(' ') || '—'}
           </p>
@@ -132,12 +132,12 @@ export const GobernanzaHerenciaAsociadaDetalle: React.FC<{ endpointId: string }>
     const renderVistaItem = (vista: VistaItem) => (
       <label
         key={vista.id}
-        className={`flex items-start gap-2 rounded border px-2 py-1.5 text-xs ${puedeSeleccionarVista ? 'cursor-pointer' : ''} ${puedeSeleccionarVista && seleccionSet.has(vista.id) ? 'border-rose-300 bg-rose-100' : 'border-border/80 bg-muted/50'}`}
+        className={`flex items-start gap-2 rounded border px-2 py-1.5 text-xs ${puedeSeleccionarVista ? 'cursor-pointer' : ''} ${puedeSeleccionarVista && seleccionSet.has(vista.id) ? 'border-destructive/30 bg-destructive/10' : 'border-border/80 bg-muted/50'}`}
       >
         {puedeSeleccionarVista && (
           <input
             type="checkbox"
-            className="mt-0.5 shrink-0 accent-rose-600"
+            className="mt-0.5 shrink-0 accent-destructive"
             checked={seleccionSet.has(vista.id)}
             onChange={() => toggleVistaDesactivar(vista.id)}
           />
@@ -150,7 +150,7 @@ export const GobernanzaHerenciaAsociadaDetalle: React.FC<{ endpointId: string }>
     );
 
     return (
-      <div className="md:col-span-2 rounded-lg border border-rose-100 bg-rose-50/50 p-3">
+      <div className="md:col-span-2 rounded-lg border border-destructive/10 bg-destructive/50 p-3">
         <div className="mb-3 flex flex-wrap gap-2">
           <Badge variant="outline">Vistas: {vistasDetalle.length}</Badge>
           <Badge variant="outline">Acciones: {accionesDetalle.length}</Badge>
@@ -170,7 +170,7 @@ export const GobernanzaHerenciaAsociadaDetalle: React.FC<{ endpointId: string }>
             <span className="font-medium text-foreground">Jerarquia:</span> {suiteSummary}
           </div>
         </div>
-        <div className="mb-3 grid gap-3 rounded-md border border-violet-200 bg-violet-50/50 p-3 text-xs md:grid-cols-2">
+        <div className="mb-3 grid gap-3 rounded-md border border-info/20 bg-info/50 p-3 text-xs md:grid-cols-2">
           <div>
             <p className="mb-1 font-semibold text-foreground">Usuario asociado a la herencia (RegisUsu)</p>
             {uDoc?._id ? (
@@ -260,7 +260,7 @@ export const GobernanzaHerenciaAsociadaDetalle: React.FC<{ endpointId: string }>
                 {/* Vistas sin suite */}
                 {sinSuite.length > 0 && (
                   <div>
-                    <p className="mb-1 rounded bg-amber-50 px-2 py-0.5 text-xs font-bold text-amber-700">Sin suite asignada</p>
+                    <p className="mb-1 rounded bg-warning/10 px-2 py-0.5 text-xs font-bold text-warning">Sin suite asignada</p>
                     <div className="ml-2 space-y-1">
                       {sinSuite.map(renderVistaItem)}
                     </div>
@@ -273,7 +273,7 @@ export const GobernanzaHerenciaAsociadaDetalle: React.FC<{ endpointId: string }>
                 <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
-                    className="text-xs text-rose-700 underline"
+                    className="text-xs text-destructive underline"
                     onClick={seleccionarTodasVistasDesactivar}
                   >
                     Seleccionar todas
@@ -283,19 +283,19 @@ export const GobernanzaHerenciaAsociadaDetalle: React.FC<{ endpointId: string }>
                   </button>
                 </div>
                 {seleccionadas.length > 0 ? (
-                  <div className="rounded border border-amber-200 bg-amber-50 px-2 py-1.5">
-                    <p className="text-xs font-medium text-amber-800">
+                  <div className="rounded border border-warning/20 bg-warning/10 px-2 py-1.5">
+                    <p className="text-xs font-medium text-warning">
                       {endpointId === 'perm-admin-tenant-global-eliminar'
                         ? `Se enviará PATCH para quitar ${seleccionadas.length} vista${seleccionadas.length === 1 ? '' : 's'} de la herencia (no borra el documento completo).`
                         : `Se enviará PATCH con vistaIds (${seleccionadas.length} vista${seleccionadas.length === 1 ? '' : 's'}).`}
                     </p>
                   </div>
                 ) : endpointId === 'perm-admin-tenant-global-eliminar' ? (
-                  <p className="text-xs font-medium text-rose-600">
+                  <p className="text-xs font-medium text-destructive">
                     Sin vistas marcadas: eliminación definitiva del registro (DELETE …/force).
                   </p>
                 ) : (
-                  <p className="text-xs font-medium text-rose-600">
+                  <p className="text-xs font-medium text-destructive">
                     Sin vistas marcadas: se desactiva la herencia completa (DELETE del documento).
                   </p>
                 )}

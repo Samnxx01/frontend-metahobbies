@@ -113,8 +113,8 @@ export function OrganigramaColumn({
         mod === 1
             ? 'border-l-primary bg-primary/[0.04]'
             : mod === 2
-              ? 'border-l-amber-500/70 bg-amber-500/[0.04]'
-              : 'border-l-violet-500/70 bg-violet-500/[0.03]';
+              ? 'border-l-amber-500/70 bg-warning/[0.04]'
+              : 'border-l-violet-500/70 bg-info/[0.03]';
 
     return (
         <div className={`relative overflow-hidden rounded-xl border border-border/90 shadow-sm ${accent} border-l-[4px]`}>

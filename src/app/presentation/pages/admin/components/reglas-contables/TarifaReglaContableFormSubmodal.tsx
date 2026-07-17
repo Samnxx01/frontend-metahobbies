@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { Pencil, Plus } from 'lucide-react';
 import { toast } from 'react-toastify';
 import reglasContablesService, { type TarifaReglaContable } from '@/app/services/reglasContablesService';
 import { Button } from '@/components/ui/button';
@@ -8,9 +7,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import InventarioCodigoPresetField from '../inventario-ajuste/InventarioCodigoPresetField';
-import { useTiposReglaContable } from '@/app/hooks/useTiposReglaContable';
-import { PRESETS_TARIFA_REGLA } from './tarifaReglaContableConstants';
+import { useAmbitosReglaContable } from '@/app/hooks/useAmbitosReglaContable';
 import { reglasContablesUi } from './reglasContablesUi';
 
 type Props = {
@@ -27,13 +24,12 @@ type Draft = {
   nombre: string;
   descripcion: string;
   valor: string;
-  tipoReglaCodigo: string;
-  orden: string;
+  ambitoCodigo: string;
   estado: boolean;
 };
 
 const inicial: Draft = {
-  codigo: '', nombre: '', descripcion: '', valor: '0', tipoReglaCodigo: '', orden: '0', estado: true,
+  codigo: '', nombre: '', descripcion: '', valor: '0', ambitoCodigo: '', estado: true,
 };
 
 const errMsg = (e: unknown, f: string) => (e instanceof Error ? e.message.replace(/^\[\d+\]\s*/, '') : f);
@@ -44,7 +40,7 @@ export default function TarifaReglaContableFormSubmodal({
   const esEdicion = Boolean(registro?.codigo);
   const [draft, setDraft] = useState<Draft>(inicial);
   const [submitting, setSubmitting] = useState(false);
-  const { tipos } = useTiposReglaContable({ refreshKey: tiposRefreshKey });
+  const { ambitos } = useAmbitosReglaContable({ refreshKey: tiposRefreshKey });
 
   useEffect(() => {
     if (!open) return;
@@ -55,8 +51,7 @@ export default function TarifaReglaContableFormSubmodal({
             nombre: registro.nombre,
             descripcion: registro.descripcion ?? '',
             valor: String(registro.valor ?? 0),
-            tipoReglaCodigo: registro.tipoReglaCodigo ?? '',
-            orden: String(registro.orden ?? 0),
+            ambitoCodigo: registro.ambitoCodigo ?? '',
             estado: registro.estado !== false,
           }
         : inicial
@@ -79,8 +74,7 @@ export default function TarifaReglaContableFormSubmodal({
         nombre: draft.nombre.trim(),
         descripcion: draft.descripcion.trim(),
         valor,
-        tipoReglaCodigo: draft.tipoReglaCodigo.trim(),
-        orden: Number(draft.orden) || 0,
+        ambitoCodigo: draft.ambitoCodigo.trim(),
         estado: draft.estado,
       };
       if (esEdicion && registro) {
@@ -105,33 +99,20 @@ export default function TarifaReglaContableFormSubmodal({
         <DialogHeader>
           <DialogTitle>{esEdicion ? 'Editar tarifa' : 'Nueva tarifa'}</DialogTitle>
           <DialogDescription className={reglasContablesUi.description}>
-            Porcentajes predefinidos (IVA 19%, margen 30%, etc.) asociables a un tipo de regla.
+            Porcentajes predefinidos (IVA 19%, margen 30%, etc.) asociables a un ámbito del catálogo.
           </DialogDescription>
         </DialogHeader>
         <div className={reglasContablesUi.section}>
-          {!esEdicion ? (
-            <InventarioCodigoPresetField
+          <div className="space-y-2">
+            <Label>Código</Label>
+            <Input
+              className={reglasContablesUi.input}
               value={draft.codigo}
-              onChange={(c) => setDraft((p) => ({ ...p, codigo: c }))}
-              presets={PRESETS_TARIFA_REGLA}
-              disabled={submitting || saving}
-              label="Código"
-              onPresetPick={(p) =>
-                setDraft((prev) => ({
-                  ...prev,
-                  codigo: p.codigo,
-                  nombre: p.nombre,
-                  valor: String(p.valor),
-                  tipoReglaCodigo: p.tipoReglaCodigo ?? '',
-                }))
-              }
+              onChange={(e) => setDraft((p) => ({ ...p, codigo: e.target.value }))}
+              placeholder="Ej: IVA_19"
+              disabled={esEdicion || submitting || saving}
             />
-          ) : (
-            <div className="space-y-2">
-              <Label>Código</Label>
-              <Input className={reglasContablesUi.input} value={draft.codigo} disabled />
-            </div>
-          )}
+          </div>
           <div className="space-y-2">
             <Label>Nombre</Label>
             <Input className={reglasContablesUi.input} value={draft.nombre} onChange={(e) => setDraft((p) => ({ ...p, nombre: e.target.value }))} />
@@ -142,18 +123,24 @@ export default function TarifaReglaContableFormSubmodal({
               <Input type="number" min={0} max={100} step="0.01" className={reglasContablesUi.input} value={draft.valor} onChange={(e) => setDraft((p) => ({ ...p, valor: e.target.value }))} />
             </div>
             <div className="space-y-2">
-              <Label>Tipo de regla (opcional)</Label>
-              <Select value={draft.tipoReglaCodigo || '__NINGUNO__'} onValueChange={(v) => setDraft((p) => ({ ...p, tipoReglaCodigo: v === '__NINGUNO__' ? '' : v }))}>
-                <SelectTrigger className={reglasContablesUi.input}><SelectValue placeholder="Cualquiera" /></SelectTrigger>
+              <Label>Ámbito (catálogo)</Label>
+              <Select value={draft.ambitoCodigo || '__NINGUNO__'} onValueChange={(v) => setDraft((p) => ({ ...p, ambitoCodigo: v === '__NINGUNO__' ? '' : v }))}>
+                <SelectTrigger className={reglasContablesUi.input}><SelectValue placeholder="Cualquier ámbito" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="__NINGUNO__">Cualquier tipo</SelectItem>
-                  {tipos.map((t) => (
-                    <SelectItem key={t.codigo} value={t.codigo}>{t.nombre}</SelectItem>
+                  <SelectItem value="__NINGUNO__">Cualquier ámbito</SelectItem>
+                  {ambitos.map((a) => (
+                    <SelectItem key={a.codigo} value={a.codigo}>{a.codigo} — {a.nombre}</SelectItem>
                   ))}
+                  {draft.ambitoCodigo && !ambitos.some((a) => a.codigo === draft.ambitoCodigo) && (
+                    <SelectItem value={draft.ambitoCodigo}>{draft.ambitoCodigo} — (no está en el catálogo)</SelectItem>
+                  )}
                 </SelectContent>
               </Select>
             </div>
           </div>
+          <p className="text-xs text-muted-foreground">
+            Relación dinámica con el catálogo de ámbitos (ambitoreglacontables).
+          </p>
           <div className="flex items-center gap-2">
             <Checkbox id="tarifa-activa" checked={draft.estado} onCheckedChange={(c) => setDraft((p) => ({ ...p, estado: c === true }))} />
             <Label htmlFor="tarifa-activa" className="font-normal cursor-pointer">Activa</Label>

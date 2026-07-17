@@ -19,7 +19,7 @@ export function EndpointCapabilityInventory({
     <div
       className={cn(
         'rounded-lg border border-border bg-card px-3 py-2 text-xs',
-        capabilities.diosSoloLectura && 'border-amber-200 bg-amber-50/60 dark:bg-amber-950/20',
+        capabilities.diosSoloLectura && 'border-warning/20 bg-warning/60 dark:bg-warning/20',
         className
       )}
     >
@@ -40,7 +40,7 @@ export function EndpointCapabilityInventory({
         ))}
       </ul>
       {capabilities.diosSoloLectura ? (
-        <p className="mt-2 text-[11px] font-medium text-amber-800 dark:text-amber-200">
+        <p className="mt-2 text-[11px] font-medium text-warning dark:text-warning">
           Modo solo lectura por jerarquía (corporativo en counters): diseño y ejecución bloqueados; puede revisar el
           inventario.
         </p>

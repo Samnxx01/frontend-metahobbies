@@ -517,7 +517,7 @@ export function GobernanzaModuloConfigView({ className }: GobernanzaModuloConfig
                         {filtrosCount} filtro(s) parametrizados
                       </p>
                     ) : item.registradoEnBd ? (
-                      <p className="mt-2 text-[11px] text-amber-700 dark:text-amber-400">
+                      <p className="mt-2 text-[11px] text-warning dark:text-warning">
                         Sin alcances parametrizados: el menú dinámico no se renderiza hasta autorizar.
                       </p>
                     ) : null}

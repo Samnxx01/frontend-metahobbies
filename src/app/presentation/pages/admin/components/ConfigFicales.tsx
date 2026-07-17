@@ -463,7 +463,7 @@ export default function ConfigFicales({
         ) : null}
 
         {!catalogosListos ? (
-          <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-900 dark:text-amber-100">
+          <div className="rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-warning dark:text-warning">
             Parametriza al menos un tipo de libro, una periodicidad y una moneda activa antes de crear o guardar libros fiscales.
           </div>
         ) : null}

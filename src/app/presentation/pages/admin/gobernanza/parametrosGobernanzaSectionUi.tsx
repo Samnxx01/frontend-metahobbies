@@ -3,10 +3,10 @@ import { Building2, KeyRound, ShieldCheck } from 'lucide-react';
 import type { EndpointSection, HttpMethod } from './parametrosGobernanzaTypes';
 
 export const METHOD_STYLE: Record<HttpMethod, string> = {
-  GET: 'bg-sky-50 text-sky-700 border-sky-200',
-  POST: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  PUT: 'bg-amber-50 text-amber-700 border-amber-200',
-  DELETE: 'bg-red-50 text-red-600 border-red-200',
+  GET: 'bg-info/10 text-info border-info/20',
+  POST: 'bg-success/10 text-success border-success/20',
+  PUT: 'bg-warning/10 text-warning border-warning/20',
+  DELETE: 'bg-destructive/10 text-destructive border-destructive/20',
 };
 
 export const SECTION_META: Record<

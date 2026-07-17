@@ -276,7 +276,7 @@ export default function CuentaBancariaForm({ token }: CuentaBancariaFormProps): 
                                                     </span>
                                                 )}
                                                 {cuenta.permite_pago_automatico && (
-                                                    <span className="text-xs px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 font-medium">
+                                                    <span className="text-xs px-2 py-1 rounded-full bg-success/10 text-success font-medium">
                                                         Pago automático
                                                     </span>
                                                 )}

@@ -77,10 +77,10 @@ const formatDate = (value: string | null): string => {
 const estadoBadge = (estado: string): React.ReactNode => {
     const normalized = String(estado || '').toLowerCase();
     if (normalized === 'procesada') {
-        return <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100">Procesada</Badge>;
+        return <Badge className="bg-success/10 text-success hover:bg-success/10">Procesada</Badge>;
     }
     if (normalized === 'pendiente') {
-        return <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100">Pendiente</Badge>;
+        return <Badge className="bg-warning/10 text-warning hover:bg-warning/10">Pendiente</Badge>;
     }
     return <Badge variant="outline">{estado || '—'}</Badge>;
 };
@@ -90,7 +90,7 @@ const reglaBadge = (producto: PipelineBProductoAgregado | null | undefined): Rea
         return <Badge variant="outline">Sin regla</Badge>;
     }
     return (
-        <Badge className="bg-violet-100 text-violet-800 hover:bg-violet-100">
+        <Badge className="bg-info/10 text-info hover:bg-info/10">
             {producto.reglaCodigo}
             {producto.reglaValor != null ? ` · ${producto.reglaValor}%` : ''}
         </Badge>
@@ -154,10 +154,10 @@ const TablaProductosAgregados = ({
                             {conRegla ? (
                                 <>
                                     <TableCell className="text-right">{formatPesos(row?.baseComisionableTotal ?? 0)}</TableCell>
-                                    <TableCell className="text-right font-semibold text-violet-800">
+                                    <TableCell className="text-right font-semibold text-info">
                                         {formatPesos(row?.comisionPotencialTotal ?? 0)}
                                     </TableCell>
-                                    <TableCell className="text-right text-emerald-700">
+                                    <TableCell className="text-right text-success">
                                         {formatPesos(row?.comisionMaterializadaTotal ?? 0)}
                                     </TableCell>
                                 </>
@@ -293,7 +293,7 @@ export default function DashboardPipelineBComision(): React.ReactElement {
         <div className="space-y-6">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div className="space-y-1">
-                    <div className="inline-flex items-center gap-2 rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-xs font-medium uppercase tracking-[0.18em] text-violet-700">
+                    <div className="inline-flex items-center gap-2 rounded-full border border-info/20 bg-info/10 px-3 py-1 text-xs font-medium uppercase tracking-[0.18em] text-info">
                         <GitBranch className="h-3.5 w-3.5" />
                         Flujo GET
                     </div>
@@ -305,7 +305,7 @@ export default function DashboardPipelineBComision(): React.ReactElement {
 
                 <div className="flex flex-wrap items-center gap-2">
                     <Button
-                        className="gap-2 bg-violet-600 text-white hover:bg-violet-700"
+                        className="gap-2 bg-info text-white hover:bg-info"
                         onClick={() => setReencolarModalOpen(true)}
                         disabled={loading || reencolando}
                     >
@@ -338,43 +338,43 @@ export default function DashboardPipelineBComision(): React.ReactElement {
                         <CardTitle className="text-2xl">{kpi?.comisionesRegistradas ?? '—'}</CardTitle>
                     </CardHeader>
                 </Card>
-                <Card className="border-emerald-200 bg-emerald-50/60 shadow-sm">
+                <Card className="border-success/20 bg-success/60 shadow-sm">
                     <CardHeader className="pb-2">
                         <CardDescription>Procesadas</CardDescription>
-                        <CardTitle className="flex items-center justify-between text-2xl text-emerald-800">
+                        <CardTitle className="flex items-center justify-between text-2xl text-success">
                             {kpi?.comisionesProcesadas ?? '—'}
-                            <TrendingUp className="h-5 w-5 text-emerald-500" />
+                            <TrendingUp className="h-5 w-5 text-success" />
                         </CardTitle>
                     </CardHeader>
                 </Card>
-                <Card className="border-amber-200 bg-amber-50/60 shadow-sm">
+                <Card className="border-warning/20 bg-warning/60 shadow-sm">
                     <CardHeader className="pb-2">
                         <CardDescription>Pendientes</CardDescription>
-                        <CardTitle className="flex items-center justify-between text-2xl text-amber-800">
+                        <CardTitle className="flex items-center justify-between text-2xl text-warning">
                             {kpi?.comisionesPendientes ?? '—'}
-                            <Clock3 className="h-5 w-5 text-amber-500" />
+                            <Clock3 className="h-5 w-5 text-warning" />
                         </CardTitle>
                     </CardHeader>
                 </Card>
-                <Card className="border-sky-200 bg-sky-50/60 shadow-sm">
+                <Card className="border-info/20 bg-info/60 shadow-sm">
                     <CardHeader className="pb-2">
                         <CardDescription>Base comisionable</CardDescription>
-                        <CardTitle className="text-xl text-sky-900">
+                        <CardTitle className="text-xl text-info">
                             {formatPesos(resumenProductosConRegla.base)}
                         </CardTitle>
-                        <p className="text-xs text-sky-700/80">
+                        <p className="text-xs text-info/80">
                             Suma productos con regla · {kpiProductos?.lineasConRegla ?? 0} línea(s)
                         </p>
                     </CardHeader>
                 </Card>
-                <Card className="border-violet-200 bg-violet-50/60 shadow-sm">
+                <Card className="border-info/20 bg-info/60 shadow-sm">
                     <CardHeader className="pb-2">
                         <CardDescription>Monto comisiones</CardDescription>
-                        <CardTitle className="flex items-center justify-between text-xl text-violet-900">
+                        <CardTitle className="flex items-center justify-between text-xl text-info">
                             {formatPesos(resumenProductosConRegla.comision)}
-                            <CircleDollarSign className="h-5 w-5 text-violet-500" />
+                            <CircleDollarSign className="h-5 w-5 text-info" />
                         </CardTitle>
-                        <p className="text-xs text-violet-700/80">
+                        <p className="text-xs text-info/80">
                             Potencial árbol · Materializada: {formatPesos(resumenProductosConRegla.materializada)}
                         </p>
                     </CardHeader>
@@ -382,67 +382,67 @@ export default function DashboardPipelineBComision(): React.ReactElement {
             </div>
 
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                <Card className="border-violet-200 bg-violet-50/50 shadow-sm">
+                <Card className="border-info/20 bg-info/50 shadow-sm">
                     <CardHeader className="pb-2">
                         <CardDescription className="flex items-center gap-2">
                             <Package className="h-4 w-4" />
                             Productos con regla
                         </CardDescription>
-                        <CardTitle className="text-2xl text-violet-900">
+                        <CardTitle className="text-2xl text-info">
                             {kpiProductos?.productosUnicosConRegla ?? '—'}
                         </CardTitle>
                     </CardHeader>
-                    <CardContent className="pt-0 text-xs text-violet-800">
+                    <CardContent className="pt-0 text-xs text-info">
                         {kpiProductos?.lineasConRegla ?? 0} líneas · {formatPesos(kpiProductos?.montoCobradoConRegla ?? 0)} cobrado
                     </CardContent>
                 </Card>
-                <Card className="border-emerald-200 bg-emerald-50/50 shadow-sm">
+                <Card className="border-success/20 bg-success/50 shadow-sm">
                     <CardHeader className="pb-2">
                         <CardDescription className="flex items-center gap-2">
                             <CheckCircle2 className="h-4 w-4" />
                             Comisión potencial
                         </CardDescription>
-                        <CardTitle className="text-xl text-emerald-900">
+                        <CardTitle className="text-xl text-success">
                             {kpiProductos ? formatPesos(kpiProductos.comisionPotencialTotal) : '—'}
                         </CardTitle>
                     </CardHeader>
-                    <CardContent className="pt-0 text-xs text-emerald-800">
+                    <CardContent className="pt-0 text-xs text-success">
                         Suma árbol sobre base regla producto.
                         {' '}
                         Materializada: {formatPesos(kpiProductos?.comisionMaterializadaTotal ?? 0)}
                     </CardContent>
                 </Card>
-                <Card className="border-amber-200 bg-amber-50/50 shadow-sm">
+                <Card className="border-warning/20 bg-warning/50 shadow-sm">
                     <CardHeader className="pb-2">
                         <CardDescription className="flex items-center gap-2">
                             <Ban className="h-4 w-4" />
                             Sin regla de comisión
                         </CardDescription>
-                        <CardTitle className="text-2xl text-amber-900">
+                        <CardTitle className="text-2xl text-warning">
                             {kpiProductos?.productosUnicosSinRegla ?? '—'}
                         </CardTitle>
                     </CardHeader>
-                    <CardContent className="pt-0 text-xs text-amber-800">
+                    <CardContent className="pt-0 text-xs text-warning">
                         {kpiProductos?.lineasSinRegla ?? 0} líneas · {formatPesos(kpiProductos?.montoCobradoSinRegla ?? 0)} cobrado
                     </CardContent>
                 </Card>
-                <Card className="border-sky-200 bg-sky-50/50 shadow-sm">
+                <Card className="border-info/20 bg-info/50 shadow-sm">
                     <CardHeader className="pb-2">
                         <CardDescription>Ventas en flujo Pipeline B</CardDescription>
-                        <CardTitle className="text-2xl text-sky-900">
+                        <CardTitle className="text-2xl text-info">
                             {kpiProductos?.ventasEnFlujo ?? '—'}
                         </CardTitle>
                     </CardHeader>
-                    <CardContent className="pt-0 text-xs text-sky-800">
+                    <CardContent className="pt-0 text-xs text-info">
                         Confirmadas con origen generador enlace ventas
                     </CardContent>
                 </Card>
             </div>
 
             <div className="grid gap-6 xl:grid-cols-2">
-                <Card className="border-emerald-200/80 shadow-sm">
+                <Card className="border-success/80 shadow-sm">
                     <CardHeader>
-                        <CardTitle className="flex items-center gap-2 text-emerald-900">
+                        <CardTitle className="flex items-center gap-2 text-success">
                             <CheckCircle2 className="h-5 w-5" />
                             Productos con regla de comisión
                         </CardTitle>
@@ -465,9 +465,9 @@ export default function DashboardPipelineBComision(): React.ReactElement {
                     </CardContent>
                 </Card>
 
-                <Card className="border-amber-200/80 shadow-sm">
+                <Card className="border-warning/80 shadow-sm">
                     <CardHeader>
-                        <CardTitle className="flex items-center gap-2 text-amber-900">
+                        <CardTitle className="flex items-center gap-2 text-warning">
                             <Ban className="h-5 w-5" />
                             Productos sin regla aplicable
                         </CardTitle>
@@ -534,9 +534,9 @@ export default function DashboardPipelineBComision(): React.ReactElement {
                                     <div className="flex flex-wrap items-center gap-2 text-sm">
                                         <Badge variant="outline">{formatPesos(venta?.montoVenta ?? 0, venta?.moneda)}</Badge>
                                         {venta?.comisionMaterializada ? (
-                                            <Badge className="bg-emerald-100 text-emerald-800">Comisión registrada</Badge>
+                                            <Badge className="bg-success/10 text-success">Comisión registrada</Badge>
                                         ) : (
-                                            <Badge className="bg-amber-100 text-amber-800">Comisión pendiente</Badge>
+                                            <Badge className="bg-warning/10 text-warning">Comisión pendiente</Badge>
                                         )}
                                     </div>
                                 </div>
@@ -564,12 +564,12 @@ export default function DashboardPipelineBComision(): React.ReactElement {
                                                         </TableCell>
                                                         <TableCell>
                                                             {linea?.reglaCodigo ? (
-                                                                <span className="text-xs font-medium text-violet-800">
+                                                                <span className="text-xs font-medium text-info">
                                                                     {linea.reglaCodigo}
                                                                     {linea.reglaValor != null ? ` (${linea.reglaValor}%)` : ''}
                                                                 </span>
                                                             ) : (
-                                                                <span className="text-xs text-amber-700">{linea?.motivoSinRegla || 'Sin regla'}</span>
+                                                                <span className="text-xs text-warning">{linea?.motivoSinRegla || 'Sin regla'}</span>
                                                             )}
                                                         </TableCell>
                                                         <TableCell className="text-right">{linea?.cantidad ?? 0}</TableCell>
@@ -582,7 +582,7 @@ export default function DashboardPipelineBComision(): React.ReactElement {
                                                         <TableCell className="text-right">
                                                             {linea?.aplicaComision ? (
                                                                 <div>
-                                                                    <div className="font-medium text-violet-800">
+                                                                    <div className="font-medium text-info">
                                                                         {formatPesos(linea?.comisionPotencial ?? 0, linea?.moneda)}
                                                                     </div>
                                                                     {(linea?.desgloseArbolPorGen?.length ?? 0) > 0 ? (
@@ -598,9 +598,9 @@ export default function DashboardPipelineBComision(): React.ReactElement {
                                                         <TableCell>
                                                             {linea?.aplicaComision ? (
                                                                 (linea?.comisionMaterializada ?? 0) > 0 ? (
-                                                                    <Badge className="bg-emerald-100 text-emerald-800">Materializada</Badge>
+                                                                    <Badge className="bg-success/10 text-success">Materializada</Badge>
                                                                 ) : (
-                                                                    <Badge className="bg-amber-100 text-amber-800">Pendiente</Badge>
+                                                                    <Badge className="bg-warning/10 text-warning">Pendiente</Badge>
                                                                 )
                                                             ) : (
                                                                 <Badge variant="outline">No aplica</Badge>
@@ -617,8 +617,8 @@ export default function DashboardPipelineBComision(): React.ReactElement {
 
                                 <div className="flex flex-wrap gap-4 border-t border-slate-100 bg-white px-4 py-2 text-xs text-slate-600">
                                     <span>Total cobrado: <strong>{formatPesos(venta?.totales?.montoCobrado ?? 0, venta?.moneda)}</strong></span>
-                                    <span>Comisión potencial: <strong className="text-violet-800">{formatPesos(venta?.totales?.comisionPotencial ?? 0, venta?.moneda)}</strong></span>
-                                    <span>Materializada: <strong className="text-emerald-700">{formatPesos(venta?.totales?.comisionMaterializada ?? 0, venta?.moneda)}</strong></span>
+                                    <span>Comisión potencial: <strong className="text-info">{formatPesos(venta?.totales?.comisionPotencial ?? 0, venta?.moneda)}</strong></span>
+                                    <span>Materializada: <strong className="text-success">{formatPesos(venta?.totales?.comisionMaterializada ?? 0, venta?.moneda)}</strong></span>
                                 </div>
                             </div>
                             );
@@ -658,7 +658,7 @@ export default function DashboardPipelineBComision(): React.ReactElement {
                                     </div>
                                     <div className="h-2 overflow-hidden rounded-full bg-slate-100">
                                         <div
-                                            className="h-full rounded-full bg-gradient-to-r from-violet-500 to-emerald-500 transition-all"
+                                            className="h-full rounded-full bg-gradient-to-r from-info to-success transition-all"
                                             style={{ width: `${Math.max((paso.count / maxFlujoCount) * 100, paso.count > 0 ? 8 : 0)}%` }}
                                         />
                                     </div>
@@ -683,24 +683,24 @@ export default function DashboardPipelineBComision(): React.ReactElement {
                             <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Total</p>
                             <p className="mt-2 text-2xl font-semibold text-slate-900">{funnel?.atribuciones.total ?? 0}</p>
                         </div>
-                        <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4">
-                            <p className="text-xs uppercase tracking-[0.16em] text-emerald-700">Resueltas</p>
-                            <p className="mt-2 text-2xl font-semibold text-emerald-900">{funnel?.atribuciones.resolved ?? 0}</p>
+                        <div className="rounded-2xl border border-success/20 bg-success/70 p-4">
+                            <p className="text-xs uppercase tracking-[0.16em] text-success">Resueltas</p>
+                            <p className="mt-2 text-2xl font-semibold text-success">{funnel?.atribuciones.resolved ?? 0}</p>
                         </div>
-                        <div className="rounded-2xl border border-sky-200 bg-sky-50/70 p-4">
-                            <p className="text-xs uppercase tracking-[0.16em] text-sky-700">Activas</p>
-                            <p className="mt-2 text-2xl font-semibold text-sky-900">{funnel?.atribuciones.active ?? 0}</p>
+                        <div className="rounded-2xl border border-info/20 bg-info/70 p-4">
+                            <p className="text-xs uppercase tracking-[0.16em] text-info">Activas</p>
+                            <p className="mt-2 text-2xl font-semibold text-info">{funnel?.atribuciones.active ?? 0}</p>
                         </div>
-                        <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-4">
-                            <p className="text-xs uppercase tracking-[0.16em] text-amber-700">Expiradas</p>
-                            <p className="mt-2 text-2xl font-semibold text-amber-900">{funnel?.atribuciones.expired ?? 0}</p>
+                        <div className="rounded-2xl border border-warning/20 bg-warning/70 p-4">
+                            <p className="text-xs uppercase tracking-[0.16em] text-warning">Expiradas</p>
+                            <p className="mt-2 text-2xl font-semibold text-warning">{funnel?.atribuciones.expired ?? 0}</p>
                         </div>
-                        <div className="rounded-2xl border border-violet-200 bg-violet-50/70 p-4 sm:col-span-2">
-                            <div className="flex items-center gap-2 text-violet-800">
+                        <div className="rounded-2xl border border-info/20 bg-info/70 p-4 sm:col-span-2">
+                            <div className="flex items-center gap-2 text-info">
                                 <Users className="h-4 w-4" />
                                 <p className="text-sm font-medium">Ventas confirmadas vs comisiones</p>
                             </div>
-                            <p className="mt-2 text-sm text-violet-950">
+                            <p className="mt-2 text-sm text-info">
                                 {funnel?.ventasConfirmadas ?? 0} ventas confirmadas · {funnel?.comisionesMaterializadas ?? 0} comisiones materializadas
                             </p>
                         </div>
@@ -828,9 +828,9 @@ export default function DashboardPipelineBComision(): React.ReactElement {
                     if (!reencolando) setReencolarModalOpen(open);
                 }}
             >
-                <AlertDialogContent className="max-w-md border-violet-200/80 bg-background shadow-xl sm:max-w-md">
+                <AlertDialogContent className="max-w-md border-info/80 bg-background shadow-xl sm:max-w-md">
                     <AlertDialogHeader>
-                        <AlertDialogMedia className="bg-violet-100 text-violet-700">
+                        <AlertDialogMedia className="bg-info/10 text-info">
                             <RotateCcw className="h-5 w-5" />
                         </AlertDialogMedia>
                         <AlertDialogTitle className="text-lg font-semibold text-slate-900">
@@ -839,7 +839,7 @@ export default function DashboardPipelineBComision(): React.ReactElement {
                         <AlertDialogDescription asChild>
                             <div className="space-y-3 text-left text-sm text-slate-600">
                                 <p>
-                                    Se evaluarán ventas con pago <strong className="font-medium text-slate-800">APPROVED</strong> que aún no tienen registro en <code className="rounded bg-violet-50 px-1.5 py-0.5 text-xs text-violet-800">ventasComission</code>.
+                                    Se evaluarán ventas con pago <strong className="font-medium text-slate-800">APPROVED</strong> que aún no tienen registro en <code className="rounded bg-info/10 px-1.5 py-0.5 text-xs text-info">ventasComission</code>.
                                 </p>
                                 <ul className="list-disc space-y-1.5 pl-5 text-slate-600">
                                     <li>Hasta <strong className="font-medium text-slate-800">50</strong> auditorías por ejecución</li>
@@ -849,11 +849,11 @@ export default function DashboardPipelineBComision(): React.ReactElement {
                             </div>
                         </AlertDialogDescription>
                     </AlertDialogHeader>
-                    <AlertDialogFooter className="border-t border-violet-100 bg-violet-50/40">
+                    <AlertDialogFooter className="border-t border-info/10 bg-info/40">
                         <AlertDialogCancel disabled={reencolando}>Cancelar</AlertDialogCancel>
                         <AlertDialogAction
                             disabled={reencolando}
-                            className="gap-2 bg-violet-600 text-white hover:bg-violet-700"
+                            className="gap-2 bg-info text-white hover:bg-info"
                             onClick={(event) => {
                                 event.preventDefault();
                                 void confirmarReencolar();

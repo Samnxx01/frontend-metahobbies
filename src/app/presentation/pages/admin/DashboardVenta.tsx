@@ -233,7 +233,7 @@ export default function DashboardVenta(): React.ReactElement {
         <div className="flex-1 space-y-8 bg-gradient-to-b from-slate-50 via-white to-slate-100 p-4 md:p-6 lg:p-8">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
                 <div className="space-y-2">
-                    <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium uppercase tracking-[0.2em] text-emerald-700">
+                    <div className="inline-flex items-center gap-2 rounded-full border border-success/20 bg-success/10 px-3 py-1 text-xs font-medium uppercase tracking-[0.2em] text-success">
                         <Wallet className="h-3.5 w-3.5" />
                         Pipeline B
                     </div>
@@ -262,32 +262,32 @@ export default function DashboardVenta(): React.ReactElement {
                     </CardHeader>
                 </Card>
 
-                <Card className="border-emerald-200 bg-emerald-50/60 shadow-sm">
+                <Card className="border-success/20 bg-success/60 shadow-sm">
                     <CardHeader className="pb-2">
                         <CardDescription>Orígenes configurados</CardDescription>
-                        <CardTitle className="flex items-center justify-between text-2xl text-emerald-800">
+                        <CardTitle className="flex items-center justify-between text-2xl text-success">
                             {resumen.configurados}
-                            <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+                            <CheckCircle2 className="h-5 w-5 text-success" />
                         </CardTitle>
                     </CardHeader>
                 </Card>
 
-                <Card className="border-amber-200 bg-amber-50/70 shadow-sm">
+                <Card className="border-warning/20 bg-warning/70 shadow-sm">
                     <CardHeader className="pb-2">
                         <CardDescription>Productos pendientes</CardDescription>
-                        <CardTitle className="flex items-center justify-between text-2xl text-amber-800">
+                        <CardTitle className="flex items-center justify-between text-2xl text-warning">
                             {resumen.pendientes}
-                            <ShoppingCart className="h-5 w-5 text-amber-500" />
+                            <ShoppingCart className="h-5 w-5 text-warning" />
                         </CardTitle>
                     </CardHeader>
                 </Card>
 
-                <Card className="border-sky-200 bg-sky-50/60 shadow-sm">
+                <Card className="border-info/20 bg-info/60 shadow-sm">
                     <CardHeader className="pb-2">
                         <CardDescription>Niveles activos</CardDescription>
-                        <CardTitle className="flex items-center justify-between text-2xl text-sky-800">
+                        <CardTitle className="flex items-center justify-between text-2xl text-info">
                             {resumen.nivelesActivos}
-                            <Activity className="h-5 w-5 text-sky-500" />
+                            <Activity className="h-5 w-5 text-info" />
                         </CardTitle>
                     </CardHeader>
                 </Card>
@@ -434,7 +434,7 @@ export default function DashboardVenta(): React.ReactElement {
                                 {pipelineChecklist.map((item) => (
                                     <div
                                         key={item.label}
-                                        className={`rounded-2xl border p-4 ${item.ok ? 'border-emerald-200 bg-emerald-50/60' : 'border-amber-200 bg-amber-50/60'}`}
+                                        className={`rounded-2xl border p-4 ${item.ok ? 'border-success/20 bg-success/60' : 'border-warning/20 bg-warning/60'}`}
                                     >
                                         <div className="flex items-center justify-between gap-3">
                                             <p className="text-sm font-medium text-slate-900">{item.label}</p>
@@ -446,7 +446,7 @@ export default function DashboardVenta(): React.ReactElement {
                                     </div>
                                 ))}
 
-                                <Alert className="border-sky-200 bg-sky-50 text-sky-950">
+                                <Alert className="border-info/20 bg-info/10 text-info">
                                     <ArrowRightLeft className="h-4 w-4" />
                                     <AlertTitle>Cómo se conecta</AlertTitle>
                                     <AlertDescription>

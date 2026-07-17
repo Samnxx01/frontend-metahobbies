@@ -33,7 +33,7 @@ const PRICING_PLANS: PricingPlan[] = [
         tagline: 'Mas capacidad para crecer tus ventas mes a mes.',
         price: '$ 29.900',
         cta: 'Elegir Go',
-        accent: 'from-amber-50 to-white',
+        accent: 'from-warning/10 to-white',
         bullets: [
             'Todo lo del plan Gratis',
             'Mas accesos y mas cargas mensuales',
@@ -48,7 +48,7 @@ const PRICING_PLANS: PricingPlan[] = [
         price: '$ 89.900',
         cta: 'Elegir Plus',
         featured: true,
-        accent: 'from-rose-50 to-white',
+        accent: 'from-destructive/10 to-white',
         bullets: [
             'Todo lo del plan Go',
             'Automatizaciones y reportes premium',
@@ -63,7 +63,7 @@ const PRICING_PLANS: PricingPlan[] = [
         prefix: 'Desde',
         price: '$ 169.900',
         cta: 'Elegir Pro',
-        accent: 'from-cyan-50 to-white',
+        accent: 'from-info/10 to-white',
         bullets: [
             'Todo lo del plan Plus',
             'Multiples usuarios y permisos avanzados',
@@ -80,13 +80,13 @@ function PricingCard({ plan }: { plan: PricingPlan }): React.ReactElement {
             className={[
                 'relative flex h-full flex-col rounded-[28px] border bg-gradient-to-b p-6 shadow-sm transition-all duration-300',
                 plan.featured
-                    ? 'border-rose-300 shadow-rose-100/80 ring-1 ring-rose-200'
+                    ? 'border-destructive/30 shadow-destructive/80 ring-1 ring-destructive/20'
                     : 'border-slate-200 hover:-translate-y-1 hover:shadow-lg',
                 plan.accent,
             ].join(' ')}
         >
             {plan.featured ? (
-                <div className="mb-5 inline-flex w-fit items-center gap-2 rounded-full bg-rose-600 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-white">
+                <div className="mb-5 inline-flex w-fit items-center gap-2 rounded-full bg-destructive px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-white">
                     <Sparkles className="h-3.5 w-3.5" />
                     Recomendado
                 </div>
@@ -117,7 +117,7 @@ function PricingCard({ plan }: { plan: PricingPlan }): React.ReactElement {
             <Button
                 className={[
                     'mb-8 h-12 rounded-full text-base font-semibold',
-                    plan.featured ? 'bg-rose-600 hover:bg-rose-500' : 'bg-slate-950 hover:bg-slate-800',
+                    plan.featured ? 'bg-destructive hover:bg-destructive' : 'bg-slate-950 hover:bg-slate-800',
                 ].join(' ')}
             >
                 {plan.cta}

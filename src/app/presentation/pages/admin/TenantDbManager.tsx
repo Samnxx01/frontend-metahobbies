@@ -69,10 +69,10 @@ const READY_STATE_LABEL: Record<number, string> = {
 };
 
 const READY_STATE_COLOR: Record<number, string> = {
-  0: 'text-red-500',
-  1: 'text-green-500',
-  2: 'text-yellow-500',
-  3: 'text-orange-500',
+  0: 'text-destructive',
+  1: 'text-success',
+  2: 'text-warning',
+  3: 'text-warning',
 };
 
 const NOMBRE_CONTENEDOR_MANUAL = '__manual__';
@@ -1495,11 +1495,11 @@ export default function TenantDbManager() {
                           </TableCell>
                           <TableCell>
                             {cfg.estado ? (
-                              <span className="flex items-center gap-1 text-green-600 text-sm">
+                              <span className="flex items-center gap-1 text-success text-sm">
                                 <CheckCircle2 className="w-4 h-4" /> Activa
                               </span>
                             ) : (
-                              <span className="flex items-center gap-1 text-red-500 text-sm">
+                              <span className="flex items-center gap-1 text-destructive text-sm">
                                 <XCircle className="w-4 h-4" /> Inactiva
                               </span>
                             )}
@@ -1646,7 +1646,7 @@ export default function TenantDbManager() {
                                   <TableCell className="font-mono text-sm">{col.coleccion}</TableCell>
                                   <TableCell>
                                     {col.autoSync ? (
-                                      <span className="flex items-center gap-1 text-green-600 text-xs">
+                                      <span className="flex items-center gap-1 text-success text-xs">
                                         <CircleDot className="w-3 h-3" /> En vivo
                                       </span>
                                     ) : (
@@ -1731,7 +1731,7 @@ export default function TenantDbManager() {
             </Card>
             <Card>
               <CardContent className="p-3">
-                <p className="text-xs text-muted-foreground flex items-center gap-1"><CircleDot className="w-3 h-3 text-green-500" /> En vivo</p>
+                <p className="text-xs text-muted-foreground flex items-center gap-1"><CircleDot className="w-3 h-3 text-success" /> En vivo</p>
                 <p className="text-xl font-semibold">{metricasMigracion.enVivo}</p>
               </CardContent>
             </Card>
@@ -1752,7 +1752,7 @@ export default function TenantDbManager() {
                 <p className="text-xs text-muted-foreground flex items-center gap-1">
                   {metricasMigracion.migracionesFallidas > 0
                     ? <XCircle className="w-3 h-3 text-destructive" />
-                    : <CheckCircle2 className="w-3 h-3 text-green-500" />}
+                    : <CheckCircle2 className="w-3 h-3 text-success" />}
                   Migraciones fallidas
                 </p>
                 <p className={`text-xl font-semibold ${metricasMigracion.migracionesFallidas > 0 ? 'text-destructive' : ''}`}>
@@ -1843,7 +1843,7 @@ export default function TenantDbManager() {
                         const col = colParts.join(':');
                         return (
                           <li key={w} className="flex items-center gap-2 text-sm">
-                            <CircleDot className="w-3 h-3 text-green-500 shrink-0" />
+                            <CircleDot className="w-3 h-3 text-success shrink-0" />
                             <span className="font-mono text-xs">{tid?.slice(0, 10)}…</span>
                             <span className="text-muted-foreground">→</span>
                             <span className="font-medium">{col}</span>
@@ -2561,7 +2561,7 @@ export default function TenantDbManager() {
                           <p className="text-xs font-medium">Pendientes de sincronizar</p>
                           <div className="grid gap-2">
                             {syncPreview.muestraPendientes.slice(0, 6).map((doc, index) => (
-                              <div key={`${String((doc as Record<string, unknown>)?._id || index)}:pendiente`} className="rounded-md border bg-amber-50 p-3 text-xs">
+                              <div key={`${String((doc as Record<string, unknown>)?._id || index)}:pendiente`} className="rounded-md border bg-warning/10 p-3 text-xs">
                                 <p className="mb-2 break-all font-mono text-[11px] text-muted-foreground">
                                   {String((doc as Record<string, unknown>)?._id || `pendiente-${index + 1}`)}
                                 </p>

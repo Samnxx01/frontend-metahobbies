@@ -42,18 +42,18 @@ const INITIAL_EDITAR: EditarForm = { NombreLevel: '', porcentaje: '' };
 
 const GEN_BADGE: Record<number, string> = {
     0: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
-    1: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400',
-    2: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400',
-    3: 'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-400',
-    4: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400',
+    1: 'bg-success/10 text-success dark:bg-success/40 dark:text-success',
+    2: 'bg-info/10 text-info dark:bg-info/40 dark:text-info',
+    3: 'bg-info/10 text-info dark:bg-info/40 dark:text-info',
+    4: 'bg-warning/10 text-warning dark:bg-warning/40 dark:text-warning',
 };
 
 const GEN_DOT: Record<number, string> = {
     0: 'bg-slate-400',
-    1: 'bg-emerald-500',
-    2: 'bg-blue-500',
-    3: 'bg-violet-500',
-    4: 'bg-amber-500',
+    1: 'bg-success',
+    2: 'bg-info',
+    3: 'bg-info',
+    4: 'bg-warning',
 };
 
 const GEN_ROL: Record<number, string> = {
@@ -241,7 +241,7 @@ export default function ParametrizacionGenyProcent({ scope = 'SUPER_ADMIN' }: Pr
 
                     {/* Error */}
                     {errorMsg && (
-                        <div className="flex items-start gap-2.5 px-4 py-3 rounded-lg text-xs border bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800">
+                        <div className="flex items-start gap-2.5 px-4 py-3 rounded-lg text-xs border bg-destructive/10 dark:bg-destructive/30 text-destructive dark:text-destructive border-destructive/20 dark:border-destructive">
                             <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
                             <span>{errorMsg}</span>
                         </div>
@@ -374,7 +374,7 @@ export default function ParametrizacionGenyProcent({ scope = 'SUPER_ADMIN' }: Pr
                                                             <button
                                                                 onClick={() => handleEliminar(n.iud, n.NombreLevel)}
                                                                 disabled={isEliminando}
-                                                                className="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors disabled:opacity-50"
+                                                                className="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium text-destructive hover:text-destructive hover:bg-destructive/10 dark:hover:bg-destructive/30 transition-colors disabled:opacity-50"
                                                                 title="Eliminar"
                                                             >
                                                                 {isEliminando
@@ -441,7 +441,7 @@ export default function ParametrizacionGenyProcent({ scope = 'SUPER_ADMIN' }: Pr
                     <div className="space-y-4 py-2">
 
                         {errorMsg && (
-                            <div className="flex items-start gap-2 px-3 py-2 rounded-lg text-xs border bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800">
+                            <div className="flex items-start gap-2 px-3 py-2 rounded-lg text-xs border bg-destructive/10 dark:bg-destructive/30 text-destructive dark:text-destructive border-destructive/20 dark:border-destructive">
                                 <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
                                 <span>{errorMsg}</span>
                             </div>

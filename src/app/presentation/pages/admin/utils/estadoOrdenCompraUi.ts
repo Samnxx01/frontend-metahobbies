@@ -54,13 +54,13 @@ export const codigosEstadoPermitenComprobanteEntrada = (
 export const estadoOrdenBadgeClass = (codigo: string): string => {
   switch (String(codigo || '').toUpperCase()) {
     case 'VERIFICACION':
-      return 'border-amber-500/50 bg-amber-500/10 text-amber-900';
+      return 'border-warning/50 bg-warning/10 text-warning';
     case 'CONFIRMADO':
-      return 'border-emerald-500/50 bg-emerald-500/10 text-emerald-800';
+      return 'border-success/50 bg-success/10 text-success';
     case 'RECIBIDA_TOTAL':
       return 'border-primary/40 bg-primary/10 text-primary';
     case 'RECIBIDA_PARCIAL':
-      return 'border-sky-500/40 bg-sky-500/10 text-sky-900';
+      return 'border-info/40 bg-info/10 text-info';
     default:
       return '';
   }

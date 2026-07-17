@@ -397,7 +397,7 @@ export default function ConfigComprobante(): React.ReactElement {
                           <div>{qty(row.cantidadSalida)}</div>
                           <div className="text-xs text-muted-foreground">{money(row.valorSalida)}</div>
                         </TableCell>
-                        <TableCell className={neto >= 0 ? 'text-emerald-700' : 'text-destructive'}>
+                        <TableCell className={neto >= 0 ? 'text-success' : 'text-destructive'}>
                           {money(neto)}
                         </TableCell>
                         <TableCell>

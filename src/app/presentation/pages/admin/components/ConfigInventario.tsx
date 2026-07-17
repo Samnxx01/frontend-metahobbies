@@ -20,6 +20,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
+import { Checkbox } from '@/components/ui/checkbox';
+import { useAmbitosReglaContable } from '@/app/hooks/useAmbitosReglaContable';
 import {
   inventarioModulosParaGridConfig,
   inventarioTabsDesdeCatalogo,
@@ -99,6 +101,8 @@ export default function ConfigInventario({
   const tenantSuperAdminId = inventarioTenantSuperAdminIdDesdeUsuario(user);
   const esDios = String(user?.role ?? (user as { rol?: string } | null)?.rol ?? '').toUpperCase() === 'DIOS';
   const [recepcionAutomaticaLocal, setRecepcionAutomaticaLocal] = useState(false);
+  const [ambitosReglaImpuestoLocal, setAmbitosReglaImpuestoLocal] = useState<string[]>([]);
+  const { ambitos: ambitosCatalogo } = useAmbitosReglaContable();
   const [ayudaComprasOpen, setAyudaComprasOpen] = useState(false);
   const [modalParametrizacionOpen, setModalParametrizacionOpen] = useState(false);
   const [modalAutorizacionOpen, setModalAutorizacionOpen] = useState(false);
@@ -171,6 +175,30 @@ export default function ConfigInventario({
   useEffect(() => {
     setRecepcionAutomaticaLocal(config?.compras?.recepcionAutomatica === true);
   }, [config?.compras?.recepcionAutomatica]);
+
+  useEffect(() => {
+    const lista = config?.compras?.ambitosReglaImpuesto;
+    setAmbitosReglaImpuestoLocal(Array.isArray(lista) ? lista : []);
+  }, [config?.compras?.ambitosReglaImpuesto]);
+
+  const toggleAmbitoReglaImpuesto = async (codigo: string): Promise<void> => {
+    const previa = ambitosReglaImpuestoLocal;
+    const nueva = previa.includes(codigo)
+      ? previa.filter((c) => c !== codigo)
+      : [...previa, codigo];
+    setAmbitosReglaImpuestoLocal(nueva);
+    try {
+      if (actualizarConfigCompras) {
+        await actualizarConfigCompras({ recepcionAutomatica: recepcionAutomaticaLocal, ambitosReglaImpuesto: nueva });
+      } else {
+        await inventarioService.actualizarConfigCompras({ recepcionAutomatica: recepcionAutomaticaLocal, ambitosReglaImpuesto: nueva });
+      }
+      toast.success('Ámbitos de reglas de impuesto en OC actualizados.');
+    } catch (error) {
+      setAmbitosReglaImpuestoLocal(previa);
+      toast.error(error instanceof Error ? error.message : 'No se pudo actualizar los ámbitos.');
+    }
+  };
 
   const guardarConfigCompras = async (compras: InventarioComprasConfig): Promise<void> => {
     const previous = recepcionAutomaticaLocal;
@@ -774,6 +802,37 @@ export default function ConfigInventario({
               />
               <span className="text-xs font-medium text-foreground">Automatico</span>
             </div>
+          </div>
+
+          <div className="mt-4 space-y-2 rounded-md border border-border bg-muted/40 p-4">
+            <Label>Ámbitos de reglas de impuesto en órdenes de compra</Label>
+            <p className="text-sm text-muted-foreground">
+              Marca ámbitos para restringir qué reglas contables aplican a las OC. Sin ámbitos marcados,
+              el alcance es dinámico: se consideran todas las reglas de IVA activas de reglascontables.
+              Sin reglas activas, el impuesto de la OC se digita manualmente.
+            </p>
+            {ambitosCatalogo.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No hay ámbitos activos en el catálogo.</p>
+            ) : (
+              <div className="flex flex-wrap gap-4">
+                {ambitosCatalogo.map((ambito) => {
+                  const marcado = ambitosReglaImpuestoLocal.includes(ambito.codigo);
+                  return (
+                    <div key={ambito.codigo} className="flex items-center gap-2">
+                      <Checkbox
+                        id={`ambito-oc-${ambito.codigo}`}
+                        checked={marcado}
+                        disabled={saving}
+                        onCheckedChange={() => void toggleAmbitoReglaImpuesto(ambito.codigo)}
+                      />
+                      <Label htmlFor={`ambito-oc-${ambito.codigo}`} className="cursor-pointer font-normal">
+                        {ambito.codigo} — {ambito.nombre}
+                      </Label>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>

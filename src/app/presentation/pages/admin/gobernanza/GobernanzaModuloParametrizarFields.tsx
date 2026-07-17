@@ -187,7 +187,7 @@ export function GobernanzaModuloParametrizarFields({
             ) : null}
             {formularioError ? <p className="text-xs text-destructive">{formularioError}</p> : null}
             {!rutasLoading && rutas.length === 0 ? (
-              <p className="rounded-md border border-amber-200/80 bg-amber-50 px-3 py-2 text-xs text-amber-950">
+              <p className="rounded-md border border-warning/80 bg-warning/10 px-3 py-2 text-xs text-warning">
                 No hay rutas disponibles. Créala en Seguridad → Rutas.
               </p>
             ) : null}
@@ -260,7 +260,7 @@ export function GobernanzaModuloParametrizarFields({
               </p>
             ) : null}
             {!tiposLoading && moduloTipos.length === 0 ? (
-              <p className="rounded-md border border-amber-200/80 bg-amber-50 px-3 py-2 text-xs text-amber-950">
+              <p className="rounded-md border border-warning/80 bg-warning/10 px-3 py-2 text-xs text-warning">
                 No hay tipos para section «{tipoSectionFiltro}». Pulsa + para crear uno en gobernanzaModuloTipos.
               </p>
             ) : null}
