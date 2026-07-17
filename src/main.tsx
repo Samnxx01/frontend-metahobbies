@@ -5,13 +5,15 @@ import './index.css';
 import LoadingProvider from './app/providers/LoadingProvider.jsx';
 import { ThemeProvider } from 'next-themes';
 import { sincronizarPaletaAntesDeMontarReact } from '@/app/bootstrap/sincronizarPaletaBootstrap';
-import { reportarErrorFrontend } from '@/app/observability/newRelicBrowser';
+import { reportarErrorFrontend, registrarEntornoNewRelic } from '@/app/observability/newRelicBrowser';
 
 const rootElement = document.getElementById('root');
 
 if (!rootElement) {
   throw new Error('Failed to find the root element');
 }
+
+registrarEntornoNewRelic();
 
 void (async (): Promise<void> => {
   /** Evita pintar pantallas públicas/login con valores del stylesheet antes de corroborar servidor. */

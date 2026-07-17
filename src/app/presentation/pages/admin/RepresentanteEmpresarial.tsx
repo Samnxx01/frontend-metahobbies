@@ -256,7 +256,7 @@ export default function RepresentanteEmpresarial() {
               <Input name="nombre_representante_legal" value={updateForm.nombre_representante_legal} onChange={handleUpdateChange} placeholder="Nombre completo" required />
               <Input name="cargo_representante_legal" value={updateForm.cargo_representante_legal} onChange={handleUpdateChange} placeholder="Cargo" required />
 
-              <Select value={updateForm.tipoDocument || undefined} onValueChange={(val) => setUpdateForm({ ...updateForm, tipoDocument: val })} disabled={loadingParams}>
+              <Select value={updateForm.tipoDocument || ''} onValueChange={(val) => setUpdateForm({ ...updateForm, tipoDocument: val })} disabled={loadingParams}>
                 <SelectTrigger>
                   <SelectValue placeholder="Tipo de documento" />
                 </SelectTrigger>
@@ -273,7 +273,7 @@ export default function RepresentanteEmpresarial() {
               <Input name="correo_representante" value={updateForm.correo_representante} onChange={handleUpdateChange} placeholder="Correo" required type="email" />
               <Input name="telefono_representante" value={updateForm.telefono_representante} onChange={handleUpdateChange} placeholder="Telefono" required />
 
-              <Select value={updateForm.nacionalidads || undefined} onValueChange={(val) => setUpdateForm({ ...updateForm, nacionalidads: val })} disabled={loadingParams}>
+              <Select value={updateForm.nacionalidads || ''} onValueChange={(val) => setUpdateForm({ ...updateForm, nacionalidads: val })} disabled={loadingParams}>
                 <SelectTrigger>
                   <SelectValue placeholder="Nacionalidad" />
                 </SelectTrigger>
@@ -286,7 +286,7 @@ export default function RepresentanteEmpresarial() {
                 </SelectContent>
               </Select>
 
-              <Select value={updateForm.prefijo || undefined} onValueChange={(val) => setUpdateForm({ ...updateForm, prefijo: val })} disabled={loadingParams}>
+              <Select value={updateForm.prefijo || ''} onValueChange={(val) => setUpdateForm({ ...updateForm, prefijo: val })} disabled={loadingParams}>
                 <SelectTrigger>
                   <SelectValue placeholder="Prefijo" />
                 </SelectTrigger>

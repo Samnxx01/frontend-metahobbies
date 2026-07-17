@@ -17,6 +17,10 @@ interface ImportMetaEnv {
   readonly VITE_NEW_RELIC_DISTRIBUTED_TRACING_ORIGINS?: string
   readonly VITE_NEW_RELIC_SESSION_TRACE_ENABLED?: string
   readonly VITE_NEW_RELIC_SESSION_REPLAY_ENABLED?: string
+  readonly VITE_APP_ENV?: string
+  readonly VITE_APP_HOST?: string
+  readonly VITE_RELEASE_SHA?: string
+  readonly VITE_RELEASE_BRANCH?: string
 }
 
 interface ImportMeta {

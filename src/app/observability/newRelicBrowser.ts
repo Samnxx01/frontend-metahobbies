@@ -65,6 +65,25 @@ export const newRelicBrowser = enabled && licenseKey && applicationID
   : null;
 
 /**
+ * Registra atributos globales del entorno/despliegue en toda la telemetría del navegador
+ * (PageView, PageAction, JavaScriptError, etc.). Permite filtrar en NRQL con:
+ *   SELECT * FROM JavaScriptError WHERE environment = 'production'
+ */
+export function registrarEntornoNewRelic(): void {
+  if (!newRelicBrowser) {
+    if (enabled) console.warn('[New Relic Browser] Agente no disponible: no se registran atributos de entorno.');
+    return;
+  }
+
+  newRelicBrowser.setCustomAttribute('environment', env.VITE_APP_ENV || env.MODE || 'unknown');
+  newRelicBrowser.setCustomAttribute('configuredHost', env.VITE_APP_HOST || 'unknown');
+  newRelicBrowser.setCustomAttribute('browserHostname', window.location.hostname);
+  newRelicBrowser.setCustomAttribute('browserOrigin', window.location.origin);
+  newRelicBrowser.setCustomAttribute('releaseSha', env.VITE_RELEASE_SHA || 'unknown');
+  newRelicBrowser.setCustomAttribute('releaseBranch', env.VITE_RELEASE_BRANCH || 'unknown');
+}
+
+/**
  * Evento personalizado PageAction para peticiones que superan el umbral de lentitud.
  * Consultable en New Relic con:
  *   SELECT * FROM PageAction WHERE actionName = 'PeticionLentaFrontend'

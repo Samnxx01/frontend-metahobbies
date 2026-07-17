@@ -143,6 +143,7 @@ export interface InventarioConfig {
   metodoBloqueadoDesdeAnioFiscal?: number | null;
   periodosCerrados: string[];
   compras?: InventarioComprasConfig;
+  productos?: InventarioProductosConfig;
   kardex?: InventarioKardexConfig;
   documentosSoporte?: DocumentoSoporteTipoConfig[];
   monedaInventario?: MonedaInventarioConfig;
@@ -169,6 +170,11 @@ export interface InventarioComprasConfig {
   ambitosReglaImpuesto?: string[];
   /** Tributo activo de DIAN_TRIBUTOS para la OC. 01 = IVA. */
   codigoDianImpuesto?: string;
+}
+
+export interface InventarioProductosConfig {
+  /** Ámbitos cuyas reglas aparecen en el formulario. Vacío = todas las activas. */
+  ambitosReglaContable?: string[];
 }
 
 /** false = validar duplicados (recomendado); true = omitir validación. */
@@ -966,6 +972,14 @@ const inventarioService = {
     const resp = await apiFetch('/api/inventario/config/compras', {
       method: 'PUT',
       body: compras,
+    });
+    return resp?.data as InventarioConfig;
+  },
+
+  async actualizarConfigProductos(productos: InventarioProductosConfig): Promise<InventarioConfig> {
+    const resp = await apiFetch('/api/inventario/config/productos', {
+      method: 'PUT',
+      body: productos,
     });
     return resp?.data as InventarioConfig;
   },

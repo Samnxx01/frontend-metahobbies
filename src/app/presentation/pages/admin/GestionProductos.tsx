@@ -37,6 +37,7 @@ import { Switch } from '@/components/ui/switch';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import VentaWompiSecuenciaModal from '@/app/presentation/pages/admin/components/VentaWompiSecuenciaModal';
+import AlcanceReglasProductosModal from '@/app/presentation/pages/admin/components/reglas-contables/AlcanceReglasProductosModal';
 import { DollarSign, Eye, FolderTree, Hash, Pencil, Plus, RefreshCw, Search, Settings2, Star, Trash2, X } from 'lucide-react';
 
 type DialogType = 'add' | 'edit' | 'view' | 'delete';
@@ -287,6 +288,7 @@ export default function GestionProductos(): React.ReactElement {
   const [openReglasVentasModal, setOpenReglasVentasModal] = useState(false);
   const [openCatalogoConfigModal, setOpenCatalogoConfigModal] = useState(false);
   const [openVentaWompiSecuenciaModal, setOpenVentaWompiSecuenciaModal] = useState(false);
+  const [openAlcanceReglasModal, setOpenAlcanceReglasModal] = useState(false);
   const [tiposReglaVentaRefreshKey, setTiposReglaVentaRefreshKey] = useState(0);
   const { config: limitesCatalogo, load: reloadLimitesCatalogo } = useProductoCatalogoConfig();
   const { tipos: tiposReglaVenta } = useTiposReglaVenta({
@@ -323,7 +325,7 @@ export default function GestionProductos(): React.ReactElement {
         productosService.listarTiposProducto(),
         inventarioService.listarUnidadesMedida(),
         inventarioService.stockActual(),
-        reglasContablesService.listarActivas(),
+        reglasContablesService.listarActivas({ alcance: 'PRODUCTOS' }),
         reglasVentasService.listarActivas().then((data) => ({ ok: true as const, data })).catch((error) => ({ ok: false as const, error })),
         inventarioService.listarMonedasCop().catch(() => [] as MonedaCopOption[]),
       ]);
@@ -1081,6 +1083,14 @@ export default function GestionProductos(): React.ReactElement {
       <div className="mb-6 flex items-center justify-between border-b pb-4">
         <h1 className="text-2xl font-bold text-foreground md:text-3xl">Gestión de Productos</h1>
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setOpenAlcanceReglasModal(true)}
+            className="flex items-center gap-2 rounded-lg"
+          >
+            <Settings2 className="h-4 w-4" />
+            Alcance reglas
+          </Button>
           <ConfigCatalogoProductosTrigger onClick={() => setOpenCatalogoConfigModal(true)} />
           <Button
             variant="outline"
@@ -1975,6 +1985,12 @@ export default function GestionProductos(): React.ReactElement {
       <VentaWompiSecuenciaModal
         open={openVentaWompiSecuenciaModal}
         onOpenChange={setOpenVentaWompiSecuenciaModal}
+      />
+
+      <AlcanceReglasProductosModal
+        open={openAlcanceReglasModal}
+        onOpenChange={setOpenAlcanceReglasModal}
+        onSaved={() => { void loadData(); }}
       />
     </div>
   );

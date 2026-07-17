@@ -166,7 +166,7 @@ const FormularioEmpresa = ({
 
             <div className="space-y-2">
                 <label className="text-sm font-semibold">Representante Legal</label>
-                <Select value={data.represeLegaEmpresa || undefined} onValueChange={(value) => updateField('represeLegaEmpresa', value)}>
+                <Select value={data.represeLegaEmpresa || ''} onValueChange={(value) => updateField('represeLegaEmpresa', value)}>
                     <SelectTrigger>
                         <SelectValue placeholder="Seleccione..." />
                     </SelectTrigger>
@@ -186,7 +186,7 @@ const FormularioEmpresa = ({
 
             <div className="space-y-2">
                 <label className="text-sm font-semibold">Ubicacion (Sede)</label>
-                <Select value={data.direccion_empresa_relacion || undefined} onValueChange={(value) => updateField('direccion_empresa_relacion', value)}>
+                <Select value={data.direccion_empresa_relacion || ''} onValueChange={(value) => updateField('direccion_empresa_relacion', value)}>
                     <SelectTrigger>
                         <SelectValue placeholder="Seleccione..." />
                     </SelectTrigger>

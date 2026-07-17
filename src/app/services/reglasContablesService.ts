@@ -341,8 +341,9 @@ const reglasContablesService = {
     return { data: resp.data as { codigo: string }, msg: resp.msg };
   },
 
-  async listarActivas(): Promise<ReglaContable[]> {
-    const resp = await apiFetch('/api/inventario/config/reglas-contables', { method: 'GET' });
+  async listarActivas(params: { alcance?: 'PRODUCTOS' } = {}): Promise<ReglaContable[]> {
+    const query = params.alcance ? `?alcance=${encodeURIComponent(params.alcance)}` : '';
+    const resp = await apiFetch(`/api/inventario/config/reglas-contables${query}`, { method: 'GET' });
     return (resp?.data ?? []) as ReglaContable[];
   },
 

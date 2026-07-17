@@ -541,7 +541,7 @@ export default function InventarioOrdenCompraModal({
             </div>
             <div className="space-y-2 sm:col-span-2 lg:col-span-1">
               <Label>Proveedor *</Label>
-              <Select value={proveedorId || undefined} onValueChange={cambiarProveedor}>
+              <Select value={proveedorId || ''} onValueChange={cambiarProveedor}>
                 <SelectTrigger className="border-input bg-background">
                   <SelectValue placeholder={proveedores.length ? 'Selecciona proveedor' : 'Sin proveedores'} />
                 </SelectTrigger>
@@ -617,7 +617,7 @@ export default function InventarioOrdenCompraModal({
                   {lines.map((line) => (
                     <TableRow key={line.id}>
                       <TableCell className="align-top">
-                        <Select value={line.sku || undefined} onValueChange={(v) => onSkuChange(line.id, v)}>
+                        <Select value={line.sku || ''} onValueChange={(v) => onSkuChange(line.id, v)}>
                           <SelectTrigger className="h-9 border-input bg-background px-2">
                             <SelectValue placeholder="SKU" />
                           </SelectTrigger>
@@ -711,7 +711,7 @@ export default function InventarioOrdenCompraModal({
                         {moneyCo(calcSubtotalLinea(line))}
                       </TableCell>
                       <TableCell className="align-top">
-                        <Select value={line.bodega || undefined} onValueChange={(v) => updateLine(line.id, { bodega: v })}>
+                        <Select value={line.bodega || ''} onValueChange={(v) => updateLine(line.id, { bodega: v })}>
                           <SelectTrigger className="h-9 border-input bg-background px-2">
                             <SelectValue placeholder="Bodega" />
                           </SelectTrigger>

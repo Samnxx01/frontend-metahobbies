@@ -2446,7 +2446,7 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
           </div>
           <div className="space-y-2">
             <Label>Referencia</Label>
-            <Select value={dominio || undefined} onValueChange={onReferenciaChange}>
+            <Select value={dominio || ''} onValueChange={onReferenciaChange}>
               <SelectTrigger>
                 <SelectValue placeholder="Referencia (catálogo)" />
               </SelectTrigger>
