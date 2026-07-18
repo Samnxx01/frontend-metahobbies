@@ -35,18 +35,15 @@ jobs:
       - name: Build Vite app
         run: npm run build
         env:
-          # Backend de producción
           VITE_API_URL: https://server-mabs-1.onrender.com/api
           VITE_API_BASE_URL: https://server-mabs-1.onrender.com/api
           VITE_SOCKET_URL: https://server-mabs-1.onrender.com
 
-          # Identificación del ambiente
           VITE_APP_ENV: production
           VITE_APP_HOST: mabsproduction-cpd0ajatdgfgdabf.centralus-01.azurewebsites.net
           VITE_RELEASE_SHA: ${{ github.sha }}
           VITE_RELEASE_BRANCH: ${{ github.ref_name }}
 
-          # New Relic Browser
           VITE_NEW_RELIC_ENABLED: "true"
           VITE_NEW_RELIC_ACCOUNT_ID: ${{ secrets.NEW_RELIC_ACCOUNT_ID }}
           VITE_NEW_RELIC_BROWSER_APPLICATION_ID: ${{ secrets.NEW_RELIC_APPLICATION_ID }}
