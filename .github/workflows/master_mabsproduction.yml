@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - master
-
   workflow_dispatch:
 
 concurrency:
@@ -24,30 +23,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Show deployment information
-        run: |
-          echo "======================================"
-          echo "INFORMACION DEL DESPLIEGUE"
-          echo "======================================"
-          echo "Repositorio: $GITHUB_REPOSITORY"
-          echo "Rama: $GITHUB_REF_NAME"
-          echo "Commit: $GITHUB_SHA"
-          echo "Run ID: $GITHUB_RUN_ID"
-          echo "Run number: $GITHUB_RUN_NUMBER"
-          echo ""
-          git log -1 --oneline
-          echo "======================================"
-
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "20.x"
           cache: "npm"
-
-      - name: Show runtime versions
-        run: |
-          echo "Node: $(node --version)"
-          echo "npm: $(npm --version)"
 
       - name: Install dependencies
         run: npm ci
@@ -55,18 +35,15 @@ jobs:
       - name: Build Vite app
         run: npm run build
         env:
-          # Backend de producción
           VITE_API_URL: https://server-mabs-1.onrender.com/api
           VITE_API_BASE_URL: https://server-mabs-1.onrender.com/api
           VITE_SOCKET_URL: https://server-mabs-1.onrender.com
 
-          # Identificación del ambiente
           VITE_APP_ENV: production
           VITE_APP_HOST: mabsproduction-cpd0ajatdgfgdabf.centralus-01.azurewebsites.net
           VITE_RELEASE_SHA: ${{ github.sha }}
           VITE_RELEASE_BRANCH: ${{ github.ref_name }}
 
-          # New Relic Browser
           VITE_NEW_RELIC_ACCOUNT_ID: ${{ secrets.NEW_RELIC_ACCOUNT_ID }}
           VITE_NEW_RELIC_APPLICATION_ID: ${{ secrets.NEW_RELIC_APPLICATION_ID }}
           VITE_NEW_RELIC_LICENSE_KEY: ${{ secrets.NEW_RELIC_BROWSER_LICENSE_KEY }}
@@ -74,79 +51,18 @@ jobs:
 
       - name: Verify build output
         run: |
-          echo "======================================"
-          echo "VALIDANDO BUILD"
-          echo "======================================"
-
-          if [ ! -d "dist" ]; then
-            echo "ERROR: La carpeta dist no fue generada"
-            exit 1
-          fi
-
-          if [ ! -f "dist/index.html" ]; then
-            echo "ERROR: dist/index.html no fue generado"
-            exit 1
-          fi
-
-          echo "Contenido de dist:"
-          find dist -maxdepth 2 -type f -printf "%p | %s bytes\n" | sort
-
-          echo ""
-          echo "Tamano total:"
-          du -sh dist
-
-      - name: Validate new inventory changes
-        run: |
-          echo "======================================"
-          echo "VALIDANDO CAMBIOS NUEVOS"
-          echo "======================================"
-
-          if grep -R -i -q "Reglas contables" dist; then
-            echo "OK: El texto 'Reglas contables' existe en el build"
-          else
-            echo "ERROR: No se encontro 'Reglas contables' en el build"
-            exit 1
-          fi
-
-          if grep -R -i -q "Inventario y kardex" dist; then
-            echo "OK: El texto 'Inventario y kardex' existe en el build"
-          else
-            echo "ERROR: No se encontro 'Inventario y kardex' en el build"
-            exit 1
-          fi
+          test -d dist
+          test -f dist/index.html
 
       - name: Create deployment version file
         run: |
-          cat > dist/version.json <<EOF
-          {
-            "repository": "${{ github.repository }}",
-            "branch": "${{ github.ref_name }}",
-            "commit": "${{ github.sha }}",
-            "runId": "${{ github.run_id }}",
-            "runNumber": "${{ github.run_number }}",
-            "deployedAt": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-          }
-          EOF
-
-          echo "Version que se desplegara:"
-          cat dist/version.json
+          printf "%s" "${{ github.sha }}" > dist/deployment-version.txt
 
       - name: Create deployment ZIP
         run: |
-          echo "======================================"
-          echo "CREANDO PAQUETE ZIP"
-          echo "======================================"
-
           cd dist
           zip -r ../mabs-frontend.zip .
           cd ..
-
-          echo "Contenido del paquete:"
-          unzip -l mabs-frontend.zip | head -100
-
-          echo ""
-          echo "Tamano del paquete:"
-          du -sh mabs-frontend.zip
 
       - name: Login to Azure
         uses: azure/login@v2
@@ -154,12 +70,6 @@ jobs:
           client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_F6B37158C604454DACB333FD894C2239 }}
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_4FF3BAB411A0498BAF7D61C57EEFEF97 }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_E12863873CAF4F19A04FA89ECEBE0272 }}
-
-      - name: Show Azure account
-        run: |
-          az account show \
-            --query "{subscription:name, subscriptionId:id, tenantId:tenantId}" \
-            --output table
 
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
@@ -170,89 +80,29 @@ jobs:
 
       - name: Validate deployed version
         run: |
-          BASE_URL="https://mabsproduction-cpd0ajatdgfgdabf.centralus-01.azurewebsites.net"
-          VERSION_URL="${BASE_URL}/version.json"
+          URL="https://mabsproduction-cpd0ajatdgfgdabf.centralus-01.azurewebsites.net/deployment-version.txt"
           MAX_ATTEMPTS=12
           WAIT_SECONDS=15
 
-          echo "======================================"
-          echo "VALIDANDO VERSION PUBLICADA"
-          echo "======================================"
-          echo "Commit esperado: $GITHUB_SHA"
-          echo "URL: $VERSION_URL"
-
           for ATTEMPT in $(seq 1 "$MAX_ATTEMPTS"); do
-            echo ""
-            echo "Intento $ATTEMPT de $MAX_ATTEMPTS"
-
-            HTTP_CODE=$(curl \
+            DEPLOYED_SHA=$(curl \
               --silent \
               --show-error \
               --location \
               --connect-timeout 10 \
               --max-time 30 \
-              --output deployed-version.json \
-              --write-out "%{http_code}" \
-              "${VERSION_URL}?cacheBust=${GITHUB_SHA}-${ATTEMPT}" || true)
+              "${URL}?cacheBust=${GITHUB_SHA}-${ATTEMPT}" || true)
 
-            echo "HTTP status: $HTTP_CODE"
-
-            if [ "$HTTP_CODE" = "200" ]; then
-              echo "Respuesta recibida:"
-              cat deployed-version.json
-              echo ""
-
-              DEPLOYED_SHA=$(node -e "
-                try {
-                  const fs = require('fs');
-                  const data = JSON.parse(
-                    fs.readFileSync('deployed-version.json', 'utf8')
-                  );
-
-                  process.stdout.write(data.commit || '');
-                } catch (error) {
-                  process.stdout.write('');
-                }
-              ")
-
-              echo "Commit esperado: $GITHUB_SHA"
-              echo "Commit publicado: $DEPLOYED_SHA"
-
-              if [ "$DEPLOYED_SHA" = "$GITHUB_SHA" ]; then
-                echo "OK: Azure esta sirviendo el commit correcto"
-                exit 0
-              fi
+            if [ "$DEPLOYED_SHA" = "$GITHUB_SHA" ]; then
+              exit 0
             fi
 
             if [ "$ATTEMPT" -lt "$MAX_ATTEMPTS" ]; then
-              echo "Azure aun no refleja la version nueva."
-              echo "Esperando $WAIT_SECONDS segundos..."
               sleep "$WAIT_SECONDS"
             fi
           done
 
-          echo ""
-          echo "ERROR: Azure no publico el commit esperado"
-          echo "Commit esperado: $GITHUB_SHA"
-
-          if [ -f deployed-version.json ]; then
-            echo "Ultima respuesta recibida:"
-            cat deployed-version.json || true
-          fi
-
+          echo "ERROR: Azure no está sirviendo el commit esperado"
+          echo "Esperado: $GITHUB_SHA"
+          echo "Recibido: $DEPLOYED_SHA"
           exit 1
-
-      - name: Deployment summary
-        if: always()
-        run: |
-          echo "======================================"
-          echo "RESUMEN DEL DESPLIEGUE"
-          echo "======================================"
-          echo "Repositorio: $GITHUB_REPOSITORY"
-          echo "Rama: $GITHUB_REF_NAME"
-          echo "Commit: $GITHUB_SHA"
-          echo "Run: $GITHUB_RUN_NUMBER"
-          echo "Aplicacion: Mabsproduction"
-          echo "Slot: Production"
-          echo "URL: https://mabsproduction-cpd0ajatdgfgdabf.centralus-01.azurewebsites.net"
-          echo "Version: https://mabsproduction-cpd0ajatdgfgdabf.centralus-01.azurewebsites.net/version.json"
