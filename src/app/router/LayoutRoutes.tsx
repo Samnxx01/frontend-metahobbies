@@ -26,6 +26,7 @@ import RecuperarContrasenaEntry from '@/app/presentation/pages/recuperar-contras
 import RecuperarContrasenaToken from '@/app/presentation/pages/recuperar-contrasena/RecuperarContrasenaToken';
 import NotFound from '@/app/presentation/pages/not-found/NotFound';
 import Home from '@/app/presentation/pages/home/Home';
+import Productos from '@/app/presentation/pages/productos/Productos';
 import Carrito from '@/app/presentation/pages/carrito/Carrito';
 import Checkout from '@/app/presentation/pages/checkout/Checkout';
 import DetalleProducto from '@/app/presentation/pages/producto/DetalleProducto';
@@ -411,17 +412,37 @@ export default function LayoutRoutes(): ReactElement {
 
     const renderRoutes = (routes: RouteConfig[], parentPath = ''): ReactElement[] => {
         return routes.map(route => {
-            const routeFullPath = parentPath
-                ? `${parentPath.replace(/\/$/, '')}/${String(route.path || '').replace(/^\//, '')}`
-                : route.path;
+            const normalizedParentPath = String(parentPath || '').replace(/^\/+|\/+$/g, '');
+            const normalizedRoutePath = String(route.path || '').replace(/^\/+|\/+$/g, '');
+            const routeAlreadyIncludesParent = Boolean(
+                normalizedParentPath
+                && (
+                    normalizedRoutePath === normalizedParentPath
+                    || normalizedRoutePath.startsWith(`${normalizedParentPath}/`)
+                )
+            );
+            const routeFullPath = normalizedParentPath && !routeAlreadyIncludesParent
+                ? `${normalizedParentPath}/${normalizedRoutePath}`
+                : normalizedRoutePath;
             const resolvedComponent = normalizeAdminRouteComponent(route.component, routeFullPath);
             const LazyComponent = componentMap[resolvedComponent] || componentMap[route.component];
             const hasChildren = Array.isArray(route.children) && route.children.length > 0;
+            if (location.pathname.includes('inventar')) {
+                console.info('[MABS][LayoutRoutes] Resolviendo ruta de inventario', {
+                    pathname: location.pathname,
+                    configuredPath: route.path,
+                    routeFullPath,
+                    configuredComponent: route.component,
+                    resolvedComponent,
+                    componentFound: Boolean(LazyComponent),
+                    hasChildren,
+                });
+            }
 
             // Ruta relativa al padre: quitar el prefijo del padre si viene con path completo
-            const relativePath = parentPath && route.path.startsWith(parentPath)
-                ? route.path.slice(parentPath.length).replace(/^\//, '')
-                : route.path;
+            const relativePath = normalizedParentPath && routeAlreadyIncludesParent
+                ? routeFullPath.slice(normalizedParentPath.length).replace(/^\/+/, '')
+                : normalizedRoutePath;
 
             const leafElement = LazyComponent
                 ? <Suspense fallback={<div>Cargando...</div>}><LazyComponent /></Suspense>
@@ -439,7 +460,7 @@ export default function LayoutRoutes(): ReactElement {
             return (
                 <Route key={route.path} path={relativePath} element={<Outlet />}>
                     <Route index element={leafElement} />
-                    {renderRoutes(route.children!, route.path)}
+                    {renderRoutes(route.children!, routeFullPath)}
                 </Route>
             );
         }).filter(Boolean) as ReactElement[];
@@ -452,6 +473,8 @@ export default function LayoutRoutes(): ReactElement {
             <Route element={<PublicLayout />}>
                 <Route path="public/render" element={<Navigate to={getGovernedPublicHomePath()} replace />} />
                 <Route path="public/render/home" element={<Home />} />
+                <Route path="productos" element={<Productos />} />
+                <Route path="public/render/productos" element={<Productos />} />
                 <Route path="producto/:id" element={<DetalleProducto />} />
                 <Route path="public/render/producto/:id" element={<DetalleProducto />} />
                 <Route path="carrito" element={<Carrito />} />

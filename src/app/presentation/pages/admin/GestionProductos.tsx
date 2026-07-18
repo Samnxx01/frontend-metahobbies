@@ -30,7 +30,7 @@ import ConfigCatalogoProductosModal, {
 } from '@/app/presentation/pages/admin/components/ConfigCatalogoProductosModal';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
@@ -309,6 +309,66 @@ export default function GestionProductos(): React.ReactElement {
     descripcion: '',
     padre: null,
   });
+  const [categoriaEdit, setCategoriaEdit] = useState<BackendCategoria | null>(null);
+  const [categoriaEditForm, setCategoriaEditForm] = useState({ nombre: '', descripcion: '', estado: true });
+  const [categoriaEditSaving, setCategoriaEditSaving] = useState(false);
+  const [categoriaEditMediaFile, setCategoriaEditMediaFile] = useState<File | null>(null);
+  const [categoriaEditMediaDuration, setCategoriaEditMediaDuration] = useState<number | undefined>(undefined);
+  const [categoriaEliminandoId, setCategoriaEliminandoId] = useState<string | null>(null);
+
+  const abrirEditarCategoria = (categoria: BackendCategoria): void => {
+    setCategoriaEdit(categoria);
+    setCategoriaEditForm({
+      nombre: categoria.nombre || '',
+      descripcion: categoria.descripcion || '',
+      estado: categoria.estado !== false,
+    });
+    setCategoriaEditMediaFile(null);
+    setCategoriaEditMediaDuration(undefined);
+  };
+
+  const guardarCategoriaEdit = async (): Promise<void> => {
+    if (!categoriaEdit) return;
+    if (!categoriaEditForm.nombre.trim()) {
+      toast.error('El nombre de la categoría es obligatorio.');
+      return;
+    }
+    try {
+      setCategoriaEditSaving(true);
+      const id = backendId(categoriaEdit);
+      await productosService.actualizarCategoria(id, {
+        nombre: categoriaEditForm.nombre.trim(),
+        descripcion: categoriaEditForm.descripcion.trim(),
+        estado: categoriaEditForm.estado,
+      });
+      // Subir nueva media reemplaza la anterior (el backend desactiva la activa en la misma transacción).
+      if (categoriaEditMediaFile) {
+        await productosService.subirMediaCategoria(id, categoriaEditMediaFile, categoriaEditMediaDuration);
+      }
+      toast.success(`Categoría "${categoriaEditForm.nombre.trim().toUpperCase()}" actualizada.`);
+      setCategoriaEdit(null);
+      await loadData();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message.replace(/^\[\d+\]\s*/, '') : 'No se pudo actualizar la categoría.');
+    } finally {
+      setCategoriaEditSaving(false);
+    }
+  };
+
+  const eliminarCategoria = async (categoria: BackendCategoria): Promise<void> => {
+    const id = backendId(categoria);
+    if (!window.confirm(`¿Eliminar la categoría "${categoria.nombre}"? Solo se permite si no tiene subcategorías, productos ni reglas contables asociadas.`)) return;
+    try {
+      setCategoriaEliminandoId(id);
+      const { msg } = await productosService.eliminarCategoria(id);
+      toast.success(msg || 'Categoría eliminada.');
+      await loadData();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message.replace(/^\[\d+\]\s*/, '') : 'No se pudo eliminar la categoría.');
+    } finally {
+      setCategoriaEliminandoId(null);
+    }
+  };
   const [typeForm, setTypeForm] = useState<TipoProductoPayload>({
     nombre: '',
     codigo: '',
@@ -521,30 +581,43 @@ export default function GestionProductos(): React.ReactElement {
     setCategoryMediaDuration(undefined);
   };
 
-  const onCategoryMediaFileChange = async (file?: File): Promise<void> => {
-    if (!file) return;
+  /** Valida imagen/video (máx. 10 s) para media de categoría; retorna null si no pasa. */
+  const validarMediaCategoria = async (file?: File): Promise<{ file: File; duracion?: number } | null> => {
+    if (!file) return null;
     const isImage = file.type.startsWith('image/');
     const isVideo = file.type.startsWith('video/');
     if (!isImage && !isVideo) {
       toast.error('Selecciona una imagen o un video.');
-      return;
+      return null;
     }
     if (isVideo) {
       try {
         const duration = await readVideoDuration(file);
         if (duration > 10) {
           toast.error('El video de la categoría debe durar máximo 10 segundos.');
-          return;
+          return null;
         }
-        setCategoryMediaDuration(duration);
+        return { file, duracion: duration };
       } catch (error) {
         toast.error(errorMessage(error, 'No se pudo validar la duración del video.'));
-        return;
+        return null;
       }
-    } else {
-      setCategoryMediaDuration(undefined);
     }
-    setCategoryMediaFile(file);
+    return { file };
+  };
+
+  const onCategoryMediaFileChange = async (file?: File): Promise<void> => {
+    const valido = await validarMediaCategoria(file);
+    if (!valido) return;
+    setCategoryMediaDuration(valido.duracion);
+    setCategoryMediaFile(valido.file);
+  };
+
+  const onCategoriaEditMediaFileChange = async (file?: File): Promise<void> => {
+    const valido = await validarMediaCategoria(file);
+    if (!valido) return;
+    setCategoriaEditMediaDuration(valido.duracion);
+    setCategoriaEditMediaFile(valido.file);
   };
 
   const closeTypeDialog = (): void => {
@@ -1783,6 +1856,9 @@ export default function GestionProductos(): React.ReactElement {
         <DialogContent className="sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>Categorias creadas</DialogTitle>
+            <DialogDescription>
+              Consulta, edita o elimina las categorías del catálogo de productos.
+            </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
@@ -1804,12 +1880,13 @@ export default function GestionProductos(): React.ReactElement {
                     <TableHead>Nivel</TableHead>
                     <TableHead>Estado</TableHead>
                     <TableHead>Descripcion</TableHead>
+                    <TableHead className="text-right">Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredCategorias.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
+                      <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
                         No hay categorias para mostrar.
                       </TableCell>
                     </TableRow>
@@ -1827,6 +1904,32 @@ export default function GestionProductos(): React.ReactElement {
                       <TableCell className="max-w-xs truncate text-muted-foreground">
                         {categoria.descripcion || 'Sin descripcion'}
                       </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-1">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            title="Editar categoría"
+                            onClick={() => abrirEditarCategoria(categoria)}
+                            disabled={categoriaEliminandoId === backendId(categoria)}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-destructive"
+                            title="Eliminar categoría"
+                            onClick={() => void eliminarCategoria(categoria)}
+                            disabled={categoriaEliminandoId === backendId(categoria)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -1841,10 +1944,99 @@ export default function GestionProductos(): React.ReactElement {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={Boolean(categoriaEdit)} onOpenChange={(open) => { if (!open) setCategoriaEdit(null); }}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Editar Categoría</DialogTitle>
+            <DialogDescription>
+              Actualiza nombre, descripción, estado o la imagen/video de la categoría.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="categoria-edit-nombre">Nombre</Label>
+              <Input
+                id="categoria-edit-nombre"
+                value={categoriaEditForm.nombre}
+                onChange={(e) => setCategoriaEditForm((prev) => ({ ...prev, nombre: e.target.value }))}
+                disabled={categoriaEditSaving}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="categoria-edit-descripcion">Descripción</Label>
+              <Input
+                id="categoria-edit-descripcion"
+                value={categoriaEditForm.descripcion}
+                onChange={(e) => setCategoriaEditForm((prev) => ({ ...prev, descripcion: e.target.value }))}
+                disabled={categoriaEditSaving}
+              />
+            </div>
+            <div className="flex items-center gap-3">
+              <Switch
+                checked={categoriaEditForm.estado}
+                onCheckedChange={(checked) => setCategoriaEditForm((prev) => ({ ...prev, estado: checked }))}
+                disabled={categoriaEditSaving}
+                aria-label="Estado de la categoría"
+              />
+              <span className="text-sm text-muted-foreground">
+                {categoriaEditForm.estado ? 'Activa en catálogo' : 'Inactiva (oculta en selects y matriz de reglas)'}
+              </span>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="categoria-edit-media">Imagen o video (máx. 10 s)</Label>
+              {categoriaEdit?.media?.url && !categoriaEditMediaFile ? (
+                <div className="flex items-center gap-3 rounded-md border p-2">
+                  {String(categoriaEdit.media.mimetype || '').startsWith('image/') ? (
+                    <img
+                      src={categoriaEdit.media.url}
+                      alt={`Media de ${categoriaEdit.nombre}`}
+                      className="h-12 w-12 rounded object-cover"
+                    />
+                  ) : (
+                    <span className="text-xs text-muted-foreground">Video actual</span>
+                  )}
+                  <span className="text-xs text-muted-foreground">Media actual — sube un archivo para reemplazarla.</span>
+                </div>
+              ) : null}
+              <Input
+                id="categoria-edit-media"
+                type="file"
+                accept="image/*,video/mp4,video/webm,video/quicktime"
+                onChange={(e) => { void onCategoriaEditMediaFileChange(e.target.files?.[0]); }}
+                disabled={categoriaEditSaving}
+              />
+              {categoriaEditMediaFile && (
+                <p className="text-xs text-muted-foreground">
+                  {categoriaEditMediaFile.name}
+                  {typeof categoriaEditMediaDuration === 'number'
+                    ? ` | ${categoriaEditMediaDuration.toFixed(1)} seg`
+                    : ''}
+                  {' — reemplazará la media actual al guardar.'}
+                </p>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCategoriaEdit(null)} disabled={categoriaEditSaving}>
+              Cancelar
+            </Button>
+            <Button onClick={() => void guardarCategoriaEdit()} disabled={categoriaEditSaving}>
+              {categoriaEditSaving ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <Pencil className="mr-2 h-4 w-4" />}
+              Guardar cambios
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={openCategoryDialog} onOpenChange={(open) => (open ? setOpenCategoryDialog(true) : closeCategoryDialog())}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Crear Categoría</DialogTitle>
+            <DialogDescription>
+              Registra una categoría del catálogo, con imagen o video opcional para el home.
+            </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-4">

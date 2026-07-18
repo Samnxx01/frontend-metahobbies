@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { toast } from 'react-toastify';
+import { axiosClient } from '@/app/services/api';
 import type { ResultadoPago } from '@/app/presentation/pages/membresia/MembershipPayment';
 import { getPrivateHomeRoute } from '@/app/services/routeService';
 
@@ -217,27 +218,27 @@ export function useMembershipPaymentForm({
         const [expMonth, expYear] = formData.paymentInfo.expiryDate?.split('/') || ['', ''];
         if (!expMonth || !expYear) throw new Error('Fecha de expiración inválida');
 
-        const tokenizeResponse = await fetch('https://production.wompi.co/v1/tokens/cards', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${wompiPublicKey}`,
-          },
-          body: JSON.stringify({
+        const tokenizeResponse = await axiosClient.post(
+          'https://production.wompi.co/v1/tokens/cards',
+          {
             number: formData.paymentInfo.cardNumber?.replace(/\s/g, ''),
             cvc: formData.paymentInfo.cvv,
             exp_month: expMonth,
             exp_year: expYear,
             card_holder: formData.paymentInfo.cardName,
-          }),
-        });
+          },
+          {
+            headers: { 'Authorization': `Bearer ${wompiPublicKey}` },
+            validateStatus: () => true,
+          },
+        );
 
-        if (!tokenizeResponse.ok) {
-          const errData = await tokenizeResponse.json().catch(() => ({}));
+        if (tokenizeResponse.status < 200 || tokenizeResponse.status >= 300) {
+          const errData = tokenizeResponse.data ?? {};
           throw new Error(errData.error?.reason || errData.error || 'Error al procesar la tarjeta');
         }
 
-        const tokenData = await tokenizeResponse.json();
+        const tokenData = tokenizeResponse.data;
         if (!tokenData.data?.id) throw new Error('No se pudo obtener el token de la tarjeta');
 
         const installmentsToSend = formData.paymentInfo.cardType === 'debit'
@@ -268,23 +269,24 @@ export function useMembershipPaymentForm({
         paymentHeaders['x-guest-session-id'] = guestSessionId;
       }
 
-      const response = await fetch(
+      const response = await axiosClient.post(
         `${API_BASE_URL}/membresia/seguridad/crear/crearmembresia/${token}`,
         {
-          method: 'POST',
+          ...paymentData,
+          membresiaId: planId,
+          ...(guestSessionId ? { guestSessionId } : {}),
+        },
+        {
           headers: paymentHeaders,
-          body: JSON.stringify({
-            ...paymentData,
-            membresiaId: planId,
-            ...(guestSessionId ? { guestSessionId } : {}),
-          }),
+          validateStatus: () => true,
         }
       );
 
-      const data = await response.json();
+      const responseOk = response.status >= 200 && response.status < 300;
+      const data = response.data;
       console.log('Respuesta del servidor:', data);
 
-      if (!response.ok || data.success === false) {
+      if (!responseOk || data.success === false) {
         throw new Error(data.msg || data.message || `Error ${response.status}`);
       }
 

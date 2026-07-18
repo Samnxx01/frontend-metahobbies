@@ -1,5 +1,6 @@
 import React from 'react';
 import { toast } from 'react-toastify';
+import { axiosClient } from '@/app/services/api';
 import { CalendarDays, DollarSign, RefreshCcw, Save, Settings } from 'lucide-react';
 import inventarioService, {
   type InventarioConfig,
@@ -212,12 +213,12 @@ export default function InventarioTrmConfiguracionTab({
     setSincronizando(true);
     try {
       const fuenteApi = resolverFuenteApi(fuente);
-      const response = await fetch(fuenteApi.url);
-      if (!response.ok) {
+      const response = await axiosClient.get(fuenteApi.url, { validateStatus: () => true });
+      if (response.status < 200 || response.status >= 300) {
         throw new Error(`No se pudo consultar ${fuenteApi.label}`);
       }
 
-      const data = (await response.json()) as DolarApiTrmResponse | DolarApiUsdCotizacionResponse;
+      const data = response.data as DolarApiTrmResponse | DolarApiUsdCotizacionResponse;
       const valor = resolverValorApi(fuente, data);
       if (!Number.isFinite(valor) || valor <= 0) {
         throw new Error(`La respuesta de ${fuenteApi.label} no trae un valor valido`);

@@ -1,3 +1,4 @@
+import axios, { type AxiosResponse, type Method } from 'axios';
 import { getGovernedLogoutPath } from '@/app/services/governedNavigation';
 import { reportarPeticionLentaFrontend } from '@/app/observability/newRelicBrowser';
 
@@ -153,6 +154,24 @@ const buildAbsoluteUrl = (endpoint: string): string => {
     return endpoint;
 };
 
+/**
+ * Instancia central de axios: apiFetch y las peticiones que no pasan por apiFetch
+ * (Wompi, TRM, descargas blob, headers especiales) importan esta misma instancia.
+ * No agregar aquí interceptores que inyecten credenciales: también la usan APIs externas.
+ */
+export const axiosClient = axios.create();
+
+const toResponseHeaders = (headers: AxiosResponse['headers']): Headers => {
+    const result = new Headers();
+    Object.entries(headers || {}).forEach(([key, value]) => {
+        if (typeof value === 'string') result.set(key, value);
+    });
+    return result;
+};
+
+/** Statuses donde Response no admite body (evita TypeError al construirlo). */
+const NULL_BODY_STATUSES = [101, 204, 205, 304];
+
 export const apiFetch = async (
     endpoint: string,
     options: ApiOptions = {}
@@ -178,11 +197,24 @@ export const apiFetch = async (
     let statusRespuesta: number | 'SIN_RESPUESTA' = 'SIN_RESPUESTA';
 
     try {
-        const response: Response = await fetch(buildAbsoluteUrl(resolvedEndpoint), requestOptions as RequestInit);
-        statusRespuesta = response.status;
+        const axiosResponse: AxiosResponse = await axiosClient.request({
+            url: buildAbsoluteUrl(resolvedEndpoint),
+            method: (requestOptions.method ?? 'GET') as Method,
+            headers: requestOptions.headers,
+            data: requestOptions.body,
+            signal: requestOptions.signal ?? undefined,
+            responseType: requestOptions.responseType === 'raw' ? 'blob' : 'text',
+            // apiFetch decide parseo y errores según status/content-type: sin transform ni throw de axios.
+            transformResponse: (data) => data,
+            validateStatus: () => true,
+        });
+
+        const status = axiosResponse.status;
+        const responseOk = status >= 200 && status < 300;
+        statusRespuesta = status;
 
         // Verificar si es 401 Unauthorized en endpoints autenticados
-        if (response.status === 401 && useAuth && logoutOn401) {
+        if (status === 401 && useAuth && logoutOn401) {
             void import('@/app/services/splashLogoService').then((m) => m.invalidateSplashLogoCache());
             localStorage.removeItem('user');
             localStorage.removeItem('token');
@@ -195,23 +227,32 @@ export const apiFetch = async (
         }
 
         if (requestOptions.responseType === 'raw') {
-            if (!response.ok) {
-                throw new Error(response.statusText || 'Error de red en respuesta raw');
+            if (!responseOk) {
+                throw new Error(axiosResponse.statusText || 'Error de red en respuesta raw');
             }
-            return response;
+            // Compatibilidad: los consumidores de 'raw' esperan un Response (.ok, .blob(), .text(), .json()).
+            return new Response(NULL_BODY_STATUSES.includes(status) ? null : axiosResponse.data, {
+                status,
+                statusText: axiosResponse.statusText,
+                headers: toResponseHeaders(axiosResponse.headers),
+            });
         }
 
-        const contentType: string | null = response.headers.get('content-type');
+        const contentTypeHeader = axiosResponse.headers?.['content-type'];
+        const contentType: string | null = typeof contentTypeHeader === 'string' ? contentTypeHeader : null;
         if (!contentType || !contentType.includes('application/json')) {
-            if (!response.ok) {
-                throw new Error(response.statusText || 'Error de red');
+            if (!responseOk) {
+                throw new Error(axiosResponse.statusText || 'Error de red');
             }
             return null;
         }
 
-        const data: any = await response.json();
+        const rawBody: unknown = axiosResponse.data;
+        const data: any = typeof rawBody === 'string'
+            ? (rawBody ? JSON.parse(rawBody) : null)
+            : rawBody;
 
-        if (!response.ok) {
+        if (!responseOk) {
             const msgField = data?.msg;
             const msgFromObject =
                 msgField && typeof msgField === 'object'
@@ -226,7 +267,7 @@ export const apiFetch = async (
                     ? data.errors.map((e: any) => e?.msg || e?.message || String(e)).join(' | ')
                     : null) ||
                 (typeof data === 'object' ? JSON.stringify(data) : String(data));
-            const err = new Error(`[${response.status}] ${backendMsg}`) as Error & {
+            const err = new Error(`[${status}] ${backendMsg}`) as Error & {
                 tipoError?: string;
                 detalle?: string;
             };
@@ -237,7 +278,7 @@ export const apiFetch = async (
 
         return data;
     } catch (error: any) {
-        console.error(`Error en fetch a ${endpoint}:`, error.message);
+        console.error(`Error en peticion a ${endpoint}:`, error.message);
         throw error;
     } finally {
         const duracionMs = Math.round(performance.now() - inicioMs);

@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Loader2, KeyRound, Eye, EyeOff, CheckCircle2, ArrowLeft, ShieldAlert } from 'lucide-react';
 import { getGovernedLoginPath } from '@/app/services/governedNavigation';
+import { axiosClient } from '@/app/services/api';
 const LOGO_URL = '/assets/logo.png';
 
 const schema = z.object({
@@ -59,12 +60,12 @@ export default function RecuperarContrasenaToken() {
             setValidandoToken(true);
             setErrorApi(null);
             try {
-                const res = await fetch('/api/recuperacion/seguridad/password/validar', {
-                    method: 'GET',
+                const res = await axiosClient.get('/api/recuperacion/seguridad/password/validar', {
                     headers: { fantasma: tokenUrl },
+                    validateStatus: () => true,
                 });
-                const data = await res.json().catch(() => ({}));
-                if (!res.ok) {
+                const data = res.data ?? {};
+                if (res.status < 200 || res.status >= 300) {
                     throw new Error(data?.msg || 'El enlace expiró o no es válido.');
                 }
                 if (!cancelado) setTokenValido(true);
@@ -149,17 +150,17 @@ export default function RecuperarContrasenaToken() {
         setErrorApi(null);
         try {
             // El backend espera el token en el header "fantasma"
-            // apiFetch no gestiona headers custom nativamente, así que se hace el fetch manualmente aquí
-            const res = await fetch('/api/recuperacion/seguridad/cambio/password/todos', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'fantasma': tokenUrl,
+            // apiFetch no gestiona headers custom nativamente, así que se hace la petición manualmente aquí
+            const res = await axiosClient.post(
+                '/api/recuperacion/seguridad/cambio/password/todos',
+                { correo, password },
+                {
+                    headers: { 'fantasma': tokenUrl },
+                    validateStatus: () => true,
                 },
-                body: JSON.stringify({ correo, password }),
-            });
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok) {
+            );
+            const data = res.data ?? {};
+            if (res.status < 200 || res.status >= 300) {
                 throw new Error(data.msg || 'Error al cambiar la contraseña.');
             }
             setExito(true);

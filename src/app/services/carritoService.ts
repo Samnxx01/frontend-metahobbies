@@ -1,4 +1,4 @@
-import { apiFetch } from './api';
+import { apiFetch, axiosClient } from './api';
 import type { DatosFacturacionInvitado } from '@/app/presentation/components/carrito/DatosFacturacionInvitadoModal';
 import {
   CART_SESSION_KEY,
@@ -352,24 +352,24 @@ const carritoService = {
       headers.metasploit = token;
       headers.Authorization = `Bearer ${token}`;
     }
-    const response = await fetch(
+    const response = await axiosClient.get(
       `/api/carrito/comprobantes-pedido/${encodeURIComponent(transactionId)}/pdf`,
-      { method: 'GET', headers },
+      { headers, responseType: 'blob', validateStatus: () => true },
     );
-    if (!response.ok) {
+    if (response.status < 200 || response.status >= 300) {
       let msg = 'No se pudo descargar el comprobante PDF';
       try {
-        const err = await response.json();
+        const err = JSON.parse(await (response.data as Blob).text());
         msg = err?.msg || msg;
       } catch {
         /* ignore */
       }
       throw new Error(msg);
     }
-    const disposition = response.headers.get('Content-Disposition') || '';
+    const disposition = String(response.headers['content-disposition'] || '');
     const match = disposition.match(/filename="?([^"]+)"?/i);
     const fileName = match?.[1] || `pedido-mabs-${transactionId}.pdf`;
-    const blob = await response.blob();
+    const blob = response.data as Blob;
     return { blob, fileName };
   },
 

@@ -14,13 +14,25 @@ export default function AdminLayout() {
     const [sinPermisoPorHerencia, setSinPermisoPorHerencia] = useState(null)
 
     useEffect(() => {
+        console.info('[MABS][AdminLayout] Verificando vista administrativa', {
+            pathname: location.pathname,
+            hasUser: Boolean(user),
+        })
         setSinPermisoPorHerencia(null)
         let active = true
         void (async () => {
             try {
                 const show = await shouldShowAdminHerenciaSinPermisoAlert(location.pathname)
+                console.info('[MABS][AdminLayout] Resultado de permisos', {
+                    pathname: location.pathname,
+                    sinPermisoPorHerencia: show,
+                })
                 if (active) setSinPermisoPorHerencia(show)
-            } catch {
+            } catch (error) {
+                console.error('[MABS][AdminLayout] Error verificando permisos', {
+                    pathname: location.pathname,
+                    error,
+                })
                 if (active) setSinPermisoPorHerencia(false)
             }
         })()
@@ -30,6 +42,9 @@ export default function AdminLayout() {
     }, [location.pathname])
 
     if (!user) {
+        console.error('[MABS][AdminLayout] Render cancelado porque user es null', {
+            pathname: location.pathname,
+        })
         return null
     }
 

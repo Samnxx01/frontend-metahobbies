@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { useMembership } from '../../../providers/MembershipProvider';
-import { apiFetch } from '@/app/services/api';
+import { apiFetch, axiosClient } from '@/app/services/api';
 import { resolvePublicAttributionContext, getAttributionLinkCodeFromSearch, capturePublicAttributionFromSearch } from '@/app/services/publicAttributionParams';
 import { isReferidoTokenComplete, resolveReferidoToken } from '@/app/utils/referidoTokenUtils';
 import {
@@ -317,18 +317,18 @@ export default function MembershipPayment(): React.ReactElement {
 
                 // Consultar el estado actual del pago usando la referencia
                 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api';
-                const response = await fetch(
+                const response = await axiosClient.get(
                     `${API_BASE_URL}/membresia/seguridad/consultar/estado/${resultado.referencia}`,
                     {
-                        method: 'GET',
                         headers: {
                             'Authorization': `Bearer ${token}`,
                         },
+                        validateStatus: () => true,
                     }
                 );
 
-                if (response.ok) {
-                    const data = await response.json();
+                if (response.status >= 200 && response.status < 300) {
+                    const data = response.data;
                     console.log('Estado actual del pago:', data);
 
                     const nuevoEstado = wompiStatusToEstado(data.status || data.estado || 'PENDING');
@@ -452,12 +452,12 @@ export default function MembershipPayment(): React.ReactElement {
         setIsRefreshing(true);
         try {
             const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api';
-            const response = await fetch(
+            const response = await axiosClient.get(
                 `${API_BASE_URL}/membresia/seguridad/consultar/estado/${resultado.referencia}`,
-                { method: 'GET', headers: { 'Authorization': `Bearer ${token}` } }
+                { headers: { 'Authorization': `Bearer ${token}` }, validateStatus: () => true }
             );
-            if (response.ok) {
-                const data = await response.json();
+            if (response.status >= 200 && response.status < 300) {
+                const data = response.data;
                 const nuevoEstado = wompiStatusToEstado(data.status || data.estado || 'PENDING');
                 const montoNormalizado = normalizeMembershipPriceFromApiLegacy(data.monto) ?? 0;
                 if (nuevoEstado !== 'pendiente') {

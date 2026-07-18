@@ -332,6 +332,25 @@ const productosService = {
     return resp?.data as BackendCategoria;
   },
 
+  async actualizarCategoria(
+    id: string,
+    payload: { nombre?: string; descripcion?: string; estado?: boolean }
+  ): Promise<BackendCategoria> {
+    const resp = await apiFetch(`/api/productos/categorias/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: payload,
+    });
+    return resp?.data as BackendCategoria;
+  },
+
+  /** Elimina solo si no tiene subcategorías, productos ni reglas contables asociadas (409 si está en uso). */
+  async eliminarCategoria(id: string): Promise<{ msg?: string }> {
+    const resp = await apiFetch(`/api/productos/categorias/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
+    return { msg: resp?.msg };
+  },
+
   async crearTipoProducto(payload: TipoProductoPayload): Promise<BackendTipoProducto> {
     const resp = await apiFetch('/api/productos/tipos', {
       method: 'POST',
@@ -360,6 +379,15 @@ const productosService = {
     if (filtros.estadoCatalogo) params.set('estadoCatalogo', filtros.estadoCatalogo);
     const query = params.toString() ? `?${params.toString()}` : '';
     const resp = await apiFetch(`/api/productos/listar${query}`, { method: 'GET' });
+    return (resp?.data ?? []) as BackendProducto[];
+  },
+
+  async listarCatalogoPublico(filtros: Pick<FiltrosProductos, 'categoria' | 'destacado'> = {}): Promise<BackendProducto[]> {
+    const params = new URLSearchParams();
+    if (filtros.categoria) params.set('categoria', filtros.categoria);
+    if (typeof filtros.destacado === 'boolean') params.set('destacado', String(filtros.destacado));
+    const query = params.toString() ? `?${params.toString()}` : '';
+    const resp = await apiFetchPublic(`/api/productos/catalogo${query}`);
     return (resp?.data ?? []) as BackendProducto[];
   },
 
@@ -488,9 +516,8 @@ const productosService = {
 
   /** Lista productos mapeados directamente a ComponentProduct */
   async listarParaHome(categoriaId?: string): Promise<ComponentProduct[]> {
-    const productos = await productosService.listarProductos({
+    const productos = await productosService.listarCatalogoPublico({
       categoria: categoriaId,
-      estadoCatalogo: 'ACTIVO',
       destacado: true,
     });
     return productos.map(mapProducto);
@@ -498,9 +525,8 @@ const productosService = {
 
   /** Catálogo público (/productos) con filtro opcional por categoría. */
   async listarParaCatalogo(categoriaId?: string): Promise<ComponentProduct[]> {
-    const productos = await productosService.listarProductos({
+    const productos = await productosService.listarCatalogoPublico({
       categoria: categoriaId,
-      estadoCatalogo: 'ACTIVO',
     });
     return productos
       .filter((p) => p.estadoProducto !== false)

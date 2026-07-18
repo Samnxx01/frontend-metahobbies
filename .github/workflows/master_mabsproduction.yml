@@ -7,11 +7,12 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
 
     permissions:
       contents: read
+      id-token: write
 
     steps:
       - name: Checkout repository
@@ -46,28 +47,15 @@ jobs:
           VITE_NEW_RELIC_LICENSE_KEY: ${{ secrets.NEW_RELIC_BROWSER_LICENSE_KEY }}
           VITE_NEW_RELIC_AGENT_ID: ${{ secrets.NEW_RELIC_AGENT_ID }}
 
-      - name: Upload artifact for deployment job
-        uses: actions/upload-artifact@v4
-        with:
-          name: vite-app
-          path: dist
-          retention-days: 1
-          if-no-files-found: error
+      - name: Verify build output
+        run: |
+          echo "Contenido de dist:"
+          ls -la dist
 
-  deploy:
-    runs-on: ubuntu-latest
-    needs: build
-
-    permissions:
-      id-token: write
-      contents: read
-
-    steps:
-      - name: Download artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: vite-app
-          path: dist
+          if [ ! -f "dist/index.html" ]; then
+            echo "Error: dist/index.html no fue generado"
+            exit 1
+          fi
 
       - name: Login to Azure
         uses: azure/login@v2
@@ -81,4 +69,4 @@ jobs:
         with:
           app-name: Mabsproduction
           slot-name: Production
-          package: dist
+          package: ./dist

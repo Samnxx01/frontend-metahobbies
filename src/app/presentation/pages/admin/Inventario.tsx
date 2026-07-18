@@ -261,6 +261,13 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
   const { initialActiveTab } = props;
   const { user } = useAuth();
   const { menuTabs: inventarioMenuTabs, loading: loadingInventarioTabs } = useInventarioTarjetasDinamicas(user);
+  useEffect(() => {
+    console.info('[MABS][Inventario] Componente montado', {
+      initialActiveTab: initialActiveTab ?? null,
+      hasUser: Boolean(user),
+    });
+    return () => console.info('[MABS][Inventario] Componente desmontado');
+  }, [initialActiveTab, user]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [config, setConfig] = useState<InventarioConfig | null>(null);
@@ -765,6 +772,11 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
 
   /** Si el menú dinámico (GET tarjetas) no incluye la pestaña activa, ir a la primera visible. */
   useEffect(() => {
+    console.info('[MABS][Inventario] Estado de pestañas dinámicas', {
+      loading: loadingInventarioTabs,
+      total: inventarioMenuTabs.length,
+      tabs: inventarioMenuTabs.map((tab) => tab.value),
+    });
     if (!inventarioMenuTabs.length) return;
     if (inventarioMenuTabs.some((t) => t.value === activeTab)) return;
     setActiveTab(inventarioMenuTabs[0].value);
