@@ -1,5 +1,7 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import FormField from '@/components/common/FormField';
+import metodoPagoService, { type MetodoPagoCatalogo } from '@/app/services/metodoPagoService';
+import type { BeneficioMembresiaPago } from '@/app/services/brandingWidget';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
@@ -48,6 +50,7 @@ interface MembershipStepContentProps {
   handleFormChange: (section: 'personalInfo' | 'paymentInfo', field: string, value: any) => void;
   MEMBERSHIP_PRICE: number | null;
   MEMBERSHIP_NOMBRE?: string;
+  BENEFICIOS_PAGO?: BeneficioMembresiaPago[];
   token: string;
 }
 
@@ -57,7 +60,59 @@ export default function MembershipStepContent({
   handleFormChange,
   MEMBERSHIP_PRICE,
   MEMBERSHIP_NOMBRE,
+  BENEFICIOS_PAGO = [],
 }: MembershipStepContentProps): React.ReactElement | null {
+  const [metodosPago, setMetodosPago] = useState<MetodoPagoCatalogo[]>([]);
+
+  useEffect(() => {
+    if (step !== 2) return;
+
+    let mounted = true;
+    metodoPagoService.listarActivos()
+      .then((data) => {
+        if (mounted) setMetodosPago(data);
+      })
+      .catch(() => {
+        if (mounted) setMetodosPago([]);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [step]);
+
+  const paymentMethods = useMemo(() => {
+    const presentationByCode = {
+      nequi: {
+        id: 'nequi' as const,
+        icon: Smartphone,
+        color: 'from-primary/15 to-accent/10',
+      },
+      card: {
+        id: 'card' as const,
+        icon: CreditCard,
+        color: 'from-accent/15 to-secondary/10',
+      },
+      pse: {
+        id: 'pse' as const,
+        icon: Building2,
+        color: 'from-secondary/15 to-primary/10',
+      },
+    };
+
+    return metodosPago.flatMap((method) => {
+      const code = method.codigo.trim().toLowerCase();
+      const normalizedCode = code === 'tarjeta' ? 'card' : code;
+      const presentation = presentationByCode[normalizedCode as keyof typeof presentationByCode];
+      if (!presentation) return [];
+
+      return [{
+        ...presentation,
+        name: method.nombre,
+        description: method.descripcion || '',
+      }];
+    });
+  }, [metodosPago]);
 
   switch (step) {
     // Step 0: Email 
@@ -166,47 +221,23 @@ export default function MembershipStepContent({
             </div>
           </Card>
 
-          {/* Trust badges */}
-          <div className="flex items-center justify-center gap-6 text-xs text-muted-foreground pt-4">
-            <div className="flex items-center gap-1">
-              <Shield className="w-4 h-4" />
-              <span>Pago seguro</span>
+          {/* Textos parametrizados del flujo de pago */}
+          {BENEFICIOS_PAGO.length > 0 && (
+            <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-muted-foreground pt-4">
+              {BENEFICIOS_PAGO.map((beneficio, index) => (
+                <div key={`${beneficio.texto}-${index}`} className="flex items-center gap-1">
+                  {beneficio.icono && <span aria-hidden="true">{beneficio.icono}</span>}
+                  <span>{beneficio.texto}</span>
+                </div>
+              ))}
             </div>
-            <div className="flex items-center gap-1">
-              <Zap className="w-4 h-4" />
-              <span>Activación inmediata</span>
-            </div>
-          </div>
+          )}
         </div>
       );
     }
 
     // Step 2: Pago
     case 2: {
-      const paymentMethods = [
-        {
-          id: 'nequi',
-          name: 'Nequi',
-          description: 'Pago rápido desde tu app',
-          icon: Smartphone,
-          color: 'from-primary/15 to-accent/10',
-        },
-        {
-          id: 'card',
-          name: 'Tarjeta',
-          description: 'Crédito o débito',
-          icon: CreditCard,
-          color: 'from-accent/15 to-secondary/10',
-        },
-        {
-          id: 'pse',
-          name: 'PSE',
-          description: 'Desde tu banco',
-          icon: Building2,
-          color: 'from-secondary/15 to-primary/10',
-        },
-      ];
-
       return (
         <div className="space-y-6">
           {/* Header */}
@@ -256,6 +287,11 @@ export default function MembershipStepContent({
               </button>
             ))}
           </div>
+          {paymentMethods.length === 0 && (
+            <p className="text-sm text-center text-muted-foreground">
+              No hay métodos de pago disponibles.
+            </p>
+          )}
 
           {/* Formularios dinámicos por método */}
           {formData.paymentInfo.paymentMethod && (

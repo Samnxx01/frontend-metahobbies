@@ -3,6 +3,7 @@ import { useParams, useNavigate, useSearchParams, useLocation } from 'react-rout
 import { toast } from 'react-toastify';
 import { useMembership } from '../../../providers/MembershipProvider';
 import { apiFetch, axiosClient } from '@/app/services/api';
+import { obtenerBeneficiosMembresiaPago, type BeneficioMembresiaPago } from '@/app/services/brandingWidget';
 import { resolvePublicAttributionContext, getAttributionLinkCodeFromSearch, capturePublicAttributionFromSearch } from '@/app/services/publicAttributionParams';
 import { isReferidoTokenComplete, resolveReferidoToken } from '@/app/utils/referidoTokenUtils';
 import {
@@ -280,6 +281,14 @@ export default function MembershipPayment(): React.ReactElement {
 
     // Refresh manual del estado
     const [isRefreshing, setIsRefreshing] = useState(false);
+    const [beneficiosPago, setBeneficiosPago] = useState<BeneficioMembresiaPago[]>([]);
+
+    useEffect(() => {
+        // Texto del pie dinámico (endpoint público, parametrizable vía branding).
+        obtenerBeneficiosMembresiaPago()
+            .then((data) => setBeneficiosPago(data))
+            .catch(() => setBeneficiosPago([]));
+    }, []);
 
     // Estado para polling mejorado del pago pendiente
     const [pollingActive, setPollingActive] = useState(false);
@@ -723,6 +732,7 @@ export default function MembershipPayment(): React.ReactElement {
                                         handleFormChange={handleFormChange}
                                         MEMBERSHIP_PRICE={planSeleccionado?.precioMembresia ?? null}
                                         MEMBERSHIP_NOMBRE={planSeleccionado?.nombreMembresia}
+                                        BENEFICIOS_PAGO={beneficiosPago}
                                         token={token || ''}
                                     />
                                 )}
@@ -750,7 +760,7 @@ export default function MembershipPayment(): React.ReactElement {
                                         || (activeStep >= 1 && !token?.trim())
                                     }
                                     size="lg"
-                                    className={`gap-2 min-w-[160px] font-semibold ${isLastStep ? 'bg-gradient-to-r from-primary to-primary/80 shadow-lg' : ''
+                                    className={`gap-2 min-w-[160px] font-semibold ${isLastStep ? 'bg-gradient-to-r from-accent to-accent/80 text-accent-foreground shadow-lg' : ''
                                         }`}
                                 >
                                     {loading ? (
@@ -765,11 +775,6 @@ export default function MembershipPayment(): React.ReactElement {
                         </CardContent>
                     </Card>
 
-                    <div className="mt-8 text-center">
-                        <p className="text-xs text-muted-foreground">
-                            🔒 Pago 100% seguro • ⚡ Activación inmediata • 💎 Acceso de por vida
-                        </p>
-                    </div>
                 </div>
             </div>
         </>

@@ -1,6 +1,7 @@
 import { apiFetch } from '@/app/services/api';
 
-export type MedioPagoDian = 'EFECTIVO' | 'TARJETA';
+/** Código parametrizado de la Lista 15A DIAN (ej. 10, 48, 49). */
+export type MedioPagoDian = string;
 
 export interface MetodoPagoCatalogo {
   iud?: string;
@@ -14,6 +15,17 @@ export interface MetodoPagoCatalogo {
   orden: number;
   estado: boolean;
   esSistema?: boolean;
+  metodoPagoId?: string | { iud?: string; _id?: string; codigo?: string; nombreMetodoPago?: string };
+}
+export interface MetodoPagoPadre {
+  iud?: string;
+  _id?: string;
+  codigo: string;
+  nombreMetodoPago: string;
+  catalogoMetodoCodigo?: string;
+  pasarelaPago?: string;
+  descripcion?: string;
+  estado: boolean;
 }
 
 type ApiResponsePayload<T> = { ok?: boolean; data?: T; msg?: string; total?: number };
@@ -25,8 +37,9 @@ const metodoPagoService = {
     return (resp?.data ?? []) as MetodoPagoCatalogo[];
   },
 
-  async listarAdmin(): Promise<MetodoPagoCatalogo[]> {
-    const resp = await apiFetch('/api/inventario/config/metodos-pago/admin', { method: 'GET' });
+  async listarAdmin(metodoPagoId?: string): Promise<MetodoPagoCatalogo[]> {
+    const query = metodoPagoId ? `?metodoPagoId=${encodeURIComponent(metodoPagoId)}` : '';
+    const resp = await apiFetch(`/api/inventario/config/metodos-pago/admin${query}`, { method: 'GET' });
     return (resp?.data ?? []) as MetodoPagoCatalogo[];
   },
 
@@ -35,6 +48,7 @@ const metodoPagoService = {
     nombre: string;
     descripcion?: string;
     medioPagoDian?: MedioPagoDian;
+    metodoPagoId?: string;
     orden?: number;
     estado?: boolean;
   }): Promise<MetodoPagoApiResult<MetodoPagoCatalogo>> {
@@ -43,6 +57,37 @@ const metodoPagoService = {
       body: payload,
     }) as ApiResponsePayload<MetodoPagoCatalogo>;
     return { data: resp.data as MetodoPagoCatalogo, msg: resp.msg };
+  },
+
+  async listarPadres(): Promise<MetodoPagoPadre[]> {
+    const resp = await apiFetch('/api/inventario/config/metodos-pago/padres', { method: 'GET' });
+    return (resp?.data ?? []) as MetodoPagoPadre[];
+  },
+
+  async crearPadre(payload: {
+    codigo?: string;
+    nombreMetodoPago: string;
+    catalogoMetodoCodigo: string;
+    pasarelaPago: string;
+    descripcion?: string;
+    estado?: boolean;
+  }): Promise<MetodoPagoApiResult<MetodoPagoPadre>> {
+    const resp = await apiFetch('/api/inventario/config/metodos-pago/padres', {
+      method: 'POST',
+      body: payload,
+    }) as ApiResponsePayload<MetodoPagoPadre>;
+    return { data: resp.data as MetodoPagoPadre, msg: resp.msg };
+  },
+
+  async actualizarPadre(
+    id: string,
+    payload: { nombreMetodoPago?: string; descripcion?: string; estado?: boolean }
+  ): Promise<MetodoPagoApiResult<MetodoPagoPadre>> {
+    const resp = await apiFetch(`/api/inventario/config/metodos-pago/padres/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: payload,
+    }) as ApiResponsePayload<MetodoPagoPadre>;
+    return { data: resp.data as MetodoPagoPadre, msg: resp.msg };
   },
 
   async actualizar(

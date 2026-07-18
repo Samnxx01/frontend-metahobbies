@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Pencil, Plus } from 'lucide-react';
 import { toast } from 'react-toastify';
 import metodoPagoService, { type MedioPagoDian, type MetodoPagoCatalogo } from '@/app/services/metodoPagoService';
+import reglasContablesService, { type CatalogoCodigo } from '@/app/services/reglasContablesService';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -26,7 +27,7 @@ type Draft = {
   estado: boolean;
 };
 
-const inicial: Draft = { codigo: '', nombre: '', descripcion: '', medioPagoDian: 'TARJETA', estado: true };
+const inicial: Draft = { codigo: '', nombre: '', descripcion: '', medioPagoDian: '', estado: true };
 
 const errMsg = (e: unknown, f: string): string => (e instanceof Error ? e.message.replace(/^\[\d+\]\s*/, '') : f);
 
@@ -36,6 +37,15 @@ export default function MetodoPagoFormSubmodal({
   const esEdicion = Boolean(registro?.codigo);
   const [draft, setDraft] = useState<Draft>(inicial);
   const [submitting, setSubmitting] = useState(false);
+  const [mediosDian, setMediosDian] = useState<CatalogoCodigo[]>([]);
+
+  const cargarMediosDian = async (): Promise<void> => {
+    try {
+      setMediosDian(await reglasContablesService.listarCatalogoCodigos('DIAN_MEDIOS_PAGO'));
+    } catch {
+      setMediosDian([]);
+    }
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -45,16 +55,17 @@ export default function MetodoPagoFormSubmodal({
             codigo: registro.codigo,
             nombre: registro.nombre,
             descripcion: registro.descripcion ?? '',
-            medioPagoDian: registro.medioPagoDian ?? 'TARJETA',
+            medioPagoDian: registro.medioPagoDian ?? '',
             estado: registro.estado !== false,
           }
         : inicial
     );
+    void cargarMediosDian();
   }, [open, registro]);
 
   const guardar = async (): Promise<void> => {
-    if (!draft.codigo.trim() || !draft.nombre.trim()) {
-      toast.error('Código y nombre son obligatorios.');
+    if (!draft.codigo.trim() || !draft.nombre.trim() || !draft.medioPagoDian) {
+      toast.error('Código, nombre y medio de pago DIAN son obligatorios.');
       return;
     }
     try {
@@ -69,7 +80,10 @@ export default function MetodoPagoFormSubmodal({
         const { msg } = await metodoPagoService.actualizar(registro.codigo, body);
         toast.success(msg || 'Método de pago actualizado.');
       } else {
-        const { msg } = await metodoPagoService.crear({ codigo: draft.codigo.trim(), ...body });
+        const { msg } = await metodoPagoService.crear({
+          codigo: draft.codigo.trim(),
+          ...body,
+        });
         toast.success(msg || 'Método de pago registrado.');
       }
       onGuardada?.();
@@ -128,8 +142,11 @@ export default function MetodoPagoFormSubmodal({
                 <SelectValue placeholder="Selecciona el medio DIAN" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="EFECTIVO">Efectivo</SelectItem>
-                <SelectItem value="TARJETA">Tarjeta</SelectItem>
+                {mediosDian.map(medio => (
+                  <SelectItem key={medio.codigo} value={medio.codigo}>
+                    {medio.codigo} — {medio.nombre}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>

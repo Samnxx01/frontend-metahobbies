@@ -7,6 +7,7 @@ import {
 
 export const MEMBRESIA_PRECIO_LIST_URL = '/api/membresia/seguridad/crear/parametrizacion/membresia';
 export const MEMBRESIA_PRECIO_CREATE_URL = '/api/membresia/seguridad/crear/parametrizacion/membresia/moneda';
+export const MEMBRESIA_OPCIONES_PAGO_URL = '/api/membresia/seguridad/parametrizacion/membresia/opciones-pago';
 export const MONEDAS_LIST_URL = '/api/monedas/seguridad/listar/monedas';
 
 export function membresiaPrecioUpdatePath(id: unknown): string {
@@ -51,6 +52,7 @@ export type MembresiaPrecioApiRow = EntityRef & {
   descripcion?: string;
   precioMembresia?: number;
   tipoPagos?: string;
+  metodoPagoCodigo?: string | null;
   estadoPrecio?: boolean;
   esPrecioDefault?: boolean;
   creacionDate?: string;
@@ -63,6 +65,7 @@ export type MembresiaPrecioRow = {
   descripcion: string;
   precioMembresia: number;
   tipoPagos: string;
+  metodoPagoCodigo: string;
   estadoPrecio: boolean;
   esPrecioDefault: boolean;
   creacionDate: string;
@@ -99,6 +102,7 @@ export function normalizeMembresiaPrecioFromApi(raw: MembresiaPrecioApiRow): Mem
     descripcion: String(raw.descripcion ?? '').trim(),
     precioMembresia: Number(raw.precioMembresia ?? 0),
     tipoPagos: String(raw.tipoPagos ?? '').trim(),
+    metodoPagoCodigo: String(raw.metodoPagoCodigo ?? '').trim(),
     estadoPrecio: raw.estadoPrecio !== false,
     esPrecioDefault: raw.esPrecioDefault === true,
     creacionDate: String(raw.creacionDate ?? ''),

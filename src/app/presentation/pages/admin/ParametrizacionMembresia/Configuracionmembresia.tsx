@@ -21,6 +21,7 @@ import {
 import {
     MEMBRESIA_PRECIO_CREATE_URL,
     MEMBRESIA_PRECIO_LIST_URL,
+    MEMBRESIA_OPCIONES_PAGO_URL,
     MONEDAS_LIST_URL,
     membresiaPrecioUpdatePath,
     normalizeMembresiaPrecioFromApi,
@@ -39,6 +40,7 @@ interface CrearForm {
     precioMembresia: string;
     tipoPagos: string;
     monedasId: string;
+    metodoPagoCodigo: string;
 }
 
 interface EditarForm {
@@ -47,6 +49,7 @@ interface EditarForm {
     precioMembresia: string;
     tipoPagos: string;
     monedasId: string;
+    metodoPagoCodigo: string;
 }
 
 const INITIAL_CREAR: CrearForm = {
@@ -56,6 +59,7 @@ const INITIAL_CREAR: CrearForm = {
     precioMembresia: '',
     tipoPagos: '',
     monedasId: '',
+    metodoPagoCodigo: '',
 };
 
 const INITIAL_EDITAR: EditarForm = {
@@ -64,9 +68,20 @@ const INITIAL_EDITAR: EditarForm = {
     precioMembresia: '',
     tipoPagos: '',
     monedasId: '',
+    metodoPagoCodigo: '',
 };
 
-const TIPO_PAGOS = ['Único', 'Mensual', 'Anual'] as const;
+interface MetodoPagoOption {
+    codigo: string;
+    nombre: string;
+    descripcion?: string;
+}
+interface TipoPagoOption {
+    codigo: string;
+    nombre: string;
+    descripcion?: string;
+    estado?: boolean;
+}
 
 const normalizarPrecioDesdeCentavos = (valor: number | string | null | undefined) =>
     Number(valor || 0) / 100;
@@ -87,6 +102,12 @@ export default function ConfiguracionMembresia() {
     // Monedas
     const [monedas, setMonedas] = useState<MonedaRow[]>([]);
     const [loadingMonedas, setLoadingMonedas] = useState(false);
+    const [tiposPago, setTiposPago] = useState<TipoPagoOption[]>([]);
+    const [metodosPago, setMetodosPago] = useState<MetodoPagoOption[]>([]);
+    const [loadingOpcionesPago, setLoadingOpcionesPago] = useState(false);
+    const [modalTipoPago, setModalTipoPago] = useState(false);
+    const [tipoPagoDraft, setTipoPagoDraft] = useState<TipoPagoOption>({ codigo: '', nombre: '', descripcion: '', estado: true });
+    const [guardandoTipoPago, setGuardandoTipoPago] = useState(false);
 
     // Tabla de membresías
     const [membresias, setMembresias] = useState<MembresiaPrecioRow[]>([]);
@@ -127,10 +148,58 @@ export default function ConfiguracionMembresia() {
         finally { setLoadingMembresias(false); }
     }, []);
 
+    const cargarOpcionesPago = useCallback(async () => {
+        setLoadingOpcionesPago(true);
+        try {
+            const res = await apiFetch(MEMBRESIA_OPCIONES_PAGO_URL, { method: 'GET' });
+            const data = res?.data ?? {};
+            setTiposPago(Array.isArray(data.tiposPago) ? data.tiposPago : []);
+            setMetodosPago(Array.isArray(data.metodosPago) ? data.metodosPago : []);
+        } catch {
+            setTiposPago([]);
+            setMetodosPago([]);
+        } finally {
+            setLoadingOpcionesPago(false);
+        }
+    }, []);
+
+    const guardarTipoPago = async () => {
+        if (!tipoPagoDraft.nombre.trim()) {
+            mostrarError('El nombre del tipo de pago es obligatorio.');
+            return;
+        }
+        setGuardandoTipoPago(true);
+        try {
+            const codigo = tipoPagoDraft.codigo.trim();
+            await apiFetch(
+                codigo
+                    ? `/api/membresia/seguridad/parametrizacion/tipos-pago/${encodeURIComponent(codigo)}`
+                    : '/api/membresia/seguridad/parametrizacion/tipos-pago',
+                {
+                    method: codigo ? 'PUT' : 'POST',
+                    body: {
+                        codigo: codigo || undefined,
+                        nombre: tipoPagoDraft.nombre.trim(),
+                        descripcion: tipoPagoDraft.descripcion?.trim() || '',
+                        estado: tipoPagoDraft.estado !== false,
+                    },
+                }
+            );
+            toast.success('Tipo de pago guardado.');
+            setTipoPagoDraft({ codigo: '', nombre: '', descripcion: '', estado: true });
+            await cargarOpcionesPago();
+        } catch (error: any) {
+            mostrarError(error.message || 'No se pudo guardar el tipo de pago.');
+        } finally {
+            setGuardandoTipoPago(false);
+        }
+    };
+
     useEffect(() => {
         cargarMonedas();
         cargarMembresias();
-    }, [cargarMonedas, cargarMembresias]);
+        cargarOpcionesPago();
+    }, [cargarMonedas, cargarMembresias, cargarOpcionesPago]);
 
     const abrirEditar = (m: MembresiaPrecioRow) => {
         setEditandoId(m.id);
@@ -140,6 +209,7 @@ export default function ConfiguracionMembresia() {
             precioMembresia: String(normalizarPrecioDesdeCentavos(m.precioMembresia)),
             tipoPagos: m.tipoPagos ?? '',
             monedasId: m.monedaId ?? '',
+            metodoPagoCodigo: m.metodoPagoCodigo,
         });
         setModalAbierto(true);
     };
@@ -178,6 +248,10 @@ export default function ConfiguracionMembresia() {
             mostrarError('Ingresa un precio válido mayor a cero.');
             return;
         }
+        if (!formCrear.tipoPagos || !formCrear.metodoPagoCodigo) {
+            mostrarError('Selecciona el tipo y el método de pago.');
+            return;
+        }
         setLoadingAccion('parametrizar');
         try {
             const body: Record<string, unknown> = {
@@ -185,6 +259,7 @@ export default function ConfiguracionMembresia() {
                 descripcion: formCrear.descripcion.trim(),
                 precioMembresia: Number(formCrear.precioMembresia),
                 tipoPagos: formCrear.tipoPagos || undefined,
+                metodoPagoCodigo: formCrear.metodoPagoCodigo,
             };
             if (formCrear.monedasId && formCrear.monedasId !== '__none__') {
                 body.monedasId = resolveMonedaIdForApiBody(formCrear.monedasId);
@@ -213,6 +288,10 @@ export default function ConfiguracionMembresia() {
             mostrarError('Ingresa un precio válido mayor a cero.');
             return;
         }
+        if (!formEditar.tipoPagos || !formEditar.metodoPagoCodigo) {
+            mostrarError('Selecciona el tipo y el método de pago.');
+            return;
+        }
         setLoadingEditar(true);
         try {
             const body: Record<string, unknown> = {
@@ -220,6 +299,7 @@ export default function ConfiguracionMembresia() {
                 descripcion: formEditar.descripcion.trim(),
                 precioMembresia: Number(formEditar.precioMembresia),
                 tipoPagos: formEditar.tipoPagos || undefined,
+                metodoPagoCodigo: formEditar.metodoPagoCodigo,
             };
             if (formEditar.monedasId && formEditar.monedasId !== '__none__') {
                 body.monedasId = resolveMonedaIdForApiBody(formEditar.monedasId);
@@ -341,11 +421,24 @@ export default function ConfiguracionMembresia() {
                             />
                         </FieldWrapper>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                             <FieldWrapper label="Tipo de pago">
+                                <Button type="button" variant="ghost" size="sm" className="mb-1 h-7 px-2 text-xs" onClick={() => setModalTipoPago(true)}>
+                                    <Plus className="mr-1 h-3 w-3" /> Parametrizar tipos
+                                </Button>
                                 <SelectTipoPago
                                     value={formCrear.tipoPagos}
                                     onChange={v => updateCrear('tipoPagos', v)}
+                                    options={tiposPago}
+                                    loading={loadingOpcionesPago}
+                                />
+                            </FieldWrapper>
+                            <FieldWrapper label="Método de pago">
+                                <SelectMetodoPago
+                                    value={formCrear.metodoPagoCodigo}
+                                    onChange={v => updateCrear('metodoPagoCodigo', v)}
+                                    options={metodosPago}
+                                    loading={loadingOpcionesPago}
                                 />
                             </FieldWrapper>
                             <FieldWrapper label="Moneda" hint="Opcional">
@@ -573,11 +666,21 @@ export default function ConfiguracionMembresia() {
                             />
                         </FieldWrapper>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                             <FieldWrapper label="Tipo de pago">
                                 <SelectTipoPago
                                     value={formEditar.tipoPagos}
                                     onChange={v => updateEditar('tipoPagos', v)}
+                                    options={tiposPago}
+                                    loading={loadingOpcionesPago}
+                                />
+                            </FieldWrapper>
+                            <FieldWrapper label="Método de pago">
+                                <SelectMetodoPago
+                                    value={formEditar.metodoPagoCodigo}
+                                    onChange={v => updateEditar('metodoPagoCodigo', v)}
+                                    options={metodosPago}
+                                    loading={loadingOpcionesPago}
                                 />
                             </FieldWrapper>
                             <FieldWrapper label="Moneda" hint="Opcional">
@@ -623,6 +726,50 @@ export default function ConfiguracionMembresia() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+            <Dialog open={modalTipoPago} onOpenChange={setModalTipoPago}>
+                <DialogContent className="sm:max-w-lg">
+                    <DialogHeader>
+                        <DialogTitle>Parametrizar tipos de pago</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                        <FieldWrapper label="Nombre" required>
+                            <Input
+                                value={tipoPagoDraft.nombre}
+                                onChange={e => setTipoPagoDraft(p => ({ ...p, nombre: e.target.value }))}
+                                placeholder="Ej: Mensual"
+                            />
+                        </FieldWrapper>
+                        <FieldWrapper label="Descripción">
+                            <Input
+                                value={tipoPagoDraft.descripcion || ''}
+                                onChange={e => setTipoPagoDraft(p => ({ ...p, descripcion: e.target.value }))}
+                            />
+                        </FieldWrapper>
+                        <div className="space-y-2">
+                            {tiposPago.map(tipo => (
+                                <button
+                                    type="button"
+                                    key={tipo.codigo}
+                                    className="flex w-full items-center justify-between rounded-md border p-2 text-left text-sm"
+                                    onClick={() => setTipoPagoDraft(tipo)}
+                                >
+                                    <span>{tipo.nombre}</span>
+                                    <Badge variant={tipo.estado === false ? 'secondary' : 'outline'}>
+                                        {tipo.estado === false ? 'Inactivo' : 'Activo'}
+                                    </Badge>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setModalTipoPago(false)}>Cerrar</Button>
+                        <Button onClick={() => void guardarTipoPago()} disabled={guardandoTipoPago}>
+                            {guardandoTipoPago && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            Guardar tipo
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </>
     );
 }
@@ -648,15 +795,52 @@ function FieldWrapper({
     );
 }
 
-function SelectTipoPago({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+function SelectTipoPago({
+    value,
+    onChange,
+    options,
+    loading,
+}: {
+    value: string;
+    onChange: (v: string) => void;
+    options: TipoPagoOption[];
+    loading: boolean;
+}) {
     return (
-        <Select value={value} onValueChange={onChange}>
+        <Select value={value} onValueChange={onChange} disabled={loading || options.length === 0}>
             <SelectTrigger className="h-9 text-sm">
-                <SelectValue placeholder="Seleccionar tipo" />
+                <SelectValue placeholder={loading ? 'Cargando...' : 'Seleccionar tipo'} />
             </SelectTrigger>
             <SelectContent>
-                {TIPO_PAGOS.map(tipo => (
-                    <SelectItem key={tipo} value={tipo}>{tipo}</SelectItem>
+                {options.map(tipo => (
+                    <SelectItem key={tipo.codigo} value={tipo.nombre}>{tipo.nombre}</SelectItem>
+                ))}
+            </SelectContent>
+        </Select>
+    );
+}
+
+function SelectMetodoPago({
+    value,
+    onChange,
+    options,
+    loading,
+}: {
+    value: string;
+    onChange: (v: string) => void;
+    options: MetodoPagoOption[];
+    loading: boolean;
+}) {
+    return (
+        <Select value={value} onValueChange={onChange} disabled={loading || options.length === 0}>
+            <SelectTrigger className="h-9 text-sm">
+                <SelectValue placeholder={loading ? 'Cargando...' : 'Seleccionar método'} />
+            </SelectTrigger>
+            <SelectContent>
+                {options.map(metodo => (
+                    <SelectItem key={metodo.codigo} value={metodo.codigo}>
+                        {metodo.nombre}
+                    </SelectItem>
                 ))}
             </SelectContent>
         </Select>

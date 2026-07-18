@@ -239,6 +239,23 @@ export const obtenerHomeImageUrl = async (): Promise<string> => {
   return '';
 };
 
+export interface BeneficioMembresiaPago {
+  icono?: string;
+  texto: string;
+}
+
+/** Textos del pie del flujo de pago de membresía (dinámicos, parametrizables vía branding). */
+export const obtenerBeneficiosMembresiaPago = async (): Promise<BeneficioMembresiaPago[]> => {
+  const response = await apiFetch('/api/config/parametrizacion/widget/branding/membresia-pago/publico', {
+    method: 'GET',
+    useAuth: false,
+    logoutOn401: false,
+  }) as { ok?: boolean; data?: BeneficioMembresiaPago[] } | null;
+
+  if (!response?.ok) return [];
+  return Array.isArray(response.data) ? response.data : [];
+};
+
 export const obtenerAccionesWidgetPublico = async (): Promise<AccionBackend[]> => {
   const response = await apiFetch('/api/config/parametrizacion/widget/branding/acciones/publico', {
     method: 'GET',
