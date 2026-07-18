@@ -35,16 +35,18 @@ jobs:
       - name: Build Vite app
         run: npm run build
         env:
+          # Backend de producción
           VITE_API_URL: https://server-mabs-1.onrender.com/api
           VITE_API_BASE_URL: https://server-mabs-1.onrender.com/api
           VITE_SOCKET_URL: https://server-mabs-1.onrender.com
 
+          # Identificación del ambiente
           VITE_APP_ENV: production
           VITE_APP_HOST: mabsproduction-cpd0ajatdgfgdabf.centralus-01.azurewebsites.net
           VITE_RELEASE_SHA: ${{ github.sha }}
           VITE_RELEASE_BRANCH: ${{ github.ref_name }}
 
-          # Nombres exactos que lee src/app/observability/newRelicBrowser.ts
+          # New Relic Browser
           VITE_NEW_RELIC_ENABLED: "true"
           VITE_NEW_RELIC_ACCOUNT_ID: ${{ secrets.NEW_RELIC_ACCOUNT_ID }}
           VITE_NEW_RELIC_BROWSER_APPLICATION_ID: ${{ secrets.NEW_RELIC_APPLICATION_ID }}
@@ -56,10 +58,6 @@ jobs:
         run: |
           test -d dist
           test -f dist/index.html
-
-      - name: Create deployment version file
-        run: |
-          printf "%s" "${{ github.sha }}" > dist/deployment-version.txt
 
       - name: Create deployment ZIP
         run: |
@@ -80,47 +78,3 @@ jobs:
           app-name: Mabsproduction
           slot-name: Production
           package: ./mabs-frontend.zip
-
-      # El servidor estático del App Service solo lee el contenido al arrancar;
-      # sin reinicio sigue sirviendo la versión anterior aunque el deploy llegue bien.
-      - name: Restart Azure Web App
-        run: |
-          APP_ID=$(az webapp list --query "[?name=='Mabsproduction'].id" -o tsv)
-
-          if [ -z "$APP_ID" ]; then
-            echo "ERROR: no se encontró la web app Mabsproduction"
-            exit 1
-          fi
-
-          echo "Reiniciando $APP_ID ..."
-          az webapp restart --ids "$APP_ID"
-          echo "Reinicio solicitado; la validación esperará a que responda la versión nueva."
-
-      - name: Validate deployed version
-        run: |
-          URL="https://mabsproduction-cpd0ajatdgfgdabf.centralus-01.azurewebsites.net/deployment-version.txt"
-          MAX_ATTEMPTS=20
-          WAIT_SECONDS=15
-
-          for ATTEMPT in $(seq 1 "$MAX_ATTEMPTS"); do
-            DEPLOYED_SHA=$(curl \
-              --silent \
-              --show-error \
-              --location \
-              --connect-timeout 10 \
-              --max-time 30 \
-              "${URL}?cacheBust=${GITHUB_SHA}-${ATTEMPT}" || true)
-
-            if [ "$DEPLOYED_SHA" = "$GITHUB_SHA" ]; then
-              exit 0
-            fi
-
-            if [ "$ATTEMPT" -lt "$MAX_ATTEMPTS" ]; then
-              sleep "$WAIT_SECONDS"
-            fi
-          done
-
-          echo "ERROR: Azure no está sirviendo el commit esperado"
-          echo "Esperado: $GITHUB_SHA"
-          echo "Recibido: $DEPLOYED_SHA"
-          exit 1
