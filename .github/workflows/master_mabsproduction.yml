@@ -44,10 +44,13 @@ jobs:
           VITE_RELEASE_SHA: ${{ github.sha }}
           VITE_RELEASE_BRANCH: ${{ github.ref_name }}
 
+          # Nombres exactos que lee src/app/observability/newRelicBrowser.ts
+          VITE_NEW_RELIC_ENABLED: "true"
           VITE_NEW_RELIC_ACCOUNT_ID: ${{ secrets.NEW_RELIC_ACCOUNT_ID }}
-          VITE_NEW_RELIC_APPLICATION_ID: ${{ secrets.NEW_RELIC_APPLICATION_ID }}
-          VITE_NEW_RELIC_LICENSE_KEY: ${{ secrets.NEW_RELIC_BROWSER_LICENSE_KEY }}
+          VITE_NEW_RELIC_BROWSER_APPLICATION_ID: ${{ secrets.NEW_RELIC_APPLICATION_ID }}
+          VITE_NEW_RELIC_BROWSER_LICENSE_KEY: ${{ secrets.NEW_RELIC_BROWSER_LICENSE_KEY }}
           VITE_NEW_RELIC_AGENT_ID: ${{ secrets.NEW_RELIC_AGENT_ID }}
+          VITE_NEW_RELIC_DISTRIBUTED_TRACING_ORIGINS: https://server-mabs-1.onrender.com
 
       - name: Verify build output
         run: |
@@ -78,10 +81,25 @@ jobs:
           slot-name: Production
           package: ./mabs-frontend.zip
 
+      # El servidor estático del App Service solo lee el contenido al arrancar;
+      # sin reinicio sigue sirviendo la versión anterior aunque el deploy llegue bien.
+      - name: Restart Azure Web App
+        run: |
+          APP_ID=$(az webapp list --query "[?name=='Mabsproduction'].id" -o tsv)
+
+          if [ -z "$APP_ID" ]; then
+            echo "ERROR: no se encontró la web app Mabsproduction"
+            exit 1
+          fi
+
+          echo "Reiniciando $APP_ID ..."
+          az webapp restart --ids "$APP_ID"
+          echo "Reinicio solicitado; la validación esperará a que responda la versión nueva."
+
       - name: Validate deployed version
         run: |
           URL="https://mabsproduction-cpd0ajatdgfgdabf.centralus-01.azurewebsites.net/deployment-version.txt"
-          MAX_ATTEMPTS=12
+          MAX_ATTEMPTS=20
           WAIT_SECONDS=15
 
           for ATTEMPT in $(seq 1 "$MAX_ATTEMPTS"); do
