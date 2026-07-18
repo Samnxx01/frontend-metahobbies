@@ -18,17 +18,43 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Show commit information
+        run: |
+          echo "======================================"
+          echo "INFORMACION DEL DESPLIEGUE"
+          echo "======================================"
+          echo "Repositorio: $GITHUB_REPOSITORY"
+          echo "Rama: $GITHUB_REF_NAME"
+          echo "Commit: $GITHUB_SHA"
+          echo "Evento: $GITHUB_EVENT_NAME"
+          echo "Run: $GITHUB_RUN_NUMBER"
+          echo ""
+          echo "Ultimo commit descargado:"
+          git log -1 --oneline
+          echo "======================================"
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "20.x"
           cache: "npm"
 
+      - name: Show runtime versions
+        run: |
+          echo "Node: $(node --version)"
+          echo "npm: $(npm --version)"
+
       - name: Install dependencies
         run: npm ci
 
       - name: Build Vite app
-        run: npm run build
+        run: |
+          echo "Compilando rama: $GITHUB_REF_NAME"
+          echo "Compilando commit: $GITHUB_SHA"
+
+          npm run build
+
+          echo "Build finalizado correctamente"
         env:
           # Backend de producción
           VITE_API_URL: https://server-mabs-1.onrender.com/api
@@ -47,14 +73,65 @@ jobs:
           VITE_NEW_RELIC_LICENSE_KEY: ${{ secrets.NEW_RELIC_BROWSER_LICENSE_KEY }}
           VITE_NEW_RELIC_AGENT_ID: ${{ secrets.NEW_RELIC_AGENT_ID }}
 
+      - name: Create deployment version file
+        run: |
+          cat > dist/version.json <<EOF
+          {
+            "repository": "${{ github.repository }}",
+            "branch": "${{ github.ref_name }}",
+            "commit": "${{ github.sha }}",
+            "runId": "${{ github.run_id }}",
+            "runNumber": "${{ github.run_number }}",
+            "deployedAt": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+          }
+          EOF
+
+          echo "Version que se desplegara:"
+          cat dist/version.json
+
       - name: Verify build output
         run: |
-          echo "Contenido de dist:"
-          ls -la dist
+          echo "======================================"
+          echo "VALIDANDO BUILD"
+          echo "======================================"
+
+          if [ ! -d "dist" ]; then
+            echo "ERROR: La carpeta dist no fue generada"
+            exit 1
+          fi
 
           if [ ! -f "dist/index.html" ]; then
-            echo "Error: dist/index.html no fue generado"
+            echo "ERROR: dist/index.html no fue generado"
             exit 1
+          fi
+
+          echo "Contenido de dist:"
+          find dist -type f -printf "%p | %s bytes\n" | sort
+
+          echo ""
+          echo "Tamano total:"
+          du -sh dist
+
+          echo ""
+          echo "Archivos referenciados por index.html:"
+          grep -Eo 'src="[^"]+"|href="[^"]+"' dist/index.html || true
+
+      - name: Validate new changes in build
+        run: |
+          echo "======================================"
+          echo "BUSCANDO CAMBIOS NUEVOS"
+          echo "======================================"
+
+          if grep -R -i -n "Reglas contables" dist; then
+            echo "OK: El texto 'Reglas contables' existe en el build"
+          else
+            echo "ADVERTENCIA: No se encontro 'Reglas contables' en dist"
+          fi
+
+          if grep -R -i -n "Inventario y kardex" dist; then
+            echo "OK: El texto 'Inventario y kardex' existe en el build"
+          else
+            echo "ADVERTENCIA: No se encontro 'Inventario y kardex' en dist"
           fi
 
       - name: Login to Azure
@@ -64,9 +141,74 @@ jobs:
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_4FF3BAB411A0498BAF7D61C57EEFEF97 }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_E12863873CAF4F19A04FA89ECEBE0272 }}
 
+      - name: Show Azure account
+        run: |
+          az account show \
+            --query "{subscription:name, subscriptionId:id, tenantId:tenantId}" \
+            --output table
+
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         with:
           app-name: Mabsproduction
           slot-name: Production
           package: ./dist
+
+      - name: Wait for Azure update
+        run: |
+          echo "Esperando que Azure publique la nueva version..."
+          sleep 30
+
+      - name: Validate deployed version
+        run: |
+          URL="https://mabsproduction-cpd0ajatdgfgdabf.centralus-01.azurewebsites.net/version.json?cacheBust=${GITHUB_SHA}"
+
+          echo "Consultando:"
+          echo "$URL"
+
+          HTTP_CODE=$(curl \
+            --silent \
+            --show-error \
+            --location \
+            --output deployed-version.json \
+            --write-out "%{http_code}" \
+            "$URL")
+
+          echo "HTTP status: $HTTP_CODE"
+
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "ERROR: Azure no publico version.json"
+            cat deployed-version.json || true
+            exit 1
+          fi
+
+          echo "Version publicada en Azure:"
+          cat deployed-version.json
+
+          DEPLOYED_SHA=$(node -p \
+            "JSON.parse(require('fs').readFileSync('deployed-version.json', 'utf8')).commit")
+
+          echo ""
+          echo "Commit esperado: $GITHUB_SHA"
+          echo "Commit publicado: $DEPLOYED_SHA"
+
+          if [ "$DEPLOYED_SHA" != "$GITHUB_SHA" ]; then
+            echo "ERROR: Azure esta sirviendo otro commit"
+            exit 1
+          fi
+
+          echo "OK: Azure esta sirviendo el commit correcto"
+
+      - name: Deployment summary
+        if: always()
+        run: |
+          echo "======================================"
+          echo "RESUMEN"
+          echo "======================================"
+          echo "Rama: $GITHUB_REF_NAME"
+          echo "Commit: $GITHUB_SHA"
+          echo "Run: $GITHUB_RUN_NUMBER"
+          echo "Aplicacion: Mabsproduction"
+          echo "Slot: Production"
+          echo "URL: https://mabsproduction-cpd0ajatdgfgdabf.centralus-01.azurewebsites.net"
+          echo "Version: https://mabsproduction-cpd0ajatdgfgdabf.centralus-01.azurewebsites.net/version.json"

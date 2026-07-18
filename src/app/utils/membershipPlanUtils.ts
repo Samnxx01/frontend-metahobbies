@@ -4,6 +4,7 @@ export type MembresiaPlanApi = EntityRef & {
   nombreMembresia?: string;
   precioMembresia?: number | string | null;
   tipoPagos?: string;
+  metodoPagoCodigo?: string | null;
   esPrecioDefault?: boolean | string | number;
   monedasId?: { monedas?: string; iud?: string; _id?: string; id?: string } | string | null;
 };
@@ -13,6 +14,7 @@ export type MembresiaPlanUi = {
   nombreMembresia: string;
   precioMembresia: number;
   tipoPagos: string;
+  metodoPagoCodigo: string;
   esPrecioDefault: boolean;
   moneda: string;
 };
@@ -42,6 +44,7 @@ export function normalizeMembresiaPlanFromApi(raw: MembresiaPlanApi): MembresiaP
     nombreMembresia: String(raw.nombreMembresia || 'Membresía Premium').trim(),
     precioMembresia: precio,
     tipoPagos: String(raw.tipoPagos || 'Único').trim(),
+    metodoPagoCodigo: String(raw.metodoPagoCodigo || '').trim(),
     esPrecioDefault: isTruthyDefault(raw.esPrecioDefault),
     moneda,
   };

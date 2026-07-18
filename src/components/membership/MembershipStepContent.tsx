@@ -50,6 +50,9 @@ interface MembershipStepContentProps {
   handleFormChange: (section: 'personalInfo' | 'paymentInfo', field: string, value: any) => void;
   MEMBERSHIP_PRICE: number | null;
   MEMBERSHIP_NOMBRE?: string;
+  TIPO_PAGO?: string;
+  METODO_PAGO_CODIGO?: string;
+  MONEDA?: string;
   BENEFICIOS_PAGO?: BeneficioMembresiaPago[];
   token: string;
 }
@@ -60,6 +63,9 @@ export default function MembershipStepContent({
   handleFormChange,
   MEMBERSHIP_PRICE,
   MEMBERSHIP_NOMBRE,
+  TIPO_PAGO,
+  METODO_PAGO_CODIGO,
+  MONEDA = 'COP',
   BENEFICIOS_PAGO = [],
 }: MembershipStepContentProps): React.ReactElement | null {
   const [metodosPago, setMetodosPago] = useState<MetodoPagoCatalogo[]>([]);
@@ -201,7 +207,12 @@ export default function MembershipStepContent({
               <div className="flex items-center justify-between mb-2">
                 {/* Nombre dinámico del plan seleccionado */}
                 <span className="text-muted-foreground">{nombrePlan}</span>
-                <span className="text-sm text-muted-foreground">Pago único</span>
+                <div className="text-right text-sm text-muted-foreground">
+                  {TIPO_PAGO && <div>{TIPO_PAGO}</div>}
+                  {METODO_PAGO_CODIGO && (
+                    <div className="text-xs">Método: {METODO_PAGO_CODIGO}</div>
+                  )}
+                </div>
               </div>
               <div className="flex items-baseline justify-between">
                 <span className="text-2xl font-bold text-foreground">Total a pagar:</span>
@@ -211,7 +222,7 @@ export default function MembershipStepContent({
                       <div className="text-3xl font-bold text-primary">
                         ${MEMBERSHIP_PRICE.toLocaleString('es-CO')}
                       </div>
-                      <div className="text-xs text-muted-foreground">COP</div>
+                      <div className="text-xs text-muted-foreground">{MONEDA}</div>
                     </>
                   ) : (
                     <div className="text-sm text-muted-foreground italic">No disponible</div>

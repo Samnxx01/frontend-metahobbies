@@ -732,6 +732,9 @@ export default function MembershipPayment(): React.ReactElement {
                                         handleFormChange={handleFormChange}
                                         MEMBERSHIP_PRICE={planSeleccionado?.precioMembresia ?? null}
                                         MEMBERSHIP_NOMBRE={planSeleccionado?.nombreMembresia}
+                                        TIPO_PAGO={planSeleccionado?.tipoPagos}
+                                        METODO_PAGO_CODIGO={planSeleccionado?.metodoPagoCodigo}
+                                        MONEDA={planSeleccionado?.moneda}
                                         BENEFICIOS_PAGO={beneficiosPago}
                                         token={token || ''}
                                     />
