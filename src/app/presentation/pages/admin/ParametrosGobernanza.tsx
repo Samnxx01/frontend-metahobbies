@@ -631,22 +631,18 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
 
   useEffect(() => {
     if (!saJerarquiaPosicionDropdown.esHijo || !saIdSeleccionadoActualizar) {
-      console.log('[DIFF_PADRE_AUTO] SA dropdown no es hijo → limpiando padreTotalVistas', { esHijo: saJerarquiaPosicionDropdown.esHijo, saId: saIdSeleccionadoActualizar });
       setPadreTotalVistas(null);
       return;
     }
-    console.log('[DIFF_PADRE_AUTO] SA dropdown es hijo → fetching diff-padre', { saId: saIdSeleccionadoActualizar, codigoPadre: saJerarquiaPosicionDropdown.codigoPadre });
     apiFetch(`/api/config/tenant/tipo/sincronizar/jerarquia/diff-padre?saId=${encodeURIComponent(saIdSeleccionadoActualizar)}`, { method: 'GET' })
       .then((res: any) => {
         const data = res?.data ?? null;
-        console.log('[DIFF_PADRE_AUTO] respuesta:', { totalRecursosPadre: data?.totalRecursosPadre, totalRecursosHijo: data?.totalRecursosHijo, totalVistasHijoLeFaltan: data?.totalVistasHijoLeFaltan, totalFaltantes: data?.totalFaltantes });
         if (data) {
           setDiffPadreData(data);
           setPadreTotalVistas(typeof data.totalRecursosPadre === 'number' ? data.totalRecursosPadre : null);
         }
       })
-      .catch((err: any) => {
-        console.error('[DIFF_PADRE_AUTO] error:', err?.message || err);
+      .catch(() => {
         setPadreTotalVistas(null);
       });
   }, [saJerarquiaPosicionDropdown.esHijo, saIdSeleccionadoActualizar]);

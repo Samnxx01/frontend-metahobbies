@@ -6,7 +6,7 @@ export const ENDPOINTS: EndpointSpec[] = [
   {
     id: 'tenant-listar-libres-superadmin',
     section: 'tenant',
-    actor: 'tenantSuperAdmin',
+    actor: 'tenantGlobal',
     method: 'GET',
     path: '/api/config/global/creacion/usu/tenant/libres',
     title: 'Listar tenantSuperAdmin (rama JWT)',
@@ -43,17 +43,15 @@ export const ENDPOINTS: EndpointSpec[] = [
   {
     id: 'tenant-crear-global-admin',
     section: 'tenant',
-    actor: 'tenantSuperAdmin',
+    actor: 'tenantGlobal',
     method: 'POST',
-    path: '/api/config/global/creacion/superAdmin/tenant/global',
-    title: 'Crear tenant Administrador del sistema',
+    path: '/api/config/global/creacion/usu/tenant/global',
+    title: 'Crear tenant global',
     description:
-      'Contrato exclusivo con tenantSuperAdmin (JWT): sin rol tenantGlobal en este flujo. El servidor valida alcance de tu rama SA y corporativo frente a tenantjerarquiacounters cuando aplica.',
+      'Flujo exclusivo de tenantGlobal sobre su rama JWT. Crea documentos tenantGlobal sin mezclar el alta de tenantSuperAdmin.',
     fields: [
-      { name: 'nvlGeneracionTenant', label: 'Nivel generacion tenant', type: 'id', required: true },
-      { name: 'tipo_tenant', label: 'Tipo tenant', type: 'id', required: true },
       { name: 'coporativo', label: 'Corporativo (empresa)', type: 'id' },
-      { name: 'tenantGlobalRef', label: 'Tenant global ref', type: 'id' },
+      { name: 'tenantGlobalRef', label: 'Tenant global padre (rama JWT)', type: 'id' },
       { name: 'apisDominios', label: 'Apis dominios', type: 'id', required: true },
       { name: 'accionesUsu', label: 'Accion usuario', type: 'id', required: true },
       { name: 'rolesMabs', label: 'Rol mabs', type: 'id', required: true },

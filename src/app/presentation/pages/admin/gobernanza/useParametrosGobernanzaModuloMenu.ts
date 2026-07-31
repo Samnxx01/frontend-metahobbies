@@ -8,6 +8,9 @@ import {
 } from './parametrosGobernanzaModuloMenu';
 import { normalizeGobernanzaModuloSlug } from './gobernanzaModulosCatalog';
 import { resolverMenuPathHubOperaciones } from './gobernanzaActionIds';
+import { GOBERNANZA_TIPO_SECTION_TENANT_GLOBAL } from './gobernanzaTipoSectionConstants';
+
+const GOBERNANZA_SECTION_GLOBAL = 'gobernanza-global';
 
 export type UseParametrosGobernanzaModuloMenuOptions = {
   moduloSlug: string | null | undefined;
@@ -48,9 +51,13 @@ export function useParametrosGobernanzaModuloMenu({
   const menuPathOperativo = operacionesHub
     ? resolverMenuPathHubOperaciones(menuPathNorm)
     : menuPathNorm;
+  const sectionKeyOperativo = operacionesHub
+    && String(tipoSection || '').trim().toLowerCase() === GOBERNANZA_TIPO_SECTION_TENANT_GLOBAL
+    ? GOBERNANZA_SECTION_GLOBAL
+    : (parametrizacionBase?.section ?? slug);
   const menu = useGobernanzaModuloMenu({
     moduloSlug: slug || null,
-    sectionKey: parametrizacionBase?.section ?? slug,
+    sectionKey: sectionKeyOperativo,
     menuPath: menuPathOperativo || null,
     syncDefaultAction: operacionesHub ? false : (syncDefaultAction ?? parametrizacionBase?.syncDefaultAction ?? true),
     /** Hub: pestañas en el padre sin navegar a subrutas (menú siempre visible). */

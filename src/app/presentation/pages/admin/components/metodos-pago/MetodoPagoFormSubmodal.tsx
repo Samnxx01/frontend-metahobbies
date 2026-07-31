@@ -1,7 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Pencil, Plus } from 'lucide-react';
+import { Landmark, Pencil, Plus } from 'lucide-react';
 import { toast } from 'react-toastify';
-import metodoPagoService, { type MedioPagoDian, type MetodoPagoCatalogo } from '@/app/services/metodoPagoService';
+import metodoPagoService, {
+  type MedioPagoDian,
+  type MetodoPagoCatalogo,
+  type ModoBancosMetodoPago,
+} from '@/app/services/metodoPagoService';
 import reglasContablesService, { type CatalogoCodigo } from '@/app/services/reglasContablesService';
 import { useBancosColombiaCatalogo } from '@/app/hooks/useBancosColombiaCatalogo';
 import { Button } from '@/components/ui/button';
@@ -10,13 +14,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import {
-  GobernanzaModuloSearchableSelect,
-  type GobernanzaSearchableSelectOption,
-} from '../../gobernanza/GobernanzaModuloSearchableSelect';
 import { reglasContablesUi } from '../reglas-contables/reglasContablesUi';
-
-const NOMBRE_MANUAL_VALUE = '__MANUAL__';
 
 const nombreBancoVisible = (nombreCorto?: string | null, nombre = ''): string => {
   const valor = String(nombreCorto || nombre).trim();
@@ -41,9 +39,13 @@ type Draft = {
   descripcion: string;
   medioPagoDian: MedioPagoDian;
   estado: boolean;
+  modoBancos: ModoBancosMetodoPago;
+  bancosAsociados: string[];
 };
 
-const inicial: Draft = { codigo: '', nombre: '', descripcion: '', medioPagoDian: '', estado: true };
+const inicial: Draft = {
+  codigo: '', nombre: '', descripcion: '', medioPagoDian: '', estado: true, modoBancos: 'NINGUNO', bancosAsociados: [],
+};
 
 const errMsg = (e: unknown, f: string): string => (e instanceof Error ? e.message.replace(/^\[\d+\]\s*/, '') : f);
 
@@ -54,17 +56,8 @@ export default function MetodoPagoFormSubmodal({
   const [draft, setDraft] = useState<Draft>(inicial);
   const [submitting, setSubmitting] = useState(false);
   const [mediosDian, setMediosDian] = useState<CatalogoCodigo[]>([]);
-  const [nombreSelectValue, setNombreSelectValue] = useState('');
   const { bancos: bancosCatalogo } = useBancosColombiaCatalogo();
-
-  const bancosOptions: GobernanzaSearchableSelectOption[] = bancosCatalogo
-    .filter((banco) => banco.estado)
-    .map((banco) => ({
-      value: banco.nombre,
-      label: nombreBancoVisible(banco.nombreCorto, banco.nombre),
-      searchText: `${banco.nombreCorto || ''} ${banco.nombre}`,
-    }))
-    .concat([{ value: NOMBRE_MANUAL_VALUE, label: 'Otro / escribir manualmente…', searchText: 'otro manual' }]);
+  const bancosActivos = bancosCatalogo.filter((banco) => banco.estado);
 
   const cargarMediosDian = async (): Promise<void> => {
     try {
@@ -84,21 +77,25 @@ export default function MetodoPagoFormSubmodal({
             descripcion: registro.descripcion ?? '',
             medioPagoDian: registro.medioPagoDian ?? '',
             estado: registro.estado !== false,
+            modoBancos: registro.modoBancos ?? (registro.esPse ? 'MULTIPLE' : 'NINGUNO'),
+            bancosAsociados: registro.bancosAsociados ?? registro.bancosPse ?? [],
           }
         : inicial
     );
-    if (registro?.nombre) {
-      const coincide = bancosCatalogo.some((banco) => banco.nombre === registro.nombre);
-      setNombreSelectValue(coincide ? registro.nombre : NOMBRE_MANUAL_VALUE);
-    } else {
-      setNombreSelectValue('');
-    }
     void cargarMediosDian();
-  }, [open, registro, bancosCatalogo]);
+  }, [open, registro]);
 
   const guardar = async (): Promise<void> => {
     if (!draft.codigo.trim() || !draft.nombre.trim() || !draft.medioPagoDian) {
       toast.error('Código, nombre y medio de pago DIAN son obligatorios.');
+      return;
+    }
+    if (draft.modoBancos === 'UNICO' && draft.bancosAsociados.length !== 1) {
+      toast.error('Seleccione exactamente una entidad bancaria.');
+      return;
+    }
+    if (draft.modoBancos === 'MULTIPLE' && draft.bancosAsociados.length === 0) {
+      toast.error('Seleccione al menos una entidad bancaria.');
       return;
     }
     try {
@@ -108,6 +105,9 @@ export default function MetodoPagoFormSubmodal({
         descripcion: draft.descripcion.trim(),
         medioPagoDian: draft.medioPagoDian,
         estado: draft.estado,
+        esPse: draft.codigo.trim().toUpperCase() === 'PSE',
+        modoBancos: draft.modoBancos,
+        bancosAsociados: draft.modoBancos === 'NINGUNO' ? [] : draft.bancosAsociados,
       };
       if (esEdicion && registro) {
         const { msg } = await metodoPagoService.actualizar(registro.codigo, body);
@@ -144,34 +144,27 @@ export default function MetodoPagoFormSubmodal({
               className={reglasContablesUi.input}
               value={draft.codigo}
               disabled={esEdicion}
-              onChange={(e) => setDraft((p) => ({ ...p, codigo: e.target.value }))}
+              onChange={(e) => {
+                const codigo = e.target.value;
+                setDraft((p) => ({
+                  ...p,
+                  codigo,
+                  modoBancos: codigo.trim().toUpperCase() === 'PSE' && p.modoBancos === 'NINGUNO'
+                    ? 'MULTIPLE'
+                    : p.modoBancos,
+                }));
+              }}
               placeholder="Ej: NEQUI"
             />
           </div>
           <div className="space-y-2">
             <Label>Nombre</Label>
-            <GobernanzaModuloSearchableSelect
-              value={nombreSelectValue}
-              onValueChange={(value) => {
-                setNombreSelectValue(value);
-                if (value && value !== NOMBRE_MANUAL_VALUE) {
-                  setDraft((p) => ({ ...p, nombre: value }));
-                } else if (value === NOMBRE_MANUAL_VALUE) {
-                  setDraft((p) => ({ ...p, nombre: '' }));
-                }
-              }}
-              options={bancosOptions}
-              placeholder="Seleccione una entidad del catálogo de bancos"
-              searchPlaceholder="Buscar banco…"
+            <Input
+              className={reglasContablesUi.input}
+              value={draft.nombre}
+              onChange={(e) => setDraft((p) => ({ ...p, nombre: e.target.value }))}
+              placeholder="Ej: Efectivo, PSE, Nequi o Tarjeta"
             />
-            {nombreSelectValue === NOMBRE_MANUAL_VALUE && (
-              <Input
-                className={`${reglasContablesUi.input} mt-2`}
-                value={draft.nombre}
-                onChange={(e) => setDraft((p) => ({ ...p, nombre: e.target.value }))}
-                placeholder="Ej: Nequi"
-              />
-            )}
           </div>
           <div className="space-y-2">
             <Label>Descripción</Label>
@@ -199,6 +192,91 @@ export default function MetodoPagoFormSubmodal({
               </SelectContent>
             </Select>
           </div>
+          <div className="space-y-2">
+            <Label>Asociación con catálogo bancario</Label>
+            <Select
+              value={draft.modoBancos}
+              onValueChange={(value) => setDraft((p) => ({
+                ...p,
+                modoBancos: value as ModoBancosMetodoPago,
+                bancosAsociados: value === 'NINGUNO' ? [] : p.bancosAsociados,
+              }))}
+            >
+              <SelectTrigger id="select-modo-bancos-metodo-pago" className={reglasContablesUi.input}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="NINGUNO">Sin banco — efectivo, tarjeta u otro</SelectItem>
+                <SelectItem value="UNICO">Un banco — Nequi u otra entidad</SelectItem>
+                <SelectItem value="MULTIPLE">Múltiples bancos — grupo PSE</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          {draft.modoBancos === 'UNICO' && (
+            <div className="space-y-2">
+              <Label>Entidad bancaria</Label>
+              <Select
+                value={draft.bancosAsociados[0] || ''}
+                onValueChange={(value) => setDraft((p) => ({ ...p, bancosAsociados: [value] }))}
+              >
+                <SelectTrigger id="select-banco-unico-metodo-pago" className={reglasContablesUi.input}>
+                  <SelectValue placeholder="Seleccione una entidad" />
+                </SelectTrigger>
+                <SelectContent>
+                  {bancosActivos.map((banco) => (
+                    <SelectItem key={banco.sfcId} value={banco.sfcId}>
+                      {nombreBancoVisible(banco.nombreCorto, banco.nombre)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          {draft.modoBancos === 'MULTIPLE' && (
+            <div className="space-y-2 rounded-lg border border-border bg-card p-3">
+              <div className="flex items-center justify-between gap-2">
+                <Label className="flex items-center gap-2">
+                  <Landmark className="h-4 w-4" /> Bancos del grupo PSE
+                </Label>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setDraft((p) => ({
+                    ...p,
+                    bancosAsociados: p.bancosAsociados.length === bancosActivos.length
+                      ? []
+                      : bancosActivos.map((banco) => banco.sfcId),
+                  }))}
+                >
+                  {draft.bancosAsociados.length === bancosActivos.length ? 'Limpiar' : 'Seleccionar todos'}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Seleccione las entidades que se mostrarán agrupadas bajo el método PSE.
+              </p>
+              <div className="max-h-48 space-y-1 overflow-y-auto rounded-md border border-border p-2">
+                {bancosActivos.map((banco) => (
+                  <label key={banco.sfcId} className="flex cursor-pointer items-center gap-2 rounded p-1.5 text-sm hover:bg-muted/50">
+                    <Checkbox
+                      checked={draft.bancosAsociados.includes(banco.sfcId)}
+                      onCheckedChange={(checked) => setDraft((p) => ({
+                        ...p,
+                        bancosAsociados: checked === true
+                          ? [...new Set([...p.bancosAsociados, banco.sfcId])]
+                          : p.bancosAsociados.filter((id) => id !== banco.sfcId),
+                      }))}
+                    />
+                    <span>{nombreBancoVisible(banco.nombreCorto, banco.nombre)}</span>
+                  </label>
+                ))}
+                {bancosActivos.length === 0 && (
+                  <p className="p-2 text-xs text-muted-foreground">No hay bancos activos en el catálogo.</p>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">{draft.bancosAsociados.length} banco(s) seleccionado(s).</p>
+            </div>
+          )}
           <div className="flex items-center gap-2">
             <Checkbox
               id="metodo-pago-activo"

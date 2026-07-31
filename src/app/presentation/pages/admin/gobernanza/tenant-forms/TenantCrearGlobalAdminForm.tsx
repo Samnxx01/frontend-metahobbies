@@ -21,8 +21,8 @@ export function TenantCrearGlobalAdminForm(props: GobernanzaTenantFormProps): Re
   return (
     <TenantFormShell
       {...props}
-      eyebrow="Alta tenantSuperAdmin"
-      hint="Formulario operativo para crear un tenant administrador del sistema validado por jerarquia."
+      eyebrow="Alta tenantGlobal"
+      hint="Formulario operativo para crear un tenantGlobal dentro de la rama permitida por el JWT."
     />
   );
 }

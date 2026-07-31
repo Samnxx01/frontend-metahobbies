@@ -2,6 +2,7 @@ import { apiFetch } from '@/app/services/api';
 
 /** Código parametrizado de la Lista 15A DIAN (ej. 10, 48, 49). */
 export type MedioPagoDian = string;
+export type ModoBancosMetodoPago = 'NINGUNO' | 'UNICO' | 'MULTIPLE';
 
 export interface MetodoPagoCatalogo {
   iud?: string;
@@ -15,6 +16,10 @@ export interface MetodoPagoCatalogo {
   orden: number;
   estado: boolean;
   esSistema?: boolean;
+  esPse?: boolean;
+  bancosPse?: string[];
+  modoBancos?: ModoBancosMetodoPago;
+  bancosAsociados?: string[];
   metodoPagoId?: string | { iud?: string; _id?: string; codigo?: string; nombreMetodoPago?: string };
 }
 export interface MetodoPagoPadre {
@@ -51,6 +56,10 @@ const metodoPagoService = {
     metodoPagoId?: string;
     orden?: number;
     estado?: boolean;
+    esPse?: boolean;
+    bancosPse?: string[];
+    modoBancos?: ModoBancosMetodoPago;
+    bancosAsociados?: string[];
   }): Promise<MetodoPagoApiResult<MetodoPagoCatalogo>> {
     const resp = await apiFetch('/api/inventario/config/metodos-pago', {
       method: 'POST',
@@ -92,7 +101,7 @@ const metodoPagoService = {
 
   async actualizar(
     codigo: string,
-    payload: { nombre?: string; descripcion?: string; medioPagoDian?: MedioPagoDian; orden?: number; estado?: boolean }
+    payload: { nombre?: string; descripcion?: string; medioPagoDian?: MedioPagoDian; orden?: number; estado?: boolean; esPse?: boolean; bancosPse?: string[]; modoBancos?: ModoBancosMetodoPago; bancosAsociados?: string[] }
   ): Promise<MetodoPagoApiResult<MetodoPagoCatalogo>> {
     const resp = await apiFetch(`/api/inventario/config/metodos-pago/${encodeURIComponent(codigo)}`, {
       method: 'PUT',

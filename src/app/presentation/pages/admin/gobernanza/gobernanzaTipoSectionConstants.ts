@@ -4,7 +4,7 @@
 export const GOBERNANZA_TIPO_SECTION_TENANT_SUPER_ADMIN = 'gobernanza';
 
 /** Formularios publicados bajo TenantGlobal (operaciones rol tenantGlobal). */
-export const GOBERNANZA_TIPO_SECTION_TENANT_GLOBAL = 'tenant-global';
+export const GOBERNANZA_TIPO_SECTION_TENANT_GLOBAL = 'gobernanza-global';
 
 /** Formularios publicados bajo ReglasTenant (Reglas SA). */
 export const GOBERNANZA_TIPO_SECTION_REGLAS_SA = 'reglas';

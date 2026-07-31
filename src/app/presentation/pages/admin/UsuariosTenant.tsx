@@ -31,6 +31,7 @@ import { ParametrizacionMarcoAfiliadoModal } from '@/app/presentation/components
 import { UsuariosRolCorporativoListadoModal } from '@/app/presentation/components/admin/usuarios-tenant/UsuariosRolCorporativoListadoModal';
 import { UsuariosTenantJerarquiaListadoModal } from '@/app/presentation/components/admin/usuarios-tenant/UsuariosTenantJerarquiaListadoModal';
 import { TenantGobernanzaCentroModal } from '@/app/presentation/components/admin/usuarios-tenant/TenantGobernanzaCentroModal';
+import { RegisUsuDirectoModal, type PerfilSuperAdminOption } from '@/app/presentation/components/admin/usuarios-tenant/RegisUsuDirectoModal';
 import type { UsuarioRolCorporativoItem } from '@/app/presentation/components/admin/usuarios-tenant/usuariosRolCorporativoTypes';
 import type {
     CorpNode,
@@ -177,6 +178,7 @@ export default function UsuariosTenant(): React.ReactElement {
 
     // Modal SuperAdmin
     const [modalSuperAdmin, setModalSuperAdmin] = useState(false);
+    const [modalRegisUsu, setModalRegisUsu] = useState(false);
 
     // Modal corporativo — guarda el nodo seleccionado
     const [nodoCorp, setNodoCorp] = useState<CorpNode | null>(null);
@@ -204,6 +206,13 @@ export default function UsuariosTenant(): React.ReactElement {
     };
 
     const scope = jerarquia?.scope ?? null;
+    const perfilesSuperAdmin: PerfilSuperAdminOption[] = Array.from(
+        new Map((jerarquia?.superAdmins ?? []).map((usuario) => {
+            const id = resolveEntityPublicId(usuario.perfil);
+            const nombre = [usuario.perfil?.nombre, usuario.perfil?.apellido].filter(Boolean).join(' ').trim();
+            return [id, { id, label: nombre ? `${nombre} · ${usuario.correo}` : usuario.correo }] as const;
+        }).filter(([id]) => Boolean(id))).values(),
+    );
 
     // Lista de TenantGlobales para el selector del SUPER_ADMIN
     const tenantsGlobalesInfo: TenantGlobalInfo[] = (jerarquia?.tenantsGlobales ?? [])
@@ -698,6 +707,11 @@ export default function UsuariosTenant(): React.ReactElement {
                         onCreateGlobal={() => setModalGlobal(true)}
                     />
                     {scope === 'SUPER_ADMIN' && (
+                        <Button className={RESPONSIVE_ACTION_BUTTON} variant="outline" size="sm" onClick={() => setModalRegisUsu(true)}>
+                            <Plus className="mr-2 h-4 w-4" />Crear RegisUsu
+                        </Button>
+                    )}
+                    {scope === 'SUPER_ADMIN' && (
                         <GovernedButton actionId={TENANT_USERS_ACTION_IDS.MANAGE_DOMAINS} className={RESPONSIVE_ACTION_BUTTON} size="sm" variant="outline" onClick={() => { setModalDominios(true); setMostrarDesactivados(false); listarDominios(false); }}>
                             <Globe className="h-4 w-4 mr-2" />
                             Dominios
@@ -925,6 +939,12 @@ export default function UsuariosTenant(): React.ReactElement {
                 onSincronizarGlobalCanReferir={token ? sincronizarGlobalCanReferirUsuarios : undefined}
                 isSincronizandoGlobal={isSincronizandoGlobalCanReferir}
                 sincronizarGlobalError={errorSincronizarGlobalCanReferir}
+            />
+            <RegisUsuDirectoModal
+                open={modalRegisUsu}
+                onClose={() => setModalRegisUsu(false)}
+                perfiles={perfilesSuperAdmin}
+                onCreated={refetch}
             />
 
             <UsuarioGlobalModal

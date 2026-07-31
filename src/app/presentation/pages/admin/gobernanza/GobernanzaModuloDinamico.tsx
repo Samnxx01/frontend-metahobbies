@@ -175,7 +175,7 @@ function GobernanzaModuloOperational({
             {menuError
               ? `No se pudo cargar el menú: ${menuError}`
               : apiSinConfigs
-                ? `GET operativo respondió 0 configs para section «${config.section}». Verifica section=permisos, estado=true y acciones[] en gobernanzaModuloConfigs.`
+                ? `GET operativo respondió 0 configs para section «${config.section}». Verifica section=gobernanza-global, estado=true y acciones[] en gobernanzaModuloConfigs.`
                 : sinPublicarEnBd
                   ? `No hay formularios publicados en gobernanzaModuloConfigs para «${config.label}».`
                   : `No hay acciones disponibles para «${config.label}».`}
