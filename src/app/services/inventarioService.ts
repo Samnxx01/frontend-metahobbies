@@ -98,6 +98,37 @@ const formulariosAutorizacionOpcionesQuery = (
 const tarjetasConfigQuery = (tenantSuperAdminId?: string): string =>
   tenantSuperAdminIdQuery(tenantSuperAdminId);
 
+const GET_CACHE_TTL_MS = 15_000;
+const getCache = new Map<string, { expiresAt: number; value: unknown }>();
+const getEnCurso = new Map<string, Promise<unknown>>();
+
+const getConCache = async <T>(key: string, loader: () => Promise<T>): Promise<T> => {
+  const cached = getCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) return cached.value as T;
+
+  const pendiente = getEnCurso.get(key);
+  if (pendiente) return pendiente as Promise<T>;
+
+  const request = loader()
+    .then((value) => {
+      getCache.set(key, { expiresAt: Date.now() + GET_CACHE_TTL_MS, value });
+      return value;
+    })
+    .finally(() => {
+      getEnCurso.delete(key);
+    });
+  getEnCurso.set(key, request);
+  return request;
+};
+
+const invalidarCacheConfiguracionFormularios = (): void => {
+  for (const key of getCache.keys()) {
+    if (key.startsWith('formularios-opciones:') || key.startsWith('tarjetas-config:')) {
+      getCache.delete(key);
+    }
+  }
+};
+
 /** Tenant global visible segun JWT o tenantSuperAdminId (DIOS). */
 export type InventarioTenantGlobalOpcion = {
   iud: string;
@@ -1233,25 +1264,30 @@ const inventarioService = {
     };
   }> {
     const q = formulariosAutorizacionOpcionesQuery(tenantSuperAdminId, opts);
-    const resp = await apiFetch(`/api/inventario/config/formularios-autorizacion/opciones${q}`, { method: 'GET' });
-    const data = resp?.data ?? {};
-    return {
-      formularios: (data.formularios ?? []) as InventarioFormularioRutaOpcion[],
-      tenantGlobales: (data.tenantGlobales ?? []) as InventarioTenantGlobalOpcion[],
-      tenantSuperAdmins: (data.tenantSuperAdmins ?? []) as InventarioTenantSuperAdminOpcion[],
-      saArbolRama: (data.saArbolRama ?? []) as InventarioTenantSuperAdminOpcion[],
-      jerarquiaSaCounters: (data.jerarquiaSaCounters ?? []) as InventarioJerarquiaSaCounterIndice[],
-      usuarios: (data.usuarios ?? []) as UsuarioOption[],
-      policy: (data.policy ?? {}) as InventarioFormulariosAutorizacionPolicy,
-      meta: data.meta,
-    };
+    return getConCache(`formularios-opciones:${q}`, async () => {
+      const resp = await apiFetch(`/api/inventario/config/formularios-autorizacion/opciones${q}`, { method: 'GET' });
+      const data = resp?.data ?? {};
+      return {
+        formularios: (data.formularios ?? []) as InventarioFormularioRutaOpcion[],
+        tenantGlobales: (data.tenantGlobales ?? []) as InventarioTenantGlobalOpcion[],
+        tenantSuperAdmins: (data.tenantSuperAdmins ?? []) as InventarioTenantSuperAdminOpcion[],
+        saArbolRama: (data.saArbolRama ?? []) as InventarioTenantSuperAdminOpcion[],
+        jerarquiaSaCounters: (data.jerarquiaSaCounters ?? []) as InventarioJerarquiaSaCounterIndice[],
+        usuarios: (data.usuarios ?? []) as UsuarioOption[],
+        policy: (data.policy ?? {}) as InventarioFormulariosAutorizacionPolicy,
+        meta: data.meta,
+      };
+    });
   },
 
   async listarTarjetasConfig(tenantSuperAdminId?: string): Promise<InventarioConfigTarjeta[]> {
-    const resp = await apiFetch(`/api/inventario/config/tarjetas${tarjetasConfigQuery(tenantSuperAdminId)}`, {
-      method: 'GET',
+    const q = tarjetasConfigQuery(tenantSuperAdminId);
+    return getConCache(`tarjetas-config:${q}`, async () => {
+      const resp = await apiFetch(`/api/inventario/config/tarjetas${q}`, {
+        method: 'GET',
+      });
+      return (resp?.data ?? []) as InventarioConfigTarjeta[];
     });
-    return (resp?.data ?? []) as InventarioConfigTarjeta[];
   },
 
   async actualizarTarjetaConfig(
@@ -1263,6 +1299,7 @@ const inventarioService = {
       `/api/inventario/config/tarjetas/${encodeURIComponent(id)}${tarjetasConfigQuery(tenantSuperAdminId)}`,
       { method: 'PUT', body },
     );
+    invalidarCacheConfiguracionFormularios();
     return resp?.data as InventarioConfigTarjeta;
   },
 
@@ -1271,6 +1308,7 @@ const inventarioService = {
       `/api/inventario/config/tarjetas/${encodeURIComponent(id)}${tarjetasConfigQuery(tenantSuperAdminId)}`,
       { method: 'DELETE' },
     );
+    invalidarCacheConfiguracionFormularios();
     return (resp?.data ?? { id, eliminada: true }) as { id: string; eliminada: boolean };
   },
 
@@ -1290,6 +1328,7 @@ const inventarioService = {
       method: 'PUT',
       body,
     });
+    invalidarCacheConfiguracionFormularios();
     return (resp?.data ?? { upserted: 0 }) as { upserted: number };
   },
 
@@ -1308,14 +1347,27 @@ const inventarioService = {
       iconKey?: string | null;
     };
   }): Promise<{ actualizadas: number; resultados: Array<{ rutaId: string; ok: boolean; error?: string }> }> {
-    const resp = await apiFetch('/api/inventario/config/formularios-autorizacion', {
-      method: 'PUT',
-      body,
-    });
-    return {
-      actualizadas: Number(resp?.actualizadas ?? 0),
-      resultados: Array.isArray(resp?.resultados) ? resp.resultados : [],
-    };
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), 45_000);
+    try {
+      const resp = await apiFetch('/api/inventario/config/formularios-autorizacion', {
+        method: 'PUT',
+        body,
+        signal: controller.signal,
+      });
+      invalidarCacheConfiguracionFormularios();
+      return {
+        actualizadas: Number(resp?.actualizadas ?? 0),
+        resultados: Array.isArray(resp?.resultados) ? resp.resultados : [],
+      };
+    } catch (error) {
+      if (controller.signal.aborted) {
+        throw new Error('El guardado continúa tardando más de lo esperado. La interfaz fue liberada; actualiza los datos antes de reintentar.');
+      }
+      throw error;
+    } finally {
+      window.clearTimeout(timeoutId);
+    }
   },
 
   async cerrarPeriodo(periodo: string): Promise<string[]> {
@@ -1712,6 +1764,34 @@ const inventarioService = {
   async listarTiposAjusteAdmin(): Promise<InventarioTipoAjuste[]> {
     const resp = await apiFetch('/api/inventario/ajustes/tipos/admin', { method: 'GET' });
     return (resp?.data ?? []) as InventarioTipoAjuste[];
+  },
+
+  async listarTodosTiposAjuste(): Promise<InventarioTipoAjuste[]> {
+    const resultados = await Promise.allSettled([
+      this.listarTiposAjuste(),
+      this.listarTiposAjusteAdmin(),
+    ]);
+    const exitosos = resultados
+      .filter((resultado): resultado is PromiseFulfilledResult<InventarioTipoAjuste[]> =>
+        resultado.status === 'fulfilled')
+      .flatMap((resultado) => resultado.value);
+
+    if (exitosos.length === 0) {
+      const rechazado = resultados.find(
+        (resultado): resultado is PromiseRejectedResult => resultado.status === 'rejected',
+      );
+      throw rechazado?.reason ?? new Error('No se pudieron cargar los tipos de ajuste.');
+    }
+
+    const porCodigo = new Map<string, InventarioTipoAjuste>();
+    for (const tipo of exitosos) {
+      const codigo = String(tipo?.codigo || '').trim().toUpperCase();
+      if (!codigo) continue;
+      porCodigo.set(codigo, { ...porCodigo.get(codigo), ...tipo, codigo });
+    }
+    return [...porCodigo.values()].sort((a, b) =>
+      String(a.nombre || a.codigo).localeCompare(String(b.nombre || b.codigo), 'es'),
+    );
   },
 
   async crearTipoAjuste(payload: {

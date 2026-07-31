@@ -6,6 +6,7 @@ import AdminSidebar from '@/app/presentation/components/admin/AdminSidebar'
 import { shouldShowAdminHerenciaSinPermisoAlert } from '@/app/services/routeService'
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert'
 import { AlertTriangle, Loader2 } from 'lucide-react'
+import { GovernanceButtonScopeProvider } from '@/app/presentation/actions'
 
 export default function AdminLayout() {
     const { user } = useAuth()
@@ -14,19 +15,11 @@ export default function AdminLayout() {
     const [sinPermisoPorHerencia, setSinPermisoPorHerencia] = useState(null)
 
     useEffect(() => {
-        console.info('[MABS][AdminLayout] Verificando vista administrativa', {
-            pathname: location.pathname,
-            hasUser: Boolean(user),
-        })
         setSinPermisoPorHerencia(null)
         let active = true
         void (async () => {
             try {
                 const show = await shouldShowAdminHerenciaSinPermisoAlert(location.pathname)
-                console.info('[MABS][AdminLayout] Resultado de permisos', {
-                    pathname: location.pathname,
-                    sinPermisoPorHerencia: show,
-                })
                 if (active) setSinPermisoPorHerencia(show)
             } catch (error) {
                 console.error('[MABS][AdminLayout] Error verificando permisos', {
@@ -42,9 +35,6 @@ export default function AdminLayout() {
     }, [location.pathname])
 
     if (!user) {
-        console.error('[MABS][AdminLayout] Render cancelado porque user es null', {
-            pathname: location.pathname,
-        })
         return null
     }
 
@@ -79,7 +69,9 @@ export default function AdminLayout() {
                         hasta que tu herencia incluya esta vista y las acciones correspondientes.
                     </div>
                 ) : (
-                    <Outlet />
+                    <GovernanceButtonScopeProvider>
+                        <Outlet />
+                    </GovernanceButtonScopeProvider>
                 )}
 
             </main>

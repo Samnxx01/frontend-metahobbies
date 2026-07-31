@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
-import { CreditCard, Loader2, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react';
+import { CreditCard, Eye, Landmark, Loader2, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import metodoPagoService, { type MetodoPagoCatalogo, type MetodoPagoPadre } from '@/app/services/metodoPagoService';
+import { useBancosColombiaCatalogo } from '@/app/hooks/useBancosColombiaCatalogo';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,6 +13,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import MetodoPagoFormSubmodal from '../components/metodos-pago/MetodoPagoFormSubmodal';
 import CatalogoMediosPagoDianModal from '../components/metodos-pago/CatalogoMediosPagoDianModal';
 import { reglasContablesUi } from '../components/reglas-contables/reglasContablesUi';
+import BancosCatalogoAdmin from '@/app/presentation/components/perfil/BancosCatalogoAdmin';
+import { GovernedButton, PAYMENT_METHOD_ACTION_IDS } from '@/app/presentation/actions';
+import {
+  GobernanzaModuloSearchableSelect,
+  type GobernanzaSearchableSelectOption,
+} from '../gobernanza/GobernanzaModuloSearchableSelect';
+
+const NOMBRE_MANUAL_VALUE = '__MANUAL__';
 
 export type MetodosPagoParametrizacionProps = {
   embedded?: boolean;
@@ -42,8 +51,22 @@ export default function MetodosPagoParametrizacion({
   const [loading, setLoading] = useState(false);
   const [submodalOpen, setSubmodalOpen] = useState(false);
   const [registroEditar, setRegistroEditar] = useState<MetodoPagoCatalogo | null>(null);
+  const [registroVer, setRegistroVer] = useState<MetodoPagoCatalogo | null>(null);
+  const [listadoCatalogosOpen, setListadoCatalogosOpen] = useState(false);
   const [eliminandoCodigo, setEliminandoCodigo] = useState<string | null>(null);
   const [catalogoDianOpen, setCatalogoDianOpen] = useState(false);
+  const [catalogoBancosOpen, setCatalogoBancosOpen] = useState(false);
+  const [nombreSelectValue, setNombreSelectValue] = useState('');
+  const { bancos: bancosCatalogo } = useBancosColombiaCatalogo();
+
+  const bancosOptions: GobernanzaSearchableSelectOption[] = bancosCatalogo
+    .filter((banco) => banco.estado)
+    .map((banco) => ({
+      value: banco.nombre,
+      label: banco.nombreCorto || banco.nombre,
+      searchText: `${banco.nombreCorto || ''} ${banco.nombre}`,
+    }))
+    .concat([{ value: NOMBRE_MANUAL_VALUE, label: 'Otro / escribir manualmente…', searchText: 'otro manual' }]);
 
   const cargar = useCallback(async (): Promise<void> => {
     try {
@@ -97,6 +120,7 @@ export default function MetodosPagoParametrizacion({
         catalogoMetodoCodigo: '',
         pasarelaPago: '',
       });
+      setNombreSelectValue('');
       await cargar();
     } catch (error) {
       toast.error(errorMessage(error, 'No se pudo crear el método de pago.'));
@@ -139,6 +163,17 @@ export default function MetodosPagoParametrizacion({
         Cada método declara a qué medio de pago DIAN (Efectivo/Tarjeta) mapea al facturar electrónicamente.
       </p>
       <div className="flex flex-wrap gap-2">
+        <GovernedButton
+          actionId={PAYMENT_METHOD_ACTION_IDS.VIEW_COLOMBIA_BANKS}
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => setCatalogoBancosOpen(true)}
+          disabled={saving}
+        >
+          <Landmark className="mr-2 h-4 w-4" />
+          Catálogo bancos Colombia
+        </GovernedButton>
         <Button
           type="button"
           variant="outline"
@@ -152,6 +187,15 @@ export default function MetodosPagoParametrizacion({
         <Button type="button" variant="outline" size="sm" onClick={() => void cargar()} disabled={loading || saving}>
           {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
           Recargar
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => setListadoCatalogosOpen(true)}
+        >
+          <Eye className="mr-2 h-4 w-4" />
+          Visualizar catálogos
         </Button>
         <Button
           type="button"
@@ -233,6 +277,16 @@ export default function MetodosPagoParametrizacion({
                     type="button"
                     variant="ghost"
                     size="icon"
+                    className="h-8 w-8 text-secondary"
+                    title="Ver detalle"
+                    onClick={() => setRegistroVer(metodo)}
+                  >
+                    <Eye className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
                     className="h-8 w-8 text-primary"
                     title="Editar"
                     disabled={saving || eliminandoCodigo === metodo.codigo}
@@ -297,7 +351,28 @@ export default function MetodosPagoParametrizacion({
           </div>
           <div className="space-y-2">
             <Label>Nombre</Label>
-            <Input value={padreDraft.nombreMetodoPago} onChange={e => setPadreDraft(p => ({ ...p, nombreMetodoPago: e.target.value }))} placeholder="Ej: Wompi" />
+            <GobernanzaModuloSearchableSelect
+              value={nombreSelectValue}
+              onValueChange={(value) => {
+                setNombreSelectValue(value);
+                if (value && value !== NOMBRE_MANUAL_VALUE) {
+                  setPadreDraft(p => ({ ...p, nombreMetodoPago: value }));
+                } else if (value === NOMBRE_MANUAL_VALUE) {
+                  setPadreDraft(p => ({ ...p, nombreMetodoPago: '' }));
+                }
+              }}
+              options={bancosOptions}
+              placeholder="Seleccione una entidad del catálogo de bancos"
+              searchPlaceholder="Buscar banco…"
+            />
+            {nombreSelectValue === NOMBRE_MANUAL_VALUE && (
+              <Input
+                className="mt-2"
+                value={padreDraft.nombreMetodoPago}
+                onChange={e => setPadreDraft(p => ({ ...p, nombreMetodoPago: e.target.value }))}
+                placeholder="Ej: Wompi"
+              />
+            )}
           </div>
           <div className="space-y-2">
             <Label>Descripción</Label>
@@ -348,6 +423,123 @@ export default function MetodosPagoParametrizacion({
         open={catalogoDianOpen}
         onOpenChange={setCatalogoDianOpen}
       />
+      <Dialog open={catalogoBancosOpen} onOpenChange={setCatalogoBancosOpen}>
+        <DialogContent className="max-h-[90vh] w-[min(96vw,72rem)] max-w-none overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Catálogo de bancos de Colombia</DialogTitle>
+          </DialogHeader>
+          <BancosCatalogoAdmin />
+        </DialogContent>
+      </Dialog>
+      <Dialog open={Boolean(registroVer)} onOpenChange={(open) => { if (!open) setRegistroVer(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Detalle del método de pago</DialogTitle>
+          </DialogHeader>
+          {registroVer ? (
+            <div className="space-y-3 text-sm">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-muted-foreground">Código</span>
+                <span className="flex items-center gap-1 font-medium">
+                  {registroVer.codigo}
+                  {registroVer.esSistema ? (
+                    <Badge variant="outline" className={reglasContablesUi.badgeSistema}>
+                      Sistema
+                    </Badge>
+                  ) : null}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-muted-foreground">Nombre</span>
+                <span className="font-medium">{registroVer.nombre}</span>
+              </div>
+              <div className="flex items-start justify-between gap-3">
+                <span className="text-muted-foreground">Descripción</span>
+                <span className="text-right">{registroVer.descripcion || '—'}</span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-muted-foreground">Medio de pago DIAN</span>
+                <Badge variant="secondary">{registroVer.medioPagoDian}</Badge>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-muted-foreground">Estado</span>
+                <Badge variant={registroVer.estado ? 'secondary' : 'outline'}>
+                  {registroVer.estado ? 'Activo' : 'Inactivo'}
+                </Badge>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-muted-foreground">Orden</span>
+                <span className="font-medium">{registroVer.orden}</span>
+              </div>
+              {registroVer.metodoPagoId && typeof registroVer.metodoPagoId === 'object' ? (
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-muted-foreground">Método padre</span>
+                  <span className="font-medium">
+                    {registroVer.metodoPagoId.nombreMetodoPago || registroVer.metodoPagoId.codigo || '—'}
+                  </span>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRegistroVer(null)}>Cerrar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={listadoCatalogosOpen} onOpenChange={setListadoCatalogosOpen}>
+        <DialogContent className="max-h-[85vh] sm:max-w-2xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Catálogo de métodos de pago</DialogTitle>
+          </DialogHeader>
+          <div className={reglasContablesUi.tableWrap}>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className={reglasContablesUi.tableHead}>Código</TableHead>
+                  <TableHead className={reglasContablesUi.tableHead}>Nombre</TableHead>
+                  <TableHead className={reglasContablesUi.tableHead}>Medio DIAN</TableHead>
+                  <TableHead className={reglasContablesUi.tableHead}>Estado</TableHead>
+                  <TableHead className={`${reglasContablesUi.tableHead} text-right`}>Ver</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {metodos.map((metodo) => (
+                  <TableRow key={metodo.codigo} className={reglasContablesUi.tableRowHover}>
+                    <TableCell className="font-medium">{metodo.codigo}</TableCell>
+                    <TableCell>{metodo.nombre}</TableCell>
+                    <TableCell>
+                      <Badge variant="secondary">{metodo.medioPagoDian}</Badge>
+                    </TableCell>
+                    <TableCell>{metodo.estado ? 'Activo' : 'Inactivo'}</TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-secondary"
+                        title="Ver detalle"
+                        onClick={() => setRegistroVer(metodo)}
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {metodos.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
+                      No hay registros en la colección metodopagocatalogos todavía. Use «Agregar catálogo» para crear el primero.
+                    </TableCell>
+                  </TableRow>
+                ) : null}
+              </TableBody>
+            </Table>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setListadoCatalogosOpen(false)}>Cerrar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 

@@ -102,7 +102,7 @@ function VistaTable({
       )}
 
       {/* Tabla */}
-      <div className="max-h-64 overflow-y-auto rounded-md border border-border">
+      <div className="max-h-64 overflow-y-auto overflow-x-auto rounded-md border border-border">
         <table className="w-full text-xs">
           <thead className="sticky top-0 bg-muted/90 backdrop-blur-sm">
             <tr>

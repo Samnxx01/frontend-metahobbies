@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { ChevronDown, ChevronRight, Users, Edit, Globe, Shield } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { BTN_GHOST_ACCENT } from '@/app/utils/buttonStyles';
-import { Button } from '@/components/ui/button';
+import { GovernedButton, TENANT_USERS_ACTION_IDS } from '@/app/presentation/actions';
 import { NodoCorpCard } from './NodoCorpCard';
 import type { TenantGlobalNode, TenantUsuario, CorpNode } from '@/app/services/tenantUsuariosService';
 
@@ -19,9 +19,9 @@ const UsuarioRow = ({ usuario, onEdit }: { usuario: TenantUsuario; onEdit?: () =
         <div className="flex items-center gap-2 flex-shrink-0 ml-2">
             {usuario.rol && <Badge variant="outline" className="text-xs">{usuario.rol}</Badge>}
             {onEdit && (
-                <Button variant="ghost" size="icon" className={`h-7 w-7 ${BTN_GHOST_ACCENT}`} onClick={onEdit}>
+                <GovernedButton actionId={TENANT_USERS_ACTION_IDS.EDIT_USER} variant="ghost" size="icon" className={`h-7 w-7 ${BTN_GHOST_ACCENT}`} onClick={onEdit}>
                     <Edit className="h-3.5 w-3.5" />
-                </Button>
+                </GovernedButton>
             )}
         </div>
     </div>
@@ -130,14 +130,15 @@ export const NodoTenantGlobalCard = ({
                         )}
 
                         {scope === 'SUPER_ADMIN' && onEditTG && (
-                            <Button
+                            <GovernedButton
+                                actionId={TENANT_USERS_ACTION_IDS.EDIT_TENANT_GLOBAL}
                                 variant="ghost"
                                 size="icon"
                                 className={`h-7 w-7 ml-1 ${BTN_GHOST_ACCENT}`}
                                 onClick={e => { e.stopPropagation(); onEditTG(tenantGlobal); }}
                             >
                                 <Edit className="h-3.5 w-3.5" />
-                            </Button>
+                            </GovernedButton>
                         )}
                     </div>
 

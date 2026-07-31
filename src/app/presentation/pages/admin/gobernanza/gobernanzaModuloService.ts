@@ -18,6 +18,7 @@ import { fetchGobernanzaCached, gobernanzaApiCacheKey, invalidateGobernanzaApiCa
 import type { GobernanzaParametrizacionUi } from './gobernanzaParametrizacionUi';
 
 const CATALOGO_PATH = '/api/config/global/gobernanza/modulos/catalogo';
+const BOTONES_CATALOGO_PATH = '/api/config/global/gobernanza/botones/catalogo';
 const CONFIGS_PATH = '/api/config/global/gobernanza/modulos/configs';
 const OPERATIVO_PATH = '/api/config/global/gobernanza/modulos/operativo';
 const PARAMETRIZACION_UI_PATH = '/api/config/global/gobernanza/modulos/parametrizacion-ui';
@@ -49,10 +50,14 @@ export async function fetchGobernanzaAccionesCatalogo(): Promise<AccionOption[]>
 }
 
 export async function fetchGobernanzaModulosCatalogo(): Promise<GobernanzaModulosCatalogoResponse> {
-  const payload = await apiFetch(CATALOGO_PATH, {
-    method: 'POST',
-    body: {},
-  });
+  const payload = await fetchGobernanzaCached(
+    gobernanzaApiCacheKey({ catalogoModulos: true }),
+    () => apiFetch(CATALOGO_PATH, {
+      method: 'POST',
+      body: {},
+    }),
+    { ttlMs: 45_000 },
+  );
 
   if (!payload || payload.ok === false) {
     throw new Error(payload?.msg || 'No se pudo cargar el catálogo de gobernanza');
@@ -371,5 +376,30 @@ export async function desactivarGobernanzaModulo(slug: string): Promise<unknown>
     throw new Error(payload?.msg || 'No se pudo desactivar el módulo');
   }
 
+  invalidateGobernanzaApiCache();
   return payload;
+}
+
+export type GobernanzaBotonCatalogoScopeItem = {
+  buttonId: string;
+  estado?: boolean;
+  disponible?: boolean;
+};
+
+export async function fetchGobernanzaBotonesCatalogo(): Promise<GobernanzaBotonCatalogoScopeItem[]> {
+  const payload = await apiFetch(BOTONES_CATALOGO_PATH, { method: 'GET' });
+  if (!payload || payload.ok === false) {
+    throw new Error(payload?.msg || 'No se pudo cargar el catálogo de botones');
+  }
+  return Array.isArray(payload.botones) ? payload.botones : [];
+}
+
+export async function guardarGobernanzaBotonesCatalogo(payload: {
+  rutaId: string;
+  botonesCatalogo: Array<Record<string, unknown>>;
+}): Promise<void> {
+  const response = await apiFetch(BOTONES_CATALOGO_PATH, { method: 'POST', body: payload });
+  if (!response || response.ok === false) {
+    throw new Error(response?.msg || 'No se pudo guardar el catálogo de botones');
+  }
 }

@@ -158,7 +158,7 @@ export default function DetalleProducto(): React.ReactElement {
             </div>
 
             {imagenes.length > 1 && (
-              <div className="grid grid-cols-4 gap-2">
+              <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
                 {imagenes.slice(0, 8).map((img, index) => (
                   <img
                     key={`${img}-${index}`}

@@ -102,6 +102,7 @@ import {
 } from './gobernanza/GobernanzaTenantActionCards';
 import { ParametrosGobernanzaEndpointDesignMenu } from './gobernanza/ParametrosGobernanzaEndpointDesignMenu';
 import { ParametrosGobernanzaModalFormLayout } from './gobernanza/ParametrosGobernanzaModalFormLayout';
+import { governanceEndpointActionId, governanceEndpointConfigureActionId, GovernedButton, TENANT_GOVERNANCE_ACTION_IDS } from '@/app/presentation/actions';
 import { PoliticaBypassPanel } from './PoliticaBypassPanel';
 import { PoliticasRuntimePanel } from './PoliticasRuntimePanel';
 import {
@@ -5565,6 +5566,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
         path={endpointOperativo.path}
         showApiPath={!useModuloInlineFlow}
         executeLabel={useModuloInlineFlow ? inlineExecuteLabel(endpointOperativo) : 'Ejecutar'}
+        executeActionId={esEndpointCreacionSaDocumento(endpointOperativo.id) ? TENANT_GOVERNANCE_ACTION_IDS.CREATE_TENANT_USER : governanceEndpointActionId(endpointOperativo.id)}
         actorLabel={endpointOperativo.actor}
         running={
           runningMain ||
@@ -6300,14 +6302,14 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
                       {endpoint.path}
                     </p>
                     <div className="grid gap-2 sm:grid-cols-2">
-                      <Button variant="outline" onClick={() => setEndpointModal(endpoint)}>
+                      <GovernedButton actionId={governanceEndpointConfigureActionId(endpoint.id)} variant="outline" onClick={() => setEndpointModal(endpoint)}>
                         <Settings2 className="mr-2 h-4 w-4" />
                         Configurar
-                      </Button>
-                      <Button onClick={() => endpoint.fields.length === 0 ? runEndpoint(endpoint) : setEndpointModal(endpoint)} disabled={!!running[endpoint.id] || !disponible}>
+                      </GovernedButton>
+                      <GovernedButton actionId={governanceEndpointActionId(endpoint.id)} onClick={() => endpoint.fields.length === 0 ? runEndpoint(endpoint) : setEndpointModal(endpoint)} disabled={!!running[endpoint.id] || !disponible}>
                         {running[endpoint.id] ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
                         Ejecutar
-                      </Button>
+                      </GovernedButton>
                     </div>
                   </CardContent>
                 </Card>

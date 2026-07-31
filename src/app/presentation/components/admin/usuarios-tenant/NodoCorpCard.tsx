@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { ChevronDown, ChevronRight, Building2, Users, UserCheck, UserPlus, Edit } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { BTN_GHOST_ACCENT } from '@/app/utils/buttonStyles';
-import { Button } from '@/components/ui/button';
+import { GovernedButton, TENANT_USERS_ACTION_IDS } from '@/app/presentation/actions';
 import type { CorpNode, TenantUsuario } from '@/app/services/tenantUsuariosService';
 
 interface UsuarioRowProps {
@@ -29,9 +29,9 @@ const UsuarioRow = ({ usuario, tipo, onEdit }: UsuarioRowProps) => (
                 {tipo === 'cliente' ? 'Cliente' : 'Admin'}
             </Badge>
             {onEdit && (
-                <Button variant="ghost" size="icon" className={`h-7 w-7 ${BTN_GHOST_ACCENT}`} onClick={onEdit}>
+                <GovernedButton actionId={TENANT_USERS_ACTION_IDS.EDIT_USER} variant="ghost" size="icon" className={`h-7 w-7 ${BTN_GHOST_ACCENT}`} onClick={onEdit}>
                     <Edit className="h-3.5 w-3.5" />
-                </Button>
+                </GovernedButton>
             )}
         </div>
     </div>
@@ -105,7 +105,8 @@ export const NodoCorpCard = ({
                     >
                         {tenantCorporativo.estado === true || tenantCorporativo.estado === 'activo' ? 'Activo' : 'Inactivo'}
                     </Badge>
-                    <Button
+                    <GovernedButton
+                        actionId={TENANT_USERS_ACTION_IDS.CREATE_CORPORATE_USER}
                         type="button"
                         size="sm"
                         variant="ghost"
@@ -114,7 +115,7 @@ export const NodoCorpCard = ({
                     >
                         <UserPlus className="h-3.5 w-3.5" />
                         Agregar
-                    </Button>
+                    </GovernedButton>
                 </div>
             </div>
 

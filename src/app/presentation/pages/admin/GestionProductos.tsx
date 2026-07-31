@@ -30,6 +30,7 @@ import ConfigCatalogoProductosModal, {
 } from '@/app/presentation/pages/admin/components/ConfigCatalogoProductosModal';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { GovernedButton, PRODUCT_ACTION_IDS } from '@/app/presentation/actions';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -309,6 +310,14 @@ export default function GestionProductos(): React.ReactElement {
     descripcion: '',
     padre: null,
   });
+  const [categoryCreateMode, setCategoryCreateMode] = useState<'parent' | 'subcategory'>('parent');
+  const [categoriaPadreSeleccionadaId, setCategoriaPadreSeleccionadaId] = useState('__new__');
+  const [subcategoriasDraft, setSubcategoriasDraft] = useState<Array<{
+    nombre: string;
+    descripcion: string;
+    mediaFile: File | null;
+    mediaDuration?: number;
+  }>>([]);
   const [categoriaEdit, setCategoriaEdit] = useState<BackendCategoria | null>(null);
   const [categoriaEditForm, setCategoriaEditForm] = useState({ nombre: '', descripcion: '', estado: true });
   const [categoriaEditSaving, setCategoriaEditSaving] = useState(false);
@@ -553,10 +562,18 @@ export default function GestionProductos(): React.ReactElement {
     const q = categoryQuery.trim().toLowerCase();
     return categorias
       .filter((categoria) => {
+        if (Number(categoria.nivel || 1) !== 1) return false;
         if (!q) return true;
+        const hijas = categorias.filter((item) => {
+          const padre = typeof item.padre === 'object' && item.padre !== null
+            ? backendId(item.padre)
+            : String(item.padre || '');
+          return padre === backendId(categoria);
+        });
         return (
           String(categoria.nombre || '').toLowerCase().includes(q)
           || String(categoria.descripcion || '').toLowerCase().includes(q)
+          || hijas.some((item) => String(item.nombre || '').toLowerCase().includes(q))
         );
       })
       .sort((a, b) => String(a.nombre || '').localeCompare(String(b.nombre || '')));
@@ -572,6 +589,8 @@ export default function GestionProductos(): React.ReactElement {
 
   const closeCategoryDialog = (): void => {
     setOpenCategoryDialog(false);
+    setCategoryCreateMode('parent');
+    setCategoriaPadreSeleccionadaId('__new__');
     setCategoryForm({
       nombre: '',
       descripcion: '',
@@ -579,6 +598,26 @@ export default function GestionProductos(): React.ReactElement {
     });
     setCategoryMediaFile(null);
     setCategoryMediaDuration(undefined);
+    setSubcategoriasDraft([]);
+  };
+
+  const abrirCrearCategoriaPadre = (): void => {
+    setCategoryCreateMode('parent');
+    setCategoriaPadreSeleccionadaId('__new__');
+    setCategoryForm({ nombre: '', descripcion: '', padre: null });
+    setSubcategoriasDraft([]);
+    setOpenCategoryDialog(true);
+  };
+
+  const abrirCrearSubcategoria = (categoriaPadre: BackendCategoria): void => {
+    setCategoryCreateMode('subcategory');
+    setCategoriaPadreSeleccionadaId(backendId(categoriaPadre));
+    setCategoryForm({
+      nombre: '',
+      descripcion: '',
+      padre: backendId(categoriaPadre),
+    });
+    setOpenCategoryDialog(true);
   };
 
   /** Valida imagen/video (máx. 10 s) para media de categoría; retorna null si no pasa. */
@@ -1080,6 +1119,53 @@ export default function GestionProductos(): React.ReactElement {
   };
 
   const onCreateCategory = async (): Promise<void> => {
+    if (categoryCreateMode === 'parent' && categoriaPadreSeleccionadaId !== '__new__') {
+      const subcategoriasValidas = subcategoriasDraft.filter((item) => item.nombre.trim());
+      if (!subcategoriasValidas.length) {
+        toast.error('Agrega al menos una subcategoría con nombre.');
+        return;
+      }
+      try {
+        setCategorySaving(true);
+        const creadas: BackendCategoria[] = [];
+        for (const subcategoria of subcategoriasValidas) {
+          const creada = await productosService.crearCategoria({
+            nombre: subcategoria.nombre.trim(),
+            descripcion: subcategoria.descripcion.trim(),
+            padre: categoriaPadreSeleccionadaId,
+          });
+          const subcategoriaId = backendId(creada);
+          if (subcategoria.mediaFile && subcategoriaId) {
+            const media = await productosService.subirMediaCategoria(
+              subcategoriaId,
+              subcategoria.mediaFile,
+              subcategoria.mediaDuration,
+            );
+            creadas.push({ ...creada, media });
+          } else {
+            creadas.push(creada);
+          }
+        }
+        if (categoryMediaFile) {
+          await productosService.subirMediaCategoria(
+            categoriaPadreSeleccionadaId,
+            categoryMediaFile,
+            categoryMediaDuration,
+          );
+        }
+        setCategorias((prev) => [...prev, ...creadas].sort((a, b) => (
+          String(a.nombre || '').localeCompare(String(b.nombre || ''))
+        )));
+        toast.success(`${creadas.length} subcategoría(s) parametrizadas correctamente`);
+        closeCategoryDialog();
+      } catch (error) {
+        toast.error(errorMessage(error, 'No se pudieron crear las subcategorías.'));
+      } finally {
+        setCategorySaving(false);
+      }
+      return;
+    }
+
     if (!categoryForm.nombre?.trim()) {
       toast.error('El nombre de la categoría es obligatorio.');
       return;
@@ -1102,12 +1188,39 @@ export default function GestionProductos(): React.ReactElement {
         );
         createdWithMedia = { ...created, media };
       }
-      const nextCategorias = [...categorias, createdWithMedia].sort((a, b) =>
+      const subcategoriasCreadas: BackendCategoria[] = [];
+      if (categoryCreateMode === 'parent' && createdId) {
+        for (const subcategoria of subcategoriasDraft) {
+          const nombre = subcategoria.nombre.trim();
+          if (!nombre) continue;
+          const creada = await productosService.crearCategoria({
+            nombre,
+            descripcion: subcategoria.descripcion.trim(),
+            padre: createdId,
+          });
+          const subcategoriaId = backendId(creada);
+          if (subcategoria.mediaFile && subcategoriaId) {
+            const media = await productosService.subirMediaCategoria(
+              subcategoriaId,
+              subcategoria.mediaFile,
+              subcategoria.mediaDuration,
+            );
+            subcategoriasCreadas.push({ ...creada, media });
+          } else {
+            subcategoriasCreadas.push(creada);
+          }
+        }
+      }
+      const nextCategorias = [...categorias, createdWithMedia, ...subcategoriasCreadas].sort((a, b) =>
         String(a.nombre || '').localeCompare(String(b.nombre || ''))
       );
       setCategorias(nextCategorias);
       setForm((prev) => ({ ...prev, categoriaId: backendId(created), categoria: created.nombre }));
-      toast.success('Categoría creada correctamente');
+      toast.success(
+        subcategoriasCreadas.length
+          ? `Categoría padre y ${subcategoriasCreadas.length} subcategoría(s) creadas correctamente`
+          : 'Categoría creada correctamente',
+      );
       closeCategoryDialog();
     } catch (error) {
       console.error('Error creando categoría:', error);
@@ -1153,35 +1266,35 @@ export default function GestionProductos(): React.ReactElement {
 
   return (
     <div className="p-4 md:p-6 lg:p-8">
-      <div className="mb-6 flex items-center justify-between border-b pb-4">
+      <div className="mb-6 flex flex-col gap-3 border-b pb-4 md:flex-row md:items-center md:justify-between">
         <h1 className="text-2xl font-bold text-foreground md:text-3xl">Gestión de Productos</h1>
-        <div className="flex items-center gap-2">
-          <Button
+        <div className="flex flex-wrap items-center gap-2">
+          <GovernedButton actionId={PRODUCT_ACTION_IDS.MANAGE_RULE_SCOPE}
             variant="outline"
             onClick={() => setOpenAlcanceReglasModal(true)}
             className="flex items-center gap-2 rounded-lg"
           >
             <Settings2 className="h-4 w-4" />
             Alcance reglas
-          </Button>
-          <ConfigCatalogoProductosTrigger onClick={() => setOpenCatalogoConfigModal(true)} />
-          <Button
+          </GovernedButton>
+          <ConfigCatalogoProductosTrigger actionId={PRODUCT_ACTION_IDS.MANAGE_CATALOG_CONFIG} onClick={() => setOpenCatalogoConfigModal(true)} />
+          <GovernedButton actionId={PRODUCT_ACTION_IDS.MANAGE_SALES_SEQUENCE}
             variant="outline"
             onClick={() => setOpenVentaWompiSecuenciaModal(true)}
             className="flex items-center gap-2 rounded-lg"
           >
             <Hash className="h-4 w-4" />
             Secuencia ventas
-          </Button>
-          <Button
+          </GovernedButton>
+          <GovernedButton actionId={PRODUCT_ACTION_IDS.MANAGE_SALES_RULES}
             variant="outline"
             onClick={() => setOpenReglasVentasModal(true)}
             className="flex items-center gap-2 rounded-lg"
           >
             <Settings2 className="h-4 w-4" />
             Reglas Ventas
-          </Button>
-          <Button
+          </GovernedButton>
+          <GovernedButton actionId={PRODUCT_ACTION_IDS.SYNC}
             variant="outline"
             onClick={() => { void onSyncCollection(); }}
             disabled={loading}
@@ -1189,18 +1302,18 @@ export default function GestionProductos(): React.ReactElement {
           >
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             Sincronizar
-          </Button>
-          <Button variant="outline" onClick={() => setOpenCategoriesListDialog(true)} className="flex items-center gap-2 rounded-lg">
+          </GovernedButton>
+          <GovernedButton actionId={PRODUCT_ACTION_IDS.VIEW_CATEGORIES} variant="outline" onClick={() => setOpenCategoriesListDialog(true)} className="flex items-center gap-2 rounded-lg">
             <FolderTree className="h-4 w-4" />
             Ver Categorias
-          </Button>
-          <Button variant="outline" onClick={() => setOpenCategoryDialog(true)} className="rounded-lg">
-            Crear Categoría
-          </Button>
-          <Button onClick={openAdd} className="flex items-center gap-2 rounded-lg">
+          </GovernedButton>
+          <GovernedButton actionId={PRODUCT_ACTION_IDS.CREATE_CATEGORY} variant="outline" onClick={abrirCrearCategoriaPadre} className="rounded-lg">
+            Crear Categoría Padre
+          </GovernedButton>
+          <GovernedButton actionId={PRODUCT_ACTION_IDS.CREATE_PRODUCT} onClick={openAdd} className="flex items-center gap-2 rounded-lg">
             <Plus className="h-5 w-5" />
             Agregar Producto
-          </Button>
+          </GovernedButton>
         </div>
       </div>
 
@@ -1304,9 +1417,9 @@ export default function GestionProductos(): React.ReactElement {
             </div>
           ) : current ? (
             <div className="min-h-0 flex-1 overflow-x-auto overflow-y-auto px-6 py-4">
-              <div className="flex min-w-[1040px] flex-row flex-nowrap items-start gap-5">
+              <div className="flex flex-col gap-5 md:min-w-[1040px] md:flex-row md:flex-nowrap md:items-start">
                 {/* Columna 1: identificación y catálogo */}
-                <section className="flex w-[min(280px,28%)] shrink-0 flex-col gap-4">
+                <section className="flex w-full flex-col gap-4 md:w-[min(280px,28%)] md:shrink-0">
                 <div className="space-y-2">
                   <Label htmlFor="nombre">Nombre</Label>
                   <Input
@@ -1420,7 +1533,7 @@ export default function GestionProductos(): React.ReactElement {
                     <button
                       type="button"
                       className="text-xs text-primary underline underline-offset-4"
-                      onClick={() => setOpenCategoryDialog(true)}
+                      onClick={abrirCrearCategoriaPadre}
                     >
                       Crear categoría nueva
                     </button>
@@ -1505,7 +1618,7 @@ export default function GestionProductos(): React.ReactElement {
                 </section>
 
                 {/* Columna 2: colores */}
-                <section className="flex w-[min(280px,28%)] shrink-0 flex-col gap-4">
+                <section className="flex w-full flex-col gap-4 md:w-[min(280px,28%)] md:shrink-0">
                 <div className="space-y-2">
                   <Label htmlFor="cantidadColoresRender">Colores a renderizar</Label>
                   <Input
@@ -1551,7 +1664,7 @@ export default function GestionProductos(): React.ReactElement {
                 </section>
 
                 {/* Columna 3: reglas contables e imagen */}
-                <section className="flex w-[min(300px,30%)] shrink-0 flex-col gap-4">
+                <section className="flex w-full flex-col gap-4 md:w-[min(300px,30%)] md:shrink-0">
                 <div className="space-y-3 rounded-md border border-border px-3 py-2">
                   <div>
                     <Label>Reglas contables del producto</Label>
@@ -1782,7 +1895,7 @@ export default function GestionProductos(): React.ReactElement {
                 </section>
 
                 {/* Columna 4: opciones y descripción */}
-                <section className="flex min-w-[220px] flex-1 flex-col gap-4">
+                <section className="flex w-full flex-col gap-4 md:min-w-[220px] md:flex-1">
                 <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
                   <div>
                     <Label htmlFor="manejaVentas">Maneja ventas</Label>
@@ -1876,8 +1989,7 @@ export default function GestionProductos(): React.ReactElement {
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/50 hover:bg-muted/50">
-                    <TableHead>Nombre</TableHead>
-                    <TableHead>Nivel</TableHead>
+                    <TableHead>Categoría padre y subcategorías</TableHead>
                     <TableHead>Estado</TableHead>
                     <TableHead>Descripcion</TableHead>
                     <TableHead className="text-right">Acciones</TableHead>
@@ -1892,9 +2004,20 @@ export default function GestionProductos(): React.ReactElement {
                     </TableRow>
                   ) : filteredCategorias.map((categoria) => (
                     <TableRow key={backendId(categoria)}>
-                      <TableCell className="font-medium">{categoria.nombre}</TableCell>
                       <TableCell>
-                        <Badge variant="outline">Nivel {Number(categoria.nivel || 1)}</Badge>
+                        <p className="font-medium">{categoria.nombre}</p>
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {categorias
+                            .filter((item) => {
+                              const padre = typeof item.padre === 'object' && item.padre !== null
+                                ? backendId(item.padre)
+                                : String(item.padre || '');
+                              return padre === backendId(categoria);
+                            })
+                            .map((item) => (
+                              <Badge key={backendId(item)} variant="outline">{item.nombre}</Badge>
+                            ))}
+                        </div>
                       </TableCell>
                       <TableCell>
                         <Badge variant={categoria.estado ? 'secondary' : 'outline'}>
@@ -1906,6 +2029,16 @@ export default function GestionProductos(): React.ReactElement {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            title="Crear subcategoría"
+                            onClick={() => abrirCrearSubcategoria(categoria)}
+                          >
+                            <Plus className="mr-1 h-4 w-4" />
+                            Subcategoría
+                          </Button>
                           <Button
                             type="button"
                             variant="ghost"
@@ -1939,15 +2072,15 @@ export default function GestionProductos(): React.ReactElement {
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpenCategoriesListDialog(false)}>Cerrar</Button>
-            <Button onClick={() => setOpenCategoryDialog(true)}>Crear Categoria</Button>
+            <Button onClick={abrirCrearCategoriaPadre}>Crear categoría padre</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       <Dialog open={Boolean(categoriaEdit)} onOpenChange={(open) => { if (!open) setCategoriaEdit(null); }}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Editar Categoría</DialogTitle>
+            <DialogTitle>Parametrizar Categoría</DialogTitle>
             <DialogDescription>
               Actualiza nombre, descripción, estado o la imagen/video de la categoría.
             </DialogDescription>
@@ -2031,15 +2164,64 @@ export default function GestionProductos(): React.ReactElement {
       </Dialog>
 
       <Dialog open={openCategoryDialog} onOpenChange={(open) => (open ? setOpenCategoryDialog(true) : closeCategoryDialog())}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Crear Categoría</DialogTitle>
+            <DialogTitle>
+              {categoryCreateMode === 'subcategory'
+                ? 'Crear Subcategoría'
+                : categoriaPadreSeleccionadaId === '__new__'
+                  ? 'Crear Categoría Padre'
+                  : 'Parametrizar Subcategorías'}
+            </DialogTitle>
             <DialogDescription>
-              Registra una categoría del catálogo, con imagen o video opcional para el home.
+              {categoryCreateMode === 'subcategory'
+                ? 'Registra una subcategoría relacionada con la categoría padre seleccionada.'
+                : categoriaPadreSeleccionadaId === '__new__'
+                  ? 'Registra una nueva categoría padre del catálogo.'
+                  : 'Agrega subcategorías a una categoría padre existente.'}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
+            {categoryCreateMode === 'parent' && (
+              <div className="space-y-2">
+                <Label htmlFor="categoria-padre-dinamica">Categoría padre</Label>
+                <select
+                  id="categoria-padre-dinamica"
+                  value={categoriaPadreSeleccionadaId}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setCategoriaPadreSeleccionadaId(value);
+                    setCategoryForm((prev) => ({
+                      ...prev,
+                      nombre: value === '__new__' ? prev.nombre : '',
+                      descripcion: value === '__new__' ? prev.descripcion : '',
+                      padre: null,
+                    }));
+                  }}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                >
+                  <option value="__new__">+ Crear nueva categoría padre</option>
+                  {categorias
+                    .filter((categoria) => (
+                      Number(categoria.nivel || 1) === 1
+                      && categoria.estado !== false
+                    ))
+                    .sort((a, b) => String(a.nombre || '').localeCompare(String(b.nombre || '')))
+                    .map((categoria) => (
+                      <option key={backendId(categoria)} value={backendId(categoria)}>
+                        {categoria.nombre}
+                      </option>
+                    ))}
+                </select>
+                <p className="text-xs text-muted-foreground">
+                  Selecciona un padre existente para agregarle subcategorías o crea uno nuevo.
+                </p>
+              </div>
+            )}
+
+            {(categoryCreateMode !== 'parent' || categoriaPadreSeleccionadaId === '__new__') && (
+            <>
             <div className="space-y-2">
               <Label htmlFor="categoria-nombre">Nombre</Label>
               <Input
@@ -2050,15 +2232,15 @@ export default function GestionProductos(): React.ReactElement {
               />
             </div>
 
+            {categoryCreateMode === 'subcategory' && (
             <div className="space-y-2">
-              <Label htmlFor="categoria-padre">Categoría padre</Label>
+              <Label htmlFor="categoria-padre">Categoría padre seleccionada</Label>
               <select
                 id="categoria-padre"
                 value={categoryForm.padre || ''}
                 onChange={(e) => setCategoryForm((prev) => ({ ...prev, padre: e.target.value || null }))}
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               >
-                <option value="">Sin categoría padre</option>
                 {categorias
                   .filter((categoria) => Number(categoria.nivel) === 1)
                   .map((categoria) => (
@@ -2067,7 +2249,11 @@ export default function GestionProductos(): React.ReactElement {
                     </option>
                   ))}
               </select>
+              <p className="text-xs text-muted-foreground">
+                La relación se guardará mediante el identificador de esta categoría padre.
+              </p>
             </div>
+            )}
 
             <div className="space-y-2">
               <Label htmlFor="categoria-descripcion">Descripción</Label>
@@ -2079,9 +2265,125 @@ export default function GestionProductos(): React.ReactElement {
                 placeholder="Descripción opcional de la categoría"
               />
             </div>
+            </>
+            )}
 
+            {categoryCreateMode === 'parent' && (
+              <div className="space-y-3 rounded-lg border p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <Label>Subcategorías</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Parametriza las subcategorías que quedarán relacionadas con este padre.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setSubcategoriasDraft((prev) => [
+                      ...prev,
+                      { nombre: '', descripcion: '', mediaFile: null },
+                    ])}
+                  >
+                    <Plus className="mr-1 h-4 w-4" />
+                    Agregar
+                  </Button>
+                </div>
+
+                {subcategoriasDraft.length === 0 ? (
+                  <p className="rounded-md bg-muted/30 p-3 text-xs text-muted-foreground">
+                    Puedes crear el padre sin subcategorías o agregar una o varias ahora.
+                  </p>
+                ) : (
+                  <div className="max-h-56 space-y-3 overflow-y-auto pr-1">
+                    {subcategoriasDraft.map((subcategoria, index) => (
+                      <div key={index} className="space-y-2 rounded-md border bg-muted/20 p-3">
+                        <div className="flex items-center gap-2">
+                          <Input
+                            value={subcategoria.nombre}
+                            placeholder={`Nombre de subcategoría ${index + 1}`}
+                            onChange={(e) => setSubcategoriasDraft((prev) => prev.map(
+                              (item, itemIndex) => itemIndex === index
+                                ? { ...item, nombre: e.target.value }
+                                : item,
+                            ))}
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="shrink-0 text-destructive"
+                            onClick={() => setSubcategoriasDraft((prev) => (
+                              prev.filter((_, itemIndex) => itemIndex !== index)
+                            ))}
+                            aria-label={`Eliminar subcategoría ${index + 1}`}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                        <Textarea
+                          value={subcategoria.descripcion}
+                          placeholder="Descripción opcional de la subcategoría"
+                          rows={2}
+                          onChange={(e) => setSubcategoriasDraft((prev) => prev.map(
+                            (item, itemIndex) => itemIndex === index
+                              ? { ...item, descripcion: e.target.value }
+                            : item,
+                          ))}
+                        />
+                        <div className="space-y-1">
+                          <Label htmlFor={`subcategoria-media-${index}`} className="text-xs">
+                            Imagen o video de la subcategoría
+                          </Label>
+                          <Input
+                            id={`subcategoria-media-${index}`}
+                            type="file"
+                            accept="image/*,video/mp4,video/webm,video/quicktime"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              void (async () => {
+                                if (!file) return;
+                                const media = await validarMediaCategoria(file);
+                                if (!media) {
+                                  e.target.value = '';
+                                  return;
+                                }
+                                setSubcategoriasDraft((prev) => prev.map(
+                                  (item, itemIndex) => itemIndex === index
+                                    ? {
+                                        ...item,
+                                        mediaFile: media.file,
+                                        mediaDuration: media.duracion,
+                                      }
+                                    : item,
+                                ));
+                              })();
+                            }}
+                          />
+                          {subcategoria.mediaFile && (
+                            <p className="text-xs text-muted-foreground">
+                              {subcategoria.mediaFile.name}
+                              {typeof subcategoria.mediaDuration === 'number'
+                                ? ` | ${subcategoria.mediaDuration.toFixed(1)} seg`
+                                : ''}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {(categoryCreateMode === 'subcategory' || categoriaPadreSeleccionadaId === '__new__') && (
             <div className="space-y-2">
-              <Label htmlFor="categoria-media">Imagen o video (máx. 10 s)</Label>
+              <Label htmlFor="categoria-media">
+                {categoryCreateMode === 'subcategory'
+                  ? 'Imagen o video de la subcategoría (máx. 10 s)'
+                  : 'Imagen o video de la categoría padre (máx. 10 s)'}
+              </Label>
               <Input
                 id="categoria-media"
                 type="file"
@@ -2100,12 +2402,19 @@ export default function GestionProductos(): React.ReactElement {
                 Se muestra en la tarjeta del home. JPG, PNG, WEBP, GIF o MP4/WEBM/MOV.
               </p>
             </div>
+            )}
           </div>
 
           <DialogFooter>
             <Button variant="outline" onClick={closeCategoryDialog}>Cancelar</Button>
             <Button onClick={() => { void onCreateCategory(); }} disabled={categorySaving}>
-              {categorySaving ? 'Guardando...' : 'Crear Categoría'}
+              {categorySaving
+                ? 'Guardando...'
+                : categoryCreateMode === 'subcategory'
+                  ? 'Crear Subcategoría'
+                  : categoriaPadreSeleccionadaId === '__new__'
+                    ? 'Crear Categoría Padre'
+                    : 'Guardar Subcategorías'}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -7,6 +7,7 @@ import type { Product as CommonProduct } from '../../../../types/common';
 import productosService, {
   type BackendCategoria,
   getCategoriaId,
+  getCategoriaPadreId,
   getCategoryImage,
 } from '../../../services/productosService';
 import { esErrorProductoRequiereColor } from '@/app/utils/productColorUtils';
@@ -50,6 +51,7 @@ export default function Home(): React.ReactElement {
   const [productos, setProductos] = useState<ComponentProduct[]>([]);
   const [loadingProductos, setLoadingProductos] = useState(true);
   const [page, setPage] = useState(0);
+  const categoriasPadre = categorias.filter((categoria) => !getCategoriaPadreId(categoria));
 
   const maxPage = Math.max(0, Math.ceil(productos.length / PRODUCTS_PER_PAGE) - 1);
   const visibleProductos = productos.slice(page * PRODUCTS_PER_PAGE, (page + 1) * PRODUCTS_PER_PAGE);
@@ -82,7 +84,25 @@ export default function Home(): React.ReactElement {
 
   const handleSelectCategoria = (id: string) => {
     setCategoriaSeleccionada(id);
-    cargarProductos(id === 'todas' ? undefined : id);
+    if (id === 'todas') {
+      cargarProductos();
+      return;
+    }
+    const idsRelacionados = [
+      id,
+      ...categorias
+        .filter((categoria) => getCategoriaPadreId(categoria) === id)
+        .map((categoria) => getCategoriaId(categoria)),
+    ];
+    setLoadingProductos(true);
+    setPage(0);
+    productosService.listarParaCatalogoCategorias(idsRelacionados)
+      .then(setProductos)
+      .catch(() => {
+        toast.error('Error cargando productos');
+        setProductos([]);
+      })
+      .finally(() => setLoadingProductos(false));
   };
 
   const handleAddToCart = async (product: ComponentProduct): Promise<void> => {
@@ -159,7 +179,7 @@ export default function Home(): React.ReactElement {
                 >
                   Todas
                 </button>
-                {categorias.map((cat, index) => {
+                {categoriasPadre.map((cat, index) => {
                   const categoryId = getCategoriaId(cat, index);
                   return (
                   <button
@@ -223,10 +243,10 @@ export default function Home(): React.ReactElement {
               Soluciones a tus necesidades
             </h2>
 
-            {categorias.length > 0 ? (
+            {categoriasPadre.length > 0 ? (
               <>
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
-                  {categorias.slice(0, 3).map((cat, index) => {
+                  {categoriasPadre.slice(0, 3).map((cat, index) => {
                     const categoryId = getCategoriaId(cat, index);
                     return (
                       <CategoryCard
@@ -241,9 +261,9 @@ export default function Home(): React.ReactElement {
                     );
                   })}
                 </div>
-                {categorias.length > 3 && (
+                {categoriasPadre.length > 3 && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mt-6">
-                    {categorias.slice(3).map((cat, index) => {
+                    {categoriasPadre.slice(3).map((cat, index) => {
                       const categoryId = getCategoriaId(cat, index + 3);
                       return (
                         <CategoryCard

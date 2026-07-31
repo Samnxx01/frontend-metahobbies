@@ -202,6 +202,7 @@ export default function GestionRutas(): React.ReactElement {
   const [routesSourceCollection, setRoutesSourceCollection] = useState<string>('');
   const [formularioPadreId, setFormularioPadreId] = useState<string>('');
   const [editHierarchyTouched, setEditHierarchyTouched] = useState<boolean>(false);
+  const [editActionsTouched, setEditActionsTouched] = useState<boolean>(false);
   const initialEditHierarchyRef = useRef<{ suiteId: string; padreId: string }>({ suiteId: '', padreId: '' });
   const [counterJerarquiaSuites, setCounterJerarquiaSuites] = useState<Route[]>([]);
   const [counterJerarquiaModulos, setCounterJerarquiaModulos] = useState<Route[]>([]);
@@ -2014,6 +2015,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
     setParentSelectSearch('');
     setSuiteSelectSearch('');
     setEditHierarchyTouched(false);
+    setEditActionsTouched(false);
     initialEditHierarchyRef.current = { suiteId: '', padreId: '' };
     if (route) {
       setIsModalOpen(true);
@@ -2040,6 +2042,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
     const typeId = String(forceTypeId || resolveNodeTypeId(formularioType) || '');
     setCreationType(typeId);
     setEditingRoute(null);
+    setEditActionsTouched(false);
     setSelectedSuiteIdForForm('');
     setSelectedSuiteIdForSubForm('');
     setSelectedModuloIdForSubForm('');
@@ -2080,6 +2083,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
     setIsModalOpen(false);
     setEditingRoute(null);
     setEditHierarchyTouched(false);
+    setEditActionsTouched(false);
     initialEditHierarchyRef.current = { suiteId: '', padreId: '' };
     setSelectedSuiteIdForForm('');
     setSelectedSuiteIdForSubForm('');
@@ -2185,7 +2189,8 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
       return;
     }
 
-    if ((isFormularioType || isSubFormularioType) && selectedAccionesIds.length === 0) {
+    const debeValidarAcciones = !editingRoute || editActionsTouched;
+    if ((isFormularioType || isSubFormularioType) && debeValidarAcciones && selectedAccionesIds.length === 0) {
       toast.error('Selecciona al menos una acción HTTP para este tipo de nodo');
       return;
     }
@@ -2258,12 +2263,14 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
       if (isFormularioType) {
         // Formulario: accessType + acciones requeridos
         payload.accessType = selectedAccessTypeIds;
-        payload.acciones = selectedAccionesIds;
+        if (!editingRoute || editActionsTouched) payload.acciones = selectedAccionesIds;
+        else delete (payload as any).acciones;
       }
       if (isSubFormularioType) {
         // SubFormulario: acciones requeridas y accessType opcional/multiple
         payload.accessType = selectedAccessTypeIds;
-        payload.acciones = selectedAccionesIds;
+        if (!editingRoute || editActionsTouched) payload.acciones = selectedAccionesIds;
+        else delete (payload as any).acciones;
       }
 
       if (editingRoute) {
@@ -2970,7 +2977,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
   return (
     <div className="p-6 space-y-6">
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
+        <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <CardTitle className="text-2xl">Gestion de Rutas</CardTitle>
             <p className="text-sm text-muted-foreground mt-1">
@@ -3040,7 +3047,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
               <p>No routes found</p>
             </div>
           ) : (
-            <div className="rounded-md border">
+            <div className="rounded-md border overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -3762,6 +3769,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
                               checked={selected}
                               onChange={(e) => {
                                 const checked = e.target.checked;
+                                setEditActionsTouched(true);
                                 setFormData((prev) => {
                                   const current = Array.isArray(prev.acciones)
                                     ? [...prev.acciones.map((v) => String(v))]
@@ -3787,7 +3795,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
             </div>
             </div>
 
-            <DialogFooter className="shrink-0 gap-2 border-t px-6 py-4 sm:justify-end">
+            <DialogFooter className="shrink-0 flex-col-reverse gap-2 border-t px-4 py-4 sm:flex-row sm:justify-end sm:px-6 [&>button]:w-full sm:[&>button]:w-auto">
               <Button type="button" variant="outline" onClick={closeRouteModal} disabled={submitting}>
                 Cancelar
               </Button>
@@ -3821,7 +3829,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
               <p className="text-sm text-muted-foreground">No hay nodos activos para mostrar.</p>
             )}
           </div>
-          <DialogFooter>
+          <DialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:justify-end [&>button]:w-full sm:[&>button]:w-auto">
             <Button variant="outline" onClick={() => setIsTreeModalOpen(false)}>Cerrar</Button>
           </DialogFooter>
         </DialogContent>
@@ -3860,7 +3868,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
                 required
               />
             </div>
-            <div className="flex justify-end gap-2">
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end [&>button]:w-full sm:[&>button]:w-auto">
               {editingAccessTypeId ? (
                 <Button type="button" variant="outline" onClick={resetAccessTypeForm} disabled={accessTypeSubmitting}>
                   Cancelar edicion
@@ -4147,7 +4155,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
               </div>
 
             </div>
-            <DialogFooter>
+            <DialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:justify-end [&>button]:w-full sm:[&>button]:w-auto">
               <Button type="button" variant="outline" onClick={closeSubFormModal} disabled={subFormSubmitting}>
                 Cancelar
               </Button>
@@ -4179,7 +4187,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label>Codigo</Label>
-                <div className="flex gap-2">
+                <div className="flex flex-col gap-2 sm:flex-row [&>button]:w-full sm:[&>button]:w-auto">
                   <Input
                     value={nodeTypeForm.codigo}
                     readOnly
@@ -4230,7 +4238,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
                 placeholder="Nivel raiz"
               />
             </div>
-            <div className="flex justify-end gap-2">
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end [&>button]:w-full sm:[&>button]:w-auto">
               {editingNodeTypeId && (
                 <Button type="button" variant="outline" onClick={resetNodeTypeForm}>
                   Cancelar edición
@@ -4244,7 +4252,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
               </Button>
             </div>
           </form>
-          <div className="flex justify-end mb-1">
+          <div className="mb-1 flex [&>button]:w-full sm:justify-end sm:[&>button]:w-auto">
             <Button
               type="button"
               variant="outline"
@@ -4356,7 +4364,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
               )}
             </div>
           )}
-          <DialogFooter>
+          <DialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:justify-end [&>button]:w-full sm:[&>button]:w-auto">
             <Button variant="outline" onClick={() => setMigracionResult(null)}>Cerrar</Button>
           </DialogFooter>
         </DialogContent>
@@ -4470,7 +4478,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
               Se normaliza en mayusculas y luego se consume por defecto cuando exista un unico registro del nivel.
             </p>
           </div>
-          <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-between">
+          <DialogFooter className="flex-col gap-2 sm:flex-row sm:items-center sm:justify-between [&>button]:w-full sm:[&>button]:w-auto">
             {savedNodeTypeCode && savedNodeTypeCode.source === 'catalogo' ? (
               <Button
                 type="button"
@@ -4484,7 +4492,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
             ) : (
               <span />
             )}
-            <div className="flex gap-2">
+            <div className="flex w-full flex-col-reverse gap-2 sm:w-auto sm:flex-row [&>button]:w-full sm:[&>button]:w-auto">
               <Button type="button" variant="outline" onClick={() => setIsNodeTypeCodeModalOpen(false)}>
                 Cancelar
               </Button>
@@ -4570,7 +4578,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
                   />
                 </div>
               </div>
-              <DialogFooter className="flex gap-2 pt-2">
+              <DialogFooter className="flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end [&>button]:w-full sm:[&>button]:w-auto">
                 <Button variant="outline" onClick={() => setEditingUser(null)}>Cancelar</Button>
                 <Button onClick={() => void handleSaveUser()} disabled={userEditSaving}>
                   {userEditSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
@@ -4611,7 +4619,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
               El SuperAdmin eliminará el registro permanentemente. El TenantGlobal lo desactivará. Esta acción afecta el scope del tenant actual.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
+          <AlertDialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:justify-end [&>button]:w-full sm:[&>button]:w-auto">
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction onClick={() => void confirmDeleteCatalogoCodigo()}>
               Confirmar
@@ -4627,7 +4635,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
               El SuperAdmin eliminará el registro permanentemente. El TenantGlobal lo desactivará.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
+          <AlertDialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:justify-end [&>button]:w-full sm:[&>button]:w-auto">
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction onClick={() => void confirmDeleteNodeType()}>
               Confirmar
@@ -4638,4 +4646,3 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
     </div>
   );
 }
-

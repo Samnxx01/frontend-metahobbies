@@ -10,6 +10,7 @@ export type GovernedNavigationAction =
   | 'register'
   | 'forgotPassword'
   | 'publicHome'
+  | 'accountActivation'
   | 'reglasContablesCompleta';
 
 export interface GovernedNavigationEntry {
@@ -24,6 +25,7 @@ export interface GovernedNavigationConfig {
   register?: GovernedNavigationEntry;
   forgotPassword?: GovernedNavigationEntry;
   publicHome?: GovernedNavigationEntry;
+  accountActivation?: GovernedNavigationEntry;
   reglasContablesCompleta?: GovernedNavigationEntry;
   allowedPaths?: string[];
 }
@@ -35,6 +37,7 @@ const DEFAULT_PATHS: Record<GovernedNavigationAction, string> = {
   register: '/public/render/registro-cliente',
   forgotPassword: '/recuperar-contrasena',
   publicHome: '/public/render/home',
+  accountActivation: '',
   reglasContablesCompleta: '',
 };
 
@@ -80,7 +83,9 @@ export const getGovernedPath = (
   }
 ): string => {
   const fallback = options?.fallback || resolveDefaultFallback(action);
-  const normalizedFallback = normalizeRoutePath(fallback);
+  const normalizedFallback = isSafeInternalPath(fallback)
+    ? normalizeRoutePath(fallback)
+    : '';
   const branding = options?.branding ?? readCachedBranding();
   const config = getNavigationConfig(branding);
   const entry = config[action];
@@ -106,6 +111,7 @@ export const getGovernedLogoutPath = (): string => getGovernedPath('logout');
 export const getGovernedRegisterPath = (): string => getGovernedPath('register');
 export const getGovernedForgotPasswordPath = (): string => getGovernedPath('forgotPassword');
 export const getGovernedPublicHomePath = (): string => getGovernedPath('publicHome');
+export const getGovernedAccountActivationPath = (): string => getGovernedPath('accountActivation');
 export const getGovernedReglasContablesCompletaPath = (): string => getGovernedPath('reglasContablesCompleta');
 
 // Retorna true solo cuando el backend tiene un path explícito y válido para la acción.

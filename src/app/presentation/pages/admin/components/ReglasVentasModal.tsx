@@ -524,6 +524,8 @@ export default function ReglasVentasModal({
 
 
 
+          <div className="overflow-x-auto">
+
           <Table>
 
             <TableHeader>
@@ -593,6 +595,8 @@ export default function ReglasVentasModal({
             </TableBody>
 
           </Table>
+
+          </div>
 
         </DialogContent>
 

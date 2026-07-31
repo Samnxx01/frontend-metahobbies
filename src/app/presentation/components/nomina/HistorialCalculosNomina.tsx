@@ -93,34 +93,36 @@ export function HistorialCalculosNomina() {
           ) : lista.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">Sin cálculos guardados.</p>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Periodo</TableHead>
-                  <TableHead className="text-right">Devengado</TableHead>
-                  <TableHead className="text-right">Descuentos</TableHead>
-                  <TableHead className="text-right">Neto</TableHead>
-                  <TableHead />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {lista.map((item) => (
-                  <TableRow key={item.iud}>
-                    <TableCell>{item.periodoLiquidacion}</TableCell>
-                    <TableCell className="text-right">{formatCOP(item.totalDevengado)}</TableCell>
-                    <TableCell className="text-right">{formatCOP(item.totalDescuentos)}</TableCell>
-                    <TableCell className="text-right font-medium">{formatCOP(item.netoPagar)}</TableCell>
-                    <TableCell className="text-right">
-                      {item.iud && (
-                        <Button variant="ghost" size="sm" onClick={() => void verDetalle(item.iud!)}>
-                          Ver
-                        </Button>
-                      )}
-                    </TableCell>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Periodo</TableHead>
+                    <TableHead className="text-right">Devengado</TableHead>
+                    <TableHead className="text-right">Descuentos</TableHead>
+                    <TableHead className="text-right">Neto</TableHead>
+                    <TableHead />
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {lista.map((item) => (
+                    <TableRow key={item.iud}>
+                      <TableCell>{item.periodoLiquidacion}</TableCell>
+                      <TableCell className="text-right">{formatCOP(item.totalDevengado)}</TableCell>
+                      <TableCell className="text-right">{formatCOP(item.totalDescuentos)}</TableCell>
+                      <TableCell className="text-right font-medium">{formatCOP(item.netoPagar)}</TableCell>
+                      <TableCell className="text-right">
+                        {item.iud && (
+                          <Button variant="ghost" size="sm" onClick={() => void verDetalle(item.iud!)}>
+                            Ver
+                          </Button>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>

@@ -153,7 +153,7 @@ export default function ConfigCatalogoProductosPanel({
               Valores persistidos en <code className="text-xs">productoCatalogoConfigs</code> y aplicados al guardar productos y al mini-carrito.
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {onReload ? (
               <Button type="button" variant="outline" size="sm" disabled={loading || saving} onClick={() => { void onReload(); }}>
                 {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}

@@ -188,7 +188,7 @@ export function ReglasTenantGlobalesLista() {
 
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
-        <div className="rounded-md border">
+        <div className="rounded-md border overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>

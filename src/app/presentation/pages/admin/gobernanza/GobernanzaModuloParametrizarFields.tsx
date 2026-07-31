@@ -22,6 +22,7 @@ export type GobernanzaModuloParametrizarState = ReturnType<typeof useGobernanzaM
 export type GobernanzaModuloParametrizarFieldsProps = {
   state: GobernanzaModuloParametrizarState;
   moduloSlug: string;
+  hideTipoSelector?: boolean;
 };
 
 function FieldCard({
@@ -47,6 +48,7 @@ function FieldCard({
 export function GobernanzaModuloParametrizarFields({
   state,
   moduloSlug,
+  hideTipoSelector = false,
 }: GobernanzaModuloParametrizarFieldsProps): React.ReactElement {
   const {
     label,
@@ -219,7 +221,7 @@ export function GobernanzaModuloParametrizarFields({
             </p>
           </div>
 
-          <div className="space-y-1.5">
+          {!hideTipoSelector ? <div className="space-y-1.5">
             <div className="flex items-center justify-between gap-2">
               <Label htmlFor="gm-tipo" className="text-xs text-muted-foreground">
                 Tipo (gobernanzaModuloTipos)
@@ -264,7 +266,7 @@ export function GobernanzaModuloParametrizarFields({
                 No hay tipos para section «{tipoSectionFiltro}». Pulsa + para crear uno en gobernanzaModuloTipos.
               </p>
             ) : null}
-          </div>
+          </div> : null}
         </div>
       </FieldCard>
 

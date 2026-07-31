@@ -2,6 +2,7 @@
 import React from 'react';
 import { toast } from 'react-toastify';
 import { Button } from '@/components/ui/button';
+import { GOVERNANCE_PERMISSIONS_ACTION_IDS, GovernedButton } from '@/app/presentation/actions';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -78,7 +79,8 @@ export const GobernanzaHerenciaSelectionBuilder: React.FC<{ endpoint: EndpointSp
               onChange={(e) => setVistaSearchByEndpoint((prev) => ({ ...prev, [endpoint.id]: e.target.value }))}
               placeholder="Buscar vista, ruta o componente"
             />
-            <Button
+            <GovernedButton
+              actionId={GOVERNANCE_PERMISSIONS_ACTION_IDS.SYNC_RULES_INHERITANCE}
               type="button"
               size="sm"
               variant="outline"
@@ -94,7 +96,7 @@ export const GobernanzaHerenciaSelectionBuilder: React.FC<{ endpoint: EndpointSp
               }}
             >
               Todas
-            </Button>
+            </GovernedButton>
             <Button
               type="button"
               size="sm"

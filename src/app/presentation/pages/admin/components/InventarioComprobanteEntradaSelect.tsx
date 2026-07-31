@@ -3,6 +3,7 @@ import { toastAjusteError } from './inventario-ajuste/inventarioAjusteAlerts';
 import inventarioService, {
   type ComprobanteEntradaAjuste,
   type ComprobanteEntradaAjusteItem,
+  type TipoAjuste,
 } from '@/app/services/inventarioService';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -26,6 +27,7 @@ type InventarioComprobanteEntradaSelectProps = {
   /** Oculta el campo bodega duplicado cuando el padre muestra «Bodega origen». */
   ocultarCampoBodega?: boolean;
   etiquetaBodega?: string;
+  tipoAjusteDireccion?: TipoAjuste | null;
 };
 
 const formatComprobanteLabel = (comprobante: ComprobanteEntradaAjuste): string => {
@@ -45,18 +47,33 @@ export default function InventarioComprobanteEntradaSelect({
   disabled = false,
   ocultarCampoBodega = false,
   etiquetaBodega = 'Bodega',
+  tipoAjusteDireccion = null,
 }: InventarioComprobanteEntradaSelectProps): React.ReactElement {
   const [comprobantes, setComprobantes] = useState<ComprobanteEntradaAjuste[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    onSelect(null);
+    if (!tipoAjusteDireccion) {
+      setComprobantes([]);
+      setLoading(false);
+      return;
+    }
     let mounted = true;
     const load = async (): Promise<void> => {
       try {
         setLoading(true);
         const data = await inventarioService.listarComprobantesEntradaAjustes();
         if (!mounted) return;
-        setComprobantes(data);
+        const asociados = tipoAjusteDireccion === 'NEGATIVO'
+          ? data
+            .map((comprobante) => ({
+              ...comprobante,
+              items: comprobante.items.filter((item) => Number(item.disponibleKardex || 0) > 0),
+            }))
+            .filter((comprobante) => comprobante.items.length > 0)
+          : data;
+        setComprobantes(asociados);
       } catch (error) {
         console.error('Error cargando comprobantes de entrada:', error);
         toastAjusteError(error, 'No se pudieron cargar los comprobantes de entrada aprobados.');
@@ -69,7 +86,7 @@ export default function InventarioComprobanteEntradaSelect({
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [tipoAjusteDireccion]);
 
   const comprobanteActual = useMemo(
     () => comprobantes.find((item) => item.recepcionId === recepcionCompraId) ?? null,
@@ -148,15 +165,17 @@ export default function InventarioComprobanteEntradaSelect({
           <Select
             value={recepcionCompraId || undefined}
             onValueChange={handleComprobanteChange}
-            disabled={disabled || loading || comprobantes.length === 0}
+            disabled={disabled || !tipoAjusteDireccion || loading || comprobantes.length === 0}
           >
             <SelectTrigger>
               <SelectValue
                 placeholder={
                   loading
                     ? 'Cargando comprobantes...'
+                    : !tipoAjusteDireccion
+                      ? 'Primero selecciona el tipo de ajuste'
                     : comprobantes.length === 0
-                      ? 'Sin comprobantes aprobados confirmados'
+                      ? 'Sin documentos asociados al tipo'
                       : 'Selecciona comprobante'
                 }
               />

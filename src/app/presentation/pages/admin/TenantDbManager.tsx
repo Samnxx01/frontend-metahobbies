@@ -1371,7 +1371,7 @@ export default function TenantDbManager() {
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center gap-3">
           <Database className="w-7 h-7 text-primary" />
           <div>
@@ -1381,7 +1381,7 @@ export default function TenantDbManager() {
             </p>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" size="sm" onClick={cargarConfigs} disabled={loading}>
             <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
             Actualizar
@@ -1438,6 +1438,7 @@ export default function TenantDbManager() {
                   </Button>
                 </div>
               ) : (
+                <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -1546,6 +1547,7 @@ export default function TenantDbManager() {
                     })}
                   </TableBody>
                 </Table>
+                </div>
               )}
             </CardContent>
           </Card>
@@ -1627,6 +1629,7 @@ export default function TenantDbManager() {
                             Ninguna colección coincide con &quot;{syncFiltroTexto}&quot;.
                           </p>
                       ) : (
+                        <div className="overflow-x-auto">
                         <Table>
                           <TableHeader>
                             <TableRow>
@@ -1692,6 +1695,7 @@ export default function TenantDbManager() {
                             })}
                           </TableBody>
                         </Table>
+                        </div>
                       )}
                     </CardContent>
                   )}
@@ -2768,6 +2772,7 @@ export default function TenantDbManager() {
                         Esta conexion aun no tiene colecciones sincronizadas.
                       </p>
                     ) : (
+                      <div className="overflow-x-auto">
                       <Table>
                         <TableHeader>
                           <TableRow>
@@ -2818,6 +2823,7 @@ export default function TenantDbManager() {
                           })}
                         </TableBody>
                       </Table>
+                      </div>
                     )}
                   </CardContent>
                 </Card>

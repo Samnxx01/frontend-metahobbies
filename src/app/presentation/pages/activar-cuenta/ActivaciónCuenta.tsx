@@ -2,7 +2,19 @@ import { useEffect, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { CheckCircle2, Sparkles, ArrowRight, Mail, KeyRound, ShieldCheck, ShieldAlert } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { getGovernedLoginPath } from '@/app/services/governedNavigation';
+import { getGovernedAccountActivationPath } from '@/app/services/governedNavigation';
+
+const resolveRedirectPath = (params: URLSearchParams): string => {
+    const requestedPath = String(
+        params.get('redirect') || params.get('returnTo') || ''
+    ).trim();
+
+    return requestedPath.startsWith('/')
+        && !requestedPath.startsWith('//')
+        && !requestedPath.includes('\\')
+        ? requestedPath
+        : '';
+};
 
 export default function ActivacionCuenta() {
     const [params] = useSearchParams();
@@ -11,6 +23,8 @@ export default function ActivacionCuenta() {
 
     const nombre = params.get('nombre') ?? '';
     const error = params.get('error'); // 'token-invalido' | 'ya-verificado' | 'servidor' | null
+    const redirectPath = resolveRedirectPath(params) || getGovernedAccountActivationPath();
+    const redirectLabel = String(params.get('redirectLabel') || '').trim();
 
     useEffect(() => {
         const t = setTimeout(() => setVisible(true), 8000);
@@ -47,8 +61,12 @@ export default function ActivacionCuenta() {
                         </p>
                     </div>
                     <div className={`space-y-3 transition-all duration-500 delay-150 ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
-                        <Button onClick={() => navigate(getGovernedLoginPath())} className="w-full gap-2 h-11 text-sm font-semibold">
-                            Ir al inicio de sesión
+                        <Button
+                            onClick={() => redirectPath && navigate(redirectPath)}
+                            disabled={!redirectPath}
+                            className="w-full gap-2 h-11 text-sm font-semibold"
+                        >
+                            {redirectLabel || (redirectPath ? 'Continuar' : 'Destino no configurado')}
                             <ArrowRight className="w-4 h-4" />
                         </Button>
                         {!esYaVerificado && (
@@ -111,8 +129,12 @@ export default function ActivacionCuenta() {
                 </div>
 
                 <div className={`space-y-3 transition-all duration-500 delay-300 ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
-                    <Button onClick={() => navigate(getGovernedLoginPath())} className="w-full gap-2 h-11 text-sm font-semibold">
-                        Ir a Mabs
+                    <Button
+                        onClick={() => redirectPath && navigate(redirectPath)}
+                        disabled={!redirectPath}
+                        className="w-full gap-2 h-11 text-sm font-semibold"
+                    >
+                        {redirectLabel || (redirectPath ? 'Continuar' : 'Destino no configurado')}
                         <ArrowRight className="w-4 h-4" />
                     </Button>
                     <p className="text-[11px] text-muted-foreground">

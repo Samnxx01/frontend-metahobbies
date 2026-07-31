@@ -51,6 +51,7 @@ export interface BrandingConfig {
       register?: { path?: string; enabled?: boolean; rutaSeguridadId?: string | null };
       forgotPassword?: { path?: string; enabled?: boolean; rutaSeguridadId?: string | null };
       publicHome?: { path?: string; enabled?: boolean; rutaSeguridadId?: string | null };
+      accountActivation?: { path?: string; enabled?: boolean; rutaSeguridadId?: string | null };
       reglasContablesCompleta?: { path?: string; enabled?: boolean; rutaSeguridadId?: string | null };
       allowedPaths?: string[];
     };

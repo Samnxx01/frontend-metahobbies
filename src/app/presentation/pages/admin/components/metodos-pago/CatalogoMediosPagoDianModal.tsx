@@ -97,7 +97,7 @@ export default function CatalogoMediosPagoDianModal({
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="max-h-56 overflow-y-auto rounded-md border">
+          <div className="max-h-56 overflow-y-auto overflow-x-auto rounded-md border">
             <Table>
               <TableHeader>
                 <TableRow>

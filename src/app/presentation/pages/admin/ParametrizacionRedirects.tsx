@@ -37,6 +37,7 @@ interface RedirectFormState {
   register: RedirectEntryState;
   forgotPassword: RedirectEntryState;
   publicHome: RedirectEntryState;
+  accountActivation: RedirectEntryState;
   reglasContablesCompleta: RedirectEntryState;
   allowedPathsJson: string;
 }
@@ -61,6 +62,7 @@ const EMPTY_FORM: RedirectFormState = {
   register: { path: '', enabled: true },
   forgotPassword: { path: '', enabled: true },
   publicHome: { path: '', enabled: true },
+  accountActivation: { path: '', enabled: true },
   reglasContablesCompleta: { path: '', enabled: true },
   allowedPathsJson: '[]',
 };
@@ -76,6 +78,7 @@ const REDIRECT_FIELDS: Array<{
   { key: 'register',       label: 'Registro',         description: 'Destino usado por pantallas que envian al registro.' },
   { key: 'forgotPassword', label: 'Recuperar clave',  description: 'Destino para flujos de recuperacion de contrasena.' },
   { key: 'publicHome',     label: 'Home publica',     description: 'Fallback seguro cuando una ruta privada no aplica.' },
+  { key: 'accountActivation', label: 'Activación de cuenta', description: 'Destino del botón Continuar en el resultado de activación de cuenta.' },
   { key: 'reglasContablesCompleta', label: 'Reglas contables (completa)', description: 'Destino del boton «Parametrizacion completa» del modal de reglas contables en Inventario.' },
 ];
 
@@ -141,6 +144,7 @@ export default function ParametrizacionRedirects({
       register:       { path: String(navigation?.register?.path       || ''), enabled: navigation?.register?.enabled       !== false, rutaSeguridadId: getRedirectRouteId(navigation?.register) },
       forgotPassword: { path: String(navigation?.forgotPassword?.path || ''), enabled: navigation?.forgotPassword?.enabled !== false, rutaSeguridadId: getRedirectRouteId(navigation?.forgotPassword) },
       publicHome:     { path: String(navigation?.publicHome?.path     || ''), enabled: navigation?.publicHome?.enabled     !== false, rutaSeguridadId: getRedirectRouteId(navigation?.publicHome) },
+      accountActivation: { path: String(navigation?.accountActivation?.path || ''), enabled: navigation?.accountActivation?.enabled !== false, rutaSeguridadId: getRedirectRouteId(navigation?.accountActivation) },
       reglasContablesCompleta: { path: String(navigation?.reglasContablesCompleta?.path || ''), enabled: navigation?.reglasContablesCompleta?.enabled !== false, rutaSeguridadId: getRedirectRouteId(navigation?.reglasContablesCompleta) },
       allowedPathsJson: JSON.stringify(allowedPaths, null, 2),
     });
@@ -250,6 +254,7 @@ export default function ParametrizacionRedirects({
             register:       formData.register,
             forgotPassword: formData.forgotPassword,
             publicHome:     formData.publicHome,
+            accountActivation: formData.accountActivation,
             reglasContablesCompleta: formData.reglasContablesCompleta,
             etiqueta: 'navegacion',
             allowedPaths,

@@ -84,6 +84,7 @@ const buildComponentMap = (): ComponentMapType => {
         tenantCorporativo:             'TenantCorporativo',
         parametrizacionMenu:           'ParametrizacionMenu',
         RouteUserMenuSettings:         'ParametrizacionMenu',
+        TenantGobernanzaCentroModal:   'TenantGobernanzaCentroPage',
         envioCorreos:                  'EnvioCorreos',
         // Alias semántico
         ConfiguracionPerfil:           'Perfil',

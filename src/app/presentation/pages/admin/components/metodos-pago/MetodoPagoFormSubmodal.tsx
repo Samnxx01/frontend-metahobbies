@@ -3,13 +3,20 @@ import { Pencil, Plus } from 'lucide-react';
 import { toast } from 'react-toastify';
 import metodoPagoService, { type MedioPagoDian, type MetodoPagoCatalogo } from '@/app/services/metodoPagoService';
 import reglasContablesService, { type CatalogoCodigo } from '@/app/services/reglasContablesService';
+import { useBancosColombiaCatalogo } from '@/app/hooks/useBancosColombiaCatalogo';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  GobernanzaModuloSearchableSelect,
+  type GobernanzaSearchableSelectOption,
+} from '../../gobernanza/GobernanzaModuloSearchableSelect';
 import { reglasContablesUi } from '../reglas-contables/reglasContablesUi';
+
+const NOMBRE_MANUAL_VALUE = '__MANUAL__';
 
 type Props = {
   open: boolean;
@@ -38,6 +45,17 @@ export default function MetodoPagoFormSubmodal({
   const [draft, setDraft] = useState<Draft>(inicial);
   const [submitting, setSubmitting] = useState(false);
   const [mediosDian, setMediosDian] = useState<CatalogoCodigo[]>([]);
+  const [nombreSelectValue, setNombreSelectValue] = useState('');
+  const { bancos: bancosCatalogo } = useBancosColombiaCatalogo();
+
+  const bancosOptions: GobernanzaSearchableSelectOption[] = bancosCatalogo
+    .filter((banco) => banco.estado)
+    .map((banco) => ({
+      value: banco.nombre,
+      label: banco.nombreCorto || banco.nombre,
+      searchText: `${banco.nombreCorto || ''} ${banco.nombre}`,
+    }))
+    .concat([{ value: NOMBRE_MANUAL_VALUE, label: 'Otro / escribir manualmente…', searchText: 'otro manual' }]);
 
   const cargarMediosDian = async (): Promise<void> => {
     try {
@@ -60,8 +78,14 @@ export default function MetodoPagoFormSubmodal({
           }
         : inicial
     );
+    if (registro?.nombre) {
+      const coincide = bancosCatalogo.some((banco) => banco.nombre === registro.nombre);
+      setNombreSelectValue(coincide ? registro.nombre : NOMBRE_MANUAL_VALUE);
+    } else {
+      setNombreSelectValue('');
+    }
     void cargarMediosDian();
-  }, [open, registro]);
+  }, [open, registro, bancosCatalogo]);
 
   const guardar = async (): Promise<void> => {
     if (!draft.codigo.trim() || !draft.nombre.trim() || !draft.medioPagoDian) {
@@ -117,12 +141,28 @@ export default function MetodoPagoFormSubmodal({
           </div>
           <div className="space-y-2">
             <Label>Nombre</Label>
-            <Input
-              className={reglasContablesUi.input}
-              value={draft.nombre}
-              onChange={(e) => setDraft((p) => ({ ...p, nombre: e.target.value }))}
-              placeholder="Ej: Nequi"
+            <GobernanzaModuloSearchableSelect
+              value={nombreSelectValue}
+              onValueChange={(value) => {
+                setNombreSelectValue(value);
+                if (value && value !== NOMBRE_MANUAL_VALUE) {
+                  setDraft((p) => ({ ...p, nombre: value }));
+                } else if (value === NOMBRE_MANUAL_VALUE) {
+                  setDraft((p) => ({ ...p, nombre: '' }));
+                }
+              }}
+              options={bancosOptions}
+              placeholder="Seleccione una entidad del catálogo de bancos"
+              searchPlaceholder="Buscar banco…"
             />
+            {nombreSelectValue === NOMBRE_MANUAL_VALUE && (
+              <Input
+                className={`${reglasContablesUi.input} mt-2`}
+                value={draft.nombre}
+                onChange={(e) => setDraft((p) => ({ ...p, nombre: e.target.value }))}
+                placeholder="Ej: Nequi"
+              />
+            )}
           </div>
           <div className="space-y-2">
             <Label>Descripción</Label>

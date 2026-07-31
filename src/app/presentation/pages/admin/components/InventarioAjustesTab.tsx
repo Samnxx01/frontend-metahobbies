@@ -73,10 +73,14 @@ export default function InventarioAjustesTab({
 
   useEffect(() => {
     let cancelled = false;
-    void inventarioService.listarTiposAjuste().then((tipos) => {
+    void inventarioService.listarTiposMovimientoAdmin().then((tipos) => {
       if (cancelled) return;
       const tipo = tipos.find((item) => item.codigo === ajusteForm.tipoAjusteCodigo);
-      if (tipo?.direccion) setTipoAjusteDireccion(tipo.direccion);
+      if (tipo?.naturaleza) {
+        setTipoAjusteDireccion(tipo.naturaleza === 'SALIDA' ? 'NEGATIVO' : 'POSITIVO');
+      }
+    }).catch((error) => {
+      console.error('Error resolviendo el tipo de ajuste seleccionado:', error);
     });
     return () => {
       cancelled = true;
@@ -135,6 +139,10 @@ export default function InventarioAjustesTab({
     setAjusteForm((prev) => ({
       ...prev,
       tipoAjusteCodigo: codigo,
+      recepcionCompraId: '',
+      sku: '',
+      bodega: '',
+      costoUnitarioReferencia: 0,
       causal: negativo ? CAUSAL_TRASLADO : prev.causal,
       bodegaDestino: negativo ? prev.bodegaDestino : '',
     }));
@@ -187,6 +195,13 @@ export default function InventarioAjustesTab({
           </div>
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <InventarioTipoAjusteSelect
+            value={ajusteForm.tipoAjusteCodigo}
+            onChange={handleTipoChange}
+            disabled={saving}
+            refreshKey={tiposAjusteRefreshKey}
+          />
+
           <InventarioComprobanteEntradaSelect
             recepcionCompraId={ajusteForm.recepcionCompraId || ''}
             sku={ajusteForm.sku}
@@ -194,13 +209,7 @@ export default function InventarioAjustesTab({
             onSelect={handleComprobanteSelect}
             disabled={saving}
             ocultarCampoBodega={esTraslado}
-          />
-
-          <InventarioTipoAjusteSelect
-            value={ajusteForm.tipoAjusteCodigo}
-            onChange={handleTipoChange}
-            disabled={saving}
-            refreshKey={tiposAjusteRefreshKey}
+            tipoAjusteDireccion={tipoAjusteDireccion}
           />
 
           {esTraslado ? (

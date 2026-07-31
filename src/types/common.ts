@@ -184,6 +184,20 @@ export interface WompiBankCatalogItem {
   estado: boolean;
 }
 
+export interface ColombiaBankCatalogItem {
+  iud: string;
+  sfcId: string;
+  tipoEntidad: string;
+  codigoEntidad: string;
+  nombre: string;
+  nombreCorto?: string | null;
+  nit?: string | null;
+  ciudad?: string | null;
+  sitioWeb?: string | null;
+  fuente: 'SUPERFINANCIERA_DATOS_ABIERTOS';
+  estado: boolean;
+}
+
 export interface BankAccount {
   iud: string;
   nombre_titular: string;

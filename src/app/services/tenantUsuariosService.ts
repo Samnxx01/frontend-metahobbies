@@ -485,12 +485,35 @@ export const getTenantsGlobalRegistro = async (
     return fetcher(`/api/registro/tenants/global/registro${q}`, { method: 'GET' });
 };
 
+const JERARQUIA_USUARIOS_TTL_MS = 30_000;
+const jerarquiaUsuariosCache = new Map<string, { at: number; data?: JerarquiaResponse; promise?: Promise<JerarquiaResponse> }>();
+
+export const invalidarCacheJerarquiaUsuarios = (): void => {
+    jerarquiaUsuariosCache.clear();
+};
+
 export const getJerarquiaUsuarios = async (
-    opts?: { useAuth?: boolean },
+    opts?: { useAuth?: boolean; forceRefresh?: boolean },
 ): Promise<JerarquiaResponse> => {
+    const key = opts?.useAuth === false ? 'public' : 'auth';
+    const cached = jerarquiaUsuariosCache.get(key);
+    if (!opts?.forceRefresh && cached) {
+        if (cached.data && Date.now() - cached.at < JERARQUIA_USUARIOS_TTL_MS) return cached.data;
+        if (cached.promise) return cached.promise;
+    }
     const fetcher = opts?.useAuth === false ? apiFetchPublic : apiFetch;
-    const res = await fetcher('/api/registro/jerarquia/usuarios', { method: 'GET' });
-    return normalizeJerarquiaResponse(res as JerarquiaResponse);
+    const promise = fetcher('/api/registro/jerarquia/usuarios', { method: 'GET' })
+        .then((res) => {
+            const data = normalizeJerarquiaResponse(res as JerarquiaResponse);
+            jerarquiaUsuariosCache.set(key, { at: Date.now(), data });
+            return data;
+        })
+        .catch((error) => {
+            if (jerarquiaUsuariosCache.get(key)?.promise === promise) jerarquiaUsuariosCache.delete(key);
+            throw error;
+        });
+    jerarquiaUsuariosCache.set(key, { at: Date.now(), promise });
+    return promise;
 };
 
 export const createUsuarioGlobal = async (data: CreateUsuarioGlobalData): Promise<any> => {

@@ -143,6 +143,13 @@ export function getCategoriaId(cat: BackendCategoria, index = 0): string {
   return String(cat.iud || cat._id || cat.id || `cat-${index}`);
 }
 
+export function getCategoriaPadreId(cat: BackendCategoria): string | null {
+  const padre = cat.padre;
+  if (!padre) return null;
+  if (typeof padre === 'string') return padre;
+  return String(padre.iud || padre._id || padre.id || '').trim() || null;
+}
+
 export function getCategoryImage(nombre: string): string {
   const key = String(nombre || '').toLowerCase();
   const match = Object.keys(CATEGORY_IMAGES).find((k) => key.includes(k));
@@ -527,10 +534,26 @@ const productosService = {
   async listarParaCatalogo(categoriaId?: string): Promise<ComponentProduct[]> {
     const productos = await productosService.listarCatalogoPublico({
       categoria: categoriaId,
+      destacado: true,
     });
     return productos
       .filter((p) => p.estadoProducto !== false)
       .map(mapProducto);
+  },
+
+  /** Consolida productos de una categoría padre y sus subcategorías sin duplicados. */
+  async listarParaCatalogoCategorias(categoriaIds: string[]): Promise<ComponentProduct[]> {
+    const ids = Array.from(new Set(categoriaIds.map(String).filter(Boolean)));
+    if (!ids.length) return productosService.listarParaCatalogo();
+
+    const grupos = await Promise.all(ids.map((categoria) =>
+      productosService.listarParaCatalogo(categoria)
+    ));
+    const unicos = new Map<string, ComponentProduct>();
+    grupos.flat().forEach((producto) => {
+      unicos.set(String(producto.id), producto);
+    });
+    return Array.from(unicos.values());
   },
 };
 

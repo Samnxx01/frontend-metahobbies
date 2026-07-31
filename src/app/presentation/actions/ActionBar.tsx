@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button } from '@/components/ui/button';
+import { GovernedButton } from './GovernedButton';
 import { cn } from '@/lib/utils';
 import type { UiActionDef } from './types';
 
@@ -31,7 +31,8 @@ export function ActionBar<TContext>({
         const Icon = action.icon;
         const disabled = globalDisabled || (action.isDisabled?.(context) ?? false);
         return (
-          <Button
+          <GovernedButton
+            actionId={action.id}
             key={action.id}
             type="button"
             variant={action.variant ?? 'ghost'}
@@ -43,7 +44,7 @@ export function ActionBar<TContext>({
             onClick={() => action.onClick(context)}
           >
             <Icon className="h-4 w-4" />
-          </Button>
+          </GovernedButton>
         );
       })}
     </div>

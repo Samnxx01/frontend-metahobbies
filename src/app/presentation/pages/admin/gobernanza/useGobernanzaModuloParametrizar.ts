@@ -19,7 +19,6 @@ import {
   fetchGobernanzaModuloConfigs,
   fetchGobernanzaModuloFormularioDetalle,
   fetchGobernanzaModuloMenu,
-  fetchGobernanzaModulosCatalogo,
   fetchGobernanzaModuloTipos,
   upsertGobernanzaModulo,
 } from './gobernanzaModuloService';
@@ -326,9 +325,8 @@ export function useGobernanzaModuloParametrizar({
     async (opts?: { aplicarPrincipal?: boolean }) => {
       setCargandoAccionesModulo(true);
       try {
-        const [menuRes, catalogRes, configsRes] = await Promise.all([
+        const [menuRes, configsRes] = await Promise.all([
           fetchGobernanzaModuloMenu(moduloSlug),
-          fetchGobernanzaModulosCatalogo().catch(() => null),
           fetchGobernanzaModuloConfigs(moduloSlug).catch(() => ({
             ok: true,
             configs: [] as GobernanzaModuloConfigApi[],
@@ -342,7 +340,6 @@ export function useGobernanzaModuloParametrizar({
         if (!debeAplicar) return;
 
         const modulo = menuRes.modulo;
-        const catalogItem = catalogRes?.modulos?.find((m) => m.slug === moduloSlug);
         const cfgDesdePath = menuPathInicialNorm
           ? resolverConfigPorRuta(configs, null, menuPathInicialNorm)
           : null;
@@ -355,11 +352,9 @@ export function useGobernanzaModuloParametrizar({
             cfgDesdePath ??
             resolverConfigPorRuta(
               configs,
-              catalogItem?.rutaId ||
-                modulo?.rutaId ||
-                catalogItem?.formularioId ||
+              modulo?.rutaId ||
                 modulo?.formularioId,
-              catalogItem?.menuPath || modulo?.menuPath || catalogItem?.frontPath || modulo?.frontPath
+              modulo?.menuPath || modulo?.frontPath
             ) ??
             configs.find((c) => c.slug === modulo?.slug) ??
             configs.find((c) => String(c.section || '').toLowerCase() === moduloSlug.toLowerCase()) ??
@@ -372,10 +367,8 @@ export function useGobernanzaModuloParametrizar({
         } else if (!menuPathInicialNorm) {
           setConfigSlug('');
           if (modulo?.label?.trim()) setLabel(modulo.label.trim());
-          else if (catalogItem?.label?.trim()) setLabel(catalogItem.label.trim());
 
           if (modulo?.description?.trim()) setDescription(modulo.description.trim());
-          else if (catalogItem?.description?.trim()) setDescription(catalogItem.description.trim());
 
           const catalogoBd = modulo?.accionesCatalog ?? [];
           setAccionesPublicadas(
@@ -388,9 +381,7 @@ export function useGobernanzaModuloParametrizar({
           );
 
           const rutaPersistida =
-            catalogItem?.rutaId ||
             modulo?.rutaId ||
-            catalogItem?.formularioId ||
             modulo?.formularioId ||
             '';
           if (rutaPersistida) setRutaId(String(rutaPersistida));

@@ -60,12 +60,24 @@ export function MarcoPermisosCatalogCard({
   onLimpiarAccionesVisibles,
 }: Props): React.ReactElement {
   const filtroAccionesNorm = filtroAcciones.trim().toLowerCase();
+  const rutasPorModulo = React.useMemo(() => {
+    const grupos = new Map<string, Route[]>();
+    for (const ruta of rutasFiltradas) {
+      const segmentos = String(ruta.path || '').split('/').filter(Boolean);
+      const moduloPath = segmentos.find((segmento) => !['admin', 'app', 'dashboard'].includes(segmento.toLowerCase()));
+      const modulo = String(moduloPath || ruta.layout || ruta.component || 'General')
+        .replace(/[-_]+/g, ' ')
+        .replace(/\b\w/g, (letra) => letra.toUpperCase());
+      grupos.set(modulo, [...(grupos.get(modulo) ?? []), ruta]);
+    }
+    return [...grupos.entries()].sort(([a], [b]) => a.localeCompare(b, 'es'));
+  }, [rutasFiltradas]);
 
   return (
     <Card>
       <CardHeader>
         <CardTitle className="text-base">Catálogo del techo</CardTitle>
-        <CardDescription>Marque vistas (rutas de seguridad) y acciones HTTP permitidas</CardDescription>
+        <CardDescription>Administre permisos separados por módulo, ruta y acción HTTP</CardDescription>
       </CardHeader>
       <CardContent className="relative space-y-4">
         {loading ? (
@@ -107,7 +119,7 @@ export function MarcoPermisosCatalogCard({
         <Tabs value={tab} onValueChange={(v) => onTabChange(v as MarcoCatalogTab)}>
           <TabsList>
             <TabsTrigger value="vistas">
-              Vistas ({vistasSel.size}/{rutasFiltradas.length})
+              Módulos y rutas ({vistasSel.size}/{rutasFiltradas.length})
             </TabsTrigger>
             <TabsTrigger value="acciones">
               Acciones ({accionesSel.size}/{accionesTotal})
@@ -130,34 +142,34 @@ export function MarcoPermisosCatalogCard({
                     Sin rutas para el filtro
                   </li>
                 ) : (
-                  rutasFiltradas.map((r) => {
-                    const id = toId(r);
-                    const checked = vistasSel.has(id);
-                    const sugerida = SUGERENCIAS_AFILIADO.test(`${r.path} ${r.name}`);
-                    return (
-                      <li key={id} className="flex items-start gap-3 py-2">
-                        <Checkbox
-                          checked={checked}
-                          onCheckedChange={(v) => onToggleVista(id, v === true)}
-                          className="mt-0.5"
-                        />
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate font-medium text-sm">{r.name}</p>
-                          <p className="truncate text-xs text-muted-foreground">{r.path}</p>
-                          <div className="mt-1 flex flex-wrap gap-1">
-                            {sugerida ? (
-                              <Badge variant="secondary" className="text-[10px]">
-                                sugerida
-                              </Badge>
-                            ) : null}
-                            <Badge variant="outline" className="text-[10px]">
-                              {r.component}
-                            </Badge>
-                          </div>
-                        </div>
-                      </li>
-                    );
-                  })
+                  rutasPorModulo.map(([modulo, rutasModulo]) => (
+                    <li key={modulo} className="list-none py-1">
+                      <div className="sticky top-0 z-[1] flex items-center justify-between bg-muted px-3 py-2 text-xs font-semibold uppercase tracking-wide">
+                        <span>{modulo}</span>
+                        <Badge variant="outline" className="text-[10px]">{rutasModulo.length} ruta(s)</Badge>
+                      </div>
+                      <ul className="divide-y">
+                        {rutasModulo.map((r) => {
+                          const id = toId(r);
+                          const checked = vistasSel.has(id);
+                          const sugerida = SUGERENCIAS_AFILIADO.test(`${r.path} ${r.name}`);
+                          return (
+                            <li key={id} className="flex items-start gap-3 px-3 py-2">
+                              <Checkbox checked={checked} onCheckedChange={(v) => onToggleVista(id, v === true)} className="mt-0.5" />
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-sm font-medium">{r.name}</p>
+                                <p className="truncate text-xs text-muted-foreground">{r.path}</p>
+                                <div className="mt-1 flex flex-wrap gap-1">
+                                  {sugerida ? <Badge variant="secondary" className="text-[10px]">sugerida</Badge> : null}
+                                  <Badge variant="outline" className="text-[10px]">{r.component}</Badge>
+                                </div>
+                              </div>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </li>
+                  ))
                 )}
               </ul>
             </ScrollArea>

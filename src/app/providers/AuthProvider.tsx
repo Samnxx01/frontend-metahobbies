@@ -44,10 +44,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     useEffect(() => {
         const storedToken = String(localStorage.getItem('token') || '').trim();
         const userJson = localStorage.getItem('user');
-        console.info('[MABS][AuthProvider] Restaurando sesión', {
-            hasToken: Boolean(storedToken),
-            hasStoredUser: Boolean(userJson),
-        });
 
         if (!storedToken) {
             if (userJson) localStorage.removeItem('user');
@@ -60,10 +56,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         if (userJson) {
             try {
                 const parsedUser = JSON.parse(userJson) as User;
-                console.info('[MABS][AuthProvider] Usuario restaurado', {
-                    hasUserId: Boolean(parsedUser?.id || parsedUser?._id || parsedUser?.iud),
-                    role: parsedUser?.role || parsedUser?.rol || null,
-                });
                 setUser(parsedUser);
             } catch (error) {
                 console.error('Error parsing user from localStorage:', error);

@@ -271,6 +271,29 @@ export type GobernanzaModuloCatalogoItemApi = {
   disponible: boolean;
   accionesTotal: number;
   accionesDisponibles: number;
+  accionesCatalog?: Array<{
+    id: string;
+    method?: string;
+    title?: string;
+    shortLabel?: string;
+    path?: string;
+    disponible: boolean;
+  }>;
+  botonesCatalogo?: Array<{
+    buttonId: string;
+    label: string;
+    moduleId: string;
+    moduleLabel?: string;
+    groupId: string;
+    groupLabel?: string;
+    routePath: string;
+    operation: string;
+    estado?: boolean;
+    disponible?: boolean;
+    tenantSuperAdminIds?: string[];
+    tenantGlobalIds?: string[];
+    usuarioIds?: string[];
+  }>;
   defaultActionId: string | null;
   registradoEnBd?: boolean;
 };

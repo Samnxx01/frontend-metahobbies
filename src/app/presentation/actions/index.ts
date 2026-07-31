@@ -1,5 +1,33 @@
 export type { ActionId, UiActionDef } from './types';
 
+export { GovernedButtonCatalogEditor } from './GovernedButtonCatalogEditor';
+export type { GovernedButtonCatalogEditorProps } from './GovernedButtonCatalogEditor';
+
+export { GovernedButton, GovernanceButtonProvider } from './GovernedButton';
+export { GovernanceButtonScopeProvider } from './GovernanceButtonScopeProvider';
+
+export type {
+  GovernedButtonProps,
+  GovernedButtonFallback,
+  GovernedButtonDeniedBehavior,
+  GovernanceButtonProviderProps,
+} from './GovernedButton';
+
+export {
+  GOVERNED_ACTION_CATALOG,
+  TENANT_GOVERNANCE_ACTION_IDS,
+  PRODUCT_ACTION_IDS,
+  TENANT_USERS_ACTION_IDS,
+  GOVERNANCE_PERMISSIONS_ACTION_IDS,
+  PAYMENT_METHOD_ACTION_IDS,
+  getGovernedActionDefinition,
+  groupGovernedActionsByModule,
+  governanceEndpointActionId,
+  governanceEndpointConfigureActionId,
+} from './registry/governedActionCatalog';
+
+export type { GovernedActionDefinition } from './registry/governedActionCatalog';
+
 export { filterVisibleActions } from './filterVisibleActions';
 
 export { ActionBar } from './ActionBar';

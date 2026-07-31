@@ -163,6 +163,7 @@ export default function Pedidos(): React.ReactElement {
                     <div className="md:col-span-2 border rounded-lg p-4 bg-muted/20">
                         <h4 className="text-lg font-semibold mb-3">Productos ({selectedOrder.items?.length || 0})</h4>
                         {selectedOrder.items && selectedOrder.items.length > 0 ? (
+                            <div className="overflow-x-auto">
                             <Table>
                                 <TableBody>
                                     {selectedOrder.items.map((item, index) => (
@@ -178,6 +179,7 @@ export default function Pedidos(): React.ReactElement {
                                     ))}
                                 </TableBody>
                             </Table>
+                            </div>
                         ) : (
                             <p className="text-sm text-muted-foreground">Detalle de productos no disponible.</p>
                         )}

@@ -1,5 +1,6 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
+import { GovernedButton } from '@/app/presentation/actions';
 import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -11,6 +12,7 @@ export type ParametrosGobernanzaModalFormLayoutProps = {
   showApiPath?: boolean;
   /** Etiqueta del botón principal (p. ej. Consultar / Guardar). */
   executeLabel?: string;
+  executeActionId?: string;
   running: boolean;
   disponible: boolean;
   /** Deshabilita solo el botón Ejecutar (p. ej. modo solo lectura por jerarquía corporativa). */
@@ -44,6 +46,7 @@ export function ParametrosGobernanzaModalFormLayout({
   disponible,
   showApiPath = true,
   executeLabel = 'Ejecutar',
+  executeActionId,
   executeDisabled = false,
   executeDisabledReason,
   executeButtonClassName,
@@ -63,7 +66,8 @@ export function ParametrosGobernanzaModalFormLayout({
         <p className="text-xs font-medium text-warning">{executeDisabledReason}</p>
       ) : null}
       <div className="flex flex-wrap items-center gap-2 border-t border-border/60 pt-4">
-        <Button
+        {executeActionId ? <GovernedButton
+          actionId={executeActionId}
           type="button"
           variant={executeButtonClassName ? 'outline' : 'default'}
           onClick={onExecute}
@@ -72,7 +76,16 @@ export function ParametrosGobernanzaModalFormLayout({
         >
           {running ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
           {executeLabel}
-        </Button>
+        </GovernedButton> : <Button
+          type="button"
+          variant={executeButtonClassName ? 'outline' : 'default'}
+          onClick={onExecute}
+          disabled={running || ejecutarBloqueado}
+          className={cn(executeButtonClassName)}
+        >
+          {running ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+          {executeLabel}
+        </Button>}
         {clearFormReplacement != null ? (
           clearFormReplacement
         ) : (

@@ -81,28 +81,30 @@ export function CalculoNominaResultado({ resultado }: Props) {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Tipo</TableHead>
-                  <TableHead className="text-right">Horas</TableHead>
-                  <TableHead className="text-right">%</TableHead>
-                  <TableHead className="text-right">Unitario</TableHead>
-                  <TableHead className="text-right">Total</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {resultado.detalleHorasExtras.map((item) => (
-                  <TableRow key={item.tipo}>
-                    <TableCell>{item.nombre || TIPO_HORA_EXTRA_LABELS[item.tipo] || item.tipo}</TableCell>
-                    <TableCell className="text-right">{item.cantidadHoras}</TableCell>
-                    <TableCell className="text-right">{item.porcentajeAplicado}</TableCell>
-                    <TableCell className="text-right">{formatCOP(item.valorUnitario)}</TableCell>
-                    <TableCell className="text-right font-medium">{formatCOP(item.valorTotal)}</TableCell>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Tipo</TableHead>
+                    <TableHead className="text-right">Horas</TableHead>
+                    <TableHead className="text-right">%</TableHead>
+                    <TableHead className="text-right">Unitario</TableHead>
+                    <TableHead className="text-right">Total</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {resultado.detalleHorasExtras.map((item) => (
+                    <TableRow key={item.tipo}>
+                      <TableCell>{item.nombre || TIPO_HORA_EXTRA_LABELS[item.tipo] || item.tipo}</TableCell>
+                      <TableCell className="text-right">{item.cantidadHoras}</TableCell>
+                      <TableCell className="text-right">{item.porcentajeAplicado}</TableCell>
+                      <TableCell className="text-right">{formatCOP(item.valorUnitario)}</TableCell>
+                      <TableCell className="text-right font-medium">{formatCOP(item.valorTotal)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           </CardContent>
         </Card>
       )}
@@ -116,28 +118,30 @@ export function CalculoNominaResultado({ resultado }: Props) {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Tipo</TableHead>
-                  <TableHead className="text-right">Horas</TableHead>
-                  <TableHead className="text-right">%</TableHead>
-                  <TableHead className="text-right">Unitario</TableHead>
-                  <TableHead className="text-right">Total</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {resultado.detalleRecargos.map((item) => (
-                  <TableRow key={item.tipo}>
-                    <TableCell>{item.nombre || TIPO_RECARGO_LABELS[item.tipo] || item.tipo}</TableCell>
-                    <TableCell className="text-right">{item.cantidadHoras}</TableCell>
-                    <TableCell className="text-right">{item.porcentajeAplicado}</TableCell>
-                    <TableCell className="text-right">{formatCOP(item.valorUnitario)}</TableCell>
-                    <TableCell className="text-right font-medium">{formatCOP(item.valorTotal)}</TableCell>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Tipo</TableHead>
+                    <TableHead className="text-right">Horas</TableHead>
+                    <TableHead className="text-right">%</TableHead>
+                    <TableHead className="text-right">Unitario</TableHead>
+                    <TableHead className="text-right">Total</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {resultado.detalleRecargos.map((item) => (
+                    <TableRow key={item.tipo}>
+                      <TableCell>{item.nombre || TIPO_RECARGO_LABELS[item.tipo] || item.tipo}</TableCell>
+                      <TableCell className="text-right">{item.cantidadHoras}</TableCell>
+                      <TableCell className="text-right">{item.porcentajeAplicado}</TableCell>
+                      <TableCell className="text-right">{formatCOP(item.valorUnitario)}</TableCell>
+                      <TableCell className="text-right font-medium">{formatCOP(item.valorTotal)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           </CardContent>
         </Card>
       )}
@@ -151,26 +155,28 @@ export function CalculoNominaResultado({ resultado }: Props) {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Concepto</TableHead>
-                  <TableHead className="text-right">Base</TableHead>
-                  <TableHead className="text-right">%</TableHead>
-                  <TableHead className="text-right">Valor</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {resultado.detalleSeguridadSocial.map((item) => (
-                  <TableRow key={item.tipo}>
-                    <TableCell>{item.nombre || TIPO_DESCUENTO_LABELS[item.tipo] || item.tipo}</TableCell>
-                    <TableCell className="text-right">{formatCOP(item.baseAplicada)}</TableCell>
-                    <TableCell className="text-right">{item.porcentajeAplicado}</TableCell>
-                    <TableCell className="text-right font-medium">{formatCOP(item.valor)}</TableCell>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Concepto</TableHead>
+                    <TableHead className="text-right">Base</TableHead>
+                    <TableHead className="text-right">%</TableHead>
+                    <TableHead className="text-right">Valor</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {resultado.detalleSeguridadSocial.map((item) => (
+                    <TableRow key={item.tipo}>
+                      <TableCell>{item.nombre || TIPO_DESCUENTO_LABELS[item.tipo] || item.tipo}</TableCell>
+                      <TableCell className="text-right">{formatCOP(item.baseAplicada)}</TableCell>
+                      <TableCell className="text-right">{item.porcentajeAplicado}</TableCell>
+                      <TableCell className="text-right font-medium">{formatCOP(item.valor)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           </CardContent>
         </Card>
       )}

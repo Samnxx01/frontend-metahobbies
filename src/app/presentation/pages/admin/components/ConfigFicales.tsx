@@ -427,7 +427,7 @@ export default function ConfigFicales({
       </Card>
 
       <Card>
-      <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
+      <CardHeader className="flex flex-col gap-4 space-y-0 md:flex-row md:items-start md:justify-between">
         <div className="space-y-1.5">
           <CardTitle className="flex items-center gap-2">
             <BookOpenCheck className="h-5 w-5" />

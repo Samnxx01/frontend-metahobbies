@@ -598,7 +598,7 @@ export default function InventarioOrdenCompraModal({
                 Agregar línea
               </Button>
             </div>
-            <div className="w-full rounded-md border border-border">
+            <div className="w-full overflow-x-auto rounded-md border border-border">
               <Table className="w-full table-fixed [&_td]:px-2 [&_th]:px-2">
                 <TableHeader>
                   <TableRow>

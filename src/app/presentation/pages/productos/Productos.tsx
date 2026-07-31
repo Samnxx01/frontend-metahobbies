@@ -16,8 +16,11 @@ import type { Product as CommonProduct } from '../../../../types/common';
 import productosService, {
   type BackendCategoria,
   getCategoriaId,
+  getCategoriaPadreId,
+  getCategoryImage,
   resolverCategoriaDesdeQuery,
 } from '../../../services/productosService';
+import CategoryCard from '../../components/common/CategoryCard';
 import { esErrorProductoRequiereColor } from '@/app/utils/productColorUtils';
 
 interface SortOption {
@@ -67,6 +70,18 @@ export default function Productos(): React.ReactElement {
     [categorias, categoriaActivaId]
   );
 
+  const categoriasPadre = useMemo(
+    () => categorias.filter((categoria) => !getCategoriaPadreId(categoria)),
+    [categorias]
+  );
+
+  const subcategoriasActivas = useMemo(() => {
+    if (!categoriaActivaId) return [];
+    const padreId = getCategoriaPadreId(categoriaActiva || {} as BackendCategoria)
+      || categoriaActivaId;
+    return categorias.filter((categoria) => getCategoriaPadreId(categoria) === padreId);
+  }, [categorias, categoriaActiva, categoriaActivaId]);
+
   useEffect(() => {
     productosService
       .listarCategorias()
@@ -77,7 +92,19 @@ export default function Productos(): React.ReactElement {
   const cargarProductos = useCallback(async (categoriaId?: string) => {
     setLoading(true);
     try {
-      const data = await productosService.listarParaCatalogo(categoriaId);
+      const categoria = categorias.find((item) => getCategoriaId(item) === categoriaId);
+      const esPadre = categoriaId && categoria && !getCategoriaPadreId(categoria);
+      const ids = esPadre
+        ? [
+            categoriaId,
+            ...categorias
+              .filter((item) => getCategoriaPadreId(item) === categoriaId)
+              .map((item) => getCategoriaId(item)),
+          ]
+        : [];
+      const data = esPadre
+        ? await productosService.listarParaCatalogoCategorias(ids)
+        : await productosService.listarParaCatalogo(categoriaId);
       setProductos(data);
     } catch {
       toast.error('Error cargando productos');
@@ -85,7 +112,7 @@ export default function Productos(): React.ReactElement {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [categorias]);
 
   useEffect(() => {
     cargarProductos(categoriaActivaId);
@@ -196,7 +223,7 @@ export default function Productos(): React.ReactElement {
           >
             Todos
           </Badge>
-          {categorias.map((cat, index) => {
+          {categoriasPadre.map((cat, index) => {
             const id = getCategoriaId(cat, index);
             const selected = categoriaActivaId === id;
             return (
@@ -232,6 +259,28 @@ export default function Productos(): React.ReactElement {
           </Select>
         </div>
       </div>
+
+      {categoriaActivaId && subcategoriasActivas.length > 0 && (
+        <section className="mb-10">
+          <h2 className="text-xl font-semibold mb-4 text-foreground">Subcategorías</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+            {subcategoriasActivas.map((subcategoria, index) => {
+              const id = getCategoriaId(subcategoria, index);
+              return (
+                <CategoryCard
+                  key={id}
+                  category={{
+                    id,
+                    name: subcategoria.nombre,
+                    image: getCategoryImage(subcategoria.nombre),
+                    media: subcategoria.media || null,
+                  }}
+                />
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       {loading ? (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">

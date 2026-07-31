@@ -197,14 +197,14 @@ export default function CatalogosCorporativos(): React.ReactElement {
         <div className="space-y-6 p-6 max-w-3xl mx-auto">
 
             {/* Header */}
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div>
                     <h1 className="text-2xl font-bold">Catálogos Corporativos</h1>
                     <p className="text-sm text-muted-foreground mt-1">
                         Tipos de comprador disponibles para tu organización.
                     </p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                     <Button
                         variant="outline"
                         size="sm"

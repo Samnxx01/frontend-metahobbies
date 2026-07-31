@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
-import { RefreshCw, Shield, Building2, Globe, Plus, Loader2, Trash2, Edit, Settings2, Users, List, X } from 'lucide-react';
+import { RefreshCw, Shield, Building2, Globe, Plus, Loader2, Trash2, Edit, Settings2, Users, List, X, CircleHelp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { GovernedButton, TENANT_USERS_ACTION_IDS } from '@/app/presentation/actions';
 import { BTN_GHOST_ACCENT } from '@/app/utils/buttonStyles';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { apiFetch } from '@/app/services/api';
 import { toast } from 'react-toastify';
 import { useTenantUsuarios } from '@/app/hooks/useTenantUsuarios';
@@ -28,6 +30,7 @@ import { RolesCorporativosModal } from '@/app/presentation/components/admin/usua
 import { ParametrizacionMarcoAfiliadoModal } from '@/app/presentation/components/admin/usuarios-tenant/ParametrizacionMarcoAfiliadoModal';
 import { UsuariosRolCorporativoListadoModal } from '@/app/presentation/components/admin/usuarios-tenant/UsuariosRolCorporativoListadoModal';
 import { UsuariosTenantJerarquiaListadoModal } from '@/app/presentation/components/admin/usuarios-tenant/UsuariosTenantJerarquiaListadoModal';
+import { TenantGobernanzaCentroModal } from '@/app/presentation/components/admin/usuarios-tenant/TenantGobernanzaCentroModal';
 import type { UsuarioRolCorporativoItem } from '@/app/presentation/components/admin/usuarios-tenant/usuariosRolCorporativoTypes';
 import type {
     CorpNode,
@@ -43,6 +46,7 @@ import {
 } from '@/app/utils/entityPublicId';
 
 const BYPASS_DOMINIOS_OPCIONES = ['RUTAS', 'DOMINIOS', 'REFERIDOS', 'VENTAS', 'COMISIONES', 'ROLES_CORPORATIVOS'] as const;
+const RESPONSIVE_ACTION_BUTTON = 'w-full justify-center whitespace-normal text-center sm:w-auto';
 
 function bypassDominiosExplicitos(doc: { bypassDominios?: string[] }) {
     return (doc.bypassDominios ?? [])
@@ -183,6 +187,21 @@ export default function UsuariosTenant(): React.ReactElement {
     const [modalParametrizacionMarco, setModalParametrizacionMarco] = useState(false);
     const [modalListadoUsuariosRolCorp, setModalListadoUsuariosRolCorp] = useState(false);
     const [modalListadoSaTgTc, setModalListadoSaTgTc] = useState(false);
+    const [modalGobernanza, setModalGobernanza] = useState(false);
+    const [retornoGobernanza, setRetornoGobernanza] = useState(false);
+
+    const abrirDesdeGobernanza = (abrir: (open: boolean) => void): void => {
+        setRetornoGobernanza(true);
+        setModalGobernanza(false);
+        abrir(true);
+    };
+
+    const cerrarSubmodalGobernanza = (cerrar: () => void): void => {
+        cerrar();
+        if (!retornoGobernanza) return;
+        setRetornoGobernanza(false);
+        window.setTimeout(() => setModalGobernanza(true), 120);
+    };
 
     const scope = jerarquia?.scope ?? null;
 
@@ -228,7 +247,7 @@ export default function UsuariosTenant(): React.ReactElement {
         try {
             await apiFetch(`/api/seguridad/pruebas/actualizar/registro/${encodePublicIdForPath(id)}`, { method: 'PUT', body });
             toast.success('Guardado correctamente');
-            setEditUserModal(false);
+            cerrarSubmodalGobernanza(() => setEditUserModal(false));
             refetch();
         } catch (err: any) {
             toast.error(String(err?.message || 'Error al guardar'));
@@ -243,7 +262,7 @@ export default function UsuariosTenant(): React.ReactElement {
         try {
             await deactivateUser(id);
             toast.success('Usuario desactivado');
-            setEditUserModal(false);
+            cerrarSubmodalGobernanza(() => setEditUserModal(false));
             refetch();
         } catch (err: unknown) {
             toast.error(err instanceof Error ? err.message : 'Error al desactivar usuario');
@@ -304,7 +323,7 @@ export default function UsuariosTenant(): React.ReactElement {
         setEditTGModal(true);
         setTgSelectsLoading(true);
         try {
-            const res: any = await apiFetch('/api/config/global/creacion/usu/tenant/global/selects', { method: 'GET' });
+            const res: any = await apiFetch('/api/config/global/creacion/usu/tenant/global/selects?lite=1', { method: 'GET' });
             const data = res?.data ?? res ?? {};
             setTgSelects({
                 rolesMabs: Array.isArray(data.rolesMabs) ? data.rolesMabs : [],
@@ -611,16 +630,38 @@ export default function UsuariosTenant(): React.ReactElement {
     return (
         <div className="min-h-full p-4 md:p-6 lg:p-8 space-y-6 bg-background text-foreground">
             {/* Encabezado */}
-            <div className="flex items-center justify-between flex-wrap gap-3">
-                <div>
-                    <h1 className="text-2xl font-bold text-foreground">Usuarios Tenant</h1>
-                    <p className="text-sm text-muted-foreground mt-1">
+            <div className="flex flex-col gap-4">
+                <div className="min-w-0">
+                    <div className="flex flex-wrap items-center justify-center gap-2 text-center sm:justify-start sm:text-left">
+                        <h1 className="text-2xl font-bold text-foreground">Usuarios Tenant</h1>
+                        <Popover>
+                            <PopoverTrigger asChild>
+                                <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5">
+                                    <CircleHelp className="h-4 w-4" /> Ayuda
+                                </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-[min(calc(100vw-2rem),28rem)] p-4" align="start">
+                                <p className="font-semibold text-foreground">Alcance del organigrama</p>
+                                <p className="mt-1 text-sm text-muted-foreground">
+                                    El organigrama se filtra según el alcance de la sesión (JWT: tenantScope) y el rol.
+                                    Cada usuario ve únicamente la rama autorizada por su token.
+                                </p>
+                                {jerarquia?.jerarquiaAlcance?.tipo === 'SUPER_ADMIN_SOLO_DESCENDIENTES' ? (
+                                    <p className="mt-2 border-l-2 border-primary/30 pl-3 text-xs text-muted-foreground">
+                                        Como SuperAdmin, la vista incluye únicamente tu rama descendente desde
+                                        tenantSuperAdminId; no muestra administradores padre ni ramas paralelas.
+                                    </p>
+                                ) : null}
+                            </PopoverContent>
+                        </Popover>
+                    </div>
+                    <p className="sr-only">
                         Organigrama filtrado por el alcance de tu sesión (JWT:{' '}
                         <code className="rounded bg-muted px-1 py-0.5 text-xs">tenantScope</code>
                         {' '}y rol). Cada usuario ve solo la rama que autoriza su token.
                     </p>
                     {jerarquia?.jerarquiaAlcance?.tipo === 'SUPER_ADMIN_SOLO_DESCENDIENTES' ? (
-                        <p className="text-xs text-muted-foreground mt-2 max-w-3xl border-l-2 border-primary/30 pl-3">
+                        <p className="sr-only">
                             Alcance SuperAdmin del JWT: solo tu rama descendente desde{' '}
                             <code className="rounded bg-muted px-1 py-0.5 text-[11px]">
                                 tenantSuperAdminId
@@ -637,16 +678,16 @@ export default function UsuariosTenant(): React.ReactElement {
                         </p>
                     ) : null}
                 </div>
-                <div className="flex items-center gap-2 flex-wrap">
+                <div className="mx-auto grid w-full max-w-6xl grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:flex xl:flex-wrap xl:items-center xl:justify-center">
                     {scope && (
-                        <Badge variant="outline" className="gap-1 border-primary/30 bg-primary/5 text-primary">
+                        <Badge variant="outline" className="flex min-h-8 w-full justify-center gap-1 border-primary/30 bg-primary/5 text-primary sm:w-auto">
                             <Shield className="h-3.5 w-3.5" />
                             {scope}
                         </Badge>
                     )}
                     <OrganigramaLegendaInfoButton />
                     {scope && (
-                        <Button variant="outline" size="sm" onClick={refetch}>
+                        <Button className={RESPONSIVE_ACTION_BUTTON} variant="outline" size="sm" onClick={refetch}>
                             <RefreshCw className="h-4 w-4 mr-2" />
                             Actualizar
                         </Button>
@@ -657,38 +698,24 @@ export default function UsuariosTenant(): React.ReactElement {
                         onCreateGlobal={() => setModalGlobal(true)}
                     />
                     {scope === 'SUPER_ADMIN' && (
-                        <Button size="sm" variant="outline" onClick={() => { setModalDominios(true); setMostrarDesactivados(false); listarDominios(false); }}>
+                        <GovernedButton actionId={TENANT_USERS_ACTION_IDS.MANAGE_DOMAINS} className={RESPONSIVE_ACTION_BUTTON} size="sm" variant="outline" onClick={() => { setModalDominios(true); setMostrarDesactivados(false); listarDominios(false); }}>
                             <Globe className="h-4 w-4 mr-2" />
                             Dominios
-                        </Button>
+                        </GovernedButton>
                     )}
                     {scope && (
-                        <Button size="sm" variant="outline" onClick={() => setModalRolesGlobales(true)}>
-                            <Globe className="h-4 w-4 mr-2" />
-                            Rol Global
-                        </Button>
-                    )}
-                    {scope && (
-                        <Button size="sm" variant="outline" onClick={() => setModalRolesCorporativos(true)}>
-                            <Building2 className="h-4 w-4 mr-2" />
-                            Rol Corporativo
-                        </Button>
-                    )}
-                    {scope && (
-                        <Button
+                        <GovernedButton
+                            actionId={TENANT_USERS_ACTION_IDS.OPEN_GOVERNANCE}
+                            className={RESPONSIVE_ACTION_BUTTON}
                             size="sm"
-                            variant="outline"
-                            onClick={() => setModalParametrizacionMarco(true)}
+                            onClick={() => {
+                                setRetornoGobernanza(false);
+                                setModalGobernanza(true);
+                            }}
                         >
-                            <Settings2 className="h-4 w-4 mr-2" />
-                            Parametrizar marco
-                        </Button>
-                    )}
-                    {scope && (
-                        <Button size="sm" onClick={() => setModalListadoUsuariosRolCorp(true)}>
-                            <Users className="h-4 w-4 mr-2" />
-                            Usuarios rol corp.
-                        </Button>
+                            <Shield className="h-4 w-4 mr-2" />
+                            Gobernanza Tenant
+                        </GovernedButton>
                     )}
                 </div>
             </div>
@@ -742,14 +769,15 @@ export default function UsuariosTenant(): React.ReactElement {
                                                     <div className="flex items-center gap-2">
                                                         <Badge variant="default" className="text-xs">{sa.rol ?? 'SUPER_ADMIN'}</Badge>
                                                         {scope === 'SUPER_ADMIN' && (
-                                                            <Button
+                                                            <GovernedButton
+                                                                actionId={TENANT_USERS_ACTION_IDS.EDIT_USER}
                                                                 variant="ghost"
                                                                 size="icon"
                                                                 className={`h-7 w-7 ${BTN_GHOST_ACCENT}`}
                                                                 onClick={() => void openEditUser(sa)}
                                                             >
                                                                 <Edit className="h-3.5 w-3.5" />
-                                                            </Button>
+                                                            </GovernedButton>
                                                         )}
                                                     </div>
                                                 </div>
@@ -770,27 +798,29 @@ export default function UsuariosTenant(): React.ReactElement {
                             titulo={`Usuarios con rol corporativo (${jerarquia?.usuariosRolCorporativo?.length ?? 0})`}
                             descripcion="Operadores con roles corporativos visibles en el alcance del árbol (entre SA y tenant global)."
                             headerAction={
-                                <div className="flex flex-wrap gap-1.5">
-                                    <Button
+                                <div className="grid w-full grid-cols-1 gap-1.5 sm:flex sm:w-auto sm:flex-wrap">
+                                    <GovernedButton
+                                        actionId={TENANT_USERS_ACTION_IDS.VIEW_HIERARCHY}
                                         type="button"
                                         size="sm"
                                         variant="secondary"
-                                        className="h-8 text-xs"
+                                        className="h-auto min-h-8 w-full whitespace-normal text-center text-xs sm:w-auto"
                                         onClick={() => setModalListadoSaTgTc(true)}
                                     >
                                         <List className="h-3.5 w-3.5 mr-1.5" />
                                         Listar usuarios Tenant SA, TG y TC
-                                    </Button>
-                                    <Button
+                                    </GovernedButton>
+                                    <GovernedButton
+                                        actionId={TENANT_USERS_ACTION_IDS.VIEW_CORPORATE}
                                         type="button"
                                         size="sm"
                                         variant="default"
-                                        className="h-8 text-xs"
+                                        className="h-auto min-h-8 w-full whitespace-normal text-center text-xs sm:w-auto"
                                         onClick={() => setModalListadoUsuariosRolCorp(true)}
                                     >
                                         <Users className="h-3.5 w-3.5 mr-1.5" />
                                         Listar usuarios
-                                    </Button>
+                                    </GovernedButton>
                                 </div>
                             }
                         >
@@ -801,24 +831,28 @@ export default function UsuariosTenant(): React.ReactElement {
                                         Los afiliados CLIENTE de plataforma global se gestionan desde
                                         la parametrización automática de permisos.
                                     </p>
-                                    <div className="flex flex-wrap gap-2">
-                                        <Button
+                                    <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap">
+                                        <GovernedButton
+                                            actionId={TENANT_USERS_ACTION_IDS.VIEW_HIERARCHY}
                                             type="button"
                                             size="sm"
                                             variant="secondary"
+                                            className={RESPONSIVE_ACTION_BUTTON}
                                             onClick={() => setModalListadoSaTgTc(true)}
                                         >
                                             <List className="h-3.5 w-3.5 mr-1.5" />
                                             Listar usuarios Tenant SA, TG y TC
-                                        </Button>
-                                        <Button
+                                        </GovernedButton>
+                                        <GovernedButton
+                                            actionId={TENANT_USERS_ACTION_IDS.VIEW_CORPORATE}
                                             type="button"
                                             size="sm"
+                                            className={RESPONSIVE_ACTION_BUTTON}
                                             onClick={() => setModalListadoUsuariosRolCorp(true)}
                                         >
                                             <Users className="h-3.5 w-3.5 mr-1.5" />
                                             Listar usuarios
-                                        </Button>
+                                        </GovernedButton>
                                     </div>
                                 </div>
                             ) : (
@@ -836,14 +870,15 @@ export default function UsuariosTenant(): React.ReactElement {
                                                     {u.rol ?? 'ROL_CORP'}
                                                 </Badge>
                                                 {(scope === 'SUPER_ADMIN' || scope === 'TENANT_GLOBAL' || scope === 'CORPORATIVO') && (
-                                                    <Button
+                                                    <GovernedButton
+                                                        actionId={TENANT_USERS_ACTION_IDS.EDIT_USER}
                                                         variant="ghost"
                                                         size="icon"
                                                         className={`h-7 w-7 ${BTN_GHOST_ACCENT}`}
                                                         onClick={() => void openEditUser(u)}
                                                     >
                                                         <Edit className="h-3.5 w-3.5" />
-                                                    </Button>
+                                                    </GovernedButton>
                                                 )}
                                             </div>
                                         </div>
@@ -1159,22 +1194,51 @@ export default function UsuariosTenant(): React.ReactElement {
             {/* ── Modales de gestión de catálogo de roles ──────────────────── */}
             <RolesGlobalesModal
                 open={modalRolesGlobales}
-                onClose={() => setModalRolesGlobales(false)}
+                onClose={() => cerrarSubmodalGobernanza(() => setModalRolesGlobales(false))}
                 scope={scope as 'SUPER_ADMIN' | 'TENANT_GLOBAL' | 'CORPORATIVO'}
             />
             <RolesCorporativosModal
                 open={modalRolesCorporativos}
-                onClose={() => setModalRolesCorporativos(false)}
+                onClose={() => cerrarSubmodalGobernanza(() => setModalRolesCorporativos(false))}
+            />
+
+            <TenantGobernanzaCentroModal
+                open={modalGobernanza}
+                onClose={() => {
+                    setRetornoGobernanza(false);
+                    setModalGobernanza(false);
+                }}
+                scope={scope}
+                resumen={{
+                    superAdmins: jerarquia?.superAdmins.length ?? 0,
+                    tenantGlobales: jerarquia?.tenantsGlobales.length ?? 0,
+                    usuariosCorporativos: jerarquia?.usuariosRolCorporativo?.length ?? 0,
+                }}
+                onAbrirUsuariosJerarquia={() => {
+                    abrirDesdeGobernanza(setModalListadoSaTgTc);
+                }}
+                onAbrirUsuariosCorporativos={() => {
+                    abrirDesdeGobernanza(setModalListadoUsuariosRolCorp);
+                }}
+                onAbrirRolesGlobales={() => {
+                    abrirDesdeGobernanza(setModalRolesGlobales);
+                }}
+                onAbrirRolesCorporativos={() => {
+                    abrirDesdeGobernanza(setModalRolesCorporativos);
+                }}
+                onAbrirModulosRutas={() => {
+                    abrirDesdeGobernanza(setModalParametrizacionMarco);
+                }}
             />
 
             <ParametrizacionMarcoAfiliadoModal
                 open={modalParametrizacionMarco}
-                onClose={() => setModalParametrizacionMarco(false)}
+                onClose={() => cerrarSubmodalGobernanza(() => setModalParametrizacionMarco(false))}
             />
 
             <UsuariosTenantJerarquiaListadoModal
                 open={modalListadoSaTgTc}
-                onClose={() => setModalListadoSaTgTc(false)}
+                onClose={() => cerrarSubmodalGobernanza(() => setModalListadoSaTgTc(false))}
                 onEditUsuario={(u) => {
                     setModalListadoSaTgTc(false);
                     void openEditUser(u);
@@ -1183,7 +1247,7 @@ export default function UsuariosTenant(): React.ReactElement {
 
             <UsuariosRolCorporativoListadoModal
                 open={modalListadoUsuariosRolCorp}
-                onClose={() => setModalListadoUsuariosRolCorp(false)}
+                onClose={() => cerrarSubmodalGobernanza(() => setModalListadoUsuariosRolCorp(false))}
                 onEditUsuario={(u: UsuarioRolCorporativoItem) => {
                     setModalListadoUsuariosRolCorp(false);
                     void openEditUser(u);
@@ -1193,7 +1257,7 @@ export default function UsuariosTenant(): React.ReactElement {
             {/* ── Modal Editar Rol Global ───────────────────────────────────── */}
             <RolGlobalEditModal
                 open={editUserModal}
-                onClose={() => setEditUserModal(false)}
+                onClose={() => cerrarSubmodalGobernanza(() => setEditUserModal(false))}
                 usuario={editUserTarget}
                 tenantGlobalActual={editUserTG}
                 tenantsGlobales={scope === 'SUPER_ADMIN' ? tenantsGlobalesInfo : []}

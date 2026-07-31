@@ -73,7 +73,7 @@ export function OrganigramaLegendaInfoButton({
                     type="button"
                     variant="outline"
                     size="sm"
-                    className={cn('h-8 shrink-0 gap-1.5 text-xs', className)}
+                    className={cn('h-auto min-h-8 w-full gap-1.5 whitespace-normal text-center text-xs sm:w-auto', className)}
                     aria-label="Ver orden jerárquico del organigrama"
                 >
                     <Info className="h-3.5 w-3.5" />
@@ -119,8 +119,8 @@ export function OrganigramaColumn({
     return (
         <div className={`relative overflow-hidden rounded-xl border border-border/90 shadow-sm ${accent} border-l-[4px]`}>
             <div className="border-b border-border/50 bg-muted/30 px-4 py-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex flex-wrap items-center gap-2 min-w-0">
+                <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+                    <div className="flex min-w-0 items-start gap-2 sm:items-center">
                         <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/90 text-xs font-bold text-primary-foreground shadow-sm">
                             {orden}
                         </span>
@@ -131,7 +131,7 @@ export function OrganigramaColumn({
                             )}
                         </div>
                     </div>
-                    {headerAction ? <div className="shrink-0">{headerAction}</div> : null}
+                    {headerAction ? <div className="w-full sm:w-auto sm:shrink-0">{headerAction}</div> : null}
                 </div>
             </div>
             <div className="p-3 sm:p-4">{children}</div>

@@ -602,7 +602,7 @@ export default function ContenedorParametrizacion(): React.ReactElement {
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" size="sm" onClick={abrirParametrizar}>
             <Database className="w-4 h-4 mr-1 text-success" />
             Parametrizar BD
@@ -690,6 +690,7 @@ export default function ContenedorParametrizacion(): React.ReactElement {
                 <p className="text-sm">Sin contenedores. Crea el primero.</p>
               </div>
             ) : (
+              <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -823,6 +824,7 @@ export default function ContenedorParametrizacion(): React.ReactElement {
                   })}
                 </TableBody>
               </Table>
+              </div>
             )}
           </CardContent>
         </Card>

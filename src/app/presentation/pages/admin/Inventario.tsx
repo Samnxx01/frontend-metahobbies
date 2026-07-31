@@ -1620,6 +1620,7 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
       toast.success('SKU eliminado.');
     } catch (error: any) {
       toast.error(error?.message || 'No se pudo eliminar el SKU.');
+      throw error;
     } finally {
       setSaving(false);
     }
@@ -1627,24 +1628,60 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
 
   const eliminarSkusCatalogoMasivo = async (productos: BackendProducto[]): Promise<void> => {
     if (!puedeGestionarSku) { toast.error('Tu scope no permite eliminar SKU.'); return; }
-    const resultados = await Promise.allSettled(
-      productos.map(async (producto) => {
-        const productoId = getProductoId(producto);
-        if (!productoId) throw new Error(`Sin ID: ${producto.sku}`);
-        await productosService.eliminarProductoAdmin(productoId);
-        return productoId;
-      }),
+    toast.info(
+      `Eliminación masiva iniciada para ${productos.length} SKU(s). Se validarán las transacciones antes de eliminar.`,
     );
-    const exitosos = resultados
-      .filter((r): r is PromiseFulfilledResult<string> => r.status === 'fulfilled')
-      .map((r) => r.value);
-    const nFallidos = resultados.filter((r) => r.status === 'rejected').length;
-    if (exitosos.length > 0) {
-      const eliminadosSet = new Set(exitosos);
-      setProductosSku((prev) => prev.filter((item) => !eliminadosSet.has(getProductoId(item))));
+    setSaving(true);
+    try {
+      const resultados = new Array<PromiseSettledResult<string>>(productos.length);
+      let siguienteIndice = 0;
+      const eliminarSiguiente = async (): Promise<void> => {
+        while (siguienteIndice < productos.length) {
+          const indice = siguienteIndice;
+          siguienteIndice += 1;
+          const producto = productos[indice];
+          const productoId = getProductoId(producto);
+          try {
+            if (!productoId) throw new Error(`Sin ID: ${producto.sku}`);
+            await productosService.eliminarProductoAdmin(productoId);
+            resultados[indice] = { status: 'fulfilled', value: productoId };
+          } catch (reason) {
+            resultados[indice] = { status: 'rejected', reason };
+          }
+        }
+      };
+      const concurrencia = Math.min(8, productos.length);
+      await Promise.all(
+        Array.from({ length: concurrencia }, () => eliminarSiguiente()),
+      );
+      const exitosos = resultados
+        .filter((r): r is PromiseFulfilledResult<string> => r.status === 'fulfilled')
+        .map((r) => r.value);
+      const fallidos = resultados.flatMap((resultado, index) => (
+        resultado.status === 'rejected'
+          ? [{
+              sku: productos[index]?.sku || productos[index]?.nombre || 'SKU desconocido',
+              motivo: resultado.reason?.message || 'No se pudo eliminar.',
+            }]
+          : []
+      ));
+      if (exitosos.length > 0) {
+        const eliminadosSet = new Set(exitosos);
+        setProductosSku((prev) => prev.filter((item) => !eliminadosSet.has(getProductoId(item))));
+      }
+      if (fallidos.length === 0) {
+        toast.success(`${exitosos.length} SKU(s) eliminados.`);
+      } else {
+        const detalle = fallidos
+          .slice(0, 3)
+          .map(({ sku, motivo }) => `${sku}: ${motivo}`)
+          .join(' | ');
+        const adicionales = fallidos.length > 3 ? ` | y ${fallidos.length - 3} más` : '';
+        toast.warning(`${exitosos.length} eliminados, ${fallidos.length} no permitidos. ${detalle}${adicionales}`);
+      }
+    } finally {
+      setSaving(false);
     }
-    if (nFallidos === 0) toast.success(`${exitosos.length} SKU(s) eliminados.`);
-    else toast.warning(`${exitosos.length} eliminados, ${nFallidos} fallaron.`);
   };
 
   const eliminarCodigoBarrasCatalogo = async (productos: BackendProducto[]): Promise<void> => {

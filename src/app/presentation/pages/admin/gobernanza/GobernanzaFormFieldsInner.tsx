@@ -1,6 +1,7 @@
 ﻿import React from 'react';
 import { toast } from 'react-toastify';
 import { Button } from '@/components/ui/button';
+import { GOVERNANCE_PERMISSIONS_ACTION_IDS, GovernedButton } from '@/app/presentation/actions';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -162,7 +163,8 @@ export const GobernanzaFormFieldsInner: React.FC<{
       {(PERM_ADMIN_TENANT_GLOBAL_ACTUALIZAR_IDS.has(endpoint.id) || endpoint.id === 'perm-admin-tenant-global') ? (
         <div className="rounded-md border border-info/20 bg-info/10 p-3 text-xs text-info">
           <div className="mb-2 flex flex-wrap items-center gap-2">
-            <Button
+            <GovernedButton
+              actionId={GOVERNANCE_PERMISSIONS_ACTION_IDS.VALIDATE_NEW_ROUTES}
               type="button"
               size="sm"
               variant="outline"
@@ -170,8 +172,9 @@ export const GobernanzaFormFieldsInner: React.FC<{
               onClick={() => runHerenciaSyncCheck(endpoint.id, false)}
             >
               Validar rutas nuevas
-            </Button>
-            <Button
+            </GovernedButton>
+            <GovernedButton
+              actionId={GOVERNANCE_PERMISSIONS_ACTION_IDS.SYNC_NOW}
               type="button"
               size="sm"
               variant="outline"
@@ -179,7 +182,7 @@ export const GobernanzaFormFieldsInner: React.FC<{
               onClick={() => runHerenciaSyncCheck(endpoint.id, true)}
             >
               Sincronizar ahora
-            </Button>
+            </GovernedButton>
           </div>
           {(() => {
             const sync = syncInfoByEndpoint[endpoint.id];

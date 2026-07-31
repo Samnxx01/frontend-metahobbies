@@ -3,26 +3,33 @@ import { toast } from 'react-toastify';
 import { Database, RefreshCcw } from 'lucide-react';
 
 import { apiFetch } from '@/app/services/api';
-import type { WompiBankCatalogItem } from '@/types/common';
+import type { ColombiaBankCatalogItem } from '@/types/common';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api';
 
+const TIPO_ENTIDAD_LABELS: Record<string, string> = {
+    '1': 'Banco',
+    '4': 'Compañía de financiamiento',
+};
+
+const tipoEntidadLabel = (tipoEntidad: string): string => TIPO_ENTIDAD_LABELS[tipoEntidad] || `Tipo ${tipoEntidad}`;
+
 interface BancosCatalogoAdminProps {
     token?: string;
 }
 
 export default function BancosCatalogoAdmin({ token }: BancosCatalogoAdminProps): React.ReactElement {
-    const [bancos, setBancos] = useState<WompiBankCatalogItem[]>([]);
+    const [bancos, setBancos] = useState<ColombiaBankCatalogItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [syncing, setSyncing] = useState(false);
 
     const loadBancos = async () => {
         try {
             setLoading(true);
-            const res = await apiFetch(`${API_BASE_URL}/perfil/seguridad/listar/bancos-wompi`, {
+            const res = await apiFetch(`${API_BASE_URL}/perfil/seguridad/listar/bancos-colombia`, {
                 method: 'GET',
             });
 
@@ -43,7 +50,7 @@ export default function BancosCatalogoAdmin({ token }: BancosCatalogoAdminProps)
     const handleSync = async () => {
         try {
             setSyncing(true);
-            const res = await apiFetch(`${API_BASE_URL}/perfil/seguridad/sincronizacion/bancos-wompi`, {
+            const res = await apiFetch(`${API_BASE_URL}/perfil/seguridad/sincronizacion/bancos-colombia`, {
                 method: 'POST',
             });
 
@@ -72,15 +79,15 @@ export default function BancosCatalogoAdmin({ token }: BancosCatalogoAdminProps)
                 <div>
                     <CardTitle className="text-lg md:text-xl font-semibold flex items-center gap-2 text-foreground">
                         <Database className="h-5 w-5 text-primary" />
-                        Catálogo bancario Wompi
+                        Catálogo de bancos de Colombia
                     </CardTitle>
                     <p className="text-sm text-muted-foreground mt-1">
-                        Visible solo para tenantSuperAdmin. Desde aquí puedes revisar y sincronizar la colección `bancosID`.
+                        Fuente oficial: entidades vigiladas publicadas por la Superintendencia Financiera de Colombia en Datos Abiertos.
                     </p>
                 </div>
                 <Button onClick={handleSync} disabled={syncing}>
                     <RefreshCcw className={`h-4 w-4 mr-2 ${syncing ? 'animate-spin' : ''}`} />
-                    {syncing ? 'Sincronizando...' : 'Sincronizar bancos'}
+                    {syncing ? 'Sincronizando...' : 'Actualizar fuente oficial'}
                 </Button>
             </CardHeader>
             <CardContent>
@@ -88,16 +95,18 @@ export default function BancosCatalogoAdmin({ token }: BancosCatalogoAdminProps)
                     <p className="text-sm text-muted-foreground">Cargando catálogo...</p>
                 ) : bancos.length === 0 ? (
                     <div className="rounded-lg border border-dashed border-border p-5 text-sm text-muted-foreground">
-                        No hay bancos sincronizados todavía.
+                        No hay bancos oficiales sincronizados todavía. Pulsa &quot;Actualizar fuente oficial&quot;.
                     </div>
                 ) : (
-                    <div className="rounded-xl border border-border overflow-hidden">
+                    <div className="rounded-xl border border-border overflow-x-auto">
                         <Table>
                             <TableHeader>
                                 <TableRow>
                                     <TableHead>Banco</TableHead>
-                                    <TableHead>ID Wompi</TableHead>
-                                    <TableHead>Código</TableHead>
+                                    <TableHead>Tipo</TableHead>
+                                    <TableHead>Código SFC</TableHead>
+                                    <TableHead>NIT</TableHead>
+                                    <TableHead>Ciudad</TableHead>
                                     <TableHead>Estado</TableHead>
                                 </TableRow>
                             </TableHeader>
@@ -105,8 +114,10 @@ export default function BancosCatalogoAdmin({ token }: BancosCatalogoAdminProps)
                                 {bancos.map((banco) => (
                                     <TableRow key={banco.iud}>
                                         <TableCell className="font-medium">{banco.nombre}</TableCell>
-                                        <TableCell>{banco.wompiBankId}</TableCell>
-                                        <TableCell>{banco.codigo || '-'}</TableCell>
+                                        <TableCell>{tipoEntidadLabel(banco.tipoEntidad)}</TableCell>
+                                        <TableCell>{banco.codigoEntidad}</TableCell>
+                                        <TableCell>{banco.nit || '-'}</TableCell>
+                                        <TableCell>{banco.ciudad || '-'}</TableCell>
                                         <TableCell>{banco.estado ? 'Activo' : 'Inactivo'}</TableCell>
                                     </TableRow>
                                 ))}

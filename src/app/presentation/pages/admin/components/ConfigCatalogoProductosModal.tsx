@@ -2,6 +2,7 @@ import React from 'react';
 import { Settings2 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { Button } from '@/components/ui/button';
+import { GovernedButton } from '@/app/presentation/actions';
 import {
   Dialog,
   DialogContent,
@@ -76,10 +77,20 @@ export default function ConfigCatalogoProductosModal({
 export function ConfigCatalogoProductosTrigger({
   onClick,
   className,
+  actionId,
 }: {
   onClick: () => void;
   className?: string;
+  actionId?: string;
 }): React.ReactElement {
+  if (actionId) {
+    return (
+      <GovernedButton actionId={actionId} type="button" variant="outline" onClick={onClick} className={className}>
+        <Settings2 className="mr-2 h-4 w-4" />
+        Config. catálogo
+      </GovernedButton>
+    );
+  }
   return (
     <Button type="button" variant="outline" onClick={onClick} className={className}>
       <Settings2 className="h-4 w-4 mr-2" />

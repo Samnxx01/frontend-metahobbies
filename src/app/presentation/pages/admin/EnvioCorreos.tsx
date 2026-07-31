@@ -641,7 +641,7 @@ export default function EnvioCorreos() {
 
           {/* Leyenda de colores */}
           {previewHtml && (
-            <div className="grid grid-cols-3 gap-1.5">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
               {(Object.keys(DEFAULT_COLORS) as (keyof PaletaColores)[]).map(key => (
                 <button
                   key={key}

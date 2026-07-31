@@ -406,42 +406,44 @@ export default function InventarioTrmConfiguracionTab({
           </div>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Fecha</TableHead>
-                <TableHead>TRM</TableHead>
-                <TableHead>Fuente</TableHead>
-                <TableHead>Estado</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {historialLoading ? (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={4} className="py-6 text-center text-sm text-muted-foreground">
-                    Cargando historial TRM...
-                  </TableCell>
+                  <TableHead>Fecha</TableHead>
+                  <TableHead>TRM</TableHead>
+                  <TableHead>Fuente</TableHead>
+                  <TableHead>Estado</TableHead>
                 </TableRow>
-              ) : historialTrm.length ? (
-                historialTrm.map((item) => (
-                  <TableRow key={item.id}>
-                    <TableCell>{item.fechaVigencia}</TableCell>
-                    <TableCell>$ {formatTrmValue(item.valor)}</TableCell>
-                    <TableCell>{item.fuente}</TableCell>
-                    <TableCell>
-                      <Badge variant={item.estado === 'ACTIVA' ? 'default' : 'secondary'}>{item.estado}</Badge>
+              </TableHeader>
+              <TableBody>
+                {historialLoading ? (
+                  <TableRow>
+                    <TableCell colSpan={4} className="py-6 text-center text-sm text-muted-foreground">
+                      Cargando historial TRM...
                     </TableCell>
                   </TableRow>
-                ))
-              ) : (
-                <TableRow>
-                  <TableCell colSpan={4} className="py-6 text-center text-sm text-muted-foreground">
-                    No hay TRM guardadas.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
+                ) : historialTrm.length ? (
+                  historialTrm.map((item) => (
+                    <TableRow key={item.id}>
+                      <TableCell>{item.fechaVigencia}</TableCell>
+                      <TableCell>$ {formatTrmValue(item.valor)}</TableCell>
+                      <TableCell>{item.fuente}</TableCell>
+                      <TableCell>
+                        <Badge variant={item.estado === 'ACTIVA' ? 'default' : 'secondary'}>{item.estado}</Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={4} className="py-6 text-center text-sm text-muted-foreground">
+                      No hay TRM guardadas.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
         </CardContent>
       </Card>
 

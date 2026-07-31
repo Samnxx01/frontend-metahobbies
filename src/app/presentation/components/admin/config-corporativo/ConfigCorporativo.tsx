@@ -617,7 +617,7 @@ export default function ConfigCorporativo() {
       <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
         <Card className="border-slate-200 shadow-sm">
           <CardHeader className="space-y-3">
-            <div className="flex items-start justify-between gap-4">
+            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-4">
               <div>
                 <CardTitle className="flex items-center gap-2 text-slate-900">
                   <UserPlus className="h-5 w-5 text-success" />
@@ -627,25 +627,27 @@ export default function ConfigCorporativo() {
                   Crea un empleado con tenant global, tenant corporativo y rol corporativo desde una sola vista.
                 </CardDescription>
               </div>
-              <Button
-                type="button"
-                variant="outline"
-                className="gap-2"
-                onClick={() => void refreshEmpleados(form.tenantGlobalId, form.tenantCorporativoId || undefined)}
-              >
-                <RefreshCw className="h-4 w-4" />
-                Recargar
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className="gap-2"
-                onClick={() => setParamModalOpen(true)}
-                disabled={!form.tenantCorporativoId}
-              >
-                <Settings2 className="h-4 w-4" />
-                Parametrizar
-              </Button>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="gap-2"
+                  onClick={() => void refreshEmpleados(form.tenantGlobalId, form.tenantCorporativoId || undefined)}
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  Recargar
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="gap-2"
+                  onClick={() => setParamModalOpen(true)}
+                  disabled={!form.tenantCorporativoId}
+                >
+                  <Settings2 className="h-4 w-4" />
+                  Parametrizar
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent>
@@ -851,42 +853,44 @@ export default function ConfigCorporativo() {
                   Cargando empleados...
                 </div>
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Correo</TableHead>
-                      <TableHead>Corporativo</TableHead>
-                      <TableHead>Rol</TableHead>
-                      <TableHead>Cargo</TableHead>
-                      <TableHead>Estado</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {empleadosFiltrados.length ? (
-                      empleadosFiltrados.map((empleado) => (
-                        <TableRow key={empleado._id}>
-                          <TableCell>
-                            <div className="space-y-1">
-                              <p className="font-medium text-slate-900">{empleado.usuarioId?.correo || '-'}</p>
-                            </div>
-                          </TableCell>
-                          <TableCell>{resolveCorporativoName(empleado.tenantCorporativoId)}</TableCell>
-                          <TableCell>{resolveRolName(empleado.rolCorporativoId)}</TableCell>
-                          <TableCell>{empleado.cargo || '-'}</TableCell>
-                          <TableCell>
-                            <Badge variant="outline">{empleado.estadoLaboral || 'N/D'}</Badge>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Correo</TableHead>
+                        <TableHead>Corporativo</TableHead>
+                        <TableHead>Rol</TableHead>
+                        <TableHead>Cargo</TableHead>
+                        <TableHead>Estado</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {empleadosFiltrados.length ? (
+                        empleadosFiltrados.map((empleado) => (
+                          <TableRow key={empleado._id}>
+                            <TableCell>
+                              <div className="space-y-1">
+                                <p className="font-medium text-slate-900">{empleado.usuarioId?.correo || '-'}</p>
+                              </div>
+                            </TableCell>
+                            <TableCell>{resolveCorporativoName(empleado.tenantCorporativoId)}</TableCell>
+                            <TableCell>{resolveRolName(empleado.rolCorporativoId)}</TableCell>
+                            <TableCell>{empleado.cargo || '-'}</TableCell>
+                            <TableCell>
+                              <Badge variant="outline">{empleado.estadoLaboral || 'N/D'}</Badge>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      ) : (
+                        <TableRow>
+                          <TableCell colSpan={5} className="py-8 text-center text-sm text-slate-500">
+                            No hay empleados para el filtro actual.
                           </TableCell>
                         </TableRow>
-                      ))
-                    ) : (
-                      <TableRow>
-                        <TableCell colSpan={5} className="py-8 text-center text-sm text-slate-500">
-                          No hay empleados para el filtro actual.
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
               )}
             </CardContent>
           </Card>

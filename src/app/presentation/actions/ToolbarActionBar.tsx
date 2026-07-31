@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button } from '@/components/ui/button';
+import { GovernedButton } from './GovernedButton';
 import { cn } from '@/lib/utils';
 import { sortActionsByOrder } from './sortActionsByOrder';
 import type { UiActionDef } from './types';
@@ -37,7 +37,8 @@ export function ToolbarActionBar<TContext>({
         const label = loading && action.loadingLabel ? action.loadingLabel : action.label;
 
         return (
-          <Button
+          <GovernedButton
+            actionId={action.id}
             key={action.id}
             type="button"
             variant={action.variant ?? 'outline'}
@@ -50,7 +51,7 @@ export function ToolbarActionBar<TContext>({
           >
             <Icon className={cn('h-4 w-4', showLabel && 'mr-2', loading && 'animate-spin')} />
             {showLabel ? label : null}
-          </Button>
+          </GovernedButton>
         );
       })}
     </div>

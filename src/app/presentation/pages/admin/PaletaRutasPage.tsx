@@ -423,12 +423,12 @@ export default function PaletaRutasPage() {
             {/* ── Paleta de colores ──────────────────────────────────────────── */}
             <Card className="shadow-lg border-border">
                 <CardHeader className="pb-3">
-                    <div className="flex items-center justify-between gap-2">
+                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                         <div className="flex items-center gap-2">
                             <Palette className="h-5 w-5 text-primary" />
                             <CardTitle>Paleta de colores de la aplicacion</CardTitle>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                             <Button variant="outline" size="sm" onClick={() => setAyudaPaletaOpen(true)}>
                                 <HelpCircle className="h-4 w-4 mr-1.5" />
                                 ¿Que cambia cada color?

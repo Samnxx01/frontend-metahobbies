@@ -96,6 +96,7 @@ export default function TipoReglaVentaModal({
               &quot;Agregar tipo&quot;; no se generan automaticamente.
             </DialogDescription>
           </DialogHeader>
+          <div className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -165,6 +166,7 @@ export default function TipoReglaVentaModal({
               ) : null}
             </TableBody>
           </Table>
+          </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cerrar</Button>
             <Button type="button" onClick={() => { setRegistroEditar(null); setSubmodalOpen(true); }}>

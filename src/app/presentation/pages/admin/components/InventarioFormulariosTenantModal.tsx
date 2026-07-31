@@ -690,7 +690,17 @@ export default function InventarioFormulariosTenantModal({
       const saTarjeta = normalizarIdApi(
         focusTarjeta?.tenantSuperAdminId ?? alcanceTenantSuperAdminId ?? null,
       );
-      const data = await inventarioService.obtenerFormulariosAutorizacionOpciones(saTarjeta || undefined);
+      const soloCatalogo = openParametrizacion && !openAutorizacion;
+      const [data, tarjetasIniciales] = await Promise.all([
+        inventarioService.obtenerFormulariosAutorizacionOpciones(
+          saTarjeta || undefined,
+          soloCatalogo ? { soloCatalogo: true } : undefined,
+        ),
+        soloCatalogo
+          ? Promise.resolve([])
+          : inventarioService.listarTarjetasConfig(saTarjeta || undefined).catch(() => []),
+      ]);
+      setTarjetasConfig(tarjetasIniciales);
       const formRows: FormRow[] = (data.formularios || []).map((f) => ({
         id: f.id,
         name: f.name,
@@ -742,36 +752,24 @@ export default function InventarioFormulariosTenantModal({
         setSelectedSaIds({});
       }
 
-      await refreshTarjetasConfig(ancla || branchSaIds[0] || undefined);
-
       const focusTarjetaId = normalizarIdApi(focusTarjeta?.tarjetaId);
       if (focusTarjetaId) {
         setSelectedTarjetaConfigId(focusTarjetaId);
       }
 
-      if (branchSaIds.length > 0) {
-        await refreshRamasSeleccionadas(branchSaIds);
-      } else if (ancla) {
-        setTenantGlobales(data.tenantGlobales || []);
-        setUsuarios(data.usuarios || []);
-        setSelectedTenantGlobales(
-          toCheckedMap((data.tenantGlobales || []).map((t) => t.iud)),
-        );
-        if (usuariosParametrizados.length) {
-          setSelectedUsuarios((prev) => {
-            const next = { ...prev };
-            usuariosParametrizados.forEach((id) => {
-              next[id] = true;
-            });
-            return next;
+      setTenantGlobales(data.tenantGlobales || []);
+      setUsuarios(data.usuarios || []);
+      setSelectedTenantGlobales(
+        toCheckedMap((data.tenantGlobales || []).map((t) => t.iud)),
+      );
+      if (usuariosParametrizados.length) {
+        setSelectedUsuarios((prev) => {
+          const next = { ...prev };
+          usuariosParametrizados.forEach((id) => {
+            next[id] = true;
           });
-        }
-      } else {
-        setTenantGlobales(data.tenantGlobales || []);
-        setUsuarios(data.usuarios || []);
-        setSelectedTenantGlobales(
-          toCheckedMap((data.tenantGlobales || []).map((t) => t.iud)),
-        );
+          return next;
+        });
       }
 
       if (!data.policy?.esDios) {
@@ -783,7 +781,14 @@ export default function InventarioFormulariosTenantModal({
     } finally {
       setLoading(false);
     }
-  }, [focusModulePath, focusTarjeta, alcanceTenantSuperAdminId, modules, refreshTarjetasConfig, refreshRamasSeleccionadas]);
+  }, [
+    focusModulePath,
+    focusTarjeta,
+    alcanceTenantSuperAdminId,
+    modules,
+    openParametrizacion,
+    openAutorizacion,
+  ]);
 
   useEffect(() => {
     if (!modalAbierto) return;
@@ -1133,6 +1138,11 @@ export default function InventarioFormulariosTenantModal({
     }
 
     const rutaIds = payload.rutas.map((r) => r.rutaId);
+    if (opts.cerrarAutorizacion) setOpenAutorizacion(false);
+    if (opts.cerrarParametrizacion) setOpenParametrizacion(false);
+    toast.info(
+      `Guardando autorizaciones en segundo plano para ${saTargets.length} rama(s). Puedes continuar usando el aplicativo.`,
+    );
     setSaving(true);
     try {
       const moduloSeleccionado = modules.find(
@@ -1193,10 +1203,6 @@ export default function InventarioFormulariosTenantModal({
       if (totalActualizadas > 0) {
         onFormulariosAutorizacionApplied?.();
         await refreshTarjetasConfig(seleccionSaId || saIdsGuardar[0]);
-      }
-      if (fallos.length === 0 && totalActualizadas > 0) {
-        if (opts.cerrarAutorizacion) setOpenAutorizacion(false);
-        if (opts.cerrarParametrizacion) setOpenParametrizacion(false);
       }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al guardar';
@@ -1278,8 +1284,14 @@ export default function InventarioFormulariosTenantModal({
         toast.info('Sin cambios en inventarioconfigtarjetas.');
       }
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Error al guardar parametrizacion';
-      toast.error(msg);
+      const msg = e instanceof Error
+        ? e.message.replace(/^\[\d+\]\s*/, '')
+        : 'Error al guardar parametrizacion';
+      if (/ya se encuentra parametrizada/i.test(msg)) {
+        toast.warning(msg);
+      } else {
+        toast.error(msg);
+      }
     } finally {
       setSaving(false);
     }

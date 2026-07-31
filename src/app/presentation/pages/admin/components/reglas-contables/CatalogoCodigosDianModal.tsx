@@ -175,7 +175,7 @@ export default function CatalogoCodigosDianModal({ open, onOpenChange }: Props):
               o registra manualmente los que necesites.
             </p>
           ) : (
-            <div className="max-h-64 overflow-y-auto rounded-md border">
+            <div className="max-h-64 overflow-y-auto overflow-x-auto rounded-md border">
               <Table>
                 <TableHeader>
                   <TableRow>

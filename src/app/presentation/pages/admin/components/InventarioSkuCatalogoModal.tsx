@@ -287,24 +287,30 @@ export default function InventarioSkuCatalogoModal({
 
   const handleConfirmarEliminar = async (): Promise<void> => {
     if (!confirmEliminar || eliminando) return;
+    const productosAEliminar = confirmEliminar;
+    const esEliminacionMasiva = productosAEliminar.length > 1;
+    if (esEliminacionMasiva) {
+      setConfirmEliminar(null);
+      refocarInputFiltro();
+    }
     setEliminando(true);
     try {
-      if (confirmEliminar.length === 1) {
-        await onEliminarSku(confirmEliminar[0]);
+      if (productosAEliminar.length === 1) {
+        await onEliminarSku(productosAEliminar[0]);
       } else if (onEliminarSkusMasivo) {
-        await onEliminarSkusMasivo(confirmEliminar);
+        await onEliminarSkusMasivo(productosAEliminar);
       } else {
-        for (const p of confirmEliminar) {
+        for (const p of productosAEliminar) {
           await onEliminarSku(p);
         }
       }
-      const idsEliminados = new Set(confirmEliminar.map((p) => getProductoId(p)));
+      const idsEliminados = new Set(productosAEliminar.map((p) => getProductoId(p)));
       setSeleccionados((prev) => {
         const next = new Set(prev);
         idsEliminados.forEach((id) => next.delete(id));
         return next;
       });
-      setConfirmEliminar(null);
+      if (!esEliminacionMasiva) setConfirmEliminar(null);
     } catch {
       // El padre ya muestra el toast de error
     } finally {
@@ -734,8 +740,8 @@ export default function InventarioSkuCatalogoModal({
               <div className="space-y-3">
                 <p className="text-sm text-muted-foreground">
                   {(confirmEliminar?.length ?? 0) === 1
-                    ? 'Esta accion elimina definitivamente el SKU. No se puede deshacer.'
-                    : `Esta accion elimina definitivamente ${confirmEliminar?.length} SKUs. No se puede deshacer.`}
+                    ? 'Solo se puede eliminar si el SKU no tiene transacciones de inventario. Esta accion no se puede deshacer.'
+                    : `Solo se eliminaran los SKU que no tengan transacciones de inventario. Esta accion no se puede deshacer.`}
                 </p>
                 {confirmEliminar && confirmEliminar.length > 0 && (
                   <div className="divide-y divide-destructive/10 rounded-md border border-destructive/20 bg-destructive/5">
