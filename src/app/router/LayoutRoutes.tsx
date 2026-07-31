@@ -428,18 +428,6 @@ export default function LayoutRoutes(): ReactElement {
             const resolvedComponent = normalizeAdminRouteComponent(route.component, routeFullPath);
             const LazyComponent = componentMap[resolvedComponent] || componentMap[route.component];
             const hasChildren = Array.isArray(route.children) && route.children.length > 0;
-            if (location.pathname.includes('inventar')) {
-                console.info('[MABS][LayoutRoutes] Resolviendo ruta de inventario', {
-                    pathname: location.pathname,
-                    configuredPath: route.path,
-                    routeFullPath,
-                    configuredComponent: route.component,
-                    resolvedComponent,
-                    componentFound: Boolean(LazyComponent),
-                    hasChildren,
-                });
-            }
-
             // Ruta relativa al padre: quitar el prefijo del padre si viene con path completo
             const relativePath = normalizedParentPath && routeAlreadyIncludesParent
                 ? routeFullPath.slice(normalizedParentPath.length).replace(/^\/+/, '')

@@ -1832,8 +1832,9 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
       }
       return result;
     } catch (error: any) {
-      toast.error(error?.message || 'No se pudo importar el archivo.');
-      return { total: 0, insertados: 0, errores: [] };
+      const mensaje = error?.message || 'No se pudo importar el archivo.';
+      toast.error(mensaje);
+      throw error instanceof Error ? error : new Error(mensaje);
     }
   };
 

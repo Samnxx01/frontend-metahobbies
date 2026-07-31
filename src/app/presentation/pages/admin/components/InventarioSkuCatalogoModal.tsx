@@ -107,6 +107,7 @@ export default function InventarioSkuCatalogoModal({
   const [refrescando, setRefrescando] = useState(false);
   const [generandoCodigos, setGenerandoCodigos] = useState(false);
   const [resultadoImport, setResultadoImport] = useState<{ total: number; insertados: number; errores: { fila: number; error: string }[] } | null>(null);
+  const [errorImport, setErrorImport] = useState<string | null>(null);
   const [confirmEliminar, setConfirmEliminar] = useState<BackendProducto[] | null>(null);
   const [eliminando, setEliminando] = useState(false);
   const [previewGeneracion, setPreviewGeneracion] = useState<Array<{ producto: BackendProducto; codigoBarras: string; formato: string | null }> | null>(null);
@@ -127,7 +128,6 @@ export default function InventarioSkuCatalogoModal({
       setFiltro(initialFiltro ?? '');
       setBarcodePreview(null);
       setSeleccionados(new Set());
-      setResultadoImport(null);
       setConfirmEliminar(null);
       setScannerActivo(false);
       isScanRef.current = false;
@@ -178,10 +178,16 @@ export default function InventarioSkuCatalogoModal({
     if (!file || !onImportarExcel) return;
     e.target.value = '';
     setImportando(true);
-    setResultadoImport(null);
+    setErrorImport(null);
     try {
       const result = await onImportarExcel(file);
       setResultadoImport(result);
+    } catch (error) {
+      setErrorImport(
+        error instanceof Error && error.message
+          ? error.message
+          : 'No se pudo procesar el archivo por un error del importador.',
+      );
     } finally {
       setImportando(false);
       refocarInputFiltro();
@@ -446,20 +452,54 @@ export default function InventarioSkuCatalogoModal({
             </div>
 
             {resultadoImport && (
-              <div className={`rounded-md border px-4 py-3 text-sm ${resultadoImport.errores.length > 0 ? 'border-warning/30 bg-warning/10 text-warning' : 'border-success/30 bg-success/10 text-success'}`}>
+              <div className={`rounded-md border px-4 py-3 text-sm ${resultadoImport.errores.length > 0 ? 'border-warning/30 bg-warning/10 text-warning' : 'border-success/30 bg-success/10 text-success'}`} role="status">
                 <p className="font-semibold">
-                  Importacion completada: {resultadoImport.insertados} de {resultadoImport.total} insertados
+                  {resultadoImport.errores.length > 0
+                    ? `Importación parcial: ${resultadoImport.insertados} de ${resultadoImport.total} registros importados`
+                    : `Importación completada: ${resultadoImport.insertados} de ${resultadoImport.total} registros importados`}
                 </p>
                 {resultadoImport.errores.length > 0 && (
-                  <ul className="mt-1 list-disc pl-4 text-xs">
-                    {resultadoImport.errores.slice(0, 5).map((e) => (
-                      <li key={e.fila}>Fila {e.fila}: {e.error}</li>
-                    ))}
-                    {resultadoImport.errores.length > 5 && (
-                      <li>…y {resultadoImport.errores.length - 5} errores mas</li>
-                    )}
-                  </ul>
+                  <div className="mt-2 text-xs">
+                    <p className="font-medium">
+                      Cola de revisión: {resultadoImport.errores.length} registro(s) pendientes de decisión.
+                    </p>
+                    <p>Corrige las filas en el archivo y vuelve a importarlo, o descarta esta cola.</p>
+                    <ul className="mt-2 max-h-32 list-disc overflow-y-auto pl-4">
+                      {resultadoImport.errores.map((e) => (
+                        <li key={`${e.fila}-${e.error}`}>Fila {e.fila}: {e.error}</li>
+                      ))}
+                    </ul>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={importando}
+                        onClick={() => importInputRef.current?.click()}
+                      >
+                        <Upload className="mr-2 h-4 w-4" />
+                        Volver a importar corregido
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        disabled={importando}
+                        onClick={() => setResultadoImport(null)}
+                      >
+                        Descartar pendientes
+                      </Button>
+                    </div>
+                  </div>
                 )}
+              </div>
+            )}
+
+            {errorImport && (
+              <div className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive" role="alert">
+                <p className="font-semibold">No se pudo importar el archivo</p>
+                <p className="mt-1 text-xs">{errorImport}</p>
+                <p className="mt-1 text-xs">Verifica el formato y las columnas del archivo. Si los datos son correctos, informa este mensaje al soporte técnico.</p>
               </div>
             )}
 
