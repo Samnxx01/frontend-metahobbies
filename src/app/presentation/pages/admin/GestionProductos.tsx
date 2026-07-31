@@ -8,6 +8,8 @@ import productosService, {
   type BackendTipoProducto,
   type CategoriaPayload,
   type TipoProductoPayload,
+  esCategoriaPadre,
+  esSubcategoriaDe,
   getProductoVentaRelacionId,
 } from '@/app/services/productosService';
 import inventarioService, { type InventarioUnidadMedida, type MonedaCopOption, type StockActualItem } from '@/app/services/inventarioService';
@@ -39,7 +41,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Textarea } from '@/components/ui/textarea';
 import VentaWompiSecuenciaModal from '@/app/presentation/pages/admin/components/VentaWompiSecuenciaModal';
 import AlcanceReglasProductosModal from '@/app/presentation/pages/admin/components/reglas-contables/AlcanceReglasProductosModal';
-import { DollarSign, Eye, FolderTree, Hash, Pencil, Plus, RefreshCw, Search, Settings2, Star, Trash2, X } from 'lucide-react';
+import { CircleHelp, DollarSign, Eye, FolderTree, Hash, Pencil, Plus, RefreshCw, Search, Settings2, Star, Trash2, X } from 'lucide-react';
 
 type DialogType = 'add' | 'edit' | 'view' | 'delete';
 
@@ -49,6 +51,8 @@ interface ProductRow {
   nombre: string;
   categoriaId: string;
   categoria: string;
+  subcategoriaId: string;
+  subcategoria: string;
   tipo: string;
   moneda: string;
   monedaId: string;
@@ -159,6 +163,8 @@ const mapProduct = (producto: BackendProducto): ProductRow => {
     nombre: String(producto.nombre || origen?.nombre || ''),
     categoriaId: categoriaId(producto.categoria || origen?.categoria),
     categoria: categoriaLabel(producto.categoria || origen?.categoria),
+    subcategoriaId: categoriaId(producto.subcategoria || origen?.subcategoria),
+    subcategoria: categoriaLabel(producto.subcategoria || origen?.subcategoria),
     tipo: String(producto.tipo || origen?.tipo || 'PRODUCTO'),
     moneda: String(producto.moneda || origen?.moneda || 'COP'),
     monedaId: resolverMonedaIdProducto(producto),
@@ -210,6 +216,7 @@ const toPayload = (product: ProductRow): AdminProductoPayload => ({
   unidadMedida: product.unidadMedida || 'UNIDAD',
   stockMinimo: Math.max(0, Number(product.stockMinimo) || 0),
   categoria: product.categoriaId || null,
+  subcategoria: product.subcategoriaId || null,
   imagenes: product.imagen && product.imagen !== PLACEHOLDER && !isDataImage(product.imagen) && !isBlobUrl(product.imagen) ? [product.imagen] : [],
   estadoCatalogo: product.publicado ? 'ACTIVO' : 'INACTIVO',
   productoOrigenId: product.productoOrigenId || null,
@@ -239,6 +246,8 @@ const EMPTY_PRODUCT: ProductRow = {
   nombre: '',
   categoriaId: '',
   categoria: '',
+  subcategoriaId: '',
+  subcategoria: '',
   tipo: '',
   moneda: 'COP',
   monedaId: '',
@@ -274,6 +283,7 @@ export default function GestionProductos(): React.ReactElement {
   const [saving, setSaving] = useState(false);
   const [dialogType, setDialogType] = useState<DialogType>('view');
   const [openDialog, setOpenDialog] = useState(false);
+  const [openProductHelpDialog, setOpenProductHelpDialog] = useState(false);
   const [openCategoriesListDialog, setOpenCategoriesListDialog] = useState(false);
   const [openCategoryDialog, setOpenCategoryDialog] = useState(false);
   const [openTypeDialog, setOpenTypeDialog] = useState(false);
@@ -305,6 +315,7 @@ export default function GestionProductos(): React.ReactElement {
   const [categoryMediaFile, setCategoryMediaFile] = useState<File | null>(null);
   const [categoryMediaDuration, setCategoryMediaDuration] = useState<number | undefined>(undefined);
   const [typeSaving, setTypeSaving] = useState(false);
+  const [tipoEditandoId, setTipoEditandoId] = useState<string | null>(null);
   const [categoryForm, setCategoryForm] = useState<CategoriaPayload>({
     nombre: '',
     descripcion: '',
@@ -666,6 +677,7 @@ export default function GestionProductos(): React.ReactElement {
       codigo: '',
       descripcion: '',
     });
+    setTipoEditandoId(null);
   };
 
   const onSelectProductSku = (value: string): void => {
@@ -683,6 +695,8 @@ export default function GestionProductos(): React.ReactElement {
       nombre: producto.nombre,
       categoriaId: producto.categoriaId,
       categoria: producto.categoria,
+      subcategoriaId: producto.subcategoriaId,
+      subcategoria: producto.subcategoria,
       tipo: producto.tipo,
       moneda: producto.moneda,
       monedaId: producto.monedaId,
@@ -1238,20 +1252,64 @@ export default function GestionProductos(): React.ReactElement {
 
     try {
       setTypeSaving(true);
-      const created = await productosService.crearTipoProducto({
+      const payload = {
         nombre: typeForm.nombre,
         codigo: typeForm.codigo || undefined,
         descripcion: typeForm.descripcion || '',
-      });
-      const nextTipos = tiposPersistidosUnicos([...tiposProducto, created])
+      };
+      const saved = tipoEditandoId
+        ? await productosService.actualizarTipoProducto(tipoEditandoId, payload)
+        : await productosService.crearTipoProducto(payload);
+      const nextTipos = tiposPersistidosUnicos([
+        ...tiposProducto.filter((tipo) => backendId(tipo) !== tipoEditandoId),
+        saved,
+      ])
         .sort((a, b) => String(a.nombre || '').localeCompare(String(b.nombre || '')));
       setTiposProducto(nextTipos);
-      setForm((prev) => ({ ...prev, tipo: created.nombre }));
-      toast.success('Tipo de producto creado correctamente');
-      closeTypeDialog();
+      setForm((prev) => ({ ...prev, tipo: saved.nombre }));
+      toast.success(tipoEditandoId ? 'Tipo actualizado correctamente' : 'Tipo creado correctamente');
+      setTypeForm({ nombre: '', codigo: '', descripcion: '' });
+      setTipoEditandoId(null);
     } catch (error) {
       console.error('Error creando tipo de producto:', error);
       toast.error(errorMessage(error, 'No se pudo crear el tipo de producto.'));
+    } finally {
+      setTypeSaving(false);
+    }
+  };
+
+  const editarTipoProducto = (tipo: BackendTipoProducto): void => {
+    setTipoEditandoId(backendId(tipo));
+    setTypeForm({
+      nombre: tipo.nombre || '',
+      codigo: tipo.codigo || '',
+      descripcion: tipo.descripcion || '',
+    });
+  };
+
+  const eliminarTipoProducto = async (tipo: BackendTipoProducto): Promise<void> => {
+    const id = backendId(tipo);
+    if (!id) return;
+    const confirmacion = await Swal({
+      title: '¿Desactivar tipo de producto?',
+      text: tipo.nombre,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Desactivar',
+      cancelButtonText: 'Cancelar',
+    });
+    if (!confirmacion.isConfirmed) return;
+    try {
+      setTypeSaving(true);
+      await productosService.eliminarTipoProducto(id);
+      setTiposProducto((prev) => prev.filter((item) => backendId(item) !== id));
+      if (tipoEditandoId === id) {
+        setTipoEditandoId(null);
+        setTypeForm({ nombre: '', codigo: '', descripcion: '' });
+      }
+      toast.success('Tipo desactivado correctamente');
+    } catch (error) {
+      toast.error(errorMessage(error, 'No se pudo desactivar el tipo.'));
     } finally {
       setTypeSaving(false);
     }
@@ -1309,6 +1367,16 @@ export default function GestionProductos(): React.ReactElement {
           </GovernedButton>
           <GovernedButton actionId={PRODUCT_ACTION_IDS.CREATE_CATEGORY} variant="outline" onClick={abrirCrearCategoriaPadre} className="rounded-lg">
             Crear Categoría Padre
+          </GovernedButton>
+          <GovernedButton
+            id="btn-parametrizar-tipos-producto"
+            actionId={PRODUCT_ACTION_IDS.MANAGE_PRODUCT_TYPES}
+            variant="outline"
+            onClick={() => setOpenTypeDialog(true)}
+            className="flex items-center gap-2 rounded-lg"
+          >
+            <Settings2 className="h-4 w-4" />
+            Parametrizar tipos
           </GovernedButton>
           <GovernedButton actionId={PRODUCT_ACTION_IDS.CREATE_PRODUCT} onClick={openAdd} className="flex items-center gap-2 rounded-lg">
             <Plus className="h-5 w-5" />
@@ -1406,9 +1474,23 @@ export default function GestionProductos(): React.ReactElement {
       <Dialog open={openDialog} onOpenChange={(open) => (open ? setOpenDialog(true) : closeDialog())}>
         <DialogContent className="flex max-h-[92vh] w-[min(96vw,1280px)] max-w-[min(96vw,1280px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(96vw,1280px)]">
           <DialogHeader className="shrink-0 border-b px-6 py-4">
-            <DialogTitle>
-              {dialogType === 'add' ? 'Agregar Nuevo Producto' : dialogType === 'edit' ? 'Editar Producto' : dialogType === 'view' ? 'Detalle del Producto' : 'Desactivar Producto'}
-            </DialogTitle>
+            <div className="flex items-center justify-between gap-4 pr-8">
+              <DialogTitle>
+                {dialogType === 'add' ? 'Agregar Nuevo Producto' : dialogType === 'edit' ? 'Editar Producto' : dialogType === 'view' ? 'Detalle del Producto' : 'Desactivar Producto'}
+              </DialogTitle>
+              {dialogType !== 'delete' ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-2"
+                  onClick={() => setOpenProductHelpDialog(true)}
+                >
+                  <CircleHelp className="h-4 w-4" />
+                  Ayuda
+                </Button>
+              ) : null}
+            </div>
           </DialogHeader>
 
           {dialogType === 'delete' ? (
@@ -1509,7 +1591,7 @@ export default function GestionProductos(): React.ReactElement {
                   )}
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="categoria">Categoría</Label>
+                  <Label htmlFor="categoria">Categoría padre</Label>
                   {dialogType === 'view' ? (
                     <Input id="categoria" value={current.categoria} disabled />
                   ) : (
@@ -1519,14 +1601,24 @@ export default function GestionProductos(): React.ReactElement {
                       onChange={(e) => {
                         const id = e.target.value;
                         const categoria = categorias.find((item) => backendId(item) === id);
-                        setForm((prev) => ({ ...prev, categoriaId: id, categoria: categoria?.nombre || '' }));
+                        setForm((prev) => ({
+                          ...prev,
+                          categoriaId: id,
+                          categoria: categoria?.nombre || '',
+                          subcategoriaId: '',
+                          subcategoria: '',
+                        }));
                       }}
                       className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                     >
                       <option value="">Sin categoría</option>
-                      {categorias.map((categoria) => (
-                        <option key={backendId(categoria)} value={backendId(categoria)}>{categoria.nombre}</option>
-                      ))}
+                      {categorias
+                        .filter(esCategoriaPadre)
+                        .map((categoria) => (
+                          <option key={backendId(categoria)} value={backendId(categoria)}>
+                            {categoria.nombre}
+                          </option>
+                        ))}
                     </select>
                   )}
                   {dialogType !== 'view' && (
@@ -1537,6 +1629,43 @@ export default function GestionProductos(): React.ReactElement {
                     >
                       Crear categoría nueva
                     </button>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="subcategoria">Subcategoría asociada</Label>
+                  {dialogType === 'view' ? (
+                    <Input
+                      id="subcategoria"
+                      value={current.subcategoria || 'Sin subcategoría'}
+                      disabled
+                    />
+                  ) : (
+                    <select
+                      id="subcategoria"
+                      value={form.subcategoriaId}
+                      disabled={!form.categoriaId}
+                      onChange={(e) => {
+                        const id = e.target.value;
+                        const subcategoria = categorias.find((item) => backendId(item) === id);
+                        setForm((prev) => ({
+                          ...prev,
+                          subcategoriaId: id,
+                          subcategoria: subcategoria?.nombre || '',
+                        }));
+                      }}
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <option value="">
+                        {form.categoriaId ? 'Sin subcategoría' : 'Selecciona primero la categoría padre'}
+                      </option>
+                      {categorias
+                        .filter((categoria) => esSubcategoriaDe(categoria, form.categoriaId))
+                        .map((subcategoria) => (
+                          <option key={backendId(subcategoria)} value={backendId(subcategoria)}>
+                            {subcategoria.nombre}
+                          </option>
+                        ))}
+                    </select>
                   )}
                 </div>
                 <div className="space-y-2">
@@ -1965,6 +2094,49 @@ export default function GestionProductos(): React.ReactElement {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={openProductHelpDialog} onOpenChange={setOpenProductHelpDialog}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CircleHelp className="h-5 w-5 text-primary" />
+              Ayuda del formulario de productos
+            </DialogTitle>
+            <DialogDescription>
+              Completa la información necesaria para publicar y vender un producto en el catálogo.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3 py-2 text-sm sm:grid-cols-2">
+            <div className="rounded-lg border p-3">
+              <p className="font-medium">Identificación</p>
+              <p className="mt-1 text-muted-foreground">Asigna el nombre y selecciona el producto con SKU y stock disponible.</p>
+            </div>
+            <div className="rounded-lg border p-3">
+              <p className="font-medium">Clasificación</p>
+              <p className="mt-1 text-muted-foreground">Selecciona tipo, categoría y subcategoría para organizar el catálogo.</p>
+            </div>
+            <div className="rounded-lg border p-3">
+              <p className="font-medium">Precio y moneda</p>
+              <p className="mt-1 text-muted-foreground">Define el precio, la moneda utilizada por el carrito y la unidad de medida.</p>
+            </div>
+            <div className="rounded-lg border p-3">
+              <p className="font-medium">Reglas del producto</p>
+              <p className="mt-1 text-muted-foreground">Activa las reglas contables y de venta que deben calcularse al agregar el producto al carrito.</p>
+            </div>
+            <div className="rounded-lg border p-3">
+              <p className="font-medium">Imágenes</p>
+              <p className="mt-1 text-muted-foreground">Agrega una URL principal o carga hasta cuatro archivos para presentar el producto.</p>
+            </div>
+            <div className="rounded-lg border p-3">
+              <p className="font-medium">Venta y visibilidad</p>
+              <p className="mt-1 text-muted-foreground">“Maneja ventas” vincula el producto al flujo comercial y “Destacado” lo muestra en el inicio.</p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" onClick={() => setOpenProductHelpDialog(false)}>Entendido</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={openCategoriesListDialog} onOpenChange={setOpenCategoriesListDialog}>
         <DialogContent className="sm:max-w-3xl">
           <DialogHeader>
@@ -2242,7 +2414,7 @@ export default function GestionProductos(): React.ReactElement {
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               >
                 {categorias
-                  .filter((categoria) => Number(categoria.nivel) === 1)
+                  .filter(esCategoriaPadre)
                   .map((categoria) => (
                     <option key={backendId(categoria)} value={backendId(categoria)}>
                       {categoria.nombre}
@@ -2421,12 +2593,64 @@ export default function GestionProductos(): React.ReactElement {
       </Dialog>
 
       <Dialog open={openTypeDialog} onOpenChange={(open) => (open ? setOpenTypeDialog(true) : closeTypeDialog())}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-3xl">
           <DialogHeader>
-            <DialogTitle>Crear Tipo de Producto</DialogTitle>
+            <DialogTitle>Parametrizar Tipos de Producto</DialogTitle>
+            <DialogDescription>Consulta, crea, edita o desactiva los tipos disponibles.</DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-4">
+          <div className="max-h-56 overflow-auto rounded-lg border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Nombre</TableHead>
+                  <TableHead>Código</TableHead>
+                  <TableHead>Descripción</TableHead>
+                  <TableHead className="text-right">Acciones</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {tiposProducto.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={4} className="py-6 text-center text-muted-foreground">
+                      No hay tipos parametrizados.
+                    </TableCell>
+                  </TableRow>
+                ) : tiposProducto.map((tipo) => (
+                  <TableRow key={backendId(tipo)}>
+                    <TableCell className="font-medium">{tipo.nombre}</TableCell>
+                    <TableCell>{tipo.codigo}</TableCell>
+                    <TableCell>{tipo.descripcion || 'Sin descripción'}</TableCell>
+                    <TableCell className="space-x-1 text-right">
+                      <GovernedButton
+                        id={`btn-editar-tipo-producto-${backendId(tipo)}`}
+                        actionId={PRODUCT_ACTION_IDS.UPDATE_PRODUCT_TYPE}
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => editarTipoProducto(tipo)}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </GovernedButton>
+                      <GovernedButton
+                        id={`btn-desactivar-tipo-producto-${backendId(tipo)}`}
+                        actionId={PRODUCT_ACTION_IDS.DELETE_PRODUCT_TYPE}
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => { void eliminarTipoProducto(tipo); }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </GovernedButton>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+
+          <div className="space-y-4 border-t pt-4">
+            <h3 className="font-semibold">{tipoEditandoId ? 'Editar tipo' : 'Crear tipo'}</h3>
             <div className="space-y-2">
               <Label htmlFor="tipo-nombre">Nombre</Label>
               <Input
@@ -2460,10 +2684,25 @@ export default function GestionProductos(): React.ReactElement {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={closeTypeDialog}>Cancelar</Button>
-            <Button onClick={() => { void onCreateType(); }} disabled={typeSaving}>
-              {typeSaving ? 'Guardando...' : 'Crear Tipo'}
-            </Button>
+            {tipoEditandoId && (
+              <Button id="btn-cancelar-edicion-tipo-producto" variant="outline" onClick={() => {
+                setTipoEditandoId(null);
+                setTypeForm({ nombre: '', codigo: '', descripcion: '' });
+              }}>
+                Cancelar edición
+              </Button>
+            )}
+            <Button id="btn-cerrar-crud-tipos-producto" variant="outline" onClick={closeTypeDialog}>Cerrar</Button>
+            <GovernedButton
+              id={tipoEditandoId ? 'btn-guardar-tipo-producto' : 'btn-crear-tipo-producto'}
+              actionId={tipoEditandoId
+                ? PRODUCT_ACTION_IDS.UPDATE_PRODUCT_TYPE
+                : PRODUCT_ACTION_IDS.CREATE_PRODUCT_TYPE}
+              onClick={() => { void onCreateType(); }}
+              disabled={typeSaving}
+            >
+              {typeSaving ? 'Guardando...' : tipoEditandoId ? 'Guardar cambios' : 'Crear Tipo'}
+            </GovernedButton>
           </DialogFooter>
         </DialogContent>
       </Dialog>

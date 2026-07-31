@@ -15,6 +15,7 @@ import {
     type MonedaApiRow,
     type MonedaRow,
 } from './parametrizacionMembresiaApi';
+import MembresiaHelpButton from './MembresiaHelpButton';
 
 type MensajeTipo = 'success' | 'error';
 interface Mensaje { tipo: MensajeTipo; texto: string }
@@ -95,7 +96,7 @@ export default function GestionMonedas() {
     const activasWompi = monedas.filter(m => m.activoWompi === true).length;
 
     return (
-        <Card className="border border-border/50 shadow-sm">
+        <Card id="widget-administracion-monedas" className="border border-border/50 shadow-sm">
             <CardHeader className="pb-4 px-6 pt-5 border-b border-border/40">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -111,18 +112,33 @@ export default function GestionMonedas() {
                             </p>
                         </div>
                     </div>
-                    <Button
-                        size="icon" variant="ghost"
-                        onClick={listarMonedas}
-                        disabled={loadingLista}
-                        className="w-8 h-8 text-muted-foreground hover:text-foreground"
-                        title="Recargar monedas"
-                    >
-                        {loadingLista
-                            ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            : <RefreshCcw className="w-3.5 h-3.5" />
-                        }
-                    </Button>
+                    <div className="flex items-center gap-2">
+                        <MembresiaHelpButton
+                            id="btn-ayuda-administracion-monedas"
+                            title="Administración de monedas"
+                            description="Gestiona las monedas disponibles y define en qué áreas puede utilizarse cada una."
+                            items={[
+                                'Sistema activa o desactiva la moneda de forma general.',
+                                'Inventario habilita la moneda para operaciones del módulo de inventario.',
+                                'Wompi permite usarla en operaciones integradas con la pasarela de pagos.',
+                                'Los cambios realizados con los interruptores se guardan inmediatamente.',
+                            ]}
+                        />
+                        <Button
+                            id="btn-recargar-administracion-monedas"
+                            size="icon" variant="outline"
+                            onClick={listarMonedas}
+                            disabled={loadingLista}
+                            className="w-8 h-8 text-muted-foreground hover:text-foreground"
+                            title="Recargar monedas"
+                            aria-label="Recargar monedas"
+                        >
+                            {loadingLista
+                                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                : <RefreshCcw className="w-3.5 h-3.5" />
+                            }
+                        </Button>
+                    </div>
                 </div>
             </CardHeader>
 
@@ -145,23 +161,36 @@ export default function GestionMonedas() {
                 )}
 
                 {/* Inicializar */}
-                <div className="flex items-center justify-between p-3.5 rounded-xl bg-muted/40 border border-border/40">
+                <div id="widget-inicializar-monedas-base" className="flex items-center justify-between rounded-xl border border-border/40 bg-card p-3.5 text-card-foreground">
                     <div>
                         <p className="text-xs font-semibold text-foreground">Inicializar monedas base</p>
                         <p className="text-xs text-muted-foreground mt-0.5">Crea COP, USD y EUR en el sistema</p>
                     </div>
-                    <Button
-                        size="sm" variant="outline"
-                        onClick={crearMonedas}
-                        disabled={loadingCrear}
-                        className="gap-2 shrink-0"
-                    >
-                        {loadingCrear
-                            ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            : <Coins className="w-3.5 h-3.5" />
-                        }
-                        Inicializar
-                    </Button>
+                    <div className="flex shrink-0 items-center gap-2">
+                        <MembresiaHelpButton
+                            id="btn-ayuda-inicializar-monedas-base"
+                            iconOnly
+                            title="Inicializar monedas base"
+                            description="Registra las monedas COP, USD y EUR que todavía no existan en el sistema."
+                            items={[
+                                'La operación no debe duplicar monedas que ya estén registradas.',
+                                'Al finalizar se actualiza automáticamente la lista.',
+                            ]}
+                        />
+                        <Button
+                            id="btn-inicializar-monedas-base"
+                            size="sm" variant="outline"
+                            onClick={crearMonedas}
+                            disabled={loadingCrear}
+                            className="gap-2 shrink-0"
+                        >
+                            {loadingCrear
+                                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                : <Coins className="w-3.5 h-3.5" />
+                            }
+                            Inicializar
+                        </Button>
+                    </div>
                 </div>
 
                 <Separator />
@@ -198,12 +227,13 @@ export default function GestionMonedas() {
 
                         {monedas.map(moneda => (
                             <div
+                                id={`widget-moneda-${moneda.id}`}
                                 key={moneda.id}
                                 className={`
                                     flex items-center justify-between px-4 py-3 rounded-xl border transition-all
                                     ${moneda.estadoMoneda
-                                        ? 'bg-background border-border/50 hover:border-border'
-                                        : 'bg-muted/20 border-border/30 opacity-70'
+                                        ? 'bg-card border-border/50 hover:border-border'
+                                        : 'bg-card border-border/30 opacity-70'
                                     }
                                 `}
                             >
@@ -241,7 +271,9 @@ export default function GestionMonedas() {
                                             <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
                                         ) : (
                                             <Switch
+                                                id={`switch-moneda-sistema-${moneda.id}`}
                                                 checked={moneda.estadoMoneda}
+                                                aria-label={`Disponibilidad general de ${moneda.monedas}`}
                                                 onCheckedChange={() => toggleEstado(moneda.id, 'estadoMoneda', moneda.estadoMoneda)}
                                             />
                                         )}
@@ -252,7 +284,9 @@ export default function GestionMonedas() {
                                             <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
                                         ) : (
                                             <Switch
+                                                id={`switch-moneda-inventario-${moneda.id}`}
                                                 checked={moneda.activosInventory === true}
+                                                aria-label={`Disponibilidad de ${moneda.monedas} en inventario`}
                                                 onCheckedChange={() => toggleEstado(moneda.id, 'activosInventory', moneda.activosInventory === true)}
                                             />
                                         )}
@@ -263,7 +297,9 @@ export default function GestionMonedas() {
                                             <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
                                         ) : (
                                             <Switch
+                                                id={`switch-moneda-wompi-${moneda.id}`}
                                                 checked={moneda.activoWompi === true}
+                                                aria-label={`Disponibilidad de ${moneda.monedas} en Wompi`}
                                                 onCheckedChange={() => toggleEstado(moneda.id, 'activoWompi', moneda.activoWompi === true)}
                                             />
                                         )}

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { toast } from 'react-toastify';
 import { apiFetch } from '@/app/services/api';
+import productosService, { type BackendTipoProducto } from '@/app/services/productosService';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,10 +14,14 @@ import {
 import {
     Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
+import {
+    Popover, PopoverContent, PopoverDescription, PopoverHeader,
+    PopoverTitle, PopoverTrigger,
+} from '@/components/ui/popover';
 import { Separator } from '@/components/ui/separator';
 import {
     Loader2, Plus, RefreshCw, Tag, AlertCircle, Pencil,
-    CheckCircle2, XCircle, DollarSign, ListFilter,
+    CheckCircle2, XCircle, DollarSign, ListFilter, CircleHelp,
 } from 'lucide-react';
 import {
     MEMBRESIA_PRECIO_CREATE_URL,
@@ -39,6 +44,7 @@ interface CrearForm {
     descripcion: string;
     precioMembresia: string;
     tipoPagos: string;
+    tipoProducto: string;
     monedasId: string;
     metodoPagoCodigo: string;
 }
@@ -48,6 +54,7 @@ interface EditarForm {
     descripcion: string;
     precioMembresia: string;
     tipoPagos: string;
+    tipoProducto: string;
     monedasId: string;
     metodoPagoCodigo: string;
 }
@@ -58,6 +65,7 @@ const INITIAL_CREAR: CrearForm = {
     descripcion: '',
     precioMembresia: '',
     tipoPagos: '',
+    tipoProducto: '',
     monedasId: '',
     metodoPagoCodigo: '',
 };
@@ -67,6 +75,7 @@ const INITIAL_EDITAR: EditarForm = {
     descripcion: '',
     precioMembresia: '',
     tipoPagos: '',
+    tipoProducto: '',
     monedasId: '',
     metodoPagoCodigo: '',
 };
@@ -82,6 +91,29 @@ interface TipoPagoOption {
     descripcion?: string;
     estado?: boolean;
 }
+
+const normalizarTipoPago = (raw: unknown): TipoPagoOption | null => {
+    if (typeof raw === 'string') {
+        const nombre = raw.trim();
+        return nombre ? { codigo: nombre, nombre, estado: true } : null;
+    }
+    if (!raw || typeof raw !== 'object') return null;
+    const row = raw as Record<string, unknown>;
+    const nombre = String(row.nombre ?? row.tipo ?? row.tipoPagos ?? '').trim();
+    if (!nombre) return null;
+    return {
+        codigo: String(row.codigo ?? row.id ?? row.iud ?? nombre).trim(),
+        nombre,
+        descripcion: String(row.descripcion ?? '').trim(),
+        estado: row.estado !== false && row.activo !== false,
+    };
+};
+
+const agregarTiposSinDuplicar = (actuales: TipoPagoOption[], nuevos: TipoPagoOption[]) => {
+    const mapa = new Map(actuales.map(tipo => [tipo.nombre.toLocaleUpperCase(), tipo]));
+    nuevos.forEach(tipo => mapa.set(tipo.nombre.toLocaleUpperCase(), tipo));
+    return Array.from(mapa.values()).filter(tipo => tipo.estado !== false);
+};
 
 const normalizarPrecioDesdeCentavos = (valor: number | string | null | undefined) =>
     Number(valor || 0) / 100;
@@ -103,6 +135,7 @@ export default function ConfiguracionMembresia() {
     const [monedas, setMonedas] = useState<MonedaRow[]>([]);
     const [loadingMonedas, setLoadingMonedas] = useState(false);
     const [tiposPago, setTiposPago] = useState<TipoPagoOption[]>([]);
+    const [tiposProducto, setTiposProducto] = useState<BackendTipoProducto[]>([]);
     const [metodosPago, setMetodosPago] = useState<MetodoPagoOption[]>([]);
     const [loadingOpcionesPago, setLoadingOpcionesPago] = useState(false);
     const [modalTipoPago, setModalTipoPago] = useState(false);
@@ -131,7 +164,9 @@ export default function ConfiguracionMembresia() {
             if (res?.monedas) {
                 const rows = (res.monedas as MonedaApiRow[])
                     .map(normalizeMonedaFromApi)
-                    .filter((m): m is MonedaRow => m !== null && m.estadoMoneda);
+                    .filter((m): m is MonedaRow =>
+                        m !== null && m.estadoMoneda && m.activoWompi === true
+                    );
                 setMonedas(rows);
             }
         } catch { /* no bloqueante */ }
@@ -143,7 +178,12 @@ export default function ConfiguracionMembresia() {
         try {
             const res = await apiFetch(MEMBRESIA_PRECIO_LIST_URL, { method: 'GET' });
             const raw = Array.isArray(res?.data) ? res.data as MembresiaPrecioApiRow[] : [];
-            setMembresias(raw.map(normalizeMembresiaPrecioFromApi).filter((m): m is MembresiaPrecioRow => m !== null));
+            const rows = raw.map(normalizeMembresiaPrecioFromApi).filter((m): m is MembresiaPrecioRow => m !== null);
+            setMembresias(rows);
+            const tiposRegistrados = rows
+                .map(row => normalizarTipoPago(row.tipoPagos))
+                .filter((tipo): tipo is TipoPagoOption => tipo !== null);
+            setTiposPago(actuales => agregarTiposSinDuplicar(actuales, tiposRegistrados));
         } catch { /* no bloqueante */ }
         finally { setLoadingMembresias(false); }
     }, []);
@@ -152,14 +192,28 @@ export default function ConfiguracionMembresia() {
         setLoadingOpcionesPago(true);
         try {
             const res = await apiFetch(MEMBRESIA_OPCIONES_PAGO_URL, { method: 'GET' });
-            const data = res?.data ?? {};
-            setTiposPago(Array.isArray(data.tiposPago) ? data.tiposPago : []);
+            const data = res?.data ?? res ?? {};
+            const tiposRaw = Array.isArray(data)
+                ? data
+                : (data.tiposPago ?? data.tipos ?? data.items ?? []);
+            const tipos = (Array.isArray(tiposRaw) ? tiposRaw : [])
+                .map(normalizarTipoPago)
+                .filter((tipo): tipo is TipoPagoOption => tipo !== null);
+            setTiposPago(actuales => agregarTiposSinDuplicar(actuales, tipos));
             setMetodosPago(Array.isArray(data.metodosPago) ? data.metodosPago : []);
         } catch {
-            setTiposPago([]);
-            setMetodosPago([]);
+            // Los tipos usados por las membresías se conservan como catálogo de respaldo.
         } finally {
             setLoadingOpcionesPago(false);
+        }
+    }, []);
+
+    const cargarTiposProducto = useCallback(async () => {
+        try {
+            const rows = await productosService.listarTiposProducto();
+            setTiposProducto(rows.filter(tipo => tipo.estado !== false));
+        } catch {
+            setTiposProducto([]);
         }
     }, []);
 
@@ -199,7 +253,8 @@ export default function ConfiguracionMembresia() {
         cargarMonedas();
         cargarMembresias();
         cargarOpcionesPago();
-    }, [cargarMonedas, cargarMembresias, cargarOpcionesPago]);
+        cargarTiposProducto();
+    }, [cargarMonedas, cargarMembresias, cargarOpcionesPago, cargarTiposProducto]);
 
     const abrirEditar = (m: MembresiaPrecioRow) => {
         setEditandoId(m.id);
@@ -208,6 +263,7 @@ export default function ConfiguracionMembresia() {
             descripcion: m.descripcion ?? '',
             precioMembresia: String(normalizarPrecioDesdeCentavos(m.precioMembresia)),
             tipoPagos: m.tipoPagos ?? '',
+            tipoProducto: m.tipoProducto ?? '',
             monedasId: m.monedaId ?? '',
             metodoPagoCodigo: m.metodoPagoCodigo,
         });
@@ -248,8 +304,8 @@ export default function ConfiguracionMembresia() {
             mostrarError('Ingresa un precio válido mayor a cero.');
             return;
         }
-        if (!formCrear.tipoPagos || !formCrear.metodoPagoCodigo) {
-            mostrarError('Selecciona el tipo y el método de pago.');
+        if (!formCrear.monedasId) {
+            mostrarError('Selecciona una moneda para crear la membresía.');
             return;
         }
         setLoadingAccion('parametrizar');
@@ -258,8 +314,9 @@ export default function ConfiguracionMembresia() {
                 nombreMembresia: formCrear.nombreMembresia.trim(),
                 descripcion: formCrear.descripcion.trim(),
                 precioMembresia: Number(formCrear.precioMembresia),
-                tipoPagos: formCrear.tipoPagos || undefined,
-                metodoPagoCodigo: formCrear.metodoPagoCodigo,
+                tipoPagos: formCrear.tipoPagos || null,
+                tipoProducto: formCrear.tipoProducto || null,
+                metodoPagoCodigo: formCrear.metodoPagoCodigo || null,
             };
             if (formCrear.monedasId && formCrear.monedasId !== '__none__') {
                 body.monedasId = resolveMonedaIdForApiBody(formCrear.monedasId);
@@ -288,8 +345,8 @@ export default function ConfiguracionMembresia() {
             mostrarError('Ingresa un precio válido mayor a cero.');
             return;
         }
-        if (!formEditar.tipoPagos || !formEditar.metodoPagoCodigo) {
-            mostrarError('Selecciona el tipo y el método de pago.');
+        if (!formEditar.monedasId) {
+            mostrarError('Selecciona una moneda para guardar la membresía.');
             return;
         }
         setLoadingEditar(true);
@@ -298,8 +355,9 @@ export default function ConfiguracionMembresia() {
                 nombreMembresia: formEditar.nombreMembresia.trim(),
                 descripcion: formEditar.descripcion.trim(),
                 precioMembresia: Number(formEditar.precioMembresia),
-                tipoPagos: formEditar.tipoPagos || undefined,
-                metodoPagoCodigo: formEditar.metodoPagoCodigo,
+                tipoPagos: formEditar.tipoPagos || null,
+                tipoProducto: formEditar.tipoProducto || null,
+                metodoPagoCodigo: formEditar.metodoPagoCodigo || null,
             };
             if (formEditar.monedasId && formEditar.monedasId !== '__none__') {
                 body.monedasId = resolveMonedaIdForApiBody(formEditar.monedasId);
@@ -352,11 +410,22 @@ export default function ConfiguracionMembresia() {
 
                     {/* Sección 1: Comprar membresía */}
                     <div className="space-y-3">
-                        <div>
-                            <p className="text-xs font-semibold text-foreground">Comprar membresía</p>
-                            <p className="text-xs text-muted-foreground mt-0.5">
-                                Genera la membresía para un usuario usando el token de la sesión activa.
-                            </p>
+                        <div className="flex items-start justify-between gap-3">
+                            <div>
+                                <p className="text-xs font-semibold text-foreground">Comprar membresía</p>
+                                <p className="text-xs text-muted-foreground mt-0.5">
+                                    Genera la membresía para un usuario usando el token de la sesión activa.
+                                </p>
+                            </div>
+                            <WidgetHelpButton
+                                title="¿Cómo comprar una membresía?"
+                                description="Crea una membresía para el usuario invitado utilizando tu sesión activa."
+                                steps={[
+                                    'Escribe el correo electrónico del usuario que recibirá la membresía.',
+                                    'Verifica que el correo sea correcto y que tu sesión continúe activa.',
+                                    'Pulsa Comprar membresía para completar la asignación.',
+                                ]}
+                            />
                         </div>
                         <FieldWrapper label="Email del invitado" required>
                             <Input
@@ -385,11 +454,23 @@ export default function ConfiguracionMembresia() {
 
                     {/* Sección 2: Parametrizar */}
                     <div className="space-y-3">
-                        <div>
-                            <p className="text-xs font-semibold text-foreground">Parametrizar membresía</p>
-                            <p className="text-xs text-muted-foreground mt-0.5">
-                                Define el precio y condiciones de una nueva parametrización en el sistema.
-                            </p>
+                        <div className="flex items-start justify-between gap-3">
+                            <div>
+                                <p className="text-xs font-semibold text-foreground">Parametrizar membresía</p>
+                                <p className="text-xs text-muted-foreground mt-0.5">
+                                    Define el precio y condiciones de una nueva parametrización en el sistema.
+                                </p>
+                            </div>
+                            <WidgetHelpButton
+                                title="¿Cómo parametrizar una membresía?"
+                                description="Define la oferta que estará disponible en el sistema y sus condiciones de cobro."
+                                steps={[
+                                    'Ingresa un nombre, un precio mayor a cero y una descripción clara.',
+                                    'Selecciona el tipo de pago, producto, método de pago y la moneda correspondiente.',
+                                    'Si el tipo de pago no existe, créalo con Parametrizar tipo de pago.',
+                                    'Pulsa Crear membresía para guardar la nueva parametrización.',
+                                ]}
+                            />
                         </div>
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -421,16 +502,30 @@ export default function ConfiguracionMembresia() {
                             />
                         </FieldWrapper>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                             <FieldWrapper label="Tipo de pago">
-                                <Button type="button" variant="ghost" size="sm" className="mb-1 h-7 px-2 text-xs" onClick={() => setModalTipoPago(true)}>
-                                    <Plus className="mr-1 h-3 w-3" /> Parametrizar tipos
+                                <Button
+                                    id="btn-parametrizar-tipo-pago-membresia"
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="mb-2 h-8 w-full justify-start px-3 text-xs"
+                                    onClick={() => setModalTipoPago(true)}
+                                >
+                                    <Plus className="mr-1 h-3.5 w-3.5" /> Parametrizar tipo de pago
                                 </Button>
                                 <SelectTipoPago
                                     value={formCrear.tipoPagos}
                                     onChange={v => updateCrear('tipoPagos', v)}
                                     options={tiposPago}
                                     loading={loadingOpcionesPago}
+                                />
+                            </FieldWrapper>
+                            <FieldWrapper label="Tipo de producto">
+                                <SelectTipoProducto
+                                    value={formCrear.tipoProducto}
+                                    onChange={v => updateCrear('tipoProducto', v)}
+                                    options={tiposProducto}
                                 />
                             </FieldWrapper>
                             <FieldWrapper label="Método de pago">
@@ -441,17 +536,16 @@ export default function ConfiguracionMembresia() {
                                     loading={loadingOpcionesPago}
                                 />
                             </FieldWrapper>
-                            <FieldWrapper label="Moneda" hint="Opcional">
+                            <FieldWrapper label="Moneda" required>
                                 <Select
-                                    value={formCrear.monedasId || '__none__'}
-                                    onValueChange={v => updateCrear('monedasId', v === '__none__' ? '' : v)}
+                                    value={formCrear.monedasId}
+                                    onValueChange={v => updateCrear('monedasId', v)}
                                     disabled={loadingMonedas}
                                 >
                                     <SelectTrigger className="h-9 text-sm">
-                                        <SelectValue placeholder={loadingMonedas ? 'Cargando...' : 'Sin moneda específica'} />
+                                        <SelectValue placeholder={loadingMonedas ? 'Cargando...' : 'Seleccionar moneda'} />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="__none__">Sin moneda específica</SelectItem>
                                         {monedas.map(m => (
                                             <SelectItem key={m.id} value={m.id}>{m.monedas}</SelectItem>
                                         ))}
@@ -470,7 +564,7 @@ export default function ConfiguracionMembresia() {
                                 ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
                                 : <Plus className="w-3.5 h-3.5" />
                             }
-                            Crear parametrización
+                            Crear membresía
                         </Button>
                     </div>
 
@@ -497,17 +591,30 @@ export default function ConfiguracionMembresia() {
                                     Haz click en el ícono de edición para modificar una membresía.
                                 </p>
                             </div>
-                            <button
-                                onClick={cargarMembresias}
-                                disabled={loadingMembresias}
-                                className="text-muted-foreground hover:text-foreground transition-colors shrink-0 mt-0.5"
-                                title="Recargar tabla"
-                            >
-                                {loadingMembresias
-                                    ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                    : <RefreshCw className="w-3.5 h-3.5" />
-                                }
-                            </button>
+                            <div className="flex shrink-0 items-center gap-2">
+                                <WidgetHelpButton
+                                    title="¿Cómo gestionar las parametrizaciones?"
+                                    description="Consulta las membresías configuradas y mantén actualizados sus datos comerciales."
+                                    steps={[
+                                        'Revisa nombre, precio, periodicidad, moneda y estado de sincronización con Wompi.',
+                                        'Usa Editar para modificar los datos de una membresía existente.',
+                                        'Usa Recargar para consultar nuevamente la información más reciente.',
+                                    ]}
+                                />
+                                <button
+                                    type="button"
+                                    onClick={cargarMembresias}
+                                    disabled={loadingMembresias}
+                                    className="rounded-md p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                                    title="Recargar tabla"
+                                    aria-label="Recargar parametrizaciones"
+                                >
+                                    {loadingMembresias
+                                        ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                        : <RefreshCw className="w-3.5 h-3.5" />
+                                    }
+                                </button>
+                            </div>
                         </div>
 
                         {/* Tabla */}
@@ -666,13 +773,20 @@ export default function ConfiguracionMembresia() {
                             />
                         </FieldWrapper>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                             <FieldWrapper label="Tipo de pago">
                                 <SelectTipoPago
                                     value={formEditar.tipoPagos}
                                     onChange={v => updateEditar('tipoPagos', v)}
                                     options={tiposPago}
                                     loading={loadingOpcionesPago}
+                                />
+                            </FieldWrapper>
+                            <FieldWrapper label="Tipo de producto">
+                                <SelectTipoProducto
+                                    value={formEditar.tipoProducto}
+                                    onChange={v => updateEditar('tipoProducto', v)}
+                                    options={tiposProducto}
                                 />
                             </FieldWrapper>
                             <FieldWrapper label="Método de pago">
@@ -683,17 +797,16 @@ export default function ConfiguracionMembresia() {
                                     loading={loadingOpcionesPago}
                                 />
                             </FieldWrapper>
-                            <FieldWrapper label="Moneda" hint="Opcional">
+                            <FieldWrapper label="Moneda" required>
                                 <Select
-                                    value={formEditar.monedasId || '__none__'}
-                                    onValueChange={v => updateEditar('monedasId', v === '__none__' ? '' : v)}
+                                    value={formEditar.monedasId}
+                                    onValueChange={v => updateEditar('monedasId', v)}
                                     disabled={loadingMonedas}
                                 >
                                     <SelectTrigger className="h-9 text-sm">
-                                        <SelectValue placeholder="Sin moneda específica" />
+                                        <SelectValue placeholder="Seleccionar moneda" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="__none__">Sin moneda específica</SelectItem>
                                         {monedas.map(m => (
                                             <SelectItem key={m.id} value={m.id}>{m.monedas}</SelectItem>
                                         ))}
@@ -762,8 +875,8 @@ export default function ConfiguracionMembresia() {
                         </div>
                     </div>
                     <DialogFooter>
-                        <Button variant="outline" onClick={() => setModalTipoPago(false)}>Cerrar</Button>
-                        <Button onClick={() => void guardarTipoPago()} disabled={guardandoTipoPago}>
+                        <Button id="btn-cerrar-parametrizacion-tipo-pago" variant="outline" onClick={() => setModalTipoPago(false)}>Cerrar</Button>
+                        <Button id="btn-guardar-tipo-pago-membresia" onClick={() => void guardarTipoPago()} disabled={guardandoTipoPago}>
                             {guardandoTipoPago && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                             Guardar tipo
                         </Button>
@@ -795,6 +908,46 @@ function FieldWrapper({
     );
 }
 
+function WidgetHelpButton({
+    title,
+    description,
+    steps,
+}: {
+    title: string;
+    description: string;
+    steps: string[];
+}) {
+    return (
+        <Popover>
+            <PopoverTrigger asChild>
+                <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 shrink-0 gap-1.5 px-2.5 text-xs"
+                    aria-label={`Ayuda: ${title}`}
+                >
+                    <CircleHelp className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">Ayuda</span>
+                </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-80 max-w-[calc(100vw-2rem)]">
+                <PopoverHeader>
+                    <PopoverTitle className="text-sm">{title}</PopoverTitle>
+                    <PopoverDescription asChild>
+                        <div className="space-y-3 pt-1 text-xs leading-relaxed text-muted-foreground">
+                            <p>{description}</p>
+                            <ol className="list-decimal space-y-1.5 pl-4">
+                                {steps.map(step => <li key={step}>{step}</li>)}
+                            </ol>
+                        </div>
+                    </PopoverDescription>
+                </PopoverHeader>
+            </PopoverContent>
+        </Popover>
+    );
+}
+
 function SelectTipoPago({
     value,
     onChange,
@@ -807,13 +960,44 @@ function SelectTipoPago({
     loading: boolean;
 }) {
     return (
-        <Select value={value} onValueChange={onChange} disabled={loading || options.length === 0}>
+        <Select
+            value={value || '__none__'}
+            onValueChange={v => onChange(v === '__none__' ? '' : v)}
+            disabled={loading}
+        >
             <SelectTrigger className="h-9 text-sm">
                 <SelectValue placeholder={loading ? 'Cargando...' : 'Seleccionar tipo'} />
             </SelectTrigger>
             <SelectContent>
+                <SelectItem value="__none__">Sin tipo de pago</SelectItem>
                 {options.map(tipo => (
                     <SelectItem key={tipo.codigo} value={tipo.nombre}>{tipo.nombre}</SelectItem>
+                ))}
+            </SelectContent>
+        </Select>
+    );
+}
+
+function SelectTipoProducto({
+    value,
+    onChange,
+    options,
+}: {
+    value: string;
+    onChange: (v: string) => void;
+    options: BackendTipoProducto[];
+}) {
+    return (
+        <Select value={value || '__none__'} onValueChange={v => onChange(v === '__none__' ? '' : v)}>
+            <SelectTrigger id="select-tipo-producto-membresia" className="h-9 text-sm">
+                <SelectValue placeholder="Seleccionar tipo" />
+            </SelectTrigger>
+            <SelectContent>
+                <SelectItem value="__none__">Sin tipo de producto</SelectItem>
+                {options.map(tipo => (
+                    <SelectItem key={tipo.codigo || tipo.iud || tipo._id} value={tipo.nombre}>
+                        {tipo.nombre}
+                    </SelectItem>
                 ))}
             </SelectContent>
         </Select>
@@ -832,11 +1016,16 @@ function SelectMetodoPago({
     loading: boolean;
 }) {
     return (
-        <Select value={value} onValueChange={onChange} disabled={loading || options.length === 0}>
+        <Select
+            value={value || '__none__'}
+            onValueChange={v => onChange(v === '__none__' ? '' : v)}
+            disabled={loading}
+        >
             <SelectTrigger className="h-9 text-sm">
                 <SelectValue placeholder={loading ? 'Cargando...' : 'Seleccionar método'} />
             </SelectTrigger>
             <SelectContent>
+                <SelectItem value="__none__">Sin método de pago</SelectItem>
                 {options.map(metodo => (
                     <SelectItem key={metodo.codigo} value={metodo.codigo}>
                         {metodo.nombre}

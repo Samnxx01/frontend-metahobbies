@@ -17,7 +17,6 @@ import productosService, {
   type BackendCategoria,
   getCategoriaId,
   getCategoriaPadreId,
-  getCategoryImage,
   resolverCategoriaDesdeQuery,
 } from '../../../services/productosService';
 import CategoryCard from '../../components/common/CategoryCard';
@@ -71,7 +70,7 @@ export default function Productos(): React.ReactElement {
   );
 
   const categoriasPadre = useMemo(
-    () => categorias.filter((categoria) => !getCategoriaPadreId(categoria)),
+    () => categorias.filter((categoria) => Number(categoria.nivel) === 1),
     [categorias]
   );
 
@@ -93,7 +92,7 @@ export default function Productos(): React.ReactElement {
     setLoading(true);
     try {
       const categoria = categorias.find((item) => getCategoriaId(item) === categoriaId);
-      const esPadre = categoriaId && categoria && !getCategoriaPadreId(categoria);
+      const esPadre = Boolean(categoriaId && categoria && Number(categoria.nivel) === 1);
       const ids = esPadre
         ? [
             categoriaId,
@@ -272,7 +271,7 @@ export default function Productos(): React.ReactElement {
                   category={{
                     id,
                     name: subcategoria.nombre,
-                    image: getCategoryImage(subcategoria.nombre),
+                    image: subcategoria.media?.url || '',
                     media: subcategoria.media || null,
                   }}
                 />

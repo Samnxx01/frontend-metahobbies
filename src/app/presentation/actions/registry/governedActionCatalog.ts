@@ -38,6 +38,10 @@ export const PRODUCT_ACTION_IDS = {
   SYNC: 'products.catalog.sync',
   VIEW_CATEGORIES: 'products.categories.view',
   CREATE_CATEGORY: 'products.categories.create',
+  MANAGE_PRODUCT_TYPES: 'products.types.manage',
+  CREATE_PRODUCT_TYPE: 'products.types.create',
+  UPDATE_PRODUCT_TYPE: 'products.types.update',
+  DELETE_PRODUCT_TYPE: 'products.types.delete',
   CREATE_PRODUCT: 'products.create',
 } as const satisfies Record<string, ActionId>;
 
@@ -187,6 +191,10 @@ export const GOVERNED_ACTION_CATALOG = [
   productAction(PRODUCT_ACTION_IDS.SYNC, 'Sincronizar productos', 'catalog', 'Catálogo', 'EXECUTE', 'Sincroniza productos desde la colección.'),
   productAction(PRODUCT_ACTION_IDS.VIEW_CATEGORIES, 'Ver categorías', 'categories', 'Categorías', 'VIEW', 'Consulta el catálogo de categorías.'),
   productAction(PRODUCT_ACTION_IDS.CREATE_CATEGORY, 'Crear categoría', 'categories', 'Categorías', 'CREATE', 'Crea una categoría de productos.'),
+  productAction(PRODUCT_ACTION_IDS.MANAGE_PRODUCT_TYPES, 'Parametrizar tipos', 'types', 'Tipos de producto', 'UPDATE', 'Administra el catálogo de tipos de producto.'),
+  productAction(PRODUCT_ACTION_IDS.CREATE_PRODUCT_TYPE, 'Crear tipo de producto', 'types', 'Tipos de producto', 'CREATE', 'Crea un tipo de producto.'),
+  productAction(PRODUCT_ACTION_IDS.UPDATE_PRODUCT_TYPE, 'Editar tipo de producto', 'types', 'Tipos de producto', 'UPDATE', 'Edita un tipo de producto.'),
+  productAction(PRODUCT_ACTION_IDS.DELETE_PRODUCT_TYPE, 'Desactivar tipo de producto', 'types', 'Tipos de producto', 'DELETE', 'Desactiva un tipo de producto.'),
   productAction(PRODUCT_ACTION_IDS.CREATE_PRODUCT, 'Agregar producto', 'products', 'Productos', 'CREATE', 'Abre el formulario de creación de productos.'),
   {
     id: TENANT_GOVERNANCE_ACTION_IDS.OPEN_BUTTON_CATALOG,

@@ -7,8 +7,6 @@ import type { Product as CommonProduct } from '../../../../types/common';
 import productosService, {
   type BackendCategoria,
   getCategoriaId,
-  getCategoriaPadreId,
-  getCategoryImage,
 } from '../../../services/productosService';
 import { esErrorProductoRequiereColor } from '@/app/utils/productColorUtils';
 
@@ -20,14 +18,6 @@ import AboutUs from '../../components/about/AboutUs';
 
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, ArrowRight } from 'lucide-react';
-
-const FALLBACK_CATEGORIES = [
-  { id: '1', name: 'Maquillaje', image: '/assets/images/products/product1.png' },
-  { id: '2', name: 'Labiales', image: '/assets/images/products/product2.png' },
-  { id: '3', name: 'Brochas', image: '/assets/images/products/product3.png' },
-  { id: '4', name: 'Base & Corrector', image: '/assets/images/products/product4.png' },
-  { id: '5', name: 'Cuidado Facial', image: '/assets/images/products/product5.png' },
-];
 
 // ── Skeleton de tarjeta ───────────────────────────────────────────────────
 function ProductCardSkeleton(): React.ReactElement {
@@ -51,7 +41,7 @@ export default function Home(): React.ReactElement {
   const [productos, setProductos] = useState<ComponentProduct[]>([]);
   const [loadingProductos, setLoadingProductos] = useState(true);
   const [page, setPage] = useState(0);
-  const categoriasPadre = categorias.filter((categoria) => !getCategoriaPadreId(categoria));
+  const categoriasPadre = categorias.filter((categoria) => Number(categoria.nivel) === 1);
 
   const maxPage = Math.max(0, Math.ceil(productos.length / PRODUCTS_PER_PAGE) - 1);
   const visibleProductos = productos.slice(page * PRODUCTS_PER_PAGE, (page + 1) * PRODUCTS_PER_PAGE);
@@ -88,21 +78,7 @@ export default function Home(): React.ReactElement {
       cargarProductos();
       return;
     }
-    const idsRelacionados = [
-      id,
-      ...categorias
-        .filter((categoria) => getCategoriaPadreId(categoria) === id)
-        .map((categoria) => getCategoriaId(categoria)),
-    ];
-    setLoadingProductos(true);
-    setPage(0);
-    productosService.listarParaCatalogoCategorias(idsRelacionados)
-      .then(setProductos)
-      .catch(() => {
-        toast.error('Error cargando productos');
-        setProductos([]);
-      })
-      .finally(() => setLoadingProductos(false));
+    cargarProductos(id);
   };
 
   const handleAddToCart = async (product: ComponentProduct): Promise<void> => {
@@ -254,7 +230,7 @@ export default function Home(): React.ReactElement {
                         category={{
                           id: categoryId,
                           name: cat.nombre,
-                          image: getCategoryImage(cat.nombre),
+                          image: cat.media?.url || '',
                           media: cat.media || null,
                         }}
                       />
@@ -271,7 +247,7 @@ export default function Home(): React.ReactElement {
                           category={{
                             id: categoryId,
                             name: cat.nombre,
-                            image: getCategoryImage(cat.nombre),
+                            image: cat.media?.url || '',
                             media: cat.media || null,
                           }}
                         />
@@ -281,18 +257,9 @@ export default function Home(): React.ReactElement {
                 )}
               </>
             ) : (
-              <>
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
-                  {FALLBACK_CATEGORIES.slice(0, 3).map(category => (
-                    <CategoryCard key={category.id} category={category} />
-                  ))}
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mt-6">
-                  {FALLBACK_CATEGORIES.slice(3, 5).map(category => (
-                    <CategoryCard key={category.id} category={category} />
-                  ))}
-                </div>
-              </>
+              <p className="py-10 text-center text-muted-foreground">
+                No hay categorías activas disponibles.
+              </p>
             )}
           </div>
 

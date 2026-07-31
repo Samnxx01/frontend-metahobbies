@@ -29,6 +29,7 @@ import {
     type MonedaApiRow,
     type MonedaRow,
 } from './parametrizacionMembresiaApi';
+import MembresiaHelpButton from './MembresiaHelpButton';
 
 type MensajeTipo = 'success' | 'error';
 interface Mensaje { tipo: MensajeTipo; texto: string }
@@ -144,20 +145,32 @@ export default function ZonaCritica() {
     };
 
     return (
-        <Card className="border border-destructive/25 shadow-sm">
-            <CardHeader className="pb-4 px-6 pt-5 border-b border-destructive/20">
-                <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-destructive/10 flex items-center justify-center shrink-0">
-                        <ShieldAlert className="w-4 h-4 text-destructive" />
+        <Card id="widget-zona-critica-membresias" className="border border-border/50 bg-card text-card-foreground shadow-sm">
+            <CardHeader className="pb-4 px-6 pt-5 border-b border-border/40">
+                <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-destructive/10 flex items-center justify-center shrink-0">
+                            <ShieldAlert className="w-4 h-4 text-destructive" />
+                        </div>
+                        <div>
+                            <CardTitle className="text-sm font-semibold text-foreground">
+                                Zona Crítica
+                            </CardTitle>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                                Acciones irreversibles sobre precios y monedas
+                            </p>
+                        </div>
                     </div>
-                    <div>
-                        <CardTitle className="text-sm font-semibold text-destructive">
-                            Zona Crítica
-                        </CardTitle>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                            Acciones irreversibles sobre precios y monedas
-                        </p>
-                    </div>
+                    <MembresiaHelpButton
+                        id="btn-ayuda-zona-critica-membresias"
+                        title="Zona Crítica"
+                        description="Este panel concentra operaciones que desactivan o eliminan información sensible."
+                        items={[
+                            'Desactivar conserva el registro y permite una recuperación posterior.',
+                            'Eliminar permanentemente borra el registro y no puede deshacerse.',
+                            'Verifica cuidadosamente el elemento seleccionado antes de confirmar.',
+                        ]}
+                    />
                 </div>
             </CardHeader>
 
@@ -181,10 +194,18 @@ export default function ZonaCritica() {
 
                 {/* Desactivar precio */}
                 <AccionCritica
+                    id="widget-desactivar-precio-membresia"
+                    helpButtonId="btn-ayuda-desactivar-precio-membresia"
+                    reloadButtonId="btn-recargar-precios-desactivar-membresia"
                     icono={<PowerOff className="w-3.5 h-3.5" />}
                     titulo="Desactivar precio"
                     descripcion="Borrado lógico — el registro permanece en BD marcado como inactivo. Acción reversible."
                     variante="amber"
+                    ayuda={{
+                        title: 'Desactivar un precio',
+                        description: 'Realiza un borrado lógico: el precio deja de estar activo, pero continúa almacenado.',
+                        items: ['Selecciona el precio.', 'Pulsa Desactivar.', 'Revisa el elemento y confirma en el diálogo de seguridad.'],
+                    }}
                     onRecargar={cargarPrecios}
                     loadingRecargar={loadingPrecios}
                 >
@@ -194,7 +215,7 @@ export default function ZonaCritica() {
                             onValueChange={setIdDesactivar}
                             disabled={loadingPrecios}
                         >
-                            <SelectTrigger className="h-9 text-xs bg-background">
+                            <SelectTrigger id="select-precio-desactivar-membresia" className="h-9 text-xs bg-background">
                                 <SelectValue placeholder={
                                     loadingPrecios ? 'Cargando precios...' : 'Selecciona un precio...'
                                 } />
@@ -221,9 +242,10 @@ export default function ZonaCritica() {
                         <AlertDialog>
                             <AlertDialogTrigger asChild>
                                 <Button
+                                    id="btn-desactivar-precio-membresia"
                                     size="sm" variant="outline"
                                     disabled={!idDesactivar || loadingDesactivar}
-                                    className="gap-2 border-warning/30 dark:border-warning text-warning dark:text-warning hover:bg-warning/10 dark:hover:bg-warning/30"
+                                    className="gap-2"
                                 >
                                     {loadingDesactivar
                                         ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -244,10 +266,10 @@ export default function ZonaCritica() {
                                     </AlertDialogDescription>
                                 </AlertDialogHeader>
                                 <AlertDialogFooter>
-                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                    <AlertDialogCancel id="btn-cancelar-desactivar-precio-membresia">Cancelar</AlertDialogCancel>
                                     <AlertDialogAction
+                                        id="btn-confirmar-desactivar-precio-membresia"
                                         onClick={handleDesactivar}
-                                        className="bg-warning hover:bg-warning text-white"
                                     >
                                         Sí, desactivar
                                     </AlertDialogAction>
@@ -261,10 +283,18 @@ export default function ZonaCritica() {
 
                 {/* Eliminar precio */}
                 <AccionCritica
+                    id="widget-eliminar-precio-membresia"
+                    helpButtonId="btn-ayuda-eliminar-precio-membresia"
+                    reloadButtonId="btn-recargar-precios-eliminar-membresia"
                     icono={<Trash2 className="w-3.5 h-3.5" />}
                     titulo="Eliminar precio permanentemente"
                     descripcion="Borrado físico — el registro se elimina de forma definitiva e irreversible de la base de datos."
                     variante="red"
+                    ayuda={{
+                        title: 'Eliminar un precio permanentemente',
+                        description: 'Borra físicamente la parametrización de precio de la base de datos.',
+                        items: ['Esta operación es irreversible.', 'Selecciona el precio correcto y confirma únicamente si ya no debe recuperarse.'],
+                    }}
                     onRecargar={cargarPrecios}
                     loadingRecargar={loadingPrecios}
                 >
@@ -274,7 +304,7 @@ export default function ZonaCritica() {
                             onValueChange={setIdEliminar}
                             disabled={loadingPrecios}
                         >
-                            <SelectTrigger className="h-9 text-xs bg-background">
+                            <SelectTrigger id="select-precio-eliminar-membresia" className="h-9 text-xs bg-background">
                                 <SelectValue placeholder={
                                     loadingPrecios ? 'Cargando precios...' : 'Selecciona un precio...'
                                 } />
@@ -301,7 +331,8 @@ export default function ZonaCritica() {
                         <AlertDialog>
                             <AlertDialogTrigger asChild>
                                 <Button
-                                    size="sm" variant="destructive"
+                                    id="btn-eliminar-precio-membresia"
+                                    size="sm" variant="default"
                                     disabled={!idEliminar || loadingEliminar}
                                     className="gap-2"
                                 >
@@ -327,10 +358,10 @@ export default function ZonaCritica() {
                                     </AlertDialogDescription>
                                 </AlertDialogHeader>
                                 <AlertDialogFooter>
-                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                    <AlertDialogCancel id="btn-cancelar-eliminar-precio-membresia">Cancelar</AlertDialogCancel>
                                     <AlertDialogAction
+                                        id="btn-confirmar-eliminar-precio-membresia"
                                         onClick={handleEliminar}
-                                        className="bg-destructive hover:bg-destructive/90"
                                     >
                                         Sí, eliminar permanentemente
                                     </AlertDialogAction>
@@ -344,10 +375,18 @@ export default function ZonaCritica() {
 
                 {/* Eliminar moneda */}
                 <AccionCritica
+                    id="widget-eliminar-moneda-sistema"
+                    helpButtonId="btn-ayuda-eliminar-moneda-sistema"
+                    reloadButtonId="btn-recargar-monedas-eliminar-sistema"
                     icono={<Coins className="w-3.5 h-3.5" />}
                     titulo="Eliminar moneda del sistema"
                     descripcion="Solo disponible para administradores. Elimina permanentemente una moneda del sistema."
                     variante="red"
+                    ayuda={{
+                        title: 'Eliminar una moneda',
+                        description: 'Elimina permanentemente una moneda del sistema; requiere permisos de administrador.',
+                        items: ['Comprueba que la moneda no sea necesaria en membresías, inventario o Wompi.', 'Selecciona la moneda y confirma la eliminación definitiva.'],
+                    }}
                     onRecargar={cargarMonedas}
                     loadingRecargar={loadingMonedas}
                 >
@@ -357,7 +396,7 @@ export default function ZonaCritica() {
                             onValueChange={setIdMonedaEliminar}
                             disabled={loadingMonedas}
                         >
-                            <SelectTrigger className="h-9 text-xs bg-background">
+                            <SelectTrigger id="select-moneda-eliminar-sistema" className="h-9 text-xs bg-background">
                                 <SelectValue placeholder={
                                     loadingMonedas ? 'Cargando monedas...' : 'Selecciona una moneda...'
                                 } />
@@ -383,7 +422,8 @@ export default function ZonaCritica() {
                         <AlertDialog>
                             <AlertDialogTrigger asChild>
                                 <Button
-                                    size="sm" variant="destructive"
+                                    id="btn-eliminar-moneda-sistema"
+                                    size="sm" variant="default"
                                     disabled={!idMonedaEliminar || loadingEliminarMoneda}
                                     className="gap-2"
                                 >
@@ -409,10 +449,10 @@ export default function ZonaCritica() {
                                     </AlertDialogDescription>
                                 </AlertDialogHeader>
                                 <AlertDialogFooter>
-                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                    <AlertDialogCancel id="btn-cancelar-eliminar-moneda-sistema">Cancelar</AlertDialogCancel>
                                     <AlertDialogAction
+                                        id="btn-confirmar-eliminar-moneda-sistema"
                                         onClick={handleEliminarMoneda}
-                                        className="bg-destructive hover:bg-destructive/90"
                                     >
                                         Sí, eliminar moneda
                                     </AlertDialogAction>
@@ -427,33 +467,41 @@ export default function ZonaCritica() {
 }
 
 function AccionCritica({
-    icono, titulo, descripcion, variante, onRecargar, loadingRecargar, children,
+    id, helpButtonId, reloadButtonId, icono, titulo, descripcion, variante, ayuda, onRecargar, loadingRecargar, children,
 }: {
+    id: string;
+    helpButtonId: string;
+    reloadButtonId: string;
     icono: React.ReactNode;
     titulo: string;
     descripcion: string;
     variante: 'amber' | 'red';
+    ayuda?: {
+        title: string;
+        description: string;
+        items?: string[];
+    };
     onRecargar?: () => void;
     loadingRecargar?: boolean;
     children: React.ReactNode;
 }) {
     const colors = {
         amber: {
-            border: 'border-warning/70 dark:border-warning/40',
-            bg: 'bg-warning/50 dark:bg-warning/10',
+            border: 'border-warning/40',
+            bg: 'bg-card',
             icon: 'text-warning dark:text-warning',
-            title: 'text-warning dark:text-warning',
+            title: 'text-foreground',
         },
         red: {
-            border: 'border-destructive/20',
-            bg: 'bg-destructive/50 dark:bg-destructive/10',
+            border: 'border-destructive/30',
+            bg: 'bg-card',
             icon: 'text-destructive',
-            title: 'text-destructive',
+            title: 'text-foreground',
         },
     }[variante];
 
     return (
-        <div className={`rounded-xl border p-4 space-y-3 ${colors.border} ${colors.bg}`}>
+        <div id={id} className={`rounded-xl border p-4 space-y-3 ${colors.border} ${colors.bg}`}>
             <div className="flex items-start justify-between gap-2">
                 <div className="flex items-start gap-2.5">
                     <span className={`mt-0.5 shrink-0 ${colors.icon}`}>{icono}</span>
@@ -462,19 +510,35 @@ function AccionCritica({
                         <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{descripcion}</p>
                     </div>
                 </div>
-                {onRecargar && (
-                    <button
-                        onClick={onRecargar}
-                        disabled={loadingRecargar}
-                        className="text-muted-foreground hover:text-foreground transition-colors shrink-0 mt-0.5"
-                        title="Recargar lista"
-                    >
-                        {loadingRecargar
-                            ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            : <RefreshCcw className="w-3.5 h-3.5" />
-                        }
-                    </button>
-                )}
+                <div className="flex shrink-0 items-center gap-1.5">
+                    {ayuda && (
+                        <MembresiaHelpButton
+                            id={helpButtonId}
+                            iconOnly
+                            title={ayuda.title}
+                            description={ayuda.description}
+                            items={ayuda.items}
+                        />
+                    )}
+                    {onRecargar && (
+                        <Button
+                            id={reloadButtonId}
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            onClick={onRecargar}
+                            disabled={loadingRecargar}
+                            className="h-8 w-8"
+                            title="Recargar lista"
+                            aria-label={`Recargar lista de ${titulo.toLocaleLowerCase()}`}
+                        >
+                            {loadingRecargar
+                                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                : <RefreshCcw className="w-3.5 h-3.5" />
+                            }
+                        </Button>
+                    )}
+                </div>
             </div>
             {children}
         </div>

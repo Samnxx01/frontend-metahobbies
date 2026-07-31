@@ -18,6 +18,15 @@ import { reglasContablesUi } from '../reglas-contables/reglasContablesUi';
 
 const NOMBRE_MANUAL_VALUE = '__MANUAL__';
 
+const nombreBancoVisible = (nombreCorto?: string | null, nombre = ''): string => {
+  const valor = String(nombreCorto || nombre).trim();
+  return valor
+    .replace(/\s*\(en adelante.*$/i, '')
+    .replace(/\s+COMPAÑ[IÍ]A\s+DE\s+FINANCIAMIENTO.*$/i, '')
+    .replace(/\s*,\s*(?:pudiendo|podrá).*$/i, '')
+    .trim() || valor;
+};
+
 type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -52,7 +61,7 @@ export default function MetodoPagoFormSubmodal({
     .filter((banco) => banco.estado)
     .map((banco) => ({
       value: banco.nombre,
-      label: banco.nombreCorto || banco.nombre,
+      label: nombreBancoVisible(banco.nombreCorto, banco.nombre),
       searchText: `${banco.nombreCorto || ''} ${banco.nombre}`,
     }))
     .concat([{ value: NOMBRE_MANUAL_VALUE, label: 'Otro / escribir manualmente…', searchText: 'otro manual' }]);

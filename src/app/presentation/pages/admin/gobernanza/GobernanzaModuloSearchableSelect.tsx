@@ -68,9 +68,9 @@ export function GobernanzaModuloSearchableSelect({
           role="combobox"
           aria-expanded={open}
           disabled={disabled}
-          className={cn('h-10 w-full justify-between font-normal', triggerClassName)}
+          className={cn('h-10 w-full min-w-0 justify-between overflow-hidden font-normal', triggerClassName)}
         >
-          <span className="truncate text-left">
+          <span className="min-w-0 flex-1 truncate text-left">
             {selected ? selected.label : placeholder}
           </span>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />

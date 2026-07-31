@@ -41,6 +41,7 @@ const COLOR_META: Array<{
     cssVar: string;
     afecta: string;
     elementos: string[];
+    noAfecta: string;
 }> = [
     {
         key: 'COLOR_PRIMARY',
@@ -54,6 +55,7 @@ const COLOR_META: Array<{
             'Color de encabezado del navbar',
             'Texto sobre botones (contraste)',
         ],
+        noAfecta: 'No cambia el fondo general, las tarjetas ni el color base de los botones.',
     },
     {
         key: 'COLOR_ACCENT',
@@ -66,6 +68,7 @@ const COLOR_META: Array<{
             'Fondo de chips y selects al pasar el cursor',
             'Foreground del color principal (contraste)',
         ],
+        noAfecta: 'No reemplaza el texto general ni el color de los botones principales.',
     },
     {
         key: 'COLOR_LIGHT',
@@ -78,6 +81,7 @@ const COLOR_META: Array<{
             'Color de placeholders y texto secundario',
             'Fondo de filas de tabla al hacer hover',
         ],
+        noAfecta: 'No cambia el fondo principal, las tarjetas ni los textos de contenido.',
     },
     {
         key: 'COLOR_BG',
@@ -89,6 +93,7 @@ const COLOR_META: Array<{
             'Fondo del panel admin',
             'Fondo del layout principal que envuelve todo',
         ],
+        noAfecta: 'No cambia el interior de tarjetas, modales, botones ni el color del texto.',
     },
     {
         key: 'COLOR_CHAMPAGNE',
@@ -101,6 +106,7 @@ const COLOR_META: Array<{
             'Fondo de Popovers y Dropdowns',
             'Header y footer de emails de la plataforma',
         ],
+        noAfecta: 'No cambia el fondo general de la pagina ni el color de los botones.',
     },
     {
         key: 'COLOR_SUNSET',
@@ -114,6 +120,7 @@ const COLOR_META: Array<{
             'Bordes internos de bloques y separadores cálidos',
             'Fondo de badges de estado "secondary"',
         ],
+        noAfecta: 'No cambia enlaces secundarios, fondos de pagina, tarjetas ni texto general.',
     },
     {
         key: 'COLOR_TEXT',
@@ -127,6 +134,7 @@ const COLOR_META: Array<{
             'Labels de formularios e inputs',
             'Texto en componentes shadcn/ui (Dialog, Sheet, etc.)',
         ],
+        noAfecta: 'No cambia fondos, bordes ni textos de botones que tengan contraste propio.',
     },
 ];
 
@@ -462,9 +470,9 @@ export default function Dashboard(): React.ReactElement {
                             <CardTitle>Paleta de colores de la aplicacion</CardTitle>
                         </div>
                         <div className="flex flex-wrap items-center gap-2">
-                            <Button variant="outline" size="sm" onClick={() => setAyudaPaletaOpen(true)}>
+                            <Button variant="secondary" size="sm" className="border border-primary/20" onClick={() => setAyudaPaletaOpen(true)} title="Consultar donde se aplica cada color">
                                 <HelpCircle className="h-4 w-4 mr-1.5" />
-                                ¿Que cambia cada color?
+                                Guia de uso de colores
                             </Button>
                             <Button size="sm" onClick={() => void abrirModalPaleta()}>
                                 <Palette className="h-4 w-4 mr-2" />
@@ -875,7 +883,7 @@ export default function Dashboard(): React.ReactElement {
                         <div className="border-t border-border" />
 
                         {/* Tabla explicativa */}
-                        {COLOR_META.map(({ key, label, cssVar, afecta, elementos }) => (
+                        {COLOR_META.map(({ key, label, cssVar, afecta, elementos, noAfecta }) => (
                             <div key={key} className="flex gap-3 p-3 rounded-lg border border-border">
                                 {/* Swatch con color real actual */}
                                 <div className="shrink-0 flex flex-col items-center gap-1">
@@ -901,6 +909,10 @@ export default function Dashboard(): React.ReactElement {
                                             </li>
                                         ))}
                                     </ul>
+                                    <p className="rounded-md bg-muted/50 px-2 py-1.5 text-xs text-muted-foreground">
+                                        <span className="font-semibold text-foreground">No modifica:</span>{' '}
+                                        {noAfecta.replace(/^No /, '')}
+                                    </p>
                                 </div>
                             </div>
                         ))}

@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from 'react';
 import { CreditCard, Eye, Landmark, Loader2, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import metodoPagoService, { type MetodoPagoCatalogo, type MetodoPagoPadre } from '@/app/services/metodoPagoService';
-import { useBancosColombiaCatalogo } from '@/app/hooks/useBancosColombiaCatalogo';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -15,12 +14,6 @@ import CatalogoMediosPagoDianModal from '../components/metodos-pago/CatalogoMedi
 import { reglasContablesUi } from '../components/reglas-contables/reglasContablesUi';
 import BancosCatalogoAdmin from '@/app/presentation/components/perfil/BancosCatalogoAdmin';
 import { GovernedButton, PAYMENT_METHOD_ACTION_IDS } from '@/app/presentation/actions';
-import {
-  GobernanzaModuloSearchableSelect,
-  type GobernanzaSearchableSelectOption,
-} from '../gobernanza/GobernanzaModuloSearchableSelect';
-
-const NOMBRE_MANUAL_VALUE = '__MANUAL__';
 
 export type MetodosPagoParametrizacionProps = {
   embedded?: boolean;
@@ -56,18 +49,6 @@ export default function MetodosPagoParametrizacion({
   const [eliminandoCodigo, setEliminandoCodigo] = useState<string | null>(null);
   const [catalogoDianOpen, setCatalogoDianOpen] = useState(false);
   const [catalogoBancosOpen, setCatalogoBancosOpen] = useState(false);
-  const [nombreSelectValue, setNombreSelectValue] = useState('');
-  const { bancos: bancosCatalogo } = useBancosColombiaCatalogo();
-
-  const bancosOptions: GobernanzaSearchableSelectOption[] = bancosCatalogo
-    .filter((banco) => banco.estado)
-    .map((banco) => ({
-      value: banco.nombre,
-      label: banco.nombreCorto || banco.nombre,
-      searchText: `${banco.nombreCorto || ''} ${banco.nombre}`,
-    }))
-    .concat([{ value: NOMBRE_MANUAL_VALUE, label: 'Otro / escribir manualmente…', searchText: 'otro manual' }]);
-
   const cargar = useCallback(async (): Promise<void> => {
     try {
       setLoading(true);
@@ -120,7 +101,6 @@ export default function MetodosPagoParametrizacion({
         catalogoMetodoCodigo: '',
         pasarelaPago: '',
       });
-      setNombreSelectValue('');
       await cargar();
     } catch (error) {
       toast.error(errorMessage(error, 'No se pudo crear el método de pago.'));
@@ -248,74 +228,29 @@ export default function MetodosPagoParametrizacion({
           <TableRow>
             <TableHead className={reglasContablesUi.tableHead}>Código</TableHead>
             <TableHead className={reglasContablesUi.tableHead}>Nombre</TableHead>
-            <TableHead className={reglasContablesUi.tableHead}>Medio DIAN</TableHead>
+            <TableHead className={reglasContablesUi.tableHead}>Catálogo asociado</TableHead>
+            <TableHead className={reglasContablesUi.tableHead}>Pasarela</TableHead>
             <TableHead className={reglasContablesUi.tableHead}>Estado</TableHead>
-            <TableHead className={`${reglasContablesUi.tableHead} text-right`}>Acciones</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {metodos.map((metodo) => (
-            <TableRow key={metodo.codigo} className={reglasContablesUi.tableRowHover}>
+          {padres.map((metodo) => (
+            <TableRow key={metodo.iud || metodo._id || metodo.codigo} className={reglasContablesUi.tableRowHover}>
               <TableCell className="font-medium">
-                <span className="flex flex-wrap items-center gap-1">
-                  {metodo.codigo}
-                  {metodo.esSistema ? (
-                    <Badge variant="outline" className={reglasContablesUi.badgeSistema}>
-                      Sistema
-                    </Badge>
-                  ) : null}
-                </span>
+                {metodo.codigo}
               </TableCell>
-              <TableCell>{metodo.nombre}</TableCell>
+              <TableCell>{metodo.nombreMetodoPago}</TableCell>
               <TableCell>
-                <Badge variant="secondary">{metodo.medioPagoDian}</Badge>
+                <Badge variant="secondary">{metodo.catalogoMetodoCodigo || '—'}</Badge>
               </TableCell>
+              <TableCell>{metodo.pasarelaPago || '—'}</TableCell>
               <TableCell>{metodo.estado ? 'Activo' : 'Inactivo'}</TableCell>
-              <TableCell className="text-right">
-                <div className="flex justify-end gap-1">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-secondary"
-                    title="Ver detalle"
-                    onClick={() => setRegistroVer(metodo)}
-                  >
-                    <Eye className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-primary"
-                    title="Editar"
-                    disabled={saving || eliminandoCodigo === metodo.codigo}
-                    onClick={() => {
-                      setRegistroEditar(metodo);
-                      setSubmodalOpen(true);
-                    }}
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-destructive"
-                    title="Eliminar"
-                    disabled={saving || eliminandoCodigo === metodo.codigo}
-                    onClick={() => void eliminarMetodo(metodo)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              </TableCell>
             </TableRow>
           ))}
-          {!loading && metodos.length === 0 ? (
+          {!loading && padres.length === 0 ? (
             <TableRow>
               <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
-                No hay registros en el catálogo. Use «Agregar catálogo» para crear el primero.
+                No hay métodos de pago registrados. Use «Agregar método» para crear el primero.
               </TableCell>
             </TableRow>
           ) : null}
@@ -350,31 +285,6 @@ export default function MetodosPagoParametrizacion({
             <Input value={padreDraft.codigo} onChange={e => setPadreDraft(p => ({ ...p, codigo: e.target.value }))} placeholder="Ej: WOMPI" />
           </div>
           <div className="space-y-2">
-            <Label>Nombre</Label>
-            <GobernanzaModuloSearchableSelect
-              value={nombreSelectValue}
-              onValueChange={(value) => {
-                setNombreSelectValue(value);
-                if (value && value !== NOMBRE_MANUAL_VALUE) {
-                  setPadreDraft(p => ({ ...p, nombreMetodoPago: value }));
-                } else if (value === NOMBRE_MANUAL_VALUE) {
-                  setPadreDraft(p => ({ ...p, nombreMetodoPago: '' }));
-                }
-              }}
-              options={bancosOptions}
-              placeholder="Seleccione una entidad del catálogo de bancos"
-              searchPlaceholder="Buscar banco…"
-            />
-            {nombreSelectValue === NOMBRE_MANUAL_VALUE && (
-              <Input
-                className="mt-2"
-                value={padreDraft.nombreMetodoPago}
-                onChange={e => setPadreDraft(p => ({ ...p, nombreMetodoPago: e.target.value }))}
-                placeholder="Ej: Wompi"
-              />
-            )}
-          </div>
-          <div className="space-y-2">
             <Label>Descripción</Label>
             <Input value={padreDraft.descripcion} onChange={e => setPadreDraft(p => ({ ...p, descripcion: e.target.value }))} />
           </div>
@@ -383,7 +293,15 @@ export default function MetodosPagoParametrizacion({
             <select
               className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               value={padreDraft.catalogoMetodoCodigo}
-              onChange={e => setPadreDraft(p => ({ ...p, catalogoMetodoCodigo: e.target.value }))}
+              onChange={e => {
+                const catalogoMetodoCodigo = e.target.value;
+                const metodoSeleccionado = metodos.find(item => item.codigo === catalogoMetodoCodigo);
+                setPadreDraft(p => ({
+                  ...p,
+                  catalogoMetodoCodigo,
+                  nombreMetodoPago: metodoSeleccionado?.nombre || '',
+                }));
+              }}
             >
               <option value="">Seleccione un método del catálogo</option>
               {metodos.filter(item => item.estado).map(item => (
