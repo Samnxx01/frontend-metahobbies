@@ -106,7 +106,7 @@ export default function MembershipStepContent({
       },
     };
 
-    return metodosPago.flatMap((method) => {
+    const configuredMethods = metodosPago.flatMap((method) => {
       const code = method.codigo.trim().toLowerCase();
       const normalizedCode = code === 'tarjeta' ? 'card' : code;
       const presentation = presentationByCode[normalizedCode as keyof typeof presentationByCode];
@@ -118,6 +118,27 @@ export default function MembershipStepContent({
         description: method.descripcion || '',
       }];
     });
+
+    if (configuredMethods.length > 0) return configuredMethods;
+
+    // Respaldo temporal mientras se completa la parametrización del catálogo.
+    return [
+      {
+        ...presentationByCode.nequi,
+        name: 'Nequi',
+        description: 'Paga desde tu cuenta Nequi',
+      },
+      {
+        ...presentationByCode.card,
+        name: 'Tarjeta',
+        description: 'Crédito o débito',
+      },
+      {
+        ...presentationByCode.pse,
+        name: 'PSE',
+        description: 'Débito desde tu banco',
+      },
+    ];
   }, [metodosPago]);
 
   switch (step) {
