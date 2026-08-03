@@ -11,9 +11,11 @@
  * Otros GET de órdenes (servicio `inventarioService`): `siguiente-numero`, `ordenes/:id`, `ordenes/:id/conciliacion`.
  */
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, FileText, Percent, Settings2, ShoppingCart, Trash2 } from 'lucide-react';
+import { AlertTriangle, FileText, Pencil, Percent, Settings2, ShoppingCart, Trash2 } from 'lucide-react';
 import { getGovernedPath, isGovernedPathConfigured } from '@/app/services/governedNavigation';
 import {
+  GovernedButton,
+  INVENTORY_PURCHASE_ACTION_IDS,
   ParameterizedActionBar,
   buildOrdenCompraRowActionCatalog,
   resolveOrdenCompraRowAllowedIds,
@@ -79,6 +81,8 @@ type InventarioOrdenComprasTabProps = {
   abrirNuevaOrdenCompra: () => void;
   abrirEditarOrdenCompra: (oc: InventarioOrdenCompra) => void;
   guardarProveedorCompra: (draft: InventarioProveedorDraft) => Promise<void>;
+  onProveedorActualizado?: (proveedor: InventarioProveedor) => void;
+  onProveedorEliminado?: (id: string) => void;
   /** Opcional si el panel se monta sin `Inventario` (ruta mal resuelta); el listado se refresca con GET local. */
   refreshOrdenesCompra?: () => Promise<void>;
   /** Callbacks optimistas: actualizan el estado del padre sin hacer refetch. */
@@ -113,6 +117,8 @@ export default function InventarioOrdenComprasTab({
   abrirNuevaOrdenCompra,
   abrirEditarOrdenCompra,
   guardarProveedorCompra,
+  onProveedorActualizado,
+  onProveedorEliminado,
   refreshOrdenesCompra,
   onOrdenCreada,
   onOrdenEliminada,
@@ -142,6 +148,9 @@ export default function InventarioOrdenComprasTab({
   const [estadosOrden, setEstadosOrden] = useState<EstadoOrdenCompraConfig[]>([]);
   const [localOrdenes, setLocalOrdenes] = useState<InventarioOrdenCompra[]>([]);
   const [localProveedores, setLocalProveedores] = useState<InventarioProveedor[]>([]);
+  const [proveedorEdicion, setProveedorEdicion] = useState<InventarioProveedor | null>(null);
+  const [proveedorEliminar, setProveedorEliminar] = useState<InventarioProveedor | null>(null);
+  const [procesandoProveedor, setProcesandoProveedor] = useState(false);
 
   const ordenesUi = useMemo(
     () => (ordenesCompra.length > 0 ? ordenesCompra : localOrdenes),
@@ -225,6 +234,63 @@ export default function InventarioOrdenComprasTab({
     const id = getOrdenCompraId(orden);
     setLocalOrdenes((prev) => prev.map((oc) => (getOrdenCompraId(oc) === id ? orden : oc)));
     onOrdenActualizadaEnPadre?.(orden);
+  };
+
+  const proveedorId = (proveedor: InventarioProveedor): string =>
+    String(proveedor._id || proveedor.iud || '');
+
+  const guardarProveedor = async (draft: InventarioProveedorDraft): Promise<void> => {
+    if (!proveedorEdicion) {
+      await guardarProveedorCompra(draft);
+      return;
+    }
+    const id = proveedorId(proveedorEdicion);
+    if (!id) {
+      toast.error('El proveedor no tiene un ID valido.');
+      return;
+    }
+    try {
+      setProcesandoProveedor(true);
+      const actualizado = await inventarioService.actualizarProveedorCompra(id, {
+        nombre: draft.nombre.trim(),
+        nit: draft.nit.trim(),
+        correo: draft.correo.trim(),
+        telefono: draft.telefono.trim(),
+        direccion: draft.direccion.trim(),
+        aplicaIva: draft.aplicaIva,
+        tipoProveedorId: draft.tipoProveedorId || undefined,
+        paisId: draft.paisId || undefined,
+        departamentoId: draft.departamentoId || undefined,
+        ciudadId: draft.ciudadId || undefined,
+      });
+      setLocalProveedores((prev) => prev.map((item) => proveedorId(item) === id ? actualizado : item));
+      onProveedorActualizado?.(actualizado);
+      setProveedorEdicion(null);
+      setProveedorModalOpen(false);
+      toast.success('Proveedor actualizado.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message.replace(/^\[\d+\]\s*/, '') : 'No se pudo actualizar el proveedor.');
+    } finally {
+      setProcesandoProveedor(false);
+    }
+  };
+
+  const confirmarEliminarProveedor = async (): Promise<void> => {
+    if (!proveedorEliminar) return;
+    const id = proveedorId(proveedorEliminar);
+    if (!id) return;
+    try {
+      setProcesandoProveedor(true);
+      await inventarioService.eliminarProveedorCompra(id);
+      setLocalProveedores((prev) => prev.filter((item) => proveedorId(item) !== id));
+      onProveedorEliminado?.(id);
+      setProveedorEliminar(null);
+      toast.success('Proveedor desactivado.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message.replace(/^\[\d+\]\s*/, '') : 'No se pudo desactivar el proveedor.');
+    } finally {
+      setProcesandoProveedor(false);
+    }
   };
 
   const eliminarOrden = async (oc: InventarioOrdenCompra): Promise<void> => {
@@ -339,7 +405,8 @@ export default function InventarioOrdenComprasTab({
               </CardDescription>
             </div>
             <div className="flex shrink-0 flex-wrap items-center gap-2">
-              <Button
+              <GovernedButton
+                actionId={INVENTORY_PURCHASE_ACTION_IDS.MANAGE_ORDER_STATUSES}
                 type="button"
                 variant="outline"
                 size="sm"
@@ -349,8 +416,9 @@ export default function InventarioOrdenComprasTab({
               >
                 <Settings2 className="mr-2 h-4 w-4" />
                 Estados OC
-              </Button>
-              <Button
+              </GovernedButton>
+              <GovernedButton
+                actionId={INVENTORY_PURCHASE_ACTION_IDS.CREATE_RECEIPT}
                 type="button"
                 variant="outline"
                 size="sm"
@@ -360,8 +428,9 @@ export default function InventarioOrdenComprasTab({
               >
                 <FileText className="mr-2 h-4 w-4" />
                 Comprobante entrada
-              </Button>
-              <Button
+              </GovernedButton>
+              <GovernedButton
+                actionId={INVENTORY_PURCHASE_ACTION_IDS.MANAGE_ACCOUNTING_RULES}
                 type="button"
                 variant="outline"
                 size="sm"
@@ -371,14 +440,19 @@ export default function InventarioOrdenComprasTab({
               >
                 <Percent className="mr-2 h-4 w-4" />
                 Reglas contables
-              </Button>
+              </GovernedButton>
               <InventarioProveedorModal
                 open={proveedorModalOpen}
-                saving={saving}
-                onOpenChange={setProveedorModalOpen}
-                onSubmit={guardarProveedorCompra}
+                saving={saving || procesandoProveedor}
+                onOpenChange={(open) => {
+                  setProveedorModalOpen(open);
+                  if (!open) setProveedorEdicion(null);
+                }}
+                onSubmit={guardarProveedor}
                 showTrigger
+                triggerActionId={INVENTORY_PURCHASE_ACTION_IDS.CREATE_PROVIDER}
                 triggerClassName="shrink-0"
+                proveedor={proveedorEdicion}
               />
               <InventarioOrdenCompraModal
                 open={ordenCompraModalOpen}
@@ -404,6 +478,7 @@ export default function InventarioOrdenComprasTab({
                 }}
                 onAntesNuevaOrden={abrirNuevaOrdenCompra}
                 showTrigger
+                triggerActionId={INVENTORY_PURCHASE_ACTION_IDS.CREATE_ORDER}
                 triggerClassName="shrink-0"
               />
             </div>
@@ -472,7 +547,40 @@ export default function InventarioOrdenComprasTab({
               <div className="max-h-72 space-y-2 overflow-auto rounded-md border border-border bg-muted/30 p-3">
                 {proveedoresUi.map((proveedor) => (
                   <div key={proveedor._id || proveedor.iud || proveedor.nit} className="rounded-lg border border-border bg-card px-3 py-2.5 text-sm shadow-sm">
-                    <p className="font-medium text-foreground">{proveedor.nombre}</p>
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="font-medium text-foreground">{proveedor.nombre}</p>
+                      <div className="flex shrink-0 items-center gap-1">
+                        <GovernedButton
+                          actionId={INVENTORY_PURCHASE_ACTION_IDS.EDIT_PROVIDER}
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-8 px-2"
+                          disabled={saving || procesandoProveedor}
+                          onClick={() => {
+                            setProveedorEdicion(proveedor);
+                            setProveedorModalOpen(true);
+                          }}
+                          aria-label={`Editar proveedor ${proveedor.nombre}`}
+                        >
+                          <Pencil className="mr-1 h-3.5 w-3.5" />
+                          Editar
+                        </GovernedButton>
+                        <GovernedButton
+                          actionId={INVENTORY_PURCHASE_ACTION_IDS.DEACTIVATE_PROVIDER}
+                          type="button"
+                          variant="destructive"
+                          size="sm"
+                          className="h-8 px-2"
+                          disabled={saving || procesandoProveedor}
+                          onClick={() => setProveedorEliminar(proveedor)}
+                          aria-label={`Desactivar proveedor ${proveedor.nombre}`}
+                        >
+                          <Trash2 className="mr-1 h-3.5 w-3.5" />
+                          Desactivar
+                        </GovernedButton>
+                      </div>
+                    </div>
                     <p className="text-xs text-muted-foreground">NIT {proveedor.nit}</p>
                     {(proveedor.tipoProveedorNombre || (proveedor.tipoProveedorId as any)?.nombre) ? (
                       <p className="mt-1 text-xs text-primary">
@@ -499,6 +607,35 @@ export default function InventarioOrdenComprasTab({
           </div>
         </CardContent>
       </Card>
+
+      <Dialog open={Boolean(proveedorEliminar)} onOpenChange={(open) => {
+        if (!open && !procesandoProveedor) setProveedorEliminar(null);
+      }}>
+        <DialogContent className="max-w-md border-border bg-background text-foreground">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              Desactivar proveedor
+            </DialogTitle>
+            <DialogDescription className="text-muted-foreground">
+              El proveedor dejará de aparecer en el catálogo y no podrá seleccionarse en nuevas órdenes de compra.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">
+            <span className="font-medium text-foreground">{proveedorEliminar?.nombre}</span>
+            <span className="block text-muted-foreground">NIT {proveedorEliminar?.nit}</span>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button type="button" variant="outline" disabled={procesandoProveedor} onClick={() => setProveedorEliminar(null)}>
+              Cancelar
+            </Button>
+            <Button type="button" variant="destructive" disabled={procesandoProveedor} onClick={() => void confirmarEliminarProveedor()}>
+              <Trash2 className="mr-2 h-4 w-4" />
+              {procesandoProveedor ? 'Desactivando...' : 'Desactivar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={Boolean(ordenEliminar)} onOpenChange={(open) => {
         if (!open) cerrarEliminarOrden();

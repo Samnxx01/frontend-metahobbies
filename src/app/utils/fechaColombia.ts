@@ -7,7 +7,11 @@ export function formatearFechaHoraColombia(value?: string | Date | null): string
   if (Number.isNaN(date.getTime())) return '—';
   return date.toLocaleString('es-CO', {
     timeZone: ZONA_COLOMBIA,
-    dateStyle: 'short',
-    timeStyle: 'short',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
   });
 }

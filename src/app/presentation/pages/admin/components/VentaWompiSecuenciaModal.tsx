@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Hash, Layers, Plus, RefreshCw, RotateCcw, Save, Settings2 } from 'lucide-react';
+import { Download, Hash, Layers, Plus, RefreshCw, RotateCcw, Save, Settings2 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import billingSecuencialService, {
   type TipoLimiteRegistros,
@@ -374,6 +374,59 @@ export default function VentaWompiSecuenciaModal({
     setTiposEnriquecidos(ventaTipos);
     return ventaTipos;
   }, []);
+
+  const exportarParametrizacion = useCallback((): void => {
+    const registros = filtrarTiposSecuenciaVenta(tiposEnriquecidos).map((row) => ({
+      registroKind: 'TIPO_CONFIG',
+      facturacionSoporteDocumentoId: row.facturacionSoporteDocumentoId || null,
+      billingSecuencialId: row.billingSecuencialId || null,
+      codigoConfig: String(row.codigo || '').trim().toUpperCase(),
+      nombreTipo: row.nombre || null,
+      descripcion: row.descripcion || null,
+      dominioSecuencia: 'VENTA',
+      prefijoTipo: row.prefijo || null,
+      padding: Number(row.padding || 0),
+      tipoSecuencia: row.tipoSecuencia || null,
+      clasificacionEmisionId: row.clasificacionEmisionId || null,
+      tipoLimiteRegistros: row.tipoLimiteRegistros || null,
+      maxRegistrosSecuencia: row.maxRegistrosSecuencia ?? null,
+      siguiente: Number(row.siguiente || 0),
+      secuencia: Number(row.secuencia || 0),
+      proximoConsecutivo: Number(row.proximoConsecutivo || 0),
+      totalEmitidos: Number(row.totalRecepciones || 0),
+      activo: row.activo !== false,
+    }));
+    const archivo = {
+      exportadoEn: new Date().toISOString(),
+      coleccion: 'billingSecuencial',
+      endpointGet: '/api/billing/facturacion-soporte-documento',
+      objetivo: 'Parametrización operativa de secuencias de venta; no contiene emisiones históricas.',
+      filtros: {
+        catalogoPadreMongo: { dominioSecuencia: 'VENTA' },
+        frontend: { dominioSecuencia: 'VENTA', activo: { $ne: false } },
+        billingSecuencialPorTipo: {
+          registroKind: 'TIPO_CONFIG',
+          codigoConfig: '<CÓDIGO DEL REGISTRO PADRE>',
+        },
+        excluidos: {
+          registroKind: 'EMISION',
+          motivo: 'Las emisiones son historial transaccional y no hacen parte del archivo de parametrización.',
+        },
+      },
+      totalRegistros: registros.length,
+      registros,
+    };
+    const blob = new Blob([JSON.stringify(archivo, null, 2)], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const enlace = document.createElement('a');
+    enlace.href = url;
+    enlace.download = `parametrizacion-billing-secuencial-venta-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(enlace);
+    enlace.click();
+    enlace.remove();
+    URL.revokeObjectURL(url);
+    toast.success(`${registros.length} parametrización(es) exportada(s).`);
+  }, [tiposEnriquecidos]);
 
   const loadConfig = useCallback(async (codigo?: CodigoReferenciaVenta): Promise<void> => {
     setLoading(true);
@@ -833,12 +886,12 @@ export default function VentaWompiSecuenciaModal({
         }
       }}
     >
-      <DialogContent className="w-[min(520px,calc(100vw-2rem))] max-w-none border-destructive/20 bg-white">
+      <DialogContent className="w-[min(520px,calc(100vw-2rem))] max-w-none border-destructive/20 bg-card">
         <DialogHeader>
-          <DialogTitle className="text-slate-900">
+          <DialogTitle className="text-foreground">
             {nuevoTipoDraft.codigoOriginal ? 'Editar o duplicar tipo' : 'Nuevo tipo de referencia'}
           </DialogTitle>
-          <DialogDescription className="text-slate-600">
+          <DialogDescription className="text-muted-foreground">
             {nuevoTipoDraft.codigoOriginal
               ? 'Se cargó el tipo seleccionado. Guarda para editar o cambia el código para insertar uno nuevo.'
               : 'Define un tipo de secuencia de venta. El padre se guarda en facturacionSoporteDocumento.'}
@@ -920,7 +973,6 @@ export default function VentaWompiSecuenciaModal({
               <Label htmlFor="nuevo-tipo-secuencia">Clasificación de emisión *</Label>
               <Button
                 type="button"
-                variant="outline"
                 size="sm"
                 className="h-8 border-destructive/30 px-2 text-destructive hover:bg-destructive/10"
                 onClick={() => {
@@ -992,7 +1044,7 @@ export default function VentaWompiSecuenciaModal({
                         nombre: e.target.value.toUpperCase(),
                       }))}
                       placeholder="CARRITO_CONTADOR"
-                      className="font-mono bg-white"
+                      className="font-mono bg-card"
                       disabled={creandoTipo || guardandoClasificacion}
                     />
                   </div>
@@ -1006,7 +1058,7 @@ export default function VentaWompiSecuenciaModal({
                         etiqueta: e.target.value,
                       }))}
                       placeholder="CARRITO"
-                      className="bg-white"
+                      className="bg-card"
                       disabled={creandoTipo || guardandoClasificacion}
                     />
                   </div>
@@ -1014,7 +1066,6 @@ export default function VentaWompiSecuenciaModal({
                 <Button
                   type="button"
                   size="sm"
-                  variant="outline"
                   className="w-full sm:w-auto"
                   onClick={() => void registrarClasificacionPersonalizada()}
                   disabled={creandoTipo || guardandoClasificacion}
@@ -1044,7 +1095,6 @@ export default function VentaWompiSecuenciaModal({
         <DialogFooter className="gap-2">
           <Button
             type="button"
-            variant="outline"
             onClick={() => setNuevoTipoOpen(false)}
             disabled={creandoTipo}
           >
@@ -1060,13 +1110,13 @@ export default function VentaWompiSecuenciaModal({
     </Dialog>
 
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92vh] w-[min(900px,calc(100vw-2rem))] max-w-none overflow-y-auto border-slate-200 bg-white text-foreground shadow-xl">
+      <DialogContent className="max-h-[92vh] w-[min(900px,calc(100vw-2rem))] max-w-none overflow-y-auto border-slate-200 bg-card text-foreground shadow-xl">
         <DialogHeader className="border-b border-slate-100 pb-4">
-          <DialogTitle className="flex items-center gap-2 text-slate-900">
-            <Hash className="h-5 w-5 shrink-0 text-slate-700" />
+          <DialogTitle className="flex items-center gap-2 text-foreground">
+            <Hash className="h-5 w-5 shrink-0 text-foreground" />
             Secuencias de venta · billingSecuencial
           </DialogTitle>
-          <DialogDescription className="text-slate-600">
+          <DialogDescription className="text-muted-foreground">
             Administra todos los contadores TIPO_CONFIG. El consecutivo avanza al emitir;
             reset y recalcular no borran emisiones históricas.
           </DialogDescription>
@@ -1074,10 +1124,10 @@ export default function VentaWompiSecuenciaModal({
 
         <div className="space-y-4">
           {filasResumen.length > 0 ? (
-            <div className="overflow-hidden rounded-lg border border-slate-200 bg-slate-50/50">
-              <div className="flex items-center justify-between gap-2 border-b border-slate-200 bg-white px-3 py-2">
-                <div className="flex items-center gap-2 text-sm font-medium text-slate-800">
-                  <Layers className="h-4 w-4 text-slate-500" />
+            <div className="overflow-hidden rounded-lg border border-slate-200 bg-muted/50">
+              <div className="flex items-center justify-between gap-2 border-b border-slate-200 bg-card px-3 py-2">
+                <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                  <Layers className="h-4 w-4 text-muted-foreground" />
                   {filasResumen.length}
                   {' '}
                   secuencias en billingSecuencial
@@ -1085,9 +1135,19 @@ export default function VentaWompiSecuenciaModal({
                 <div className="flex flex-wrap gap-2">
                   <Button
                     type="button"
-                    variant="outline"
                     size="sm"
-                    className="h-8 border-slate-300 text-slate-700"
+                    variant="outline"
+                    className="h-8 border-slate-300 text-foreground"
+                    disabled={loading || tiposEnriquecidos.length === 0}
+                    onClick={exportarParametrizacion}
+                  >
+                    <Download className="mr-1.5 h-3.5 w-3.5" />
+                    Exportar parametrización
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="h-8 border-slate-300 text-foreground"
                     disabled={loading || saving || reseteando || procesandoTodos}
                     onClick={() => void ejecutarRecalcularTodos()}
                   >
@@ -1096,7 +1156,6 @@ export default function VentaWompiSecuenciaModal({
                   </Button>
                   <Button
                     type="button"
-                    variant="outline"
                     size="sm"
                     className="h-8 border-destructive/40 text-destructive hover:bg-destructive/5"
                     disabled={loading || saving || reseteando || procesandoTodos}
@@ -1109,7 +1168,7 @@ export default function VentaWompiSecuenciaModal({
               </div>
               <div className="max-h-52 overflow-auto">
                 <table className="w-full text-left text-xs">
-                  <thead className="sticky top-0 bg-slate-100 text-slate-600">
+                  <thead className="sticky top-0 bg-muted text-muted-foreground">
                     <tr>
                       <th className="px-3 py-2 font-medium">Tipo</th>
                       <th className="px-3 py-2 font-medium">Código</th>
@@ -1126,16 +1185,16 @@ export default function VentaWompiSecuenciaModal({
                         <tr
                           key={fila.codigo}
                           className={`cursor-pointer border-t border-slate-200/80 transition-colors ${
-                            activa ? 'bg-info/80' : 'bg-white hover:bg-slate-50'
+                            activa ? 'bg-info/80' : 'bg-card hover:bg-muted'
                           }`}
                           onClick={() => handleCambioTipoReferencia(fila.codigo)}
                         >
-                          <td className="px-3 py-2 font-medium text-slate-900">{fila.nombre}</td>
-                          <td className="px-3 py-2 font-mono text-slate-600">{fila.codigo}</td>
+                          <td className="px-3 py-2 font-medium text-foreground">{fila.nombre}</td>
+                          <td className="px-3 py-2 font-mono text-muted-foreground">{fila.codigo}</td>
                           <td className="px-3 py-2 text-right font-mono">{fila.contador}</td>
                           <td className="px-3 py-2 text-right font-mono">{fila.proximo}</td>
                           <td className="px-3 py-2 text-right font-mono">{fila.emisionesBd}</td>
-                          <td className="px-3 py-2 font-mono text-slate-700">{fila.preview}</td>
+                          <td className="px-3 py-2 font-mono text-foreground">{fila.preview}</td>
                         </tr>
                       );
                     })}
@@ -1163,13 +1222,12 @@ export default function VentaWompiSecuenciaModal({
             </div>
           ) : null}
           {sinTiposConfigurados ? (
-            <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-sm text-slate-600">
+            <div className="rounded-md border border-dashed border-slate-300 bg-muted px-4 py-6 text-center text-sm text-muted-foreground">
               <p>No hay registros en facturacionSoporteDocumento para secuencias de venta.</p>
               <Button
                 type="button"
-                variant="outline"
                 size="sm"
-                className="mt-3 border-slate-300 text-slate-800 hover:bg-slate-100"
+                className="mt-3 border-slate-300 text-foreground hover:bg-muted"
                 onClick={abrirModalTipo}
                 disabled={loading || saving || creandoTipo}
               >
@@ -1231,9 +1289,8 @@ export default function VentaWompiSecuenciaModal({
                 <Label htmlFor="tipo-referencia-venta">Tipo de referencia *</Label>
                 <Button
                   type="button"
-                  variant="outline"
                   size="sm"
-                  className="h-8 border-slate-300 text-slate-800 hover:bg-slate-100"
+                  className="h-8 border-slate-300 text-foreground hover:bg-muted"
                   onClick={abrirModalTipo}
                   disabled={loading || saving || creandoTipo}
                 >
@@ -1395,7 +1452,6 @@ export default function VentaWompiSecuenciaModal({
           <div className="flex flex-wrap gap-2">
             <Button
               type="button"
-              variant="outline"
               onClick={async () => {
                 const codigo = codigoSeleccionadoFormulario;
                 if (!codigo) {
@@ -1431,7 +1487,6 @@ export default function VentaWompiSecuenciaModal({
             </Button>
             <Button
               type="button"
-              variant="outline"
               className="border-destructive/50 text-destructive hover:bg-destructive/10"
               onClick={() => {
                 if (!codigoSeleccionadoFormulario) {
@@ -1453,7 +1508,6 @@ export default function VentaWompiSecuenciaModal({
           <div className="flex gap-2">
             <Button
               type="button"
-              variant="outline"
               onClick={() => onOpenChange(false)}
               disabled={saving}
             >
@@ -1469,9 +1523,9 @@ export default function VentaWompiSecuenciaModal({
     </Dialog>
 
     <AlertDialog open={resetTodosConfirmOpen} onOpenChange={(next) => !procesandoTodos && setResetTodosConfirmOpen(next)}>
-      <AlertDialogContent className="max-w-lg border-slate-200">
+      <AlertDialogContent className="max-h-[90dvh] w-[calc(100vw-1.5rem)] max-w-lg overflow-y-auto border-border bg-card text-foreground sm:w-full">
         <AlertDialogHeader>
-          <AlertDialogTitle className="flex items-center gap-2 text-slate-900">
+          <AlertDialogTitle className="flex items-center gap-2 text-foreground">
             <RotateCcw className="h-5 w-5 shrink-0 text-destructive" />
             Resetear todas las secuencias
           </AlertDialogTitle>
@@ -1484,9 +1538,9 @@ export default function VentaWompiSecuenciaModal({
                 {' '}
                 tipos en billingSecuencial. No se borran emisiones históricas.
               </p>
-              <ul className="max-h-36 overflow-auto rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs">
+              <ul className="max-h-36 overflow-auto rounded-md border border-border bg-muted px-3 py-2 text-xs">
                 {filasResumen.map((fila) => (
-                  <li key={fila.codigo} className="py-0.5 font-mono text-slate-700">
+                  <li key={fila.codigo} className="py-0.5 font-mono text-foreground">
                     {fila.nombre}
                     {' '}
                     ·
@@ -1498,10 +1552,10 @@ export default function VentaWompiSecuenciaModal({
             </div>
           </AlertDialogDescription>
         </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel disabled={procesandoTodos}>Cancelar</AlertDialogCancel>
+        <AlertDialogFooter className="flex-col gap-2 sm:flex-row">
+          <AlertDialogCancel className="w-full !bg-button !text-button-foreground hover:!bg-button/90 sm:w-auto" disabled={procesandoTodos}>Cancelar</AlertDialogCancel>
           <AlertDialogAction
-            variant="destructive"
+            className="h-auto min-h-10 w-full whitespace-normal break-words text-center sm:w-auto"
             disabled={procesandoTodos || filasResumen.length === 0}
             onClick={(event) => {
               event.preventDefault();
@@ -1515,17 +1569,17 @@ export default function VentaWompiSecuenciaModal({
     </AlertDialog>
 
     <AlertDialog open={resetConfirmOpen} onOpenChange={(next) => !reseteando && setResetConfirmOpen(next)}>
-      <AlertDialogContent className="max-w-lg border-slate-200">
+      <AlertDialogContent className="max-h-[90dvh] w-[calc(100vw-1.5rem)] max-w-lg overflow-y-auto border-border bg-card text-foreground sm:w-full">
         <AlertDialogHeader>
-          <AlertDialogTitle className="flex items-center gap-2 text-slate-900">
+          <AlertDialogTitle className="flex min-w-0 flex-wrap items-center gap-2 break-words text-foreground">
             <RotateCcw className="h-5 w-5 shrink-0 text-destructive" />
             Resetear
             {' '}
             {etiquetaSeleccionada}
           </AlertDialogTitle>
           <AlertDialogDescription asChild>
-            <div className="space-y-4 text-sm text-muted-foreground">
-              <div className="rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning">
+            <div className="min-w-0 space-y-4 break-words text-sm text-muted-foreground">
+              <div className="rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning-foreground">
                 <p className="font-semibold">
                   Solo esta secuencia:
                   {' '}
@@ -1566,13 +1620,14 @@ export default function VentaWompiSecuenciaModal({
                 </p>
               </div>
 
-              <div className="overflow-hidden rounded-md border border-border text-xs">
-                <div className="grid grid-cols-2 border-b border-border bg-muted/40 px-3 py-2 font-semibold text-foreground">
+              <div className="overflow-hidden rounded-md border border-border bg-muted/20 text-xs">
+                <div className="hidden grid-cols-2 border-b border-border bg-muted/40 px-3 py-2 font-semibold text-foreground sm:grid">
                   <span>Estado actual</span>
                   <span>Después del reset</span>
                 </div>
-                <div className="grid grid-cols-2 gap-x-3 gap-y-2 px-3 py-3">
-                  <div className="space-y-2">
+                <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2">
+                  <div className="min-w-0 space-y-2 rounded-md bg-card p-3">
+                    <p className="border-b border-border pb-2 font-semibold text-foreground sm:hidden">Estado actual</p>
                     <p>
                       secuencia:
                       {' '}
@@ -1589,7 +1644,8 @@ export default function VentaWompiSecuenciaModal({
                       <span className="font-mono text-foreground">{preview}</span>
                     </p>
                   </div>
-                  <div className="space-y-2">
+                  <div className="min-w-0 space-y-2 rounded-md bg-card p-3">
+                    <p className="border-b border-border pb-2 font-semibold text-foreground sm:hidden">Después del reset</p>
                     <p>
                       secuencia:
                       {' '}
@@ -1619,10 +1675,10 @@ export default function VentaWompiSecuenciaModal({
             </div>
           </AlertDialogDescription>
         </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel disabled={reseteando}>Cancelar</AlertDialogCancel>
+        <AlertDialogFooter className="flex-col gap-2 sm:flex-row">
+          <AlertDialogCancel className="w-full !bg-button !text-button-foreground hover:!bg-button/90 sm:w-auto" disabled={reseteando}>Cancelar</AlertDialogCancel>
           <AlertDialogAction
-            variant="destructive"
+            className="h-auto min-h-10 w-full whitespace-normal break-words text-center sm:w-auto"
             disabled={reseteando || !codigoActivo}
             onClick={(event) => {
               event.preventDefault();

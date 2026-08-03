@@ -19,7 +19,7 @@ export const labelEstadoComprobanteEntrada = (estado: string): string => {
 export const estadoComprobanteEntradaBadgeClass = (estado: string): string => {
   switch (normalizarEstado(estado)) {
     case 'PENDIENTE_APROBACION':
-      return 'border-warning/60 bg-warning/10 text-warning dark:border-warning/50 dark:bg-warning/15 dark:text-warning';
+      return 'border-warning/60 bg-warning/15 text-foreground dark:border-warning/50 dark:bg-warning/20 dark:text-foreground';
     case 'APROBADA':
       return 'border-success/50 bg-success/10 text-success dark:border-success/40 dark:bg-success/15 dark:text-success';
     case 'ANULADA':
@@ -38,10 +38,10 @@ export const estadoKardexLineaBadgeClass = (estadoKardex?: string): string => {
   if (String(estadoKardex || '').toUpperCase() === 'CONFIRMADO') {
     return 'border-success/50 bg-success/10 text-success dark:border-success/40 dark:bg-success/15 dark:text-success';
   }
-  return 'border-warning/60 bg-warning/10 text-warning dark:border-warning/50 dark:bg-warning/15 dark:text-warning';
+  return 'border-warning/60 bg-warning/15 text-foreground dark:border-warning/50 dark:bg-warning/20 dark:text-foreground';
 };
 
 export const salidaKardexComprobanteBadgeClass = (disponible: boolean): string =>
   disponible
     ? 'border-success/50 bg-success/10 text-success dark:border-success/40 dark:bg-success/15 dark:text-success'
-    : 'border-warning/60 bg-warning/10 text-warning dark:border-warning/50 dark:bg-warning/15 dark:text-warning';
+    : 'border-warning/60 bg-warning/15 text-foreground dark:border-warning/50 dark:bg-warning/20 dark:text-foreground';

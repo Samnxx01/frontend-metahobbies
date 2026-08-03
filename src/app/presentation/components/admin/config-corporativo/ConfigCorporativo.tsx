@@ -115,7 +115,7 @@ const formatActorBadge = (actor: ActorScope | null) => {
   if (!actor) return null;
   if (actor.tenantSuperAdminId) return { label: 'tenantSuperAdmin', className: 'border-info/20 bg-info/10 text-info' };
   if (actor.tenantGlobalId) return { label: 'tenantGlobal', className: 'border-info/20 bg-info/10 text-info' };
-  return { label: actor.rol || 'sin scope', className: 'border-slate-200 bg-slate-50 text-slate-700' };
+  return { label: actor.rol || 'sin scope', className: 'border-border bg-muted/40 text-foreground' };
 };
 
 const resolveCorporativoName = (value: EmpleadoGlobal['tenantCorporativoId']) => {
@@ -557,7 +557,7 @@ export default function ConfigCorporativo() {
 
   if (loading) {
     return (
-      <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-6 text-sm text-slate-600 shadow-sm">
+      <div className="flex items-center gap-3 rounded-2xl border border-border bg-card px-4 py-6 text-sm text-muted-foreground shadow-sm">
         <Loader2 className="h-4 w-4 animate-spin" />
         Cargando centro de empleados corporativos...
       </div>
@@ -566,16 +566,16 @@ export default function ConfigCorporativo() {
 
   return (
     <section className="space-y-6">
-      <div className="rounded-3xl border border-slate-200 bg-[radial-gradient(circle_at_top_left,_rgba(16,185,129,0.22),_transparent_35%),linear-gradient(135deg,_#0f172a,_#111827_45%,_#0f766e)] px-6 py-7 text-white shadow-lg">
+      <div className="rounded-3xl border border-border bg-[radial-gradient(circle_at_top_left,_rgba(16,185,129,0.22),_transparent_35%),linear-gradient(135deg,_#0f172a,_#111827_45%,_#0f766e)] px-6 py-7 text-button-foreground shadow-lg">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-3xl space-y-3">
             <div className="flex flex-wrap items-center gap-2">
-              <Badge className="border-white/10 bg-white/10 text-white hover:bg-white/10">Config Corporativo</Badge>
+              <Badge className="border-border bg-muted/40 text-button-foreground hover:bg-muted/40">Config Corporativo</Badge>
               {actorBadge ? <Badge className={actorBadge.className}>{actorBadge.label}</Badge> : null}
             </div>
             <div>
               <h1 className="text-2xl font-semibold tracking-tight">Parametrizacion intuitiva de empleados</h1>
-              <p className="mt-2 text-sm text-slate-200">
+              <p className="mt-2 text-sm text-muted-foreground">
                 Esta ruta debe gobernar personas, no repetir la parametrizacion corporativa vieja. Desde aqui puedes
                 elegir el tenant global, definir el corporativo, configurar el rol corporativo y revisar el equipo activo.
               </p>
@@ -583,29 +583,29 @@ export default function ConfigCorporativo() {
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <Card className="border-white/10 bg-white/10 text-white shadow-none">
+            <Card className="border-border bg-muted/40 text-button-foreground shadow-none">
               <CardContent className="flex items-center gap-3 p-4">
                 <Users className="h-5 w-5 text-success" />
                 <div>
-                  <p className="text-xs uppercase tracking-[0.18em] text-slate-300">Empleados</p>
+                  <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Empleados</p>
                   <p className="text-2xl font-semibold">{empleados.length}</p>
                 </div>
               </CardContent>
             </Card>
-            <Card className="border-white/10 bg-white/10 text-white shadow-none">
+            <Card className="border-border bg-muted/40 text-button-foreground shadow-none">
               <CardContent className="flex items-center gap-3 p-4">
                 <BadgeCheck className="h-5 w-5 text-info" />
                 <div>
-                  <p className="text-xs uppercase tracking-[0.18em] text-slate-300">Activos</p>
+                  <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Activos</p>
                   <p className="text-2xl font-semibold">{totalActivos}</p>
                 </div>
               </CardContent>
             </Card>
-            <Card className="border-white/10 bg-white/10 text-white shadow-none">
+            <Card className="border-border bg-muted/40 text-button-foreground shadow-none">
               <CardContent className="flex items-center gap-3 p-4">
                 <Building2 className="h-5 w-5 text-info" />
                 <div>
-                  <p className="text-xs uppercase tracking-[0.18em] text-slate-300">Corporativos</p>
+                  <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Corporativos</p>
                   <p className="text-2xl font-semibold">{corporativosDisponibles.length}</p>
                 </div>
               </CardContent>
@@ -615,11 +615,11 @@ export default function ConfigCorporativo() {
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-        <Card className="border-slate-200 shadow-sm">
+        <Card className="border-border shadow-sm">
           <CardHeader className="space-y-3">
             <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-4">
               <div>
-                <CardTitle className="flex items-center gap-2 text-slate-900">
+                <CardTitle className="flex items-center gap-2 text-foreground">
                   <UserPlus className="h-5 w-5 text-success" />
                   Alta guiada de empleado
                 </CardTitle>
@@ -795,11 +795,11 @@ export default function ConfigCorporativo() {
         </Card>
 
         <div className="space-y-6">
-          <Card className="border-slate-200 shadow-sm">
+          <Card className="border-border shadow-sm">
             <CardHeader className="space-y-3">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <CardTitle className="flex items-center gap-2 text-slate-900">
+                  <CardTitle className="flex items-center gap-2 text-foreground">
                     <BriefcaseBusiness className="h-5 w-5 text-info" />
                     Parametrizacion
                   </CardTitle>
@@ -831,11 +831,11 @@ export default function ConfigCorporativo() {
             </CardContent>
           </Card>
 
-          <Card className="border-slate-200 shadow-sm">
+          <Card className="border-border shadow-sm">
             <CardHeader className="space-y-3">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <CardTitle className="text-slate-900">Equipo actual</CardTitle>
+                  <CardTitle className="text-foreground">Equipo actual</CardTitle>
                   <CardDescription>Filtra por correo, rol, corporativo o cargo.</CardDescription>
                 </div>
                 <Badge variant="outline">{empleadosFiltrados.length} visibles</Badge>
@@ -848,7 +848,7 @@ export default function ConfigCorporativo() {
             </CardHeader>
             <CardContent>
               {loadingTable ? (
-                <div className="flex items-center gap-2 rounded-xl border border-dashed border-slate-200 px-4 py-6 text-sm text-slate-500">
+                <div className="flex items-center gap-2 rounded-xl border border-dashed border-border px-4 py-6 text-sm text-muted-foreground">
                   <Loader2 className="h-4 w-4 animate-spin" />
                   Cargando empleados...
                 </div>
@@ -870,7 +870,7 @@ export default function ConfigCorporativo() {
                           <TableRow key={empleado._id}>
                             <TableCell>
                               <div className="space-y-1">
-                                <p className="font-medium text-slate-900">{empleado.usuarioId?.correo || '-'}</p>
+                                <p className="font-medium text-foreground">{empleado.usuarioId?.correo || '-'}</p>
                               </div>
                             </TableCell>
                             <TableCell>{resolveCorporativoName(empleado.tenantCorporativoId)}</TableCell>
@@ -883,7 +883,7 @@ export default function ConfigCorporativo() {
                         ))
                       ) : (
                         <TableRow>
-                          <TableCell colSpan={5} className="py-8 text-center text-sm text-slate-500">
+                          <TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
                             No hay empleados para el filtro actual.
                           </TableCell>
                         </TableRow>
@@ -933,7 +933,7 @@ export default function ConfigCorporativo() {
             </div>
 
             {!form.tenantCorporativoId ? (
-              <div className="rounded-xl border border-dashed border-slate-200 px-4 py-5 text-sm text-slate-500">
+              <div className="rounded-xl border border-dashed border-border px-4 py-5 text-sm text-muted-foreground">
                 Selecciona un tenant corporativo para listar y administrar sus roles.
               </div>
             ) : rolesDisponibles.length ? (
@@ -941,9 +941,9 @@ export default function ConfigCorporativo() {
                 {rolesDisponibles.map((role) => (
                   <div
                     key={role.id}
-                    className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 px-3 py-2"
+                    className="flex items-center justify-between gap-3 rounded-xl border border-border px-3 py-2"
                   >
-                    <span className="min-w-0 truncate text-sm font-medium text-slate-900">{role.label}</span>
+                    <span className="min-w-0 truncate text-sm font-medium text-foreground">{role.label}</span>
                     <div className="flex shrink-0 gap-1">
                       <Button type="button" variant="ghost" size="icon" onClick={() => handleEditRol(role)}>
                         <Pencil className="h-4 w-4" />
@@ -966,7 +966,7 @@ export default function ConfigCorporativo() {
                 ))}
               </div>
             ) : (
-              <div className="rounded-xl border border-dashed border-slate-200 px-4 py-5 text-sm text-slate-500">
+              <div className="rounded-xl border border-dashed border-border px-4 py-5 text-sm text-muted-foreground">
                 No hay roles corporativos para este tenant.
               </div>
             )}
@@ -1041,7 +1041,7 @@ export default function ConfigCorporativo() {
                 <div key={item.id} className="flex items-center justify-between gap-3 rounded-xl border px-3 py-2">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium">{item.valor}</p>
-                    {item.isDefault ? <p className="text-xs text-slate-500">Default inicial</p> : null}
+                    {item.isDefault ? <p className="text-xs text-muted-foreground">Default inicial</p> : null}
                   </div>
                   <div className="flex shrink-0 gap-1">
                     <Button

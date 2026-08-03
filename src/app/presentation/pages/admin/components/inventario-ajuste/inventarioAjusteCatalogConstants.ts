@@ -14,13 +14,4 @@ export const CODIGOS_TIPO_AJUSTE_PRESET: Array<{ codigo: string; nombre: string;
   { codigo: 'ERROR_CONTEO_SALIDA', nombre: 'Corrección conteo (salida)', direccion: 'NEGATIVO' },
 ];
 
-export const CODIGOS_CAUSAL_AJUSTE_PRESET: Array<{ codigo: string; nombre: string }> = [
-  { codigo: 'TRASLADO', nombre: 'Traslado entre bodegas' },
-  { codigo: 'MERMA', nombre: 'Merma' },
-  { codigo: 'DANO', nombre: 'Daño' },
-  { codigo: 'ERROR_CONTEO', nombre: 'Error de conteo' },
-  { codigo: 'PERDIDA', nombre: 'Pérdida' },
-  { codigo: 'OTRO', nombre: 'Otro' },
-];
-
 export const MODO_REGISTRO_MANUAL = '__REGISTRO_MANUAL__';

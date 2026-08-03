@@ -73,11 +73,18 @@ export default function InventarioAjustesTab({
 
   useEffect(() => {
     let cancelled = false;
-    void inventarioService.listarTiposMovimientoAdmin().then((tipos) => {
+    void inventarioService.listarTiposAjusteAdmin().then((tipos) => {
       if (cancelled) return;
       const tipo = tipos.find((item) => item.codigo === ajusteForm.tipoAjusteCodigo);
-      if (tipo?.naturaleza) {
-        setTipoAjusteDireccion(tipo.naturaleza === 'SALIDA' ? 'NEGATIVO' : 'POSITIVO');
+      if (tipo?.direccion) {
+        setTipoAjusteDireccion(tipo.direccion);
+        return;
+      }
+      setTipoAjusteDireccion(null);
+      if (ajusteForm.tipoAjusteCodigo) {
+        setAjusteForm((prev) => prev.tipoAjusteCodigo === ajusteForm.tipoAjusteCodigo
+          ? { ...prev, tipoAjusteCodigo: '' }
+          : prev);
       }
     }).catch((error) => {
       console.error('Error resolviendo el tipo de ajuste seleccionado:', error);
@@ -85,7 +92,7 @@ export default function InventarioAjustesTab({
     return () => {
       cancelled = true;
     };
-  }, [ajusteForm.tipoAjusteCodigo, tiposAjusteRefreshKey]);
+  }, [ajusteForm.tipoAjusteCodigo, tiposAjusteRefreshKey, setAjusteForm]);
 
   const esNegativo = esTipoAjusteNegativo(ajusteForm.tipoAjusteCodigo, tipoAjusteDireccion);
   const esConteoEntrada = String(ajusteForm.tipoAjusteCodigo || '').trim().toUpperCase() === CODIGO_CONTEO_ENTRADA;

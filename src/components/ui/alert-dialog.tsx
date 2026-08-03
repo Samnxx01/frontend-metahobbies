@@ -5,6 +5,7 @@ import { AlertDialog as AlertDialogPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
+import { CircleHelp } from "lucide-react"
 
 function AlertDialog({
     ...props
@@ -35,7 +36,7 @@ function AlertDialogOverlay({
     return (
         <AlertDialogPrimitive.Overlay
             data-slot="alert-dialog-overlay"
-            className={cn("data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 bg-black/10 duration-100 supports-backdrop-filter:backdrop-blur-xs fixed inset-0 z-50", className)}
+            className={cn("data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 bg-button/10 duration-100 supports-backdrop-filter:backdrop-blur-xs fixed inset-0 z-50", className)}
             {...props}
         />
     )
@@ -48,6 +49,8 @@ function AlertDialogContent({
 }: React.ComponentProps<typeof AlertDialogPrimitive.Content> & {
     size?: "default" | "sm"
 }) {
+    const [helpOpen, setHelpOpen] = React.useState(false)
+    const helpId = React.useId().replace(/:/g, '')
     return (
         <AlertDialogPortal>
             <AlertDialogOverlay />
@@ -55,11 +58,17 @@ function AlertDialogContent({
                 data-slot="alert-dialog-content"
                 data-size={size}
                 className={cn(
-                    "data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 data-closed:zoom-out-95 data-open:zoom-in-95 bg-background ring-foreground/10 gap-4 rounded-xl p-4 ring-1 duration-100 data-[size=default]:max-w-xs data-[size=sm]:max-w-xs data-[size=default]:sm:max-w-sm group/alert-dialog-content fixed top-1/2 left-1/2 z-50 grid w-full -translate-x-1/2 -translate-y-1/2 outline-none",
+                    "data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 data-closed:zoom-out-95 data-open:zoom-in-95 bg-background ring-foreground/10 gap-4 rounded-xl p-4 ring-1 duration-100 data-[size=default]:max-w-xs data-[size=sm]:max-w-xs data-[size=default]:sm:max-w-sm group/alert-dialog-content fixed top-1/2 left-1/2 z-50 grid max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto outline-none",
                     className
                 )}
                 {...props}
-            />
+            >
+                <div className="flex min-h-8 items-center justify-end">
+                <button id={`btn-ayuda-alerta-${helpId}`} type="button" onClick={() => setHelpOpen((value) => !value)} className="inline-flex h-7 items-center gap-1 rounded-md border bg-background px-2 text-xs" aria-label="Ayuda de esta confirmación"><CircleHelp className="h-3.5 w-3.5" /><span className="hidden sm:inline">Ayuda</span></button>
+                </div>
+                {helpOpen && <div className="rounded-md border bg-muted/50 p-3 pr-20 text-left text-sm text-muted-foreground">Esta ventana solicita confirmar una operación. Revisa su descripción y consecuencias antes de continuar.</div>}
+                {props.children}
+            </AlertDialogPrimitive.Content>
         </AlertDialogPortal>
     )
 }

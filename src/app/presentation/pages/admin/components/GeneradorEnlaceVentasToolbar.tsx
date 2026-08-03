@@ -22,7 +22,7 @@ export default function GeneradorEnlaceVentasToolbar({
             <Button
                 type="button"
                 variant="outline"
-                className="gap-2 border-destructive/20 bg-destructive/10 text-destructive hover:bg-destructive/10"
+                className="gap-2"
                 onClick={onOpenSecuenciaWompi}
             >
                 <Hash className="h-4 w-4" />
@@ -31,7 +31,7 @@ export default function GeneradorEnlaceVentasToolbar({
             <Button
                 type="button"
                 variant="outline"
-                className="gap-2 border-info/20 bg-info/10 text-info hover:bg-info/10"
+                className="gap-2"
                 onClick={onOpenParametrizarArbol}
             >
                 <Network className="h-4 w-4" />

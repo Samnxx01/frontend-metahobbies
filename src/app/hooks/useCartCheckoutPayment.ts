@@ -511,6 +511,10 @@ export function useCartCheckoutPayment(
     setMensajePagoRechazado('');
     setLoading(true);
     try {
+      // El intento de pago nace al pulsar "Pagar pedido", antes de contactar Wompi.
+      // checkout es idempotente: si el carrito ya estaba preparado, reutiliza su auditoría.
+      await carritoService.checkout(carritoId, datosFacturacion);
+
       let payload: Parameters<typeof carritoService.ejecutarPagoWompi>[1] = {
         paymentMethod: paymentInfo.paymentMethod as 'nequi' | 'card' | 'pse',
         customer_email: email,

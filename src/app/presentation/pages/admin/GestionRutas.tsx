@@ -4548,8 +4548,8 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
 
           {editingUser ? (
             <div className="flex flex-col gap-4 py-2">
-              <p className="text-sm text-slate-500">
-                Editando: <span className="font-semibold text-slate-800">{String(editingUser?.nombre || editingUser?.correo || editingUser?.email || '')}</span>
+              <p className="text-sm text-muted-foreground">
+                Editando: <span className="font-semibold text-foreground">{String(editingUser?.nombre || editingUser?.correo || editingUser?.email || '')}</span>
               </p>
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 <div>
@@ -4569,7 +4569,7 @@ const [loadingCatalogoCodigo, setLoadingCatalogoCodigo] = useState<boolean>(fals
                   />
                 </div>
                 <div>
-                  <Label>Nueva contraseña <span className="text-slate-400 text-xs">(dejar vacío para no cambiar)</span></Label>
+                  <Label>Nueva contraseña <span className="text-muted-foreground text-xs">(dejar vacío para no cambiar)</span></Label>
                   <Input
                     type="password"
                     value={userEditForm.password}

@@ -316,11 +316,9 @@ export default function AdminSidebar({ mobileOpen, setMobileOpen }: AdminSidebar
             <div
                 className={rowStyle}
                 style={{ paddingLeft: `${10 + indent}px` }}
-                onClick={(e) => {
+                onClick={() => {
                     if (hasChildren && !isNavigable) {
                         toggleNode(node.id);
-                    } else {
-                        handleClick();
                     }
                 }}
             >
@@ -372,7 +370,11 @@ export default function AdminSidebar({ mobileOpen, setMobileOpen }: AdminSidebar
                 {isNavigable ? (
                     <a
                         href={node.path}
-                        onClick={(e) => { e.preventDefault(); handleClick(); }}
+                        onClick={(e) => {
+                            if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey || e.button !== 0) return;
+                            e.preventDefault();
+                            handleClick();
+                        }}
                         className="block no-underline"
                     >
                         {row}

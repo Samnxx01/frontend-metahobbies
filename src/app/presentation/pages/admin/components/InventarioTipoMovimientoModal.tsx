@@ -1,5 +1,5 @@
 import React from 'react';
-import { Save } from 'lucide-react';
+import { Pencil, Save, Trash2 } from 'lucide-react';
 import type { InventarioTipoMovimiento } from '@/app/services/inventarioService';
 import { idTipoMovimiento } from '@/app/presentation/pages/admin/inventario/inventarioTipoMovimientoKardex';
 import { Badge } from '@/components/ui/badge';
@@ -34,6 +34,7 @@ type InventarioTipoMovimientoModalProps = {
   onDraftChange: (draft: TipoMovimientoDraft) => void;
   onSubmit: () => void;
   onEdit: (tipo: InventarioTipoMovimiento) => void;
+  onDelete: (tipo: InventarioTipoMovimiento) => void;
   onReset: () => void;
 };
 
@@ -46,6 +47,7 @@ export default function InventarioTipoMovimientoModal({
   onDraftChange,
   onSubmit,
   onEdit,
+  onDelete,
   onReset,
 }: InventarioTipoMovimientoModalProps): React.ReactElement {
   const update = (field: keyof TipoMovimientoDraft, value: string | boolean): void => {
@@ -99,25 +101,32 @@ export default function InventarioTipoMovimientoModal({
 
         <div className="max-h-56 overflow-auto rounded-md border border-border bg-card">
           {tipos.map((tipo) => (
-            <button
+            <div
               key={idTipoMovimiento(tipo) || tipo.codigo}
-              type="button"
-              className="flex w-full items-center justify-between gap-3 border-b border-border px-4 py-3 text-left text-foreground last:border-b-0 transition-colors hover:bg-muted/60"
-              onClick={() => onEdit(tipo)}
+              className="flex w-full flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3 text-left text-foreground last:border-b-0 transition-colors hover:bg-muted/60"
             >
-              <span>
+              <span className="min-w-0 flex-1">
                 <span className="block text-sm font-semibold text-foreground">{tipo.nombre}</span>
                 <span className="block text-xs text-muted-foreground">{tipo.codigo} - {tipo.descripcion || 'Sin descripcion'}</span>
               </span>
-              <span className="flex items-center gap-2">
+              <span className="flex flex-wrap items-center justify-end gap-2">
+                {tipo.codigo === 'SALIDA_VENTA_CARRITO' ? (
+                  <Badge variant="secondary">Pipeline B</Badge>
+                ) : null}
                 <Badge variant="outline">
                   {tipo.naturaleza === 'ENTRADA' ? 'Entrada' : 'Salida'}
                 </Badge>
                 <Badge variant={tipo.estado ? 'outline' : 'destructive'}>
                   {tipo.estado ? 'Activo' : 'Inactivo'}
                 </Badge>
+                <Button type="button" variant="outline" size="sm" onClick={() => onEdit(tipo)} disabled={saving}>
+                  <Pencil className="mr-1 h-3.5 w-3.5" /> Editar
+                </Button>
+                <Button type="button" variant="destructive" size="sm" onClick={() => onDelete(tipo)} disabled={saving}>
+                  <Trash2 className="mr-1 h-3.5 w-3.5" /> Eliminar
+                </Button>
               </span>
-            </button>
+            </div>
           ))}
         </div>
 

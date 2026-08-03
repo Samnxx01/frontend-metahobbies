@@ -33,7 +33,7 @@ export interface TarifaReglaContable {
   esSistema?: boolean;
 }
 
-export type BaseCalculoRegla = 'COSTO' | 'SUBTOTAL_COMERCIAL' | 'IMPUESTO' | 'PRECIO_FINAL';
+export type BaseCalculoRegla = 'COSTO' | 'SUBTOTAL_COMERCIAL' | 'IMPUESTO' | 'PRECIO_FINAL' | 'VALOR_IVA';
 
 /** Código del ámbito parametrizado (catálogo `/config/reglas-contables/ambitos`). */
 export type AplicaEnRegla = string;

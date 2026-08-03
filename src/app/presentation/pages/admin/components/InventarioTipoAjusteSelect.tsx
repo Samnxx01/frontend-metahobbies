@@ -23,16 +23,7 @@ export default function InventarioTipoAjusteSelect({
   const [tiposCache, setTiposCache] = useState<InventarioTipoAjuste[]>([]);
 
   const loadOptions = useCallback(async () => {
-    const movimientos = await inventarioService.listarTiposMovimientoAdmin();
-    const data: InventarioTipoAjuste[] = movimientos.map((tipo) => ({
-      _id: tipo._id,
-      iud: tipo.iud,
-      codigo: tipo.codigo,
-      nombre: tipo.nombre,
-      descripcion: tipo.descripcion,
-      direccion: tipo.naturaleza === 'SALIDA' ? 'NEGATIVO' : 'POSITIVO',
-      estado: tipo.estado,
-    }));
+    const data = await inventarioService.listarTiposAjusteAdmin();
     setTiposCache(data);
     return data.map((tipo) => ({
       codigo: tipo.codigo,

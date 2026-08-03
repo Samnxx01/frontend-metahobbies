@@ -194,8 +194,10 @@ export default function InventarioStockTab({
                   <TableHead>Tipo</TableHead>
                   <TableHead>SKU</TableHead>
                   <TableHead>Documento</TableHead>
+                  <TableHead>Ejecutado por</TableHead>
                   <TableHead className="text-right">Cantidad</TableHead>
-                  <TableHead className="text-right">Costo</TableHead>
+                  <TableHead className="text-right">Costo unit.</TableHead>
+                  <TableHead className="text-right">Valor movimiento</TableHead>
                   <TableHead className="text-right">Valor inicial</TableHead>
                   <TableHead className="text-right">Valor actual</TableHead>
                   <TableHead>Hash</TableHead>
@@ -212,7 +214,14 @@ export default function InventarioStockTab({
                     </TableCell>
                     <TableCell>{mov.sku}</TableCell>
                     <TableCell>{mov.documentoRelacionado?.tipo} {mov.documentoRelacionado?.numero}</TableCell>
+                    <TableCell>
+                      <span className="block text-sm">{mov.auditoria?.usuarioNombre || mov.auditoria?.usuarioCorreo || 'Sistema'}</span>
+                      {mov.auditoria?.usuarioNombre && mov.auditoria?.usuarioCorreo ? (
+                        <span className="block text-xs text-muted-foreground">{mov.auditoria.usuarioCorreo}</span>
+                      ) : null}
+                    </TableCell>
                     <TableCell className="text-right">{Number(mov.cantidad || 0).toLocaleString('es-CO')}</TableCell>
+                    <TableCell className="text-right">{money.format(Number(mov.costoUnitario || 0))}</TableCell>
                     <TableCell className="text-right">{money.format(Number(mov.costoTotal || 0))}</TableCell>
                     <TableCell className="text-right">
                       {mov.saldoBodega?.valorInicial != null
@@ -229,7 +238,7 @@ export default function InventarioStockTab({
                 ))}
                 {kardex.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={9} className="py-8 text-center text-muted-foreground">Pulsa Consultar para ver movimientos del kardex.</TableCell>
+                      <TableCell colSpan={11} className="py-8 text-center text-muted-foreground">Pulsa Consultar para ver movimientos del kardex.</TableCell>
                   </TableRow>
                 ) : null}
               </TableBody>

@@ -23,7 +23,8 @@ export default function InventarioMenuTabs({
   const tabs = tabsProp ?? [];
 
   return (
-    <TabsList className="justify-start">
+    <div className="w-full overflow-x-auto pb-1">
+    <TabsList className="h-auto min-w-max justify-start">
       {tabs.map((tab) => (
         <TabsTrigger
           key={tab.value}
@@ -35,5 +36,6 @@ export default function InventarioMenuTabs({
         </TabsTrigger>
       ))}
     </TabsList>
+    </div>
   );
 }

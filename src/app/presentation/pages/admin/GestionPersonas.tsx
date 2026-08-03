@@ -343,16 +343,16 @@ export default function GestionPersonas() {
       className="flex w-full items-center justify-between gap-2 py-1 text-left"
       onClick={() => toggleSection(id)}
     >
-      <span className="flex items-center gap-2 font-semibold text-slate-800">
+      <span className="flex items-center gap-2 font-semibold text-foreground">
         {icon}
         {title}
         {hint && (
-          <span className="flex items-center gap-1 text-xs font-normal text-slate-500">
+          <span className="flex items-center gap-1 text-xs font-normal text-muted-foreground">
             <HelpCircle className="h-3 w-3" /> {hint}
           </span>
         )}
       </span>
-      {sectionOpen[id] ? <ChevronUp className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
+      {sectionOpen[id] ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
     </button>
   );
 
@@ -371,20 +371,20 @@ export default function GestionPersonas() {
   // ─── JSX ────────────────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 md:p-6 lg:p-8">
+    <div className="min-h-screen bg-muted/40 p-4 md:p-6 lg:p-8">
       <div className="mx-auto max-w-5xl space-y-5">
 
         {/* Header */}
-        <Card className="border-slate-200">
+        <Card className="border-border">
           <CardHeader>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-3">
-                <div className="rounded-xl bg-slate-900 p-2">
-                  <Users className="h-6 w-6 text-white" />
+                <div className="rounded-xl bg-button p-2">
+                  <Users className="h-6 w-6 text-button-foreground" />
                 </div>
                 <div>
-                  <CardTitle className="text-2xl font-black text-slate-900">Gestión de Personas</CardTitle>
-                  <p className="text-sm text-slate-500">Registro y asignación al árbol multi-tenant</p>
+                  <CardTitle className="text-2xl font-black text-foreground">Gestión de Personas</CardTitle>
+                  <p className="text-sm text-muted-foreground">Registro y asignación al árbol multi-tenant</p>
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-2">
@@ -398,26 +398,26 @@ export default function GestionPersonas() {
             </div>
 
             {/* Info box multi-tenant */}
-            <div className="mt-3 grid grid-cols-1 gap-2 rounded-xl border border-slate-100 bg-white p-3 text-xs sm:grid-cols-3">
+            <div className="mt-3 grid grid-cols-1 gap-2 rounded-xl border border-border bg-card p-3 text-xs sm:grid-cols-3">
               <div className="flex items-start gap-2">
                 <div className="mt-0.5 rounded bg-info/10 p-1"><Shield className="h-3 w-3 text-info" /></div>
                 <div>
-                  <p className="font-semibold text-slate-700">Proveedor (SuperAdmin)</p>
-                  <p className="text-slate-500">Gestiona el software. Puede crear personas en cualquier árbol.</p>
+                  <p className="font-semibold text-foreground">Proveedor (SuperAdmin)</p>
+                  <p className="text-muted-foreground">Gestiona el software. Puede crear personas en cualquier árbol.</p>
                 </div>
               </div>
               <div className="flex items-start gap-2">
                 <div className="mt-0.5 rounded bg-info/10 p-1"><Building2 className="h-3 w-3 text-info" /></div>
                 <div>
-                  <p className="font-semibold text-slate-700">Licencia (TenantGlobal)</p>
-                  <p className="text-slate-500">Dueño de la licencia. Crea personas en sus corporativos.</p>
+                  <p className="font-semibold text-foreground">Licencia (TenantGlobal)</p>
+                  <p className="text-muted-foreground">Dueño de la licencia. Crea personas en sus corporativos.</p>
                 </div>
               </div>
               <div className="flex items-start gap-2">
                 <div className="mt-0.5 rounded bg-success/10 p-1"><User className="h-3 w-3 text-success" /></div>
                 <div>
-                  <p className="font-semibold text-slate-700">Corporativo</p>
-                  <p className="text-slate-500">Área o división. Sus empleados y clientes se gestionan aquí.</p>
+                  <p className="font-semibold text-foreground">Corporativo</p>
+                  <p className="text-muted-foreground">Área o división. Sus empleados y clientes se gestionan aquí.</p>
                 </div>
               </div>
             </div>
@@ -425,17 +425,17 @@ export default function GestionPersonas() {
         </Card>
 
         {/* Tabs */}
-        <div className="flex gap-2 rounded-xl border border-slate-200 bg-white p-1">
+        <div className="flex gap-2 rounded-xl border border-border bg-card p-1">
           <button
             type="button"
-            className={`flex-1 rounded-lg py-2 text-sm font-medium transition-colors ${tab === 'formulario' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
+            className={`flex-1 rounded-lg py-2 text-sm font-medium transition-colors ${tab === 'formulario' ? 'bg-button text-button-foreground' : 'text-muted-foreground hover:bg-muted/40'}`}
             onClick={() => setTab('formulario')}
           >
             Nueva persona
           </button>
           <button
             type="button"
-            className={`flex-1 rounded-lg py-2 text-sm font-medium transition-colors ${tab === 'lista' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
+            className={`flex-1 rounded-lg py-2 text-sm font-medium transition-colors ${tab === 'lista' ? 'bg-button text-button-foreground' : 'text-muted-foreground hover:bg-muted/40'}`}
             onClick={() => setTab('lista')}
           >
             Ver personas
@@ -447,7 +447,7 @@ export default function GestionPersonas() {
           <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
 
             {/* Sección 1: Asignación Tenant (primero para contexto) */}
-            <Card className="border-slate-200">
+            <Card className="border-border">
               <CardContent className="pt-4">
                 <SectionHeader
                   id="tenant"
@@ -484,10 +484,10 @@ export default function GestionPersonas() {
                         <Input
                           readOnly
                           value={actor?.tenantGlobalId ? `${actor.tenantGlobalId.slice(0, 8)}… (del JWT)` : 'Sin tenantGlobal en JWT'}
-                          className="bg-slate-50 text-slate-500"
+                          className="bg-muted/40 text-muted-foreground"
                         />
                       )}
-                      <p className="text-xs text-slate-500">Contenedor de licencia al que pertenece la persona.</p>
+                      <p className="text-xs text-muted-foreground">Contenedor de licencia al que pertenece la persona.</p>
                     </div>
 
                     {/* TenantCorporativo */}
@@ -500,7 +500,7 @@ export default function GestionPersonas() {
                         <Input
                           readOnly
                           value={`${actor.tenantCorporativoId.slice(0, 8)}… (del JWT)`}
-                          className="bg-slate-50 text-slate-500"
+                          className="bg-muted/40 text-muted-foreground"
                         />
                       ) : (
                         <Select
@@ -523,7 +523,7 @@ export default function GestionPersonas() {
                           </SelectContent>
                         </Select>
                       )}
-                      <p className="text-xs text-slate-500">Área o división donde se crean empleados y clientes.</p>
+                      <p className="text-xs text-muted-foreground">Área o división donde se crean empleados y clientes.</p>
                     </div>
                   </div>
                 )}
@@ -531,11 +531,11 @@ export default function GestionPersonas() {
             </Card>
 
             {/* Sección 2: Datos personales */}
-            <Card className="border-slate-200">
+            <Card className="border-border">
               <CardContent className="pt-4">
                 <SectionHeader
                   id="personal"
-                  icon={<User className="h-4 w-4 text-slate-600" />}
+                  icon={<User className="h-4 w-4 text-muted-foreground" />}
                   title="Datos personales"
                 />
                 {sectionOpen.personal && (
@@ -596,11 +596,11 @@ export default function GestionPersonas() {
             </Card>
 
             {/* Sección 3: Contacto */}
-            <Card className="border-slate-200">
+            <Card className="border-border">
               <CardContent className="pt-4">
                 <SectionHeader
                   id="contacto"
-                  icon={<Users className="h-4 w-4 text-slate-600" />}
+                  icon={<Users className="h-4 w-4 text-muted-foreground" />}
                   title="Contacto"
                 />
                 {sectionOpen.contacto && (
@@ -628,7 +628,7 @@ export default function GestionPersonas() {
                     <div className="space-y-1">
                       <Label>Correo electrónico *</Label>
                       <Input type="email" value={form.correo} onChange={(e) => setField('correo', e.target.value)} placeholder="persona@empresa.com" />
-                      <p className="text-xs text-slate-500">Se enviará un correo de verificación a esta dirección.</p>
+                      <p className="text-xs text-muted-foreground">Se enviará un correo de verificación a esta dirección.</p>
                     </div>
 
                     <div className="space-y-1">
@@ -650,11 +650,11 @@ export default function GestionPersonas() {
             </Card>
 
             {/* Sección 4: Acceso */}
-            <Card className="border-slate-200">
+            <Card className="border-border">
               <CardContent className="pt-4">
                 <SectionHeader
                   id="acceso"
-                  icon={<Shield className="h-4 w-4 text-slate-600" />}
+                  icon={<Shield className="h-4 w-4 text-muted-foreground" />}
                   title="Credenciales de acceso"
                   hint="La persona deberá cambiar la contraseña en su primer ingreso"
                 />
@@ -668,7 +668,7 @@ export default function GestionPersonas() {
                         onChange={(e) => setField('password', e.target.value)}
                         placeholder="Mínimo 8 caracteres"
                       />
-                      <p className="text-xs text-slate-500">Contraseña inicial. El sistema puede requerir cambio en el primer ingreso.</p>
+                      <p className="text-xs text-muted-foreground">Contraseña inicial. El sistema puede requerir cambio en el primer ingreso.</p>
                     </div>
                   </div>
                 )}
@@ -711,13 +711,13 @@ export default function GestionPersonas() {
 
         {/* ── LISTA ──────────────────────────────────────────────────────────── */}
         {tab === 'lista' && (
-          <Card className="border-slate-200">
+          <Card className="border-border">
             <CardHeader>
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <CardTitle className="text-lg">Personas registradas</CardTitle>
                 <div className="flex gap-2">
                   <div className="relative">
-                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                     <Input
                       value={search}
                       onChange={(e) => setSearch(e.target.value)}
@@ -734,17 +734,17 @@ export default function GestionPersonas() {
             <CardContent>
               {loadingPersonas ? (
                 <div className="flex justify-center py-12">
-                  <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                 </div>
               ) : personasFiltradas.length === 0 ? (
-                <div className="py-12 text-center text-slate-500">
-                  <Users className="mx-auto mb-3 h-10 w-10 text-slate-300" />
+                <div className="py-12 text-center text-muted-foreground">
+                  <Users className="mx-auto mb-3 h-10 w-10 text-muted-foreground" />
                   <p>{search ? 'Sin resultados para la búsqueda' : 'No hay personas registradas'}</p>
                 </div>
               ) : (
-                <div className="overflow-auto rounded-lg border border-slate-100">
+                <div className="overflow-auto rounded-lg border border-border">
                   <table className="w-full min-w-[640px] text-sm">
-                    <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
+                    <thead className="bg-muted/40 text-xs font-semibold text-muted-foreground">
                       <tr>
                         <th className="px-4 py-3 text-left">Nombre</th>
                         <th className="px-4 py-3 text-left">Correo</th>
@@ -756,16 +756,16 @@ export default function GestionPersonas() {
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {personasFiltradas.map((p) => (
-                        <tr key={p._id} className="hover:bg-slate-50 transition-colors">
-                          <td className="px-4 py-3 font-medium text-slate-800">
+                        <tr key={p._id} className="hover:bg-muted/40 transition-colors">
+                          <td className="px-4 py-3 font-medium text-foreground">
                             {[p.perfil?.nombre_cliente, p.perfil?.apellido].filter(Boolean).join(' ') || '—'}
                           </td>
-                          <td className="px-4 py-3 text-slate-600">{p.correo}</td>
-                          <td className="px-4 py-3 text-slate-500 font-mono text-xs">
+                          <td className="px-4 py-3 text-muted-foreground">{p.correo}</td>
+                          <td className="px-4 py-3 text-muted-foreground font-mono text-xs">
                             {p.perfil?.documentoIntentidad || '—'}
                           </td>
-                          <td className="px-4 py-3 text-slate-500">{p.perfil?.telefono || '—'}</td>
-                          <td className="px-4 py-3 text-xs text-slate-500 font-mono">
+                          <td className="px-4 py-3 text-muted-foreground">{p.perfil?.telefono || '—'}</td>
+                          <td className="px-4 py-3 text-xs text-muted-foreground font-mono">
                             {p.tenantCorporativoId ? `${String(p.tenantCorporativoId).slice(0, 8)}…` : '—'}
                           </td>
                           <td className="px-4 py-3 text-center">
@@ -779,7 +779,7 @@ export default function GestionPersonas() {
                   </table>
                 </div>
               )}
-              <p className="mt-2 text-right text-xs text-slate-400">{personasFiltradas.length} persona{personasFiltradas.length !== 1 ? 's' : ''}</p>
+              <p className="mt-2 text-right text-xs text-muted-foreground">{personasFiltradas.length} persona{personasFiltradas.length !== 1 ? 's' : ''}</p>
             </CardContent>
           </Card>
         )}

@@ -91,7 +91,7 @@ export default function GeneradorEnlaceVentas({
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-5">
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="rounded-2xl border border-slate-200 bg-muted p-4">
                         <div className="flex flex-wrap items-center gap-2">
                             <Badge variant="secondary" className="gap-1">
                                 <ShoppingBag className="h-3.5 w-3.5" />
@@ -101,7 +101,7 @@ export default function GeneradorEnlaceVentas({
                                 {originName || (originId ? 'Producto seleccionado' : 'Sin producto seleccionado')}
                             </Badge>
                         </div>
-                        <p className="mt-2 text-xs text-slate-500">
+                        <p className="mt-2 text-xs text-muted-foreground">
                             Si seleccionas un producto en DashboardVenta, este generador enviara `originType=producto` y su `originId`.
                         </p>
                     </div>
@@ -141,7 +141,7 @@ export default function GeneradorEnlaceVentas({
                         </div>
                     </div>
 
-                    <Alert className="border-info/20 bg-info/10 text-info">
+                    <Alert className="border-info/20 bg-info/10 text-info-foreground">
                         <Sparkles className="h-4 w-4" />
                         <AlertTitle>Navigate parametrizado</AlertTitle>
                         <AlertDescription>
@@ -186,7 +186,7 @@ export default function GeneradorEnlaceVentas({
                                 <Copy className="h-4 w-4" />
                             </Button>
                         </div>
-                        <p className="text-xs text-slate-500">
+                        <p className="text-xs text-muted-foreground">
                             Enlace corto con código de atribución (`?at=MABS-…`). Al abrirlo el sistema carga guestSessionId, ref y origen automáticamente.
                         </p>
                     </div>
@@ -217,15 +217,15 @@ export default function GeneradorEnlaceVentas({
     }
 
     return (
-        <div className="flex-1 space-y-8 bg-gradient-to-b from-slate-50 via-white to-slate-100 p-4 md:p-6 lg:p-8">
+        <div className="flex-1 space-y-8 bg-gradient-to-b from-slate-50 via-background to-slate-100 p-4 md:p-6 lg:p-8">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
                 <div className="space-y-2">
-                    <div className="inline-flex items-center gap-2 rounded-full border border-info/20 bg-info/10 px-3 py-1 text-xs font-medium uppercase tracking-[0.2em] text-info">
+                    <div className="inline-flex items-center gap-2 rounded-full border border-info/20 bg-info/10 px-3 py-1 text-xs font-medium uppercase tracking-[0.2em] text-info-foreground">
                         <Orbit className="h-3.5 w-3.5" />
                         Attribution
                     </div>
-                    <h1 className="text-3xl font-semibold tracking-tight text-slate-900">generadorenlaceVentas</h1>
-                    <p className="max-w-3xl text-sm text-slate-600">
+                    <h1 className="text-3xl font-semibold tracking-tight text-foreground">generadorenlaceVentas</h1>
+                    <p className="max-w-3xl text-sm text-muted-foreground">
                         Generador independiente para enlaces de venta con attribution session y trazabilidad del sponsor.
                     </p>
                 </div>
@@ -238,9 +238,9 @@ export default function GeneradorEnlaceVentas({
 
 function ResultBox({ label, value }: { label: string; value: string }): React.ReactElement {
     return (
-        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <p className="text-xs uppercase tracking-[0.18em] text-slate-500">{label}</p>
-            <p className="mt-2 break-all text-sm font-medium text-slate-900">{value}</p>
+        <div className="rounded-2xl border border-slate-200 bg-muted p-4">
+            <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
+            <p className="mt-2 break-all text-sm font-medium text-foreground">{value}</p>
         </div>
     );
 }

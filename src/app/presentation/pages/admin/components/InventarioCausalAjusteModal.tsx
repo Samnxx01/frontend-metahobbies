@@ -3,6 +3,17 @@ import { Pencil, Plus, Trash2 } from 'lucide-react';
 import { toastAjusteError, toastAjusteExito } from './inventario-ajuste/inventarioAjusteAlerts';
 import inventarioService, { type InventarioCausalAjuste } from '@/app/services/inventarioService';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import {
   Dialog,
   DialogContent,
@@ -36,13 +47,36 @@ export default function InventarioCausalAjusteModal({
   const [loading, setLoading] = useState(false);
   const [submodalOpen, setSubmodalOpen] = useState(false);
   const [registroEditar, setRegistroEditar] = useState<InventarioCausalAjuste | null>(null);
+  const [editorInstance, setEditorInstance] = useState(0);
+  const [registroEliminar, setRegistroEliminar] = useState<InventarioCausalAjuste | null>(null);
   const [eliminandoCodigo, setEliminandoCodigo] = useState<string | null>(null);
 
   const cargar = useCallback(async (): Promise<void> => {
     try {
       setLoading(true);
-      const data = await inventarioService.listarCausalesAjusteAdmin();
-      setCausales(data);
+      const [data, tiposMovimiento] = await Promise.all([
+        inventarioService.listarCausalesAjusteAdmin(),
+        inventarioService.listarTiposMovimientoAdmin(),
+      ]);
+      const tiposPorId = new Map(
+        tiposMovimiento.flatMap((tipo) => {
+          const ids = [tipo.iud, tipo._id].map((id) => String(id || '')).filter(Boolean);
+          return ids.map((id) => [id, tipo] as const);
+        }),
+      );
+      setCausales(data.map((causal) => {
+        const referenciaId = String(
+          causal.tipoMovimientoReferenciaId
+          || (typeof causal.tipoMovimientoId === 'string' ? causal.tipoMovimientoId : '')
+          || '',
+        );
+        const tipoMovimiento = causal.tipoMovimiento || tiposPorId.get(referenciaId) || null;
+        return {
+          ...causal,
+          tipoMovimiento,
+          tipoMovimientoRelacionValida: Boolean(tipoMovimiento),
+        };
+      }));
     } catch (error) {
       console.error('Error cargando causales de ajuste:', error);
       toastAjusteError(error, 'No se pudieron cargar las causales.');
@@ -63,24 +97,24 @@ export default function InventarioCausalAjusteModal({
 
   const abrirCrear = (): void => {
     setRegistroEditar(null);
+    setEditorInstance((actual) => actual + 1);
     setSubmodalOpen(true);
   };
 
   const abrirEditar = (causal: InventarioCausalAjuste): void => {
-    setRegistroEditar(causal);
+    setRegistroEditar({ ...causal });
+    setEditorInstance((actual) => actual + 1);
     setSubmodalOpen(true);
   };
 
-  const eliminarCausal = async (causal: InventarioCausalAjuste): Promise<void> => {
-    const confirmar = window.confirm(
-      `¿Eliminar la causal "${causal.codigo}"? Esta acción no se puede deshacer.`
-    );
-    if (!confirmar) return;
-
+  const eliminarCausal = async (): Promise<void> => {
+    const causal = registroEliminar;
+    if (!causal) return;
     try {
       setEliminandoCodigo(causal.codigo);
       const { msg } = await inventarioService.eliminarCausalAjuste(causal.codigo);
       toastAjusteExito(msg || `Causal "${causal.codigo}" eliminada.`);
+      setRegistroEliminar(null);
       handleGuardada();
     } catch (error) {
       console.error('Error eliminando causal:', error);
@@ -101,12 +135,13 @@ export default function InventarioCausalAjusteModal({
             </DialogDescription>
           </DialogHeader>
 
-          <div className={catalogoAjusteUi.tableWrap}>
+          <div className={`${catalogoAjusteUi.tableWrap} hidden md:block`}>
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead className={catalogoAjusteUi.tableHead}>Código</TableHead>
                   <TableHead className={catalogoAjusteUi.tableHead}>Nombre</TableHead>
+                  <TableHead className={catalogoAjusteUi.tableHead}>Tipo de movimiento</TableHead>
                   <TableHead className={catalogoAjusteUi.tableHead}>Estado</TableHead>
                   <TableHead className={`${catalogoAjusteUi.tableHead} text-right`}>Acciones</TableHead>
                 </TableRow>
@@ -116,6 +151,13 @@ export default function InventarioCausalAjusteModal({
                   <TableRow key={causal.codigo} className={catalogoAjusteUi.tableRowHover}>
                     <TableCell className="font-medium">{causal.codigo}</TableCell>
                     <TableCell>{causal.nombre}</TableCell>
+                    <TableCell>
+                      {causal.tipoMovimiento
+                        ? `${causal.tipoMovimiento.codigo} · ${causal.tipoMovimiento.nombre}`
+                        : causal.tipoMovimientoReferenciaId
+                          ? `Referencia inválida · ${causal.tipoMovimientoReferenciaId}`
+                          : 'Sin relación'}
+                    </TableCell>
                     <TableCell>{causal.estado ? 'Activo' : 'Inactivo'}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1">
@@ -137,7 +179,7 @@ export default function InventarioCausalAjusteModal({
                           className="h-8 w-8 text-destructive"
                           title="Eliminar"
                           disabled={saving || eliminandoCodigo === causal.codigo}
-                          onClick={() => void eliminarCausal(causal)}
+                          onClick={() => setRegistroEliminar(causal)}
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -147,13 +189,48 @@ export default function InventarioCausalAjusteModal({
                 ))}
                 {!loading && causales.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={4} className="py-6 text-center text-muted-foreground">
+                    <TableCell colSpan={5} className="py-6 text-center text-muted-foreground">
                       No hay causales parametrizadas.
                     </TableCell>
                   </TableRow>
                 ) : null}
               </TableBody>
             </Table>
+          </div>
+
+          <div className="grid gap-3 md:hidden">
+            {causales.map((causal) => {
+              const tipo = causal.tipoMovimiento || null;
+              return (
+                <article key={causal.codigo} className="rounded-lg border border-border bg-card p-3 text-card-foreground shadow-sm">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="break-words text-sm font-semibold">{causal.nombre}</p>
+                      <p className="break-all text-xs text-muted-foreground">{causal.codigo}</p>
+                    </div>
+                    <Badge variant={causal.estado ? 'outline' : 'destructive'}>
+                      {causal.estado ? 'Activo' : 'Inactivo'}
+                    </Badge>
+                  </div>
+                  <div className="mt-3 rounded-md border border-border bg-muted/40 p-2 text-xs">
+                    <span className="font-medium">Tipo de movimiento:</span>{' '}
+                    {tipo
+                      ? `${tipo.codigo} · ${tipo.nombre}`
+                      : causal.tipoMovimientoReferenciaId
+                        ? `Referencia inválida · ${causal.tipoMovimientoReferenciaId}`
+                        : 'Sin relación'}
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <Button type="button" variant="outline" size="sm" onClick={() => abrirEditar(causal)} disabled={saving || eliminandoCodigo === causal.codigo}>
+                      <Pencil className="mr-1 h-4 w-4" /> Editar
+                    </Button>
+                    <Button type="button" variant="destructive" size="sm" onClick={() => setRegistroEliminar(causal)} disabled={saving || eliminandoCodigo === causal.codigo}>
+                      <Trash2 className="mr-1 h-4 w-4" /> Eliminar
+                    </Button>
+                  </div>
+                </article>
+              );
+            })}
           </div>
 
           <DialogFooter className="gap-2 sm:gap-0">
@@ -174,6 +251,7 @@ export default function InventarioCausalAjusteModal({
       </Dialog>
 
       <InventarioCausalAjusteFormSubmodal
+        key={`${editorInstance}-${registroEditar?.codigo || 'nuevo'}`}
         open={submodalOpen}
         onOpenChange={(next) => {
           setSubmodalOpen(next);
@@ -183,6 +261,41 @@ export default function InventarioCausalAjusteModal({
         registro={registroEditar}
         onGuardada={handleGuardada}
       />
+
+      <AlertDialog
+        open={Boolean(registroEliminar)}
+        onOpenChange={(next) => {
+          if (!next && !eliminandoCodigo) setRegistroEliminar(null);
+        }}
+      >
+        <AlertDialogContent className="max-h-[90dvh] w-[calc(100vw-1.5rem)] max-w-md overflow-y-auto border-border bg-card p-4 text-card-foreground sm:w-full sm:p-6">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Eliminar causal de ajuste</AlertDialogTitle>
+            <AlertDialogDescription className="space-y-3">
+              <span className="block">Esta operación elimina permanentemente la causal seleccionada.</span>
+              {registroEliminar ? (
+                <span className="block rounded-md border border-destructive/30 bg-destructive/10 p-3 text-foreground">
+                  <strong>{registroEliminar.codigo}</strong> · {registroEliminar.nombre}
+                </span>
+              ) : null}
+              <span className="block">Si tiene ajustes relacionados, el servidor impedirá eliminarla. En ese caso puedes desactivarla desde Editar.</span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <AlertDialogCancel className="w-full sm:w-auto" disabled={Boolean(eliminandoCodigo)}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="w-full bg-destructive text-destructive-foreground hover:bg-destructive/90 sm:w-auto"
+              disabled={Boolean(eliminandoCodigo)}
+              onClick={(event) => {
+                event.preventDefault();
+                void eliminarCausal();
+              }}
+            >
+              {eliminandoCodigo ? 'Eliminando…' : 'Eliminar definitivamente'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

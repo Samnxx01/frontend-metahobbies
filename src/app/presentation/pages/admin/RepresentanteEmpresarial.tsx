@@ -172,17 +172,17 @@ export default function RepresentanteEmpresarial() {
         ) : (
           <>
             {data?.representantes?.length > 0 ? (
-              <div className="mb-8 space-y-3 rounded-lg border bg-slate-50 p-4">
+              <div className="mb-8 space-y-3 rounded-lg border bg-muted/40 p-4">
                 <h3 className="mb-2 text-sm font-semibold text-muted-foreground">Datos Actuales del Representante</h3>
                 <div className="grid grid-cols-1 gap-2">
-                  <Input value={updateForm.nombre_representante_legal} disabled className="bg-white text-gray-600" placeholder="Nombre" />
-                  <Input value={updateForm.cargo_representante_legal} disabled className="bg-white text-gray-600" placeholder="Cargo" />
-                  <Input value={getDocLabel()} disabled className="bg-white text-gray-600" placeholder="Tipo Documento" />
-                  <Input value={updateForm.documentoidentidad} disabled className="bg-white text-gray-600" placeholder="Numero de documento" />
-                  <Input value={updateForm.correo_representante} disabled className="bg-white text-gray-600" placeholder="Correo" />
-                  <Input value={updateForm.telefono_representante} disabled className="bg-white text-gray-600" placeholder="Telefono" />
-                  <Input value={getNacLabel()} disabled className="bg-white text-gray-600" placeholder="Nacionalidad" />
-                  <Input value={getPrefLabel()} disabled className="bg-white text-gray-600" placeholder="Prefijo" />
+                  <Input value={updateForm.nombre_representante_legal} disabled className="bg-card text-muted-foreground" placeholder="Nombre" />
+                  <Input value={updateForm.cargo_representante_legal} disabled className="bg-card text-muted-foreground" placeholder="Cargo" />
+                  <Input value={getDocLabel()} disabled className="bg-card text-muted-foreground" placeholder="Tipo Documento" />
+                  <Input value={updateForm.documentoidentidad} disabled className="bg-card text-muted-foreground" placeholder="Numero de documento" />
+                  <Input value={updateForm.correo_representante} disabled className="bg-card text-muted-foreground" placeholder="Correo" />
+                  <Input value={updateForm.telefono_representante} disabled className="bg-card text-muted-foreground" placeholder="Telefono" />
+                  <Input value={getNacLabel()} disabled className="bg-card text-muted-foreground" placeholder="Nacionalidad" />
+                  <Input value={getPrefLabel()} disabled className="bg-card text-muted-foreground" placeholder="Prefijo" />
                 </div>
 
                 <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-start">

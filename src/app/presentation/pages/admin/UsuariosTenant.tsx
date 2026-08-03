@@ -775,7 +775,7 @@ export default function UsuariosTenant(): React.ReactElement {
                                                     <div className="flex items-center gap-2">
                                                         <div
                                                             className={`h-2 w-2 rounded-full ${
-                                                                sa.estado === true || sa.estado === 'activo' ? 'bg-success' : 'bg-gray-400'
+                                                                sa.estado === true || sa.estado === 'activo' ? 'bg-success' : 'bg-muted-foreground'
                                                             }`}
                                                         />
                                                         <span className="text-muted-foreground">{sa.correo}</span>
@@ -875,7 +875,7 @@ export default function UsuariosTenant(): React.ReactElement {
                                         <div key={String(u.iud)} className="flex items-center justify-between px-4 py-2.5 text-sm transition-colors hover:bg-muted/40">
                                             <div className="flex items-center gap-2 min-w-0">
                                                 <div className={`h-2 w-2 shrink-0 rounded-full ${
-                                                    u.estado === true || u.estado === 'activo' ? 'bg-success' : 'bg-gray-400'
+                                                    u.estado === true || u.estado === 'activo' ? 'bg-success' : 'bg-muted-foreground'
                                                 }`} />
                                                 <span className="text-muted-foreground truncate">{u.correo}</span>
                                             </div>

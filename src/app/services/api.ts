@@ -134,13 +134,6 @@ const buildSafeHeaders = (
     return safeHeaders;
 };
 
-const appendSpaContextQuery = (endpoint: string, spaFrontendPath = ''): string => {
-    if (!spaFrontendPath) return endpoint;
-
-    const join = endpoint.includes('?') ? '&' : '?';
-    return `${endpoint}${join}_mabsPath=${encodeURIComponent(spaFrontendPath)}`;
-};
-
 // En producción (build) VITE_API_URL apunta a Render.
 // En dev, el proxy de Vite redirige /api → localhost:8080, así que API_ORIGIN debe ser vacío.
 const API_ORIGIN = import.meta.env.PROD
@@ -181,7 +174,6 @@ export const apiFetch = async (
     const logoutOn401: boolean = options.logoutOn401 ?? Boolean(token);
     const requestOptions: ApiOptions = { ...options };
     const spaFrontendPath = resolveSpaContext(endpoint);
-    const resolvedEndpoint = appendSpaContextQuery(endpoint, spaFrontendPath);
 
     requestOptions.headers = buildSafeHeaders(requestOptions.headers, useAuth, token, spaFrontendPath);
 
@@ -198,7 +190,7 @@ export const apiFetch = async (
 
     try {
         const axiosResponse: AxiosResponse = await axiosClient.request({
-            url: buildAbsoluteUrl(resolvedEndpoint),
+            url: buildAbsoluteUrl(endpoint),
             method: (requestOptions.method ?? 'GET') as Method,
             headers: requestOptions.headers,
             data: requestOptions.body,

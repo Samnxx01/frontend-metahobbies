@@ -446,9 +446,8 @@ export default function Checkout(): React.ReactElement {
       const reabierto = await carritoService.reabrirTrasPagoFallido(id);
       id = getCarritoPublicId(reabierto) || id;
     }
-    await carritoService.guardarDatosFacturacion(id, datos);
-    const checkout = await carritoService.checkout(id, datos);
-    const idPago = getCarritoPublicId(checkout.carrito) || id;
+      const carritoActualizado = await carritoService.guardarDatosFacturacion(id, datos);
+      const idPago = getCarritoPublicId(carritoActualizado) || id;
     setCarritoIdPago(idPago);
     persistCarritoIdPago(idPago);
     setCarritoPagoHidratado(true);

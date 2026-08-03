@@ -543,7 +543,7 @@ export default function Dashboard(): React.ReactElement {
                                                     <p className="text-xs text-muted-foreground">{getUsuarioPerfil(u)}</p>
                                                 </div>
                                             </TableCell>
-                                            <TableCell className="text-xs text-slate-500">{String(u?.correo || u?.email || '-')}</TableCell>
+                                            <TableCell className="text-xs text-muted-foreground">{String(u?.correo || u?.email || '-')}</TableCell>
                                             <TableCell><Badge variant="outline">{getUsuarioRol(u)}</Badge></TableCell>
                                             <TableCell>
                                                 <Badge variant={u?.estado !== false ? 'outline' : 'secondary'}>
@@ -560,7 +560,7 @@ export default function Dashboard(): React.ReactElement {
                                 })}
                                 {!usuariosLoading && filteredUsuarios.length === 0 && (
                                     <TableRow>
-                                        <TableCell colSpan={5} className="py-6 text-center text-slate-400">
+                                        <TableCell colSpan={5} className="py-6 text-center text-muted-foreground">
                                             Sin usuarios cargados
                                         </TableCell>
                                     </TableRow>
@@ -687,7 +687,7 @@ export default function Dashboard(): React.ReactElement {
                     <DialogHeader>
                         <DialogTitle>Gestion de Usuarios</DialogTitle>
                         <DialogDescription>
-                            Editando: <span className="font-semibold text-slate-800">{String(editingUser?.nombre || editingUser?.correo || editingUser?.email || '')}</span>
+                            Editando: <span className="font-semibold text-foreground">{String(editingUser?.nombre || editingUser?.correo || editingUser?.email || '')}</span>
                         </DialogDescription>
                     </DialogHeader>
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-2">

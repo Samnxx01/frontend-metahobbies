@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { toast } from 'react-toastify';
-import { Building2, Mail, MapPin, Phone, RefreshCcw, Search, ShieldCheck } from 'lucide-react';
+import { Building2, Mail, MapPin, Pencil, Phone, RefreshCcw, Search, ShieldCheck, Trash2 } from 'lucide-react';
 import inventarioService, { type InventarioProveedor } from '@/app/services/inventarioService';
 import InventarioProveedorModal, { type InventarioProveedorDraft } from './components/InventarioProveedorModal';
 import ProveedorResponsabilidadesModal from './components/ProveedorResponsabilidadesModal';
@@ -15,6 +15,8 @@ export default function Proveedores(): React.ReactElement {
   const [modalOpen, setModalOpen] = useState<boolean>(false);
   const [search, setSearch] = useState<string>('');
   const [proveedorResponsabilidades, setProveedorResponsabilidades] = useState<InventarioProveedor | null>(null);
+  const [proveedorEditar, setProveedorEditar] = useState<InventarioProveedor | null>(null);
+  const [proveedorEliminar, setProveedorEliminar] = useState<InventarioProveedor | null>(null);
 
   const cargarProveedores = async (): Promise<void> => {
     try {
@@ -70,11 +72,16 @@ export default function Proveedores(): React.ReactElement {
         correo: draft.correo.trim(),
         telefono: draft.telefono.trim(),
         direccion: draft.direccion.trim(),
+        aplicaIva: draft.aplicaIva,
         tipoProveedorId: draft.tipoProveedorId || undefined,
         paisId: draft.paisId || undefined,
         departamentoId: draft.departamentoId || undefined,
         ciudadId: draft.ciudadId || undefined,
       });
+      const proveedorId = String(created._id || (created as { iud?: string }).iud || '');
+      if (draft.responsabilidadesFiscales.length && proveedorId) {
+        await inventarioService.guardarResponsabilidadesProveedor(proveedorId, draft.responsabilidadesFiscales);
+      }
       setProveedores((prev) => [...prev, created].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')));
       setModalOpen(false);
       toast.success('Proveedor registrado.');
@@ -84,6 +91,36 @@ export default function Proveedores(): React.ReactElement {
     } finally {
       setSaving(false);
     }
+  };
+
+  const actualizarProveedor = async (draft: InventarioProveedorDraft): Promise<void> => {
+    if (!proveedorEditar?._id) return;
+    try {
+      setSaving(true);
+      const updated = await inventarioService.actualizarProveedorCompra(proveedorEditar._id, {
+        nombre: draft.nombre.trim(), nit: draft.nit.trim(), correo: draft.correo.trim(), telefono: draft.telefono.trim(),
+        direccion: draft.direccion.trim(), aplicaIva: draft.aplicaIva, tipoProveedorId: draft.tipoProveedorId || undefined,
+        paisId: draft.paisId || undefined, departamentoId: draft.departamentoId || undefined, ciudadId: draft.ciudadId || undefined,
+      });
+      setProveedores((prev) => prev.map((item) => item._id === updated._id ? updated : item));
+      setProveedorEditar(null);
+      toast.success('Proveedor actualizado.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message.replace(/^\[\d+\]\s*/, '') : 'No se pudo actualizar el proveedor.');
+    } finally { setSaving(false); }
+  };
+
+  const eliminarProveedor = async (): Promise<void> => {
+    if (!proveedorEliminar?._id) return;
+    try {
+      setSaving(true);
+      await inventarioService.eliminarProveedorCompra(proveedorEliminar._id);
+      setProveedores((prev) => prev.filter((item) => item._id !== proveedorEliminar._id));
+      setProveedorEliminar(null);
+      toast.success('Proveedor eliminado.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message.replace(/^\[\d+\]\s*/, '') : 'No se pudo eliminar el proveedor.');
+    } finally { setSaving(false); }
   };
 
   return (
@@ -198,6 +235,8 @@ export default function Proveedores(): React.ReactElement {
                   </div>
 
                   <div className="mt-4">
+                    <p className="mb-3 text-xs font-medium text-foreground">IVA: {proveedor.aplicaIva ? 'Sí aplica' : 'No aplica'}</p>
+                    <div className="flex flex-wrap gap-2">
                     <Button
                       type="button"
                       variant="outline"
@@ -207,6 +246,13 @@ export default function Proveedores(): React.ReactElement {
                       <ShieldCheck className="mr-2 h-4 w-4" />
                       Responsabilidades DIAN
                     </Button>
+                    <Button type="button" variant="outline" size="sm" onClick={() => setProveedorEditar(proveedor)}>
+                      <Pencil className="mr-2 h-4 w-4" /> Editar
+                    </Button>
+                    <Button type="button" variant="destructive" size="sm" onClick={() => setProveedorEliminar(proveedor)}>
+                      <Trash2 className="mr-2 h-4 w-4" /> Eliminar
+                    </Button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -222,6 +268,22 @@ export default function Proveedores(): React.ReactElement {
         }}
         proveedor={proveedorResponsabilidades}
       />
+      <InventarioProveedorModal
+        open={Boolean(proveedorEditar)} saving={saving} proveedor={proveedorEditar}
+        onOpenChange={(value) => { if (!value) setProveedorEditar(null); }} onSubmit={actualizarProveedor}
+      />
+      {proveedorEliminar ? (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-lg border border-border bg-background p-5 text-foreground shadow-xl">
+            <h2 className="text-lg font-semibold">Eliminar proveedor</h2>
+            <p className="mt-2 text-sm text-muted-foreground">¿Deseas eliminar a {proveedorEliminar.nombre}? Dejará de aparecer en el catálogo.</p>
+            <div className="mt-5 flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setProveedorEliminar(null)} disabled={saving}>Cancelar</Button>
+              <Button variant="destructive" onClick={() => void eliminarProveedor()} disabled={saving}>Eliminar</Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -41,7 +41,7 @@ interface EditarForm {
 const INITIAL_EDITAR: EditarForm = { NombreLevel: '', porcentaje: '' };
 
 const GEN_BADGE: Record<number, string> = {
-    0: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
+    0: 'bg-muted text-muted-foreground dark:bg-button dark:text-muted-foreground',
     1: 'bg-success/10 text-success dark:bg-success/40 dark:text-success',
     2: 'bg-info/10 text-info dark:bg-info/40 dark:text-info',
     3: 'bg-info/10 text-info dark:bg-info/40 dark:text-info',
@@ -49,7 +49,7 @@ const GEN_BADGE: Record<number, string> = {
 };
 
 const GEN_DOT: Record<number, string> = {
-    0: 'bg-slate-400',
+    0: 'bg-muted-foreground',
     1: 'bg-success',
     2: 'bg-info',
     3: 'bg-info',

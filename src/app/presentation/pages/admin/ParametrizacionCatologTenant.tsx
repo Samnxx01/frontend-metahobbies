@@ -869,7 +869,7 @@ function NavItem({ endpoint, isActive, onClick }: {
       onClick={onClick}
       className={cn(
         'w-full flex items-start gap-2.5 px-3 py-2 rounded-lg text-left transition-colors',
-        isActive ? 'bg-destructive/10 text-destructive ring-1 ring-destructive/20' : 'hover:bg-slate-100 text-slate-700'
+        isActive ? 'bg-destructive/10 text-destructive ring-1 ring-destructive/20' : 'hover:bg-muted text-foreground'
       )}
     >
       <span className="mt-0.5 shrink-0"><MethodBadge method={endpoint.method} size="sm" /></span>
@@ -888,17 +888,17 @@ function FieldRow({ field, renderField }: {
   return (
     <div className="grid gap-1.5">
       <div className="flex items-center gap-2 flex-wrap">
-        <Label className="text-sm font-medium text-slate-800">
+        <Label className="text-sm font-medium text-foreground">
           {field.label}
           {field.required && <span className="text-destructive ml-1">*</span>}
         </Label>
         {field.pathParam && <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">path param</Badge>}
-        {field.type === 'boolean' && <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-slate-500">boolean</Badge>}
-        {field.type === 'number'  && <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-slate-500">number</Badge>}
+        {field.type === 'boolean' && <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-muted-foreground">boolean</Badge>}
+        {field.type === 'number'  && <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-muted-foreground">number</Badge>}
         {field.type === 'id'      && <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-info">ObjectId</Badge>}
       </div>
       {renderField()}
-      {field.hint && <p className="text-xs text-slate-500 leading-snug">{field.hint}</p>}
+      {field.hint && <p className="text-xs text-muted-foreground leading-snug">{field.hint}</p>}
     </div>
   );
 }
@@ -1763,29 +1763,29 @@ const ParametrizacionCatologTenant: React.FC = () => {
               })}
             </SelectContent>
           </Select>
-          <p className="text-xs text-slate-600 leading-relaxed">
+          <p className="text-xs text-muted-foreground leading-relaxed">
             {secuenciaParametrizacion != null && Number.isFinite(secuenciaParametrizacion) ? (
               <>
                 Contador en parametrización (secuencia){' '}
-                <span className="font-semibold text-slate-800">{secuenciaParametrizacion}</span>
+                <span className="font-semibold text-foreground">{secuenciaParametrizacion}</span>
                 {canManageGlobalNvlState ? (
                   <>
                     {' '}
                     · Reintentos en flujo (límite del contador){' '}
-                    <span className="font-semibold text-slate-800">{currentRetryCount}</span>
+                    <span className="font-semibold text-foreground">{currentRetryCount}</span>
                   </>
                 ) : null}
               </>
             ) : (
               <>
-                Listado = catálogo <code className="rounded bg-slate-100 px-1 text-[11px]">generacionGlobalNvlRoles</code>
+                Listado = catálogo <code className="rounded bg-muted px-1 text-[11px]">generacionGlobalNvlRoles</code>
                 (como en Parametrizar). La <span className="font-medium">secuencia</span> aparece cuando existe parametrización en{' '}
-                <code className="rounded bg-slate-100 px-1 text-[11px]">generacionglobalnvlrolesconfigs</code>.
+                <code className="rounded bg-muted px-1 text-[11px]">generacionglobalnvlrolesconfigs</code>.
                 {canManageGlobalNvlState ? (
                   <>
                     {' '}
                     Reintentos en flujo (límite global){' '}
-                    <span className="font-semibold text-slate-800">{currentRetryCount}</span>.
+                    <span className="font-semibold text-foreground">{currentRetryCount}</span>.
                   </>
                 ) : null}
               </>
@@ -1801,7 +1801,7 @@ const ParametrizacionCatologTenant: React.FC = () => {
             value={value}
             type="number"
             readOnly
-            className="bg-slate-50"
+            className="bg-muted"
             placeholder={field.placeholder || 'Calculada por contador'}
           />
           <Button
@@ -1826,7 +1826,7 @@ const ParametrizacionCatologTenant: React.FC = () => {
       <Input value={value} type={field.type === 'number' ? 'number' : 'text'}
         placeholder={field.placeholder || `Ingresa ${field.label}`}
         readOnly={field.readOnly}
-        className={field.readOnly ? 'bg-slate-50' : undefined}
+        className={field.readOnly ? 'bg-muted' : undefined}
         onChange={(e) => setField(eid, field.name, e.target.value)} />
     );
   };
@@ -1844,14 +1844,14 @@ const ParametrizacionCatologTenant: React.FC = () => {
             <DialogTitle>Validar secuencia de NVL registrados</DialogTitle>
             <DialogDescription>
               Coleccion{' '}
-              <code className="rounded bg-slate-100 px-1">generacionglobalnvlrolesconfigs</code>{' '}
+              <code className="rounded bg-muted px-1">generacionglobalnvlrolesconfigs</code>{' '}
               : expande cada registro para ver el vinculo con el nivel global padre. Cada alta por POST en el nivel global crea tambien una fila de parametrizacion (secuencia) en la misma operacion atomicamente.
             </DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-5">
             <div className="grid gap-3 sm:grid-cols-3">
-              <Card className="border-slate-200 bg-slate-50">
+              <Card className="border-slate-200 bg-muted">
                 <CardHeader className="pb-2">
                   <CardDescription>Contador actual</CardDescription>
                   <CardTitle className="text-2xl">{nvlSequenceState?.current ?? 0}</CardTitle>
@@ -1863,7 +1863,7 @@ const ParametrizacionCatologTenant: React.FC = () => {
                   <CardTitle className="text-2xl text-destructive">{nvlSequenceState?.next ?? 1}</CardTitle>
                 </CardHeader>
               </Card>
-              <Card className="border-slate-200 bg-white">
+              <Card className="border-slate-200 bg-card">
                 <CardHeader className="pb-2">
                   <CardDescription>Registros relacionados</CardDescription>
                   <CardTitle className="text-2xl">{nvlSequenceState?.totalRegistros ?? 0}</CardTitle>
@@ -1871,9 +1871,9 @@ const ParametrizacionCatologTenant: React.FC = () => {
               </Card>
             </div>
 
-            <div className="rounded-lg border border-slate-200 bg-white p-4">
-              <p className="text-sm font-medium text-slate-800">Registros individuales (parametrizacion por NVL)</p>
-              <p className="mt-1 text-xs text-slate-500">
+            <div className="rounded-lg border border-slate-200 bg-card p-4">
+              <p className="text-sm font-medium text-foreground">Registros individuales (parametrizacion por NVL)</p>
+              <p className="mt-1 text-xs text-muted-foreground">
                 Abre cada acordeon para revisar datos del nivel padre, validar ese registro contra el API y administrar securityPlatform / estado.
               </p>
               <div className="mt-3">
@@ -1889,35 +1889,35 @@ const ParametrizacionCatologTenant: React.FC = () => {
                         <AccordionItem key={`nvl-seq-${accordionValue}`} value={accordionValue} className="border-0 px-2">
                           <AccordionTrigger className="py-3 text-sm hover:no-underline [&[data-state=open]]:pb-2">
                             <span className="flex flex-wrap items-center gap-2 text-left">
-                              <Badge variant="outline" className="bg-white shrink-0">
+                              <Badge variant="outline" className="bg-card shrink-0">
                                 Sec. config {Number(item?.secuencia ?? 0)}
                               </Badge>
-                              <Badge variant="outline" className="bg-white shrink-0">
+                              <Badge variant="outline" className="bg-card shrink-0">
                                 NVL {String(item?.nvl ?? '?')}
                               </Badge>
-                              <Badge variant={item?.estado === false ? 'secondary' : 'outline'} className="bg-white shrink-0">
+                              <Badge variant={item?.estado === false ? 'secondary' : 'outline'} className="bg-card shrink-0">
                                 {item?.estado === false ? 'Config inactiva' : 'Config activa'}
                               </Badge>
                               {padreHueco ? (
                                 <Badge variant="destructive" className="shrink-0">Padre NVL sin datos enlazados</Badge>
                               ) : null}
-                              <span className="truncate text-xs font-mono text-slate-600">
+                              <span className="truncate text-xs font-mono text-muted-foreground">
                                 {String(item?.generation_tenant ?? '') || '—'}
                               </span>
                             </span>
                           </AccordionTrigger>
                           <AccordionContent>
-                            <div className="space-y-4 rounded-lg border border-slate-100 bg-slate-50 p-4">
-                              <div className="space-y-2 text-xs text-slate-600">
+                            <div className="space-y-4 rounded-lg border border-slate-100 bg-muted p-4">
+                              <div className="space-y-2 text-xs text-muted-foreground">
                                 <p>
-                                  <span className="font-semibold text-slate-700">ID parametrizacion: </span>
-                                  <code className="rounded bg-white px-1">{cfgId}</code>
+                                  <span className="font-semibold text-foreground">ID parametrizacion: </span>
+                                  <code className="rounded bg-card px-1">{cfgId}</code>
                                 </p>
                                 <p>
-                                  <span className="font-semibold text-slate-700">ID nivel global padre: </span>
-                                  <code className="rounded bg-white px-1">{parentId || '—'}</code>
+                                  <span className="font-semibold text-foreground">ID nivel global padre: </span>
+                                  <code className="rounded bg-card px-1">{parentId || '—'}</code>
                                 </p>
-                                <p className="text-sm font-medium text-slate-800">
+                                <p className="text-sm font-medium text-foreground">
                                   {String(item?.nombre ?? '') || 'Sin nombre visible'}
                                 </p>
                                 <p>{String(item?.descripcion ?? '') || 'Sin descripcion del nivel padre'}</p>
@@ -1987,7 +1987,7 @@ const ParametrizacionCatologTenant: React.FC = () => {
                     })}
                   </Accordion>
                 ) : (
-                  <Badge variant="outline" className="w-fit bg-white">No hay registros asociados a la secuencia todavia</Badge>
+                  <Badge variant="outline" className="w-fit bg-card">No hay registros asociados a la secuencia todavia</Badge>
                 )}
               </div>
             </div>
@@ -2011,9 +2011,9 @@ const ParametrizacionCatologTenant: React.FC = () => {
           </DialogHeader>
 
           <div className="grid gap-5">
-            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-              <p className="text-sm font-medium text-slate-800">Catalogo NVL guardado</p>
-              <p className="mt-1 text-xs text-slate-500">
+            <div className="rounded-lg border border-slate-200 bg-muted p-4">
+              <p className="text-sm font-medium text-foreground">Catalogo NVL guardado</p>
+              <p className="mt-1 text-xs text-muted-foreground">
                 Aqui ves la informacion existente en `generacionGlobalNvlRoles` para reutilizar el catalogo padre y evitar duplicados.
               </p>
               <div className="mt-3 grid gap-2 sm:grid-cols-2">
@@ -2022,7 +2022,7 @@ const ParametrizacionCatologTenant: React.FC = () => {
                     <button
                       key={`nvl-catalog-${item?.iud || item?._id || item?.nvl}`}
                       type="button"
-                      className="rounded-lg border border-slate-200 bg-white p-3 text-left transition-colors hover:border-destructive/30 hover:bg-destructive/10"
+                      className="rounded-lg border border-slate-200 bg-card p-3 text-left transition-colors hover:border-destructive/30 hover:bg-destructive/10"
                       onClick={() =>
                         setNvlModalState({
                           nvl: String(item?.nvl ?? ''),
@@ -2033,26 +2033,26 @@ const ParametrizacionCatologTenant: React.FC = () => {
                       }
                     >
                       <div className="flex items-center gap-2">
-                        <Badge variant="outline" className="bg-white">
+                        <Badge variant="outline" className="bg-card">
                           NVL {String(item?.nvl ?? '')}
                         </Badge>
-                        <span className="text-xs font-mono text-slate-500">
+                        <span className="text-xs font-mono text-muted-foreground">
                           {String(item?.generation_tenant ?? '') || 'SIN-CLAVE'}
                         </span>
                       </div>
-                      <p className="mt-2 text-sm font-medium text-slate-800">
+                      <p className="mt-2 text-sm font-medium text-foreground">
                         {String(item?.nombre ?? '') || 'Sin nombre visible'}
                       </p>
-                      <p className="mt-1 text-xs text-slate-500">
+                      <p className="mt-1 text-xs text-muted-foreground">
                         {String(item?.descripcion ?? '') || 'Sin descripcion parametrizada'}
                       </p>
-                      <p className="mt-1 text-[11px] text-slate-500">
+                      <p className="mt-1 text-[11px] text-muted-foreground">
                         Secuencia relacionada: {Number(item?.orden ?? 0)}
                       </p>
                     </button>
                   ))
                 ) : (
-                  <Badge variant="outline" className="bg-white">Sin registros en generacionGlobalNvlRoles</Badge>
+                  <Badge variant="outline" className="bg-card">Sin registros en generacionGlobalNvlRoles</Badge>
                 )}
               </div>
             </div>
@@ -2164,8 +2164,8 @@ const ParametrizacionCatologTenant: React.FC = () => {
           </DialogHeader>
 
           <div className="space-y-4">
-            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
-              Valor activo en backend: <span className="font-semibold text-slate-900">{currentRetryCount}</span>
+            <div className="rounded-lg border border-slate-200 bg-muted p-3 text-sm text-muted-foreground">
+              Valor activo en backend: <span className="font-semibold text-foreground">{currentRetryCount}</span>
             </div>
 
             <div className="grid gap-1.5">
@@ -2179,7 +2179,7 @@ const ParametrizacionCatologTenant: React.FC = () => {
                 onChange={(e) => setRetryModalValue(e.target.value)}
                 disabled={retryModalLoading || retryModalSaving}
               />
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-muted-foreground">
                 Si no lo parametrizas, el backend usa el valor por defecto. La relacion queda sobre el ultimo registro del counter.
               </p>
             </div>
@@ -2248,18 +2248,18 @@ const ParametrizacionCatologTenant: React.FC = () => {
         </DialogContent>
       </Dialog>
 
-      <div className="flex h-full min-h-screen bg-slate-50">
+      <div className="flex h-full min-h-screen bg-muted">
 
       {/* ── SIDEBAR ─────────────────────────────────────────────── */}
-      <aside className="w-72 shrink-0 border-r bg-white flex flex-col shadow-sm">
+      <aside className="w-72 shrink-0 border-r bg-card flex flex-col shadow-sm">
         <div className="px-4 py-4 border-b space-y-3">
           <div className="flex items-center gap-2">
             <Settings2 className="h-5 w-5 text-destructive" />
-            <span className="font-semibold text-slate-900 text-sm">Catalogo Tenant</span>
+            <span className="font-semibold text-foreground text-sm">Catalogo Tenant</span>
             <Badge variant="outline" className="ml-auto text-[10px]">{ENDPOINTS.length}</Badge>
           </div>
           <div className="relative">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input value={search} onChange={(e) => setSearch(e.target.value)}
               placeholder="Buscar endpoint..." className="pl-8 h-9 text-sm" />
           </div>
@@ -2273,16 +2273,16 @@ const ParametrizacionCatologTenant: React.FC = () => {
               return (
                 <div key={section}>
                   <button onClick={() => toggleSection(section)}
-                    className="w-full flex items-center justify-between px-2 py-2 rounded-md hover:bg-slate-50 transition-colors">
+                    className="w-full flex items-center justify-between px-2 py-2 rounded-md hover:bg-muted transition-colors">
                     <div className="flex items-center gap-2">
                       <span className={cn('shrink-0', SECTION_COLOR[section])}>{SECTION_ICON[section]}</span>
-                      <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
+                      <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                         {SECTION_LABEL[section]}
                       </span>
                     </div>
                     <div className="flex items-center gap-1.5">
-                      <span className="text-[10px] text-slate-400 font-mono">{items.length}</span>
-                      <span className="text-slate-400">
+                      <span className="text-[10px] text-muted-foreground font-mono">{items.length}</span>
+                      <span className="text-muted-foreground">
                         {isOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
                       </span>
                     </div>
@@ -2290,7 +2290,7 @@ const ParametrizacionCatologTenant: React.FC = () => {
                   {isOpen && (
                     <div className="mt-0.5 mb-2 ml-2 pl-2 border-l border-slate-100 space-y-0.5">
                       {items.length === 0 && (
-                        <p className="px-3 py-2 text-xs text-slate-400 italic">Sin resultados</p>
+                        <p className="px-3 py-2 text-xs text-muted-foreground italic">Sin resultados</p>
                       )}
                       {items.map((ep) => (
                         <NavItem key={ep.id} endpoint={ep} isActive={selectedId === ep.id}
@@ -2311,13 +2311,13 @@ const ParametrizacionCatologTenant: React.FC = () => {
 
           {/* Breadcrumb */}
           <div>
-            <p className="text-xs text-slate-400 mb-1 flex items-center gap-1.5">
+            <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1.5">
               <span className={SECTION_COLOR[selectedEndpoint.section]}>{SECTION_ICON[selectedEndpoint.section]}</span>
               <span>{SECTION_LABEL[selectedEndpoint.section]}</span>
             </p>
             <div className="flex flex-wrap items-center gap-3">
               <MethodBadge method={selectedEndpoint.method} />
-              <h1 className="text-2xl font-bold text-slate-900">{selectedEndpoint.title}</h1>
+              <h1 className="text-2xl font-bold text-foreground">{selectedEndpoint.title}</h1>
               {selectedEndpoint.id === 'nvlg-crear' ? <NvlGlobalCrearHelpButton /> : null}
             </div>
           </div>
@@ -2325,10 +2325,10 @@ const ParametrizacionCatologTenant: React.FC = () => {
           {/* Info card */}
           <Card className="border-slate-200">
             <CardContent className="pt-4 pb-4 space-y-2">
-              <code className="block rounded bg-slate-100 px-3 py-2 text-xs text-slate-700 font-mono break-all">
+              <code className="block rounded bg-muted px-3 py-2 text-xs text-foreground font-mono break-all">
                 {selectedEndpoint.path}
               </code>
-              <p className="text-sm text-slate-600">{selectedEndpoint.description}</p>
+              <p className="text-sm text-muted-foreground">{selectedEndpoint.description}</p>
               {isSelectedEndpointBlocked && (
                 <p className="text-sm font-medium text-warning">
                   Solo el scope `tenantSuperAdmin` del JWT puede guardar o ejecutar esta accion. `tenantGlobal` y `tenantCorporativo` quedan sin accion.
@@ -2341,7 +2341,7 @@ const ParametrizacionCatologTenant: React.FC = () => {
           <Card className="border-slate-200">
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
-                <Settings2 className="h-4 w-4 text-slate-500" />
+                <Settings2 className="h-4 w-4 text-muted-foreground" />
                 Parametros
               </CardTitle>
               {selectedEndpoint.fields.length === 0 && (
@@ -2361,7 +2361,7 @@ const ParametrizacionCatologTenant: React.FC = () => {
                       {pathFields.length > 0 && (
                         <div className="space-y-4">
                           <div className="flex items-center gap-2">
-                            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Path params</span>
+                            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Path params</span>
                             <Separator className="flex-1" />
                           </div>
                           {pathFields.map((field) => (
@@ -2376,7 +2376,7 @@ const ParametrizacionCatologTenant: React.FC = () => {
                         <div className="space-y-4">
                           {pathFields.length > 0 && (
                             <div className="flex items-center gap-2">
-                              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Body</span>
+                              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Body</span>
                               <Separator className="flex-1" />
                             </div>
                           )}
@@ -2389,7 +2389,7 @@ const ParametrizacionCatologTenant: React.FC = () => {
                         </div>
                       )}
                       {selectedEndpoint.id === 'nvlg-crear' && (
-                        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-3">
+                        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-muted/80 px-3 py-3">
                           {canManageGlobalNvlState ? (
                             <Button
                               type="button"
@@ -2448,23 +2448,23 @@ const ParametrizacionCatologTenant: React.FC = () => {
           {(resultText || isRunning || (selectedEndpoint.id === 'nvlg-listar' && nvlGlobalListData.length > 0)) && (
             <Card className="border-slate-200">
               <CardHeader className="pb-2">
-                <CardTitle className="text-base text-slate-700">Respuesta</CardTitle>
+                <CardTitle className="text-base text-foreground">Respuesta</CardTitle>
               </CardHeader>
               <CardContent>
                 {isRunning ? (
-                  <div className="flex items-center gap-2 text-sm text-slate-500">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Loader2 className="h-4 w-4 animate-spin" />
                     Ejecutando solicitud...
                   </div>
                 ) : selectedEndpoint.id === 'nvlg-listar' ? (
                   <div className="space-y-4">
-                    <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                    <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-muted px-4 py-3">
                       <div>
-                        <p className="text-sm font-semibold text-slate-800">Tabla de niveles globales</p>
-                        <p className="text-xs text-slate-500">Vista estetica del catalogo base y su relacion con la parametrizacion hija.</p>
+                        <p className="text-sm font-semibold text-foreground">Tabla de niveles globales</p>
+                        <p className="text-xs text-muted-foreground">Vista estetica del catalogo base y su relacion con la parametrizacion hija.</p>
                       </div>
                       <div className="flex items-center gap-3">
-                        <Badge variant="outline" className="bg-white">
+                        <Badge variant="outline" className="bg-card">
                           {nvlGlobalListData.length} registros
                         </Badge>
                         <Button type="button" variant="outline" size="sm" onClick={() => void fetchNvlGlobalList()} disabled={nvlGlobalListLoading}>
@@ -2472,12 +2472,12 @@ const ParametrizacionCatologTenant: React.FC = () => {
                         </Button>
                       </div>
                     </div>
-                    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-                      <div className="grid grid-cols-2 gap-0 bg-slate-100 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                    <div className="overflow-hidden rounded-xl border border-slate-200 bg-card">
+                      <div className="grid grid-cols-2 gap-0 bg-muted text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                         <div className="px-4 py-3">Resumen del nivel</div>
                         <div className="px-4 py-3 text-left lg:text-right">Estado y acciones</div>
                       </div>
-                      <div className="divide-y divide-slate-200 bg-white">
+                      <div className="divide-y divide-slate-200 bg-card">
                         {nvlGlobalListData.map((item) => {
                           const itemId = String(item?.iud || item?._id || '');
                           const busy = nvlGlobalActionId === itemId;
@@ -2488,35 +2488,35 @@ const ParametrizacionCatologTenant: React.FC = () => {
                             >
                               <div className="space-y-3">
                                 <div className="flex flex-wrap items-center gap-2">
-                                  <Badge variant="outline" className="bg-white">NVL {String(item?.nvl ?? '-')}</Badge>
+                                  <Badge variant="outline" className="bg-card">NVL {String(item?.nvl ?? '-')}</Badge>
                                   <Badge variant="secondary">Secuencia #{Number(item?.secuencia ?? item?.orden ?? 0)}</Badge>
                                   <Badge variant={item?.estado === false ? 'secondary' : 'default'}>
                                     {item?.estado === false ? 'Inactivo' : 'Activo'}
                                   </Badge>
                                 </div>
-                                <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                                <div className="rounded-xl border border-slate-200 bg-muted px-4 py-3">
                                   <div className="flex flex-col gap-1">
-                                    <p className="text-base font-semibold text-slate-900">{String(item?.nombre ?? 'Sin nombre')}</p>
-                                    <p className="font-mono text-xs text-slate-500">{String(item?.generation_tenant ?? 'SIN-CLAVE')}</p>
-                                    <p className="text-sm text-slate-500">{String(item?.descripcion ?? 'Sin descripcion')}</p>
+                                    <p className="text-base font-semibold text-foreground">{String(item?.nombre ?? 'Sin nombre')}</p>
+                                    <p className="font-mono text-xs text-muted-foreground">{String(item?.generation_tenant ?? 'SIN-CLAVE')}</p>
+                                    <p className="text-sm text-muted-foreground">{String(item?.descripcion ?? 'Sin descripcion')}</p>
                                   </div>
                                 </div>
                               </div>
-                              <div className="space-y-3 rounded-2xl border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-4">
+                              <div className="space-y-3 rounded-2xl border border-slate-200 bg-gradient-to-br from-background to-slate-50 p-4">
                                 <div className="grid gap-3 sm:grid-cols-2">
-                                  <div className="rounded-xl border border-slate-200 bg-white px-3 py-3">
-                                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Acceso libre</p>
+                                  <div className="rounded-xl border border-slate-200 bg-card px-3 py-3">
+                                    <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Acceso libre</p>
                                     <p className={`mt-2 text-sm font-semibold ${item?.securityPlatform ? 'text-success' : 'text-warning'}`}>
                                       {item?.securityPlatform ? 'true' : 'false'}
                                     </p>
                                   </div>
-                                  <div className="rounded-xl border border-slate-200 bg-white px-3 py-3">
-                                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Registro</p>
-                                    <p className="mt-2 break-all text-xs text-slate-500">{itemId || 'Sin id'}</p>
+                                  <div className="rounded-xl border border-slate-200 bg-card px-3 py-3">
+                                    <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Registro</p>
+                                    <p className="mt-2 break-all text-xs text-muted-foreground">{itemId || 'Sin id'}</p>
                                   </div>
                                 </div>
                                 <div className="border-t border-slate-200 pt-3">
-                                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Acciones disponibles</p>
+                                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Acciones disponibles</p>
                                   {canManageGlobalNvlState ? (
                                     <div className="flex flex-wrap gap-2">
                                       <Button type="button" variant="outline" size="sm" className="gap-1" onClick={() => openNvlListEditModal(item)} disabled={busy}>
@@ -2532,7 +2532,7 @@ const ParametrizacionCatologTenant: React.FC = () => {
                                       </Button>
                                     </div>
                                   ) : (
-                                    <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-400">
+                                    <div className="rounded-lg border border-dashed border-slate-200 bg-muted px-3 py-2 text-xs text-muted-foreground">
                                       Sin acciones para este scope
                                     </div>
                                   )}
@@ -2542,13 +2542,13 @@ const ParametrizacionCatologTenant: React.FC = () => {
                           );
                         })}
                         {!nvlGlobalListData.length ? (
-                          <div className="px-4 py-6 text-sm text-slate-500">No hay niveles globales para mostrar.</div>
+                          <div className="px-4 py-6 text-sm text-muted-foreground">No hay niveles globales para mostrar.</div>
                         ) : null}
                       </div>
                     </div>
                   </div>
                 ) : resultText ? (
-                  <pre className="overflow-auto rounded bg-slate-950 text-slate-50 p-4 text-xs font-mono leading-relaxed max-h-[400px] whitespace-pre-wrap break-words">
+                  <pre className="overflow-auto rounded bg-button text-muted-foreground p-4 text-xs font-mono leading-relaxed max-h-[400px] whitespace-pre-wrap break-words">
                     {resultText}
                   </pre>
                 ) : null}

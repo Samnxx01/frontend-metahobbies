@@ -230,22 +230,22 @@ export default function DocumentosCorporativos() {
 
       {/* MODAL: VISOR DE DOCUMENTO */}
       <Dialog open={!!selectedDoc} onOpenChange={() => setSelectedDoc(null)}>
-        <DialogContent className="max-w-6xl w-[95vw] h-[90vh] p-0 flex flex-col overflow-hidden bg-zinc-100">
-          <div className="p-3 border-b bg-white flex justify-between items-center px-6">
+        <DialogContent className="max-w-6xl w-[95vw] h-[90vh] p-0 flex flex-col overflow-hidden bg-muted">
+          <div className="p-3 border-b bg-card flex justify-between items-center px-6">
             <h3 className="font-semibold truncate max-w-[80%]">{selectedDoc?.nombre}</h3>
             {/* <Button variant="ghost" size="sm" onClick={() => setSelectedDoc(null)}>
               <X className="h-5 w-5" />
             </Button> */}
           </div>
 
-          <div className="flex-1 relative bg-zinc-200/50 flex items-center justify-center overflow-auto p-4">
+          <div className="flex-1 relative bg-muted/50 flex items-center justify-center overflow-auto p-4">
             {selectedDoc ? (
               selectedDoc.mimetype === 'application/pdf' ? (
-                <iframe src={selectedDoc.url} className="w-full h-full border rounded shadow-sm bg-white" title="Visor PDF" />
+                <iframe src={selectedDoc.url} className="w-full h-full border rounded shadow-sm bg-card" title="Visor PDF" />
               ) : selectedDoc.mimetype.startsWith('image/') ? (
                 <img src={selectedDoc.url} alt="Vista previa" className="max-w-full max-h-full object-contain rounded shadow-md" />
               ) : (
-                <div className="text-center p-10 bg-white rounded shadow">
+                <div className="text-center p-10 bg-card rounded shadow">
                   <p className="text-destructive font-medium">Formato no soportado para vista previa</p>
                   <p className="text-sm text-muted-foreground mt-2">Tipo: {selectedDoc.mimetype}</p>
                 </div>

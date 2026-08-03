@@ -1,5 +1,5 @@
 import React from 'react';
-import { CheckCircle2, FileText, Loader2 } from 'lucide-react';
+import { CheckCircle2, FileText, Loader2, Pencil, Save, X } from 'lucide-react';
 import { toast } from 'react-toastify';
 import inventarioService, { type ComprobanteEntradaDetalle } from '@/app/services/inventarioService';
 import {
@@ -11,6 +11,7 @@ import {
 } from '@/app/presentation/pages/admin/utils/estadoComprobanteEntradaUi';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import InventarioReporteKardexEntrada from './InventarioReporteKardexEntrada';
@@ -46,6 +47,19 @@ export default function InventarioComprobanteEntradaVistaModal({
 }: InventarioComprobanteEntradaVistaModalProps): React.ReactElement {
   const [loading, setLoading] = React.useState(false);
   const [detalle, setDetalle] = React.useState<ComprobanteEntradaDetalle | null>(null);
+  const [editando, setEditando] = React.useState(false);
+  const [guardando, setGuardando] = React.useState(false);
+  const [cantidades, setCantidades] = React.useState<Record<string, string>>({});
+
+  const cargarDetalle = React.useCallback(async (): Promise<void> => {
+    if (!recepcionId) return;
+    const data = await inventarioService.obtenerDetalleComprobanteEntrada(recepcionId);
+    setDetalle(data);
+    setCantidades(Object.fromEntries(data.items.map((item) => [
+      item.lineaKey || `${item.sku}-${item.bodega}`,
+      String(item.cantidadRecibida),
+    ])));
+  }, [recepcionId]);
 
   React.useEffect(() => {
     if (!open || !recepcionId) {
@@ -57,7 +71,14 @@ export default function InventarioComprobanteEntradaVistaModal({
       try {
         setLoading(true);
         const data = await inventarioService.obtenerDetalleComprobanteEntrada(recepcionId);
-        if (!cancelled) setDetalle(data);
+        if (!cancelled) {
+          setDetalle(data);
+          setEditando(false);
+          setCantidades(Object.fromEntries(data.items.map((item) => [
+            item.lineaKey || `${item.sku}-${item.bodega}`,
+            String(item.cantidadRecibida),
+          ])));
+        }
       } catch (error) {
         console.error('Error cargando comprobante:', error);
         toast.error('No se pudo cargar el comprobante de entrada.');
@@ -72,19 +93,62 @@ export default function InventarioComprobanteEntradaVistaModal({
     };
   }, [open, recepcionId, onOpenChange]);
 
-  const total = React.useMemo(
-    () => (detalle?.items || []).reduce(
-      (acc, it) => acc + subtotalLineaComprobanteEntrada(
-        Number(it.cantidadRecibida || 0),
-        Number(it.costoUnitario || 0),
-        it.subtotal,
-      ),
-      0,
-    ),
-    [detalle],
-  );
+  const desgloseEditado = React.useMemo(() => (detalle?.items || []).map((item) => {
+    const key = item.lineaKey || `${item.sku}-${item.bodega}`;
+    const cantidadOriginal = Number(item.cantidadRecibida || 0);
+    const cantidad = editando ? Number(cantidades[key] || 0) : cantidadOriginal;
+    const factor = cantidadOriginal > 0 ? cantidad / cantidadOriginal : 0;
+    const escalar = (valor?: number) => Math.round((Number(valor || 0) * factor + Number.EPSILON) * 100) / 100;
+    return {
+      key,
+      cantidad,
+      subtotalBruto: escalar(item.desglose?.subtotalBruto),
+      descuento: escalar(item.desglose?.descuento),
+      baseGravable: escalar(item.desglose?.baseGravable),
+      iva: escalar(item.desglose?.iva),
+      total: item.desglose
+        ? escalar(item.desglose.total)
+        : subtotalLineaComprobanteEntrada(cantidad, Number(item.costoUnitario || 0)),
+    };
+  }), [detalle, editando, cantidades]);
+  const resumen = React.useMemo(() => desgloseEditado.reduce((acc, item) => ({
+    subtotalBruto: acc.subtotalBruto + item.subtotalBruto,
+    descuento: acc.descuento + item.descuento,
+    baseGravable: acc.baseGravable + item.baseGravable,
+    iva: acc.iva + item.iva,
+    total: acc.total + item.total,
+  }), { subtotalBruto: 0, descuento: 0, baseGravable: 0, iva: 0, total: 0 }), [desgloseEditado]);
+  const total = resumen.total;
   const pendienteConfirmacion = String(detalle?.estado || '').trim().toUpperCase() === 'PENDIENTE_APROBACION';
   const confirmando = Boolean(recepcionId && confirmandoComprobanteId === recepcionId);
+
+  const guardarEdicion = async (): Promise<void> => {
+    if (!recepcionId || !detalle) return;
+    const items = detalle.items.map((item) => {
+      const key = item.lineaKey || `${item.sku}-${item.bodega}`;
+      return {
+        ordenItemIndex: item.ordenItemIndex,
+        sku: item.sku,
+        cantidadRecibida: Number(cantidades[key]),
+      };
+    });
+    if (items.some((item) => !Number.isFinite(item.cantidadRecibida) || item.cantidadRecibida <= 0)) {
+      toast.error('Todas las cantidades recibidas deben ser mayores que cero.');
+      return;
+    }
+    try {
+      setGuardando(true);
+      await inventarioService.actualizarComprobanteEntradaPendiente(recepcionId, { items });
+      await cargarDetalle();
+      setEditando(false);
+      toast.success('Comprobante actualizado. Ya puede confirmarlo.');
+    } catch (error) {
+      console.error('Error actualizando comprobante:', error);
+      toast.error(error instanceof Error ? error.message : 'No se pudo actualizar el comprobante.');
+    } finally {
+      setGuardando(false);
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -97,20 +161,43 @@ export default function InventarioComprobanteEntradaVistaModal({
               : 'Comprobante de entrada'}
           </DialogTitle>
           {pendienteConfirmacion && recepcionId ? (
-            <Button
-              type="button"
-              size="sm"
-              className="absolute right-14 top-5"
-              onClick={() => void onConfirmarComprobante?.(recepcionId)}
-              disabled={confirmando}
-            >
-              {confirmando ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            <div className="absolute right-14 top-5 flex items-center gap-2">
+              {editando ? (
+                <>
+                  <Button type="button" size="sm" variant="outline" onClick={() => setEditando(false)} disabled={guardando}>
+                    <X className="mr-2 h-4 w-4" /> Cancelar edición
+                  </Button>
+                  <Button type="button" size="sm" onClick={() => void guardarEdicion()} disabled={guardando}>
+                    {guardando ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                    {guardando ? 'Guardando...' : 'Guardar cambios'}
+                  </Button>
+                </>
               ) : (
-                <CheckCircle2 className="mr-2 h-4 w-4" />
+                <>
+                  <Button
+                    id="editar-comprobante-entrada"
+                    data-testid="editar-comprobante-entrada"
+                    data-recepcion-id={recepcionId}
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setEditando(true)}
+                    disabled={confirmando}
+                  >
+                    <Pencil className="mr-2 h-4 w-4" /> Editar
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => void onConfirmarComprobante?.(recepcionId)}
+                    disabled={confirmando}
+                  >
+                    {confirmando ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
+                    {confirmando ? 'Confirmando...' : 'Confirmar comprobante'}
+                  </Button>
+                </>
               )}
-              {confirmando ? 'Confirmando...' : 'Confirmar comprobante'}
-            </Button>
+            </div>
           ) : null}
           <DialogDescription className="sr-only">
             Consulta del comprobante de entrada, líneas recibidas y movimiento en kardex.
@@ -193,16 +280,27 @@ export default function InventarioComprobanteEntradaVistaModal({
                   </TableHeader>
                   <TableBody>
                     {detalle.items.map((it) => {
-                      const subtotal = subtotalLineaComprobanteEntrada(
-                        Number(it.cantidadRecibida || 0),
-                        Number(it.costoUnitario || 0),
-                        it.subtotal,
-                      );
+                      const calculada = desgloseEditado.find((row) => row.key === (it.lineaKey || `${it.sku}-${it.bodega}`));
+                      const subtotal = calculada?.total ?? Number(it.subtotal || 0);
                       return (
                         <TableRow key={it.lineaKey || `${it.sku}-${it.bodega}`}>
                           <TableCell className="font-mono text-xs">{it.sku}</TableCell>
                           <TableCell>{it.bodega}</TableCell>
-                          <TableCell className="text-right tabular-nums">{formatQty(Number(it.cantidadRecibida || 0))}</TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            {editando ? (
+                              <Input
+                                type="number"
+                                min="0.01"
+                                step="0.01"
+                                className="ml-auto h-8 w-28 text-right"
+                                value={cantidades[it.lineaKey || `${it.sku}-${it.bodega}`] ?? ''}
+                                onChange={(event) => setCantidades((actual) => ({
+                                  ...actual,
+                                  [it.lineaKey || `${it.sku}-${it.bodega}`]: event.target.value,
+                                }))}
+                              />
+                            ) : formatQty(Number(it.cantidadRecibida || 0))}
+                          </TableCell>
                           <TableCell className="text-right tabular-nums">{formatQty(Number(it.disponibleKardex || 0))}</TableCell>
                           <TableCell>
                             <Badge
@@ -219,6 +317,13 @@ export default function InventarioComprobanteEntradaVistaModal({
                     })}
                   </TableBody>
                 </Table>
+              </div>
+              <div className="ml-auto grid w-full max-w-sm gap-2 rounded-md border border-border bg-muted/40 p-3 text-sm">
+                <div className="flex justify-between gap-4"><span>Subtotal bruto</span><span className="font-medium tabular-nums">{moneyCo(resumen.subtotalBruto)}</span></div>
+                <div className="flex justify-between gap-4"><span>Descuento</span><span className="font-medium tabular-nums">- {moneyCo(resumen.descuento)}</span></div>
+                <div className="flex justify-between gap-4"><span>Base gravable</span><span className="font-medium tabular-nums">{moneyCo(resumen.baseGravable)}</span></div>
+                <div className="flex justify-between gap-4"><span>IVA según tarifa</span><span className="font-medium tabular-nums">+ {moneyCo(resumen.iva)}</span></div>
+                <div className="flex justify-between gap-4 border-t border-border pt-2 font-semibold"><span>Total recibido</span><span className="tabular-nums">{moneyCo(resumen.total)}</span></div>
               </div>
             </div>
 

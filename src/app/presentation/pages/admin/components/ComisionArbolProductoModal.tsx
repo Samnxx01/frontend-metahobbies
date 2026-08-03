@@ -40,10 +40,10 @@ const normalizeLevels = (levels: EditableLevel[]): PipelineBLevel[] =>
         .sort((a, b) => a.gen - b.gen);
 
 const GEN_STYLES: Record<number, string> = {
-    1: 'border-success/20 bg-success/10 text-success',
-    2: 'border-info/20 bg-info/10 text-info',
-    3: 'border-info/20 bg-info/10 text-info',
-    4: 'border-warning/20 bg-warning/10 text-warning',
+    1: 'border-success/20 bg-success/10 text-success-foreground',
+    2: 'border-info/20 bg-info/10 text-info-foreground',
+    3: 'border-info/20 bg-info/10 text-info-foreground',
+    4: 'border-warning/20 bg-warning/10 text-warning-foreground',
 };
 
 const GEN_LABEL: Record<number, string> = {
@@ -159,13 +159,13 @@ export default function ComisionArbolProductoModal({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-h-[92vh] w-[min(920px,calc(100vw-2rem))] max-w-none overflow-y-auto border-info/20 bg-gradient-to-b from-info/80 via-white to-white">
+            <DialogContent className="max-h-[92vh] w-[min(920px,calc(100vw-2rem))] max-w-none overflow-y-auto border-info/20 bg-gradient-to-b from-info/80 via-background to-background">
                 <DialogHeader>
-                    <DialogTitle className="flex items-center gap-2 text-slate-900">
-                        <Network className="h-5 w-5 text-info" />
+                    <DialogTitle className="flex items-center gap-2 text-foreground">
+                        <Network className="h-5 w-5 text-info-foreground" />
                         Parametrizar comisiones por árbol de referidos
                     </DialogTitle>
-                    <DialogDescription className="text-slate-600">
+                    <DialogDescription className="text-muted-foreground">
                         Define el % por generación del sponsor en refeClient. Aplica a cualquier venta de producto
                         cuando la transacción trae referidoId y el disparador valida el sponsor.
                     </DialogDescription>
@@ -175,7 +175,7 @@ export default function ComisionArbolProductoModal({
                     <div className="space-y-4">
                         <div className="rounded-2xl border border-info/20 bg-info/70 p-4">
                             <div className="flex flex-wrap items-center justify-between gap-2">
-                                <div className="flex items-center gap-2 text-sm font-medium text-info">
+                                <div className="flex items-center gap-2 text-sm font-medium text-info-foreground">
                                     <Users className="h-4 w-4" />
                                     Árbol por referido / sponsor
                                 </div>
@@ -187,19 +187,19 @@ export default function ComisionArbolProductoModal({
                                           : 'Sin configuración guardada'}
                                 </Badge>
                             </div>
-                            <p className="mt-1 text-xs text-info/80">
+                            <p className="mt-1 text-xs text-info-foreground/80">
                                 No se configura por producto. El motor sube refeClient desde el comprador:
                                 Gen1 = sponsor directo, Gen2 = sponsor del sponsor, etc.
                             </p>
                         </div>
 
-                        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-600">
+                        <div className="rounded-2xl border border-border bg-muted/40 p-4 text-xs text-muted-foreground">
                             <p>
-                                <span className="font-semibold text-slate-800">Disparo:</span> motorProductos →
+                                <span className="font-semibold text-foreground">Disparo:</span> motorProductos →
                                 APPROVED + tercero + invoice FAC-* + referidoId → sponsor en refeClient → comisión por árbol.
                             </p>
-                            <p className="mt-2 border-t border-slate-200 pt-2">
-                                <span className="font-semibold text-slate-800">Cálculo en dos pasos:</span>{' '}
+                            <p className="mt-2 border-t border-border pt-2">
+                                <span className="font-semibold text-foreground">Cálculo en dos pasos:</span>{' '}
                                 primero la regla del producto sobre el monto cobrado (ej. $2.000 × 75% = $1.500 base);
                                 luego cada % del árbol se aplica sobre esa base (ej. Gen1 20% → $300).
                             </p>
@@ -209,7 +209,7 @@ export default function ComisionArbolProductoModal({
                             {levels.map((level, index) => (
                                 <div
                                     key={level.key}
-                                    className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 md:grid-cols-[0.7fr_1fr_auto]"
+                                    className="grid gap-3 rounded-2xl border border-border bg-card p-4 md:grid-cols-[0.7fr_1fr_auto]"
                                 >
                                     <div className="space-y-2">
                                         <Label>Gen</Label>
@@ -231,7 +231,7 @@ export default function ComisionArbolProductoModal({
                                         <Button
                                             variant="ghost"
                                             size="icon"
-                                            className="text-slate-500"
+                                            className="text-muted-foreground"
                                             onClick={() => removeLevel(level.key)}
                                             disabled={levels.length === 1}
                                         >
@@ -249,13 +249,13 @@ export default function ComisionArbolProductoModal({
                     </div>
 
                     <div className="space-y-4">
-                        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                        <div className="rounded-2xl border border-border bg-muted/40 p-4">
+                            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                                 Vista del árbol (refeClient)
                             </p>
 
                             {loading ? (
-                                <div className="mt-4 flex items-center gap-2 text-sm text-slate-500">
+                                <div className="mt-4 flex items-center gap-2 text-sm text-muted-foreground">
                                     <Loader2 className="h-4 w-4 animate-spin" />
                                     Cargando configuración...
                                 </div>
@@ -264,7 +264,7 @@ export default function ComisionArbolProductoModal({
                                     {treePreview.map((level) => (
                                         <div key={`preview-${level.gen}`} className="flex flex-col items-center">
                                             <div
-                                                className={`w-full rounded-2xl border px-4 py-3 ${GEN_STYLES[level.gen] || 'border-slate-200 bg-white text-slate-900'}`}
+                                                className={`w-full rounded-2xl border px-4 py-3 ${GEN_STYLES[level.gen] || 'border-border bg-card text-foreground'}`}
                                             >
                                                 <div className="flex items-center justify-between gap-3">
                                                     <div>
@@ -280,22 +280,22 @@ export default function ComisionArbolProductoModal({
                                         </div>
                                     ))}
 
-                                    <div className="rounded-2xl border border-slate-300 bg-white px-4 py-3">
-                                        <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-                                            <UserRound className="h-4 w-4 text-info" />
+                                    <div className="rounded-2xl border border-border bg-card px-4 py-3">
+                                        <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                                            <UserRound className="h-4 w-4 text-info-foreground" />
                                             Comprador (referidoId)
                                         </div>
-                                        <p className="mt-1 text-xs text-slate-500">
+                                        <p className="mt-1 text-xs text-muted-foreground">
                                             Base del árbol. La relación sponsor→comprador se materializa al aprobar el pago.
                                         </p>
                                     </div>
 
-                                    <div className="rounded-2xl border border-dashed border-info/20 bg-info/50 px-4 py-3 text-xs text-info">
+                                    <div className="rounded-2xl border border-dashed border-info/20 bg-info/50 px-4 py-3 text-xs text-info-foreground">
                                         <div className="flex items-center gap-2 font-medium">
                                             <GitBranch className="h-3.5 w-3.5" />
                                             Alcance global de ventas referidas
                                         </div>
-                                        <p className="mt-1 text-info/80">
+                                        <p className="mt-1 text-info-foreground/80">
                                             originType={VENTA_REFERIDO_ARBOL.originType} · cualquier producto con sponsor válido
                                         </p>
                                     </div>
@@ -303,7 +303,7 @@ export default function ComisionArbolProductoModal({
                             )}
                         </div>
 
-                        <div className="rounded-2xl border border-warning/20 bg-warning/10 p-4 text-xs text-warning">
+                        <div className="rounded-2xl border border-warning/20 bg-warning/10 p-4 text-xs text-warning-foreground">
                             El disparo exige: pago APPROVED, comprador con tercero + invoice CONFIRMADA (FAC-*),
                             referidoId en auditoría y sponsor válido en refeClient.
                         </div>
@@ -313,7 +313,7 @@ export default function ComisionArbolProductoModal({
                 <Separator />
 
                 <DialogFooter className="gap-2 sm:justify-between">
-                    <p className="text-xs text-slate-500">
+                    <p className="text-xs text-muted-foreground">
                         {editingConfigId
                             ? 'Actualizando configuración global del árbol de referidos.'
                             : 'Se creará la configuración global venta-referido.'}

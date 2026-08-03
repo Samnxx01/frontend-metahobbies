@@ -105,7 +105,7 @@ export default function ProductoDetalleEscaneoModal({
               <img
                 src={producto.imagenes[0]}
                 alt={producto.nombre}
-                className="h-40 w-full rounded-md border object-contain bg-white"
+                className="h-40 w-full rounded-md border object-contain bg-card"
               />
             )}
 

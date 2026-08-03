@@ -35,6 +35,8 @@ export const PRODUCT_ACTION_IDS = {
   MANAGE_CATALOG_CONFIG: 'products.catalog.config.manage',
   MANAGE_SALES_SEQUENCE: 'products.sales.sequence.manage',
   MANAGE_SALES_RULES: 'products.sales.rules.manage',
+  MANAGE_ACCOUNTING_RULES: 'products.accounting.rules.manage',
+  REQUEUE_PIPELINE_B: 'products.pipeline-b.requeue',
   SYNC: 'products.catalog.sync',
   VIEW_CATEGORIES: 'products.categories.view',
   CREATE_CATEGORY: 'products.categories.create',
@@ -81,6 +83,27 @@ export const INVENTORY_SHARED_ACTION_IDS = {
   VIEW_PURCHASE_ORDER: 'VER',
   EDIT_ENTITY: 'EDIT',
   DELETE_ENTITY: 'ELIMINAR',
+} as const satisfies Record<string, ActionId>;
+
+export const INVENTORY_PURCHASE_ACTION_IDS = {
+  MANAGE_ORDER_STATUSES: 'inventory.purchases.order-statuses.manage',
+  CREATE_RECEIPT: 'inventory.purchases.receipts.create',
+  MANAGE_ACCOUNTING_RULES: 'inventory.purchases.accounting-rules.manage',
+  CREATE_PROVIDER: 'inventory.purchases.providers.create',
+  CREATE_ORDER: 'inventory.purchases.orders.create',
+  EDIT_PROVIDER: 'inventory.purchases.providers.update',
+  DEACTIVATE_PROVIDER: 'inventory.purchases.providers.deactivate',
+} as const satisfies Record<string, ActionId>;
+
+export const INVENTORY_SKU_ACTION_IDS = {
+  REFRESH_CATALOG: 'inventory.skus.catalog.refresh',
+  EXPORT_CATALOG: 'inventory.skus.catalog.export',
+  IMPORT_CATALOG: 'inventory.skus.catalog.import',
+  VIEW_DETAILS: 'inventory.skus.details.view',
+  DEACTIVATE: 'inventory.skus.deactivate',
+  DELETE: 'inventory.skus.delete',
+  EDIT: 'inventory.skus.update',
+  GENERATE_BARCODE: 'inventory.skus.barcode.generate',
 } as const satisfies Record<string, ActionId>;
 
 export const PAYMENT_METHOD_ACTION_IDS = {
@@ -172,6 +195,21 @@ export const GOVERNED_ACTION_CATALOG = [
   governedAction(INVENTORY_SHARED_ACTION_IDS.VIEW_PURCHASE_ORDER, 'Ver orden de compra', 'inventory', 'Inventario', '/admin/inventory', 'purchase-orders', 'Órdenes de compra', 'VIEW', 'Consulta el detalle de una orden de compra.'),
   governedAction(INVENTORY_SHARED_ACTION_IDS.EDIT_ENTITY, 'Editar registro de inventario', 'inventory', 'Inventario', '/admin/inventory', 'shared', 'Acciones de registros', 'UPDATE', 'Edita un registro operativo de inventario.'),
   governedAction(INVENTORY_SHARED_ACTION_IDS.DELETE_ENTITY, 'Eliminar registro de inventario', 'inventory', 'Inventario', '/admin/inventory', 'shared', 'Acciones de registros', 'DELETE', 'Elimina un registro cuando las reglas del inventario lo permiten.'),
+  governedAction(INVENTORY_PURCHASE_ACTION_IDS.MANAGE_ORDER_STATUSES, 'Estados OC', 'inventory', 'Inventario', '/admin/inventory', 'purchases', 'Orden/compras', 'UPDATE', 'Administra los estados de las órdenes de compra.'),
+  governedAction(INVENTORY_PURCHASE_ACTION_IDS.CREATE_RECEIPT, 'Comprobante de entrada', 'inventory', 'Inventario', '/admin/inventory', 'purchases', 'Orden/compras', 'CREATE', 'Registra la recepción de mercancía de una orden de compra.'),
+  governedAction(INVENTORY_PURCHASE_ACTION_IDS.MANAGE_ACCOUNTING_RULES, 'Reglas contables', 'inventory', 'Inventario', '/admin/inventory', 'purchases', 'Orden/compras', 'UPDATE', 'Administra las reglas contables aplicables a compras.'),
+  governedAction(INVENTORY_PURCHASE_ACTION_IDS.CREATE_PROVIDER, 'Nuevo proveedor', 'inventory', 'Inventario', '/admin/inventory', 'providers', 'Proveedores', 'CREATE', 'Crea un proveedor para las órdenes de compra.'),
+  governedAction(INVENTORY_PURCHASE_ACTION_IDS.CREATE_ORDER, 'Nueva orden de compra', 'inventory', 'Inventario', '/admin/inventory', 'purchase-orders', 'Órdenes de compra', 'CREATE', 'Crea una nueva orden de compra.'),
+  governedAction(INVENTORY_PURCHASE_ACTION_IDS.EDIT_PROVIDER, 'Editar proveedor', 'inventory', 'Inventario', '/admin/inventory', 'providers', 'Proveedores', 'UPDATE', 'Edita los datos del proveedor seleccionado.'),
+  governedAction(INVENTORY_PURCHASE_ACTION_IDS.DEACTIVATE_PROVIDER, 'Desactivar proveedor', 'inventory', 'Inventario', '/admin/inventory', 'providers', 'Proveedores', 'DELETE', 'Desactiva el proveedor seleccionado.'),
+  governedAction(INVENTORY_SKU_ACTION_IDS.REFRESH_CATALOG, 'Actualizar catálogo SKU', 'inventory', 'Inventario', '/admin/inventory', 'skus', 'Catálogo SKU', 'VIEW', 'Recarga el catálogo de SKU desde la base de datos.'),
+  governedAction(INVENTORY_SKU_ACTION_IDS.EXPORT_CATALOG, 'Exportar catálogo SKU', 'inventory', 'Inventario', '/admin/inventory', 'skus', 'Catálogo SKU', 'EXECUTE', 'Exporta el catálogo de SKU a Excel.'),
+  governedAction(INVENTORY_SKU_ACTION_IDS.IMPORT_CATALOG, 'Importar catálogo SKU', 'inventory', 'Inventario', '/admin/inventory', 'skus', 'Catálogo SKU', 'CREATE', 'Importa productos y SKU desde Excel.'),
+  governedAction(INVENTORY_SKU_ACTION_IDS.VIEW_DETAILS, 'Ver detalles del SKU', 'inventory', 'Inventario', '/admin/inventory', 'skus', 'Catálogo SKU', 'VIEW', 'Consulta la información y el código de barras del SKU.'),
+  governedAction(INVENTORY_SKU_ACTION_IDS.DEACTIVATE, 'Desactivar SKU', 'inventory', 'Inventario', '/admin/inventory', 'skus', 'Catálogo SKU', 'UPDATE', 'Desactiva el SKU seleccionado.'),
+  governedAction(INVENTORY_SKU_ACTION_IDS.DELETE, 'Eliminar SKU', 'inventory', 'Inventario', '/admin/inventory', 'skus', 'Catálogo SKU', 'DELETE', 'Elimina el SKU seleccionado.'),
+  governedAction(INVENTORY_SKU_ACTION_IDS.EDIT, 'Editar SKU', 'inventory', 'Inventario', '/admin/inventory', 'skus', 'Catálogo SKU', 'UPDATE', 'Edita el SKU seleccionado.'),
+  governedAction(INVENTORY_SKU_ACTION_IDS.GENERATE_BARCODE, 'Generar código de barras', 'inventory', 'Inventario', '/admin/inventory', 'skus', 'Catálogo SKU', 'EXECUTE', 'Genera un código de barras para el SKU seleccionado.'),
   governedAction(TENANT_USERS_ACTION_IDS.CREATE_SUPER_ADMIN, 'Crear usuario SuperAdmin', 'tenant-users', 'Usuarios Tenant', '/admin/usuarios-tenant', 'users', 'Usuarios', 'CREATE', 'Crea un usuario dentro del Tenant SuperAdmin autorizado.'),
   governedAction(TENANT_USERS_ACTION_IDS.CREATE_GLOBAL, 'Crear usuario Global', 'tenant-users', 'Usuarios Tenant', '/admin/usuarios-tenant', 'users', 'Usuarios', 'CREATE', 'Crea un usuario dentro del Tenant Global autorizado.'),
   governedAction(TENANT_USERS_ACTION_IDS.VIEW_HIERARCHY, 'Listar usuarios Tenant SA, TG y TC', 'tenant-users', 'Usuarios Tenant', '/admin/usuarios-tenant', 'users', 'Usuarios', 'VIEW', 'Abre el listado de usuarios de la jerarquía Tenant dentro del alcance autorizado.'),
@@ -188,6 +226,8 @@ export const GOVERNED_ACTION_CATALOG = [
   productAction(PRODUCT_ACTION_IDS.MANAGE_CATALOG_CONFIG, 'Configurar catálogo', 'catalog', 'Catálogo', 'UPDATE', 'Administra la configuración comercial del catálogo.'),
   productAction(PRODUCT_ACTION_IDS.MANAGE_SALES_SEQUENCE, 'Secuencia ventas', 'sales', 'Ventas', 'UPDATE', 'Administra la secuencia utilizada en ventas.'),
   productAction(PRODUCT_ACTION_IDS.MANAGE_SALES_RULES, 'Reglas ventas', 'sales', 'Ventas', 'UPDATE', 'Administra las reglas de venta asociadas a productos.'),
+  productAction(PRODUCT_ACTION_IDS.MANAGE_ACCOUNTING_RULES, 'Reglas contables', 'accounting', 'Contabilidad', 'UPDATE', 'Administra las reglas contables aplicables a productos.'),
+  productAction(PRODUCT_ACTION_IDS.REQUEUE_PIPELINE_B, 'Reencolar Pipeline B', 'sales', 'Ventas', 'EXECUTE', 'Reprocesa las comisiones pendientes del Pipeline B.'),
   productAction(PRODUCT_ACTION_IDS.SYNC, 'Sincronizar productos', 'catalog', 'Catálogo', 'EXECUTE', 'Sincroniza productos desde la colección.'),
   productAction(PRODUCT_ACTION_IDS.VIEW_CATEGORIES, 'Ver categorías', 'categories', 'Categorías', 'VIEW', 'Consulta el catálogo de categorías.'),
   productAction(PRODUCT_ACTION_IDS.CREATE_CATEGORY, 'Crear categoría', 'categories', 'Categorías', 'CREATE', 'Crea una categoría de productos.'),

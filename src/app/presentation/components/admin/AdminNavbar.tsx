@@ -227,7 +227,12 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
                                     >
                                         <a
                                             href={item.path}
-                                            onClick={(e) => { e.preventDefault(); setMenuOpen(false); navigate(item.path) }}
+                                            onClick={(e) => {
+                                                if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey || e.button !== 0) return
+                                                e.preventDefault()
+                                                setMenuOpen(false)
+                                                navigate(item.path)
+                                            }}
                                             className="group flex h-10 min-w-0 items-center gap-3 rounded-md px-2.5 text-sm transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                                         >
                                             <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">

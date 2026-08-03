@@ -265,27 +265,27 @@ export default function DireccionCorporativa() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-muted/30 rounded-lg border">
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-muted-foreground uppercase">País</label>
-                <div className="p-2 bg-white border rounded">Colombia</div>
+                <div className="p-2 bg-card border rounded">Colombia</div>
               </div>
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-muted-foreground uppercase">Departamento</label>
-                <div className="p-2 bg-white border rounded">{getLabelDepartamento()}</div>
+                <div className="p-2 bg-card border rounded">{getLabelDepartamento()}</div>
               </div>
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-muted-foreground uppercase">Ciudad</label>
-                <div className="p-2 bg-white border rounded">{getLabelCiudad()}</div>
+                <div className="p-2 bg-card border rounded">{getLabelCiudad()}</div>
               </div>
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-muted-foreground uppercase">Teléfono</label>
-                <div className="p-2 bg-white border rounded">{getLabelPrefijo()} {activeAddress.telefono_empresa}</div>
+                <div className="p-2 bg-card border rounded">{getLabelPrefijo()} {activeAddress.telefono_empresa}</div>
               </div>
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-muted-foreground uppercase">Correo</label>
-                <div className="p-2 bg-white border rounded">{activeAddress.correo_empresa}</div>
+                <div className="p-2 bg-card border rounded">{activeAddress.correo_empresa}</div>
               </div>
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-muted-foreground uppercase">Horario</label>
-                <div className="p-2 bg-white border rounded">{activeAddress.horario_atencion}</div>
+                <div className="p-2 bg-card border rounded">{activeAddress.horario_atencion}</div>
               </div>
             </div>
             <Button onClick={() => setIsUpdateModalOpen(true)} className="w-full">

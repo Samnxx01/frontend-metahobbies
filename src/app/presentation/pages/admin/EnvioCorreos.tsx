@@ -622,7 +622,7 @@ export default function EnvioCorreos() {
           )}
 
           {/* Iframe interactivo */}
-          <div className="rounded-xl border overflow-hidden shadow-md bg-white">
+          <div className="rounded-xl border overflow-hidden shadow-md bg-card">
             {previewHtml ? (
               <iframe
                 key={tipoPreview}

@@ -142,6 +142,14 @@ const idsFromChecked = (map: Record<string, boolean>): string[] => (
   Object.entries(map).filter(([, checked]) => checked).map(([id]) => id)
 );
 
+const idsCheckedExistentes = (
+  map: Record<string, boolean>,
+  opciones: Array<{ id: string }>,
+): string[] => {
+  const existentes = new Set(opciones.map((opcion) => String(opcion.id)));
+  return idsFromChecked(map).filter((id) => existentes.has(String(id)));
+};
+
 const checkedFromIds = (ids: string[]): Record<string, boolean> => (
   ids.reduce<Record<string, boolean>>((acc, id) => {
     acc[id] = true;
@@ -279,6 +287,7 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
   const [scopeTcIds, setScopeTcIds] = useState<string[]>([]);
   const [scopeUsuarioIds, setScopeUsuarioIds] = useState<string[]>([]);
   const [scopeParamOpen, setScopeParamOpen] = useState(false);
+  const [scopeRefreshing, setScopeRefreshing] = useState(false);
   const [scopeDraftSa, setScopeDraftSa] = useState<Record<string, boolean>>({});
   const [scopeDraftTg, setScopeDraftTg] = useState<Record<string, boolean>>({});
   const [scopeDraftTc, setScopeDraftTc] = useState<Record<string, boolean>>({});
@@ -435,9 +444,9 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
   );
 
   const usuariosFiltradosScopeDraft = useMemo(() => {
-    const saSet = new Set(idsFromChecked(scopeDraftSa));
-    const tgSet = new Set(idsFromChecked(scopeDraftTg));
-    const tcSet = new Set(idsFromChecked(scopeDraftTc));
+    const saSet = new Set(idsCheckedExistentes(scopeDraftSa, tenantsScope.tenantSuperAdmins));
+    const tgSet = new Set(idsCheckedExistentes(scopeDraftTg, tenantsScope.tenantGlobales));
+    const tcSet = new Set(idsCheckedExistentes(scopeDraftTc, tenantsScope.tenantCorporativos));
     const tgIdsRamaSa = new Set(
       tenantsScope.tenantGlobales
         .filter((t) => !saSet.size || (t.tenantSuperAdminId && saSet.has(String(t.tenantSuperAdminId))))
@@ -475,7 +484,32 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
       }
       return true;
     });
-  }, [usuariosOpciones, scopeDraftSa, scopeDraftTg, scopeDraftTc, tenantsScope.tenantGlobales, tenantsScope.tenantCorporativos]);
+  }, [usuariosOpciones, scopeDraftSa, scopeDraftTg, scopeDraftTc, tenantsScope.tenantSuperAdmins, tenantsScope.tenantGlobales, tenantsScope.tenantCorporativos]);
+
+  useEffect(() => {
+    if (!scopeParamOpen) return;
+    const seleccion = {
+      tenantSuperAdminIds: idsCheckedExistentes(scopeDraftSa, tenantsScope.tenantSuperAdmins),
+      tenantGlobalIds: idsCheckedExistentes(scopeDraftTg, tenantsScope.tenantGlobales),
+      tenantCorporativoIds: idsCheckedExistentes(scopeDraftTc, tenantsScope.tenantCorporativos),
+    };
+    console.info('[PoliticasRuntime][Alcance] Resultado del filtro de usuarios', {
+      seleccion,
+      usuariosRecibidos: usuariosOpciones.length,
+      usuariosVisibles: usuariosFiltradosScopeDraft.length,
+      asociacionesRecibidas: usuariosOpciones.map((u) => ({
+        id: u.id,
+        tenantSuperAdminId: u.tenantSuperAdminId ?? null,
+        tenantGlobalId: u.tenantGlobalId ?? null,
+        tenantCorporativoId: u.tenantCorporativoId ?? null,
+      })),
+      motivoSinResultados: usuariosOpciones.length === 0
+        ? 'El backend devolvio usuarios=[]'
+        : usuariosFiltradosScopeDraft.length === 0
+          ? 'Los usuarios recibidos no coinciden con los IDs tenant seleccionados'
+          : null,
+    });
+  }, [scopeParamOpen, scopeDraftSa, scopeDraftTg, scopeDraftTc, usuariosOpciones, usuariosFiltradosScopeDraft, tenantsScope.tenantSuperAdmins, tenantsScope.tenantGlobales, tenantsScope.tenantCorporativos]);
 
   const scopeResumenSa = useMemo(
     () => scopeSaIds.map((id) => tenantsScope.tenantSuperAdmins.find((t) => t.id === id)?.label || id),
@@ -647,12 +681,36 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
     aplicarApisDominioPorDefecto();
   };
 
-  const abrirScopeParam = (): void => {
+  const refrescarOpcionesScope = async (): Promise<void> => {
+    setScopeRefreshing(true);
+    try {
+      const opciones = await fetchPoliticasRuntimeOpciones();
+      setOpcionesRuntime(opciones);
+      console.info('[PoliticasRuntime][Alcance] Opciones actualizadas', {
+        tenantSuperAdmins: opciones.tenantsScope?.tenantSuperAdmins.length ?? 0,
+        tenantGlobales: opciones.tenantsScope?.tenantGlobales.length ?? 0,
+        tenantCorporativos: opciones.tenantsScope?.tenantCorporativos.length ?? 0,
+        usuarios: opciones.usuarios.length,
+        usuariosSinAsociacion: opciones.usuarios.filter((u) => (
+          !u.tenantSuperAdminId && !u.tenantGlobalId && !u.tenantCorporativoId
+        )).map((u) => u.id),
+      });
+      toast.success(`Usuarios actualizados: ${opciones.usuarios.length}`);
+    } catch (e: unknown) {
+      console.error('[PoliticasRuntime][Alcance] Error al actualizar opciones', e);
+      toast.error(e instanceof Error ? e.message : 'No se pudieron actualizar los usuarios del alcance');
+    } finally {
+      setScopeRefreshing(false);
+    }
+  };
+
+  const abrirScopeParam = async (): Promise<void> => {
     setScopeDraftSa(checkedFromIds(scopeSaIds));
     setScopeDraftTg(checkedFromIds(scopeTgIds));
     setScopeDraftTc(checkedFromIds(scopeTcIds));
     setScopeDraftUsuarios(checkedFromIds(scopeUsuarioIds));
     setScopeParamOpen(true);
+    await refrescarOpcionesScope();
   };
 
   const toggleScopeDraft = (
@@ -677,9 +735,9 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
   };
 
   const aplicarScopeParam = (): void => {
-    const nextSa = idsFromChecked(scopeDraftSa);
-    const nextTg = idsFromChecked(scopeDraftTg);
-    const nextTc = idsFromChecked(scopeDraftTc);
+    const nextSa = idsCheckedExistentes(scopeDraftSa, tenantsScope.tenantSuperAdmins);
+    const nextTg = idsCheckedExistentes(scopeDraftTg, tenantsScope.tenantGlobales);
+    const nextTc = idsCheckedExistentes(scopeDraftTc, tenantsScope.tenantCorporativos);
     const usuariosValidos = new Set(usuariosFiltradosScopeDraft.map((u) => u.id));
     const nextUsuarios = idsFromChecked(scopeDraftUsuarios).filter((id) => usuariosValidos.has(id));
     setScopeSaIds(nextSa);
@@ -2953,6 +3011,19 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
                 <Button
                   type="button"
                   size="sm"
+                  variant="outline"
+                  className="h-6 px-2 text-[10px]"
+                  disabled={scopeRefreshing}
+                  onClick={() => void refrescarOpcionesScope()}
+                >
+                  {scopeRefreshing
+                    ? <Loader2 className="h-3 w-3 animate-spin" />
+                    : <RefreshCw className="h-3 w-3" />}
+                  Refrescar usuarios
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
                   variant="ghost"
                   className="h-6 px-2 text-[10px]"
                   disabled={!usuariosFiltradosScopeDraft.length}
@@ -2975,7 +3046,7 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
               </div>
             </div>
             <p className="text-[11px] text-muted-foreground">
-              Si no marcas usuarios, la política aplica a todos los del alcance tenant seleccionado.
+              La política solo aplica a los usuarios seleccionados dentro del alcance tenant. Sin usuarios seleccionados no se autoriza ninguno.
             </p>
             <ScrollArea className="h-48 rounded border p-2">
               <div className="space-y-2">

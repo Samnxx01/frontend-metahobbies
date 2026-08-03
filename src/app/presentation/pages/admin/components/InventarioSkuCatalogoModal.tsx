@@ -36,6 +36,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { GovernedButton, INVENTORY_SKU_ACTION_IDS } from '@/app/presentation/actions';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
@@ -394,7 +395,8 @@ export default function InventarioSkuCatalogoModal({
               </Badge>
               <div className="flex gap-2">
                 {onRefresh && (
-                  <Button
+                  <GovernedButton
+                    actionId={INVENTORY_SKU_ACTION_IDS.REFRESH_CATALOG}
                     type="button"
                     variant="outline"
                     size="sm"
@@ -407,13 +409,14 @@ export default function InventarioSkuCatalogoModal({
                   >
                     <RefreshCw className={`mr-2 h-4 w-4 ${refrescando ? 'animate-spin' : ''}`} />
                     {refrescando ? 'Actualizando…' : 'Actualizar'}
-                  </Button>
+                  </GovernedButton>
                 )}
               </div>
               {(onExportarExcel || onImportarExcel) && (
                 <div className="flex gap-2">
                   {onExportarExcel && (
-                    <Button
+                    <GovernedButton
+                      actionId={INVENTORY_SKU_ACTION_IDS.EXPORT_CATALOG}
                       type="button"
                       variant="outline"
                       size="sm"
@@ -423,7 +426,7 @@ export default function InventarioSkuCatalogoModal({
                     >
                       <Download className="mr-2 h-4 w-4" />
                       {exportando ? 'Exportando…' : 'Exportar'}
-                    </Button>
+                    </GovernedButton>
                   )}
                   {onImportarExcel && (
                     <>
@@ -434,7 +437,8 @@ export default function InventarioSkuCatalogoModal({
                         className="hidden"
                         onChange={(e) => void handleImportarArchivo(e)}
                       />
-                      <Button
+                      <GovernedButton
+                        actionId={INVENTORY_SKU_ACTION_IDS.IMPORT_CATALOG}
                         type="button"
                         variant="outline"
                         size="sm"
@@ -444,7 +448,7 @@ export default function InventarioSkuCatalogoModal({
                       >
                         <Upload className="mr-2 h-4 w-4" />
                         {importando ? 'Importando…' : 'Importar'}
-                      </Button>
+                      </GovernedButton>
                     </>
                   )}
                 </div>
@@ -557,7 +561,8 @@ export default function InventarioSkuCatalogoModal({
                                 <BarcodePreview codigo={undefined} formato={undefined} />
                               )}
                               {!tieneCodigoRegistrado(producto) && puedeGestionarSku && (
-                                <Button
+                                <GovernedButton
+                                  actionId={INVENTORY_SKU_ACTION_IDS.GENERATE_BARCODE}
                                   type="button"
                                   variant="outline"
                                   size="sm"
@@ -566,7 +571,7 @@ export default function InventarioSkuCatalogoModal({
                                   onClick={() => void onGenerarCodigoBarras(producto)}
                                 >
                                   Generar codigo
-                                </Button>
+                                </GovernedButton>
                               )}
                             </div>
                           </div>
@@ -581,7 +586,8 @@ export default function InventarioSkuCatalogoModal({
                         <TableCell>{MONEY.format(Number(producto.precio || 0))}</TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-1">
-                            <Button
+                            <GovernedButton
+                              actionId={INVENTORY_SKU_ACTION_IDS.VIEW_DETAILS}
                               type="button"
                               variant="outline"
                               size="icon"
@@ -589,10 +595,11 @@ export default function InventarioSkuCatalogoModal({
                               onClick={() => setBarcodePreview(producto)}
                             >
                               <Info className="h-4 w-4" />
-                            </Button>
+                            </GovernedButton>
                             {puedeGestionarSku && (
                               <>
-                                <Button
+                                <GovernedButton
+                                  actionId={INVENTORY_SKU_ACTION_IDS.DEACTIVATE}
                                   type="button"
                                   variant="outline"
                                   size="icon"
@@ -601,8 +608,9 @@ export default function InventarioSkuCatalogoModal({
                                   onClick={() => void onDesactivarSku(producto)}
                                 >
                                   <AlertTriangle className="h-4 w-4" />
-                                </Button>
-                                <Button
+                                </GovernedButton>
+                                <GovernedButton
+                                  actionId={INVENTORY_SKU_ACTION_IDS.DELETE}
                                   type="button"
                                   variant="destructive"
                                   size="icon"
@@ -611,9 +619,10 @@ export default function InventarioSkuCatalogoModal({
                                   onClick={() => setConfirmEliminar([producto])}
                                 >
                                   <Trash2 className="h-4 w-4" />
-                                </Button>
+                                </GovernedButton>
                                 {onEditSku && (
-                                  <Button
+                                  <GovernedButton
+                                    actionId={INVENTORY_SKU_ACTION_IDS.EDIT}
                                     type="button"
                                     variant="outline"
                                     size="icon"
@@ -622,7 +631,7 @@ export default function InventarioSkuCatalogoModal({
                                     onClick={() => onEditSku(producto)}
                                   >
                                     <Pencil className="h-4 w-4" />
-                                  </Button>
+                                  </GovernedButton>
                                 )}
                               </>
                             )}
@@ -732,17 +741,17 @@ export default function InventarioSkuCatalogoModal({
           </DialogHeader>
 
           <div className="space-y-4">
-            <div className="rounded-md border bg-white p-5 text-center text-slate-950">
+            <div className="rounded-md border bg-card p-5 text-center text-foreground">
               <p className="text-sm font-semibold">{barcodePreview?.sku || 'SKU'}</p>
               <p className="mb-1 text-xs font-medium uppercase">{barcodePreview?.nombre || 'Producto'}</p>
-              <p className="mb-3 text-xs text-slate-500">{barcodePreview?.descripcion || barcodePreview?.descripcionCorta || ''}</p>
+              <p className="mb-3 text-xs text-muted-foreground">{barcodePreview?.descripcion || barcodePreview?.descripcionCorta || ''}</p>
               <div className="mb-2 flex justify-center">
                 <BarcodePreview
                   codigo={barcodePreview && tieneCodigoRegistrado(barcodePreview) ? barcodePreview.codigoBarras : undefined}
                   formato={barcodePreview && tieneCodigoRegistrado(barcodePreview) ? barcodePreview.formatoCodigoBarras : undefined}
                 />
               </div>
-              <div className="flex justify-center gap-4 text-xs text-slate-500">
+              <div className="flex justify-center gap-4 text-xs text-muted-foreground">
                 <span>Unidad: <strong>{barcodePreview?.unidadMedida || 'UNIDAD'}</strong></span>
                 <span>Precio: <strong>{MONEY.format(Number(barcodePreview?.precio || 0))}</strong></span>
                 <span>Tipo: <strong>{barcodePreview?.tipo || '-'}</strong></span>

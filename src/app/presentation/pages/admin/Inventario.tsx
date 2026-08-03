@@ -89,6 +89,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import ModuleHelpButton from '@/app/presentation/components/common/ModuleHelpButton';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -103,6 +104,9 @@ import { Textarea } from '@/components/ui/textarea';
 /** Valor interno del select cuando no hay bodega filtrada (Radix Select no admite value vacío). */
 const BODEGA_TODAS = '__TODAS__';
 const SKU_TODOS = '__TODOS_SKU__';
+
+const getBodegaId = (bodega: BodegaInventario | null | undefined): string =>
+  String(bodega?._id || bodega?.iud || '').trim();
 
 const MONEY = new Intl.NumberFormat('es-CO', {
   style: 'currency',
@@ -173,7 +177,6 @@ const movimientoInicial: MovimientoForm = {
   ordenCompraItemIndex: '',
   recepcionCompraId: '',
   recepcionLineaKey: '',
-  sku: '',
   bodega: '',
   bodegaDestino: '',
   cantidad: '',
@@ -261,13 +264,6 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
   const { initialActiveTab } = props;
   const { user } = useAuth();
   const { menuTabs: inventarioMenuTabs, loading: loadingInventarioTabs } = useInventarioTarjetasDinamicas(user);
-  useEffect(() => {
-    console.info('[MABS][Inventario] Componente montado', {
-      initialActiveTab: initialActiveTab ?? null,
-      hasUser: Boolean(user),
-    });
-    return () => console.info('[MABS][Inventario] Componente desmontado');
-  }, [initialActiveTab, user]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [config, setConfig] = useState<InventarioConfig | null>(null);
@@ -772,11 +768,6 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
 
   /** Si el menú dinámico (GET tarjetas) no incluye la pestaña activa, ir a la primera visible. */
   useEffect(() => {
-    console.info('[MABS][Inventario] Estado de pestañas dinámicas', {
-      loading: loadingInventarioTabs,
-      total: inventarioMenuTabs.length,
-      tabs: inventarioMenuTabs.map((tab) => tab.value),
-    });
     if (!inventarioMenuTabs.length) return;
     if (inventarioMenuTabs.some((t) => t.value === activeTab)) return;
     setActiveTab(inventarioMenuTabs[0].value);
@@ -918,7 +909,12 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
   };
 
   const iniciarEdicionBodega = (doc: BodegaInventario): void => {
-    setEditingBodegaId(String(doc._id || doc.iud || '').trim());
+    const id = getBodegaId(doc);
+    if (!id) {
+      toast.error('La bodega no tiene un ID válido para editar. Actualiza la lista e intenta nuevamente.');
+      return;
+    }
+    setEditingBodegaId(id);
     const principalId = doc.ciudadId || '';
     const extras = (doc.municipiosSubnodo ?? [])
       .map((m) => m.ciudadId)
@@ -968,7 +964,7 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
           estado: bodegaForm.estado,
         });
         setBodegas((prev) =>
-          [...prev.filter((b) => b._id !== editingBodegaId), updated].sort((a, b) => a.nombre.localeCompare(b.nombre))
+          [...prev.filter((b) => getBodegaId(b) !== editingBodegaId), updated].sort((a, b) => a.nombre.localeCompare(b.nombre))
         );
         cancelarEdicionBodega();
         toast.success('Bodega actualizada.');
@@ -994,11 +990,16 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
 
   const confirmarEliminarBodega = async (): Promise<void> => {
     if (!bodegaDeleteTarget) return;
+    const id = getBodegaId(bodegaDeleteTarget);
+    if (!id) {
+      toast.error('La bodega no tiene un ID válido para eliminar. Actualiza la lista e intenta nuevamente.');
+      return;
+    }
     try {
       setBodegaDeleteBusy(true);
-      await inventarioService.eliminarBodega(bodegaDeleteTarget._id!);
-      setBodegas((prev) => prev.filter((b) => b._id !== bodegaDeleteTarget._id));
-      if (editingBodegaId === bodegaDeleteTarget._id) cancelarEdicionBodega();
+      await inventarioService.eliminarBodega(id);
+      setBodegas((prev) => prev.filter((b) => getBodegaId(b) !== id));
+      if (editingBodegaId === id) cancelarEdicionBodega();
       setBodegaDeleteTarget(null);
       toast.success('Bodega eliminada.');
     } catch (error) {
@@ -1022,11 +1023,16 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
         correo: draft.correo.trim() || undefined,
         telefono: draft.telefono.trim() || undefined,
         direccion: draft.direccion.trim() || undefined,
+        aplicaIva: draft.aplicaIva,
         tipoProveedorId: draft.tipoProveedorId || undefined,
         paisId: draft.paisId || undefined,
         departamentoId: draft.departamentoId || undefined,
         ciudadId: draft.ciudadId || undefined,
       });
+      const proveedorId = String(created._id || (created as { iud?: string }).iud || '');
+      if (draft.responsabilidadesFiscales.length && proveedorId) {
+        await inventarioService.guardarResponsabilidadesProveedor(proveedorId, draft.responsabilidadesFiscales);
+      }
       setProveedoresCompra((prev) => [...prev, created].sort((a, b) => a.nombre.localeCompare(b.nombre)));
       setProveedorModalOpen(false);
       toast.success('Proveedor registrado.');
@@ -1390,7 +1396,7 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
 
     const payloadBase = {
       nombre,
-      precio,
+      ...(!skuEditandoId ? { precio } : {}),
       moneda: 'COP' as const,
       tipo: skuForm.tipo || 'FISICO',
       unidadMedida: skuForm.unidadMedida,
@@ -1624,6 +1630,21 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
     } finally {
       setSaving(false);
     }
+  };
+
+  const onProveedorActualizado = (proveedor: InventarioProveedor): void => {
+    const id = String(proveedor._id || proveedor.iud || '');
+    setProveedoresCompra((prev) =>
+      prev
+        .map((item) => String(item._id || item.iud || '') === id ? proveedor : item)
+        .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
+    );
+  };
+
+  const onProveedorEliminado = (id: string): void => {
+    setProveedoresCompra((prev) =>
+      prev.filter((item) => String(item._id || item.iud || '') !== id)
+    );
   };
 
   const eliminarSkusCatalogoMasivo = async (productos: BackendProducto[]): Promise<void> => {
@@ -2067,8 +2088,37 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
 
   const getTipoMovimientoLabel = (mov: InventarioMovimiento): string => {
     const config = mov.tipoMovimientoConfigId;
-    if (typeof config === 'object' && config?.nombre) return config.nombre;
+    if (typeof config === 'object' && config?.nombre) {
+      return config.codigo === 'SALIDA_VENTA_CARRITO'
+        ? `${config.nombre} (Pipeline B)`
+        : config.nombre;
+    }
+    const documentoTipo = String(mov.documentoRelacionado?.tipo || '').toUpperCase();
+    if (mov.tipoMovimiento === 'ENTRADA' && (mov.motivo === 'COMPRA' || documentoTipo === 'COMPROBANTE_ENTRADA')) {
+      return 'Entrada por compra';
+    }
+    if (mov.tipoMovimiento === 'SALIDA' && ['VENTA_CARRITO', 'WOMPI_VENTA_CARRITO'].includes(documentoTipo)) {
+      return 'Salida por venta de carrito';
+    }
     return mov.tipoMovimiento;
+  };
+
+  const eliminarTipoMovimiento = async (tipo: InventarioTipoMovimiento): Promise<void> => {
+    const id = idTipoMovimiento(tipo);
+    if (!id) return;
+    if (!window.confirm(`Confirma eliminar el tipo de movimiento "${tipo.nombre}".`)) return;
+    try {
+      setSaving(true);
+      await inventarioService.eliminarTipoMovimiento(id);
+      setTiposMovimiento((prev) => prev.filter((tipo) => idTipoMovimiento(tipo) !== id));
+      setTipoMovimientoDraft(tipoMovimientoDraftInicial);
+      toast.success('Tipo de movimiento eliminado.');
+    } catch (error) {
+      console.error('Error eliminando tipo de movimiento:', error);
+      toast.error(error instanceof Error ? error.message.replace(/^\[\d+\]\s*/, '') : 'No se pudo eliminar el tipo de movimiento.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const renderBodegaSelect = (value: string, onChange: (value: string) => void): React.ReactElement => (
@@ -2110,13 +2160,24 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
 
   const renderSkuSelect = (value: string, onChange: (value: string) => void): React.ReactElement => (
     <Select value={value} onValueChange={onChange}>
-      <SelectTrigger>
+      <SelectTrigger title={skuOptions.find((producto) => producto.sku === value)?.nombre || 'Selecciona un SKU'}>
         <SelectValue placeholder="Selecciona SKU" />
       </SelectTrigger>
       <SelectContent>
         {skuOptions.map((producto) => (
-          <SelectItem key={getProductoId(producto) || producto.sku} value={producto.sku || ''}>
-            {producto.sku} | {producto.nombre}
+          <SelectItem
+            key={getProductoId(producto) || producto.sku}
+            value={producto.sku || ''}
+            title={`Producto: ${producto.nombre || 'Sin nombre'}`}
+            aria-label={`${producto.sku}. ${producto.nombre || 'Sin nombre'}`}
+            className="group items-start"
+          >
+            <span className="flex min-w-0 flex-col">
+              <span className="font-medium">{producto.sku}</span>
+              <span className="hidden whitespace-normal pt-0.5 text-xs text-muted-foreground group-hover:block group-focus:block group-data-[highlighted]:block">
+                Producto: {producto.nombre || 'Sin nombre'}
+              </span>
+            </span>
           </SelectItem>
         ))}
       </SelectContent>
@@ -2137,14 +2198,30 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
           setStockFiltro((prev) => ({ ...prev, sku }));
         }}
       >
-        <SelectTrigger className="border-input bg-background">
+        <SelectTrigger
+          className="border-input bg-background"
+          title={stockFiltro.sku
+            ? skuOptions.find((producto) => producto.sku === stockFiltro.sku)?.nombre || stockFiltro.sku
+            : 'Todos los SKU'}
+        >
           <SelectValue placeholder={skuOptions.length ? 'Selecciona SKU' : 'Sin SKUs'} />
         </SelectTrigger>
         <SelectContent className="max-h-72 border-border bg-popover">
           <SelectItem value="__SIN_SKU__">Todos</SelectItem>
           {skuOptionsFiltradasStock.map((producto) => (
-            <SelectItem key={getProductoId(producto) || producto.sku} value={producto.sku || ''}>
-              {producto.sku} | {producto.nombre}
+            <SelectItem
+              key={getProductoId(producto) || producto.sku}
+              value={producto.sku || ''}
+              title={`Producto: ${producto.nombre || 'Sin nombre'}`}
+              aria-label={`${producto.sku}. ${producto.nombre || 'Sin nombre'}`}
+              className="group items-start"
+            >
+              <span className="flex min-w-0 flex-col">
+                <span className="font-medium">{producto.sku}</span>
+                <span className="hidden whitespace-normal pt-0.5 text-xs text-muted-foreground group-hover:block group-focus:block group-data-[highlighted]:block">
+                  Producto: {producto.nombre || 'Sin nombre'}
+                </span>
+              </span>
             </SelectItem>
           ))}
         </SelectContent>
@@ -2166,9 +2243,12 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
   return (
     <div className="space-y-6 p-4 md:p-6">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
+        <div className="min-w-0 flex-1">
           <p className="text-sm font-medium text-primary">ERP Inventario</p>
-          <h1 className="text-2xl font-bold tracking-normal text-foreground md:text-3xl">Inventario y kardex</h1>
+          <div className="flex items-center justify-between gap-2 sm:justify-start">
+            <h1 className="text-2xl font-bold tracking-normal text-foreground md:text-3xl">Inventario y kardex</h1>
+            <ModuleHelpButton id="btn-ayuda-modulo-inventario" title="Ayuda de Inventario y kardex" description="Consulta existencias, registra movimientos, administra bodegas y controla compras sin modificar el historial del kardex." details={["Stock muestra saldos por SKU y bodega.", "Movimientos registra entradas y salidas auditables.", "Orden/compras administra órdenes y comprobantes.", "Ajustes y bodegas corrigen o distribuyen existencias."]} />
+          </div>
           <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
             Gestiona stock, movimientos inmutables, bodegas, cierres contables y ajustes con documento soporte.
           </p>
@@ -2236,12 +2316,12 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
         onValueChange={(value) => setActiveTab(value as InventarioTabValue)}
         className="space-y-4"
       >
-        <InventarioMenuTabs
-          activeTab={activeTab}
-          onTabChange={setActiveTab}
-          user={user}
-          tabs={inventarioMenuTabs}
-        />
+        <div className="flex min-w-0 items-center gap-2">
+          <div className="min-w-0 flex-1">
+            <InventarioMenuTabs activeTab={activeTab} onTabChange={setActiveTab} user={user} tabs={inventarioMenuTabs} />
+          </div>
+          <ModuleHelpButton id={`btn-ayuda-submodulo-inventario-${activeTab}`} compact title={`Ayuda: ${inventarioMenuTabs.find((tab) => tab.value === activeTab)?.label || activeTab}`} description="Ayuda del submódulo seleccionado. Las operaciones respetan la bodega visible, permisos y trazabilidad del documento soporte." />
+        </div>
 
         <TabsContent value="stock" className="space-y-4">
           <InventarioStockTab
@@ -2310,6 +2390,8 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
             abrirNuevaOrdenCompra={abrirNuevaOrdenCompra}
             abrirEditarOrdenCompra={abrirEditarOrdenCompra}
             guardarProveedorCompra={guardarProveedorCompra}
+            onProveedorActualizado={onProveedorActualizado}
+            onProveedorEliminado={onProveedorEliminado}
             refreshOrdenesCompra={refreshOrdenesCompra}
             onOrdenCreada={onOrdenCreada}
             onOrdenEliminada={onOrdenEliminada}
@@ -2395,6 +2477,7 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
         onDraftChange={setTipoMovimientoDraft}
         onSubmit={() => void guardarTipoMovimiento()}
         onEdit={editarTipoMovimiento}
+        onDelete={(tipo) => void eliminarTipoMovimiento(tipo)}
         onReset={() => setTipoMovimientoDraft(tipoMovimientoDraftInicial)}
       />
 

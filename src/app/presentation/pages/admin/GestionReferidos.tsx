@@ -157,7 +157,7 @@ const ReferralChain = ({ chain }: { chain: ReferralChainNode[] }) => {
                                     ${node.isDestino
                                         ? 'bg-primary text-primary-foreground shadow-sm shadow-primary/30'
                                         : node.isOrigen
-                                            ? 'bg-success text-white shadow-sm shadow-success/30'
+                                            ? 'bg-success text-button-foreground shadow-sm shadow-success/30'
                                             : 'bg-muted-foreground/15 text-muted-foreground'
                                     }
                                 `}
@@ -810,8 +810,8 @@ function GestionReferidos(): React.ReactElement {
                                     </h2>
                                     <Badge
                                         className={`mt-2 border-0 ${selectedVoucher.status === 'pagado'
-                                            ? 'bg-white/20 text-white hover:bg-white/30'
-                                            : 'bg-black/20 text-white hover:bg-black/30'
+                                            ? 'bg-card/20 text-button-foreground hover:bg-card/30'
+                                            : 'bg-button/20 text-button-foreground hover:bg-button/30'
                                             }`}
                                     >
                                         {selectedVoucher.status === 'pagado'

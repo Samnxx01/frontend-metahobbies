@@ -423,7 +423,7 @@ export default function LogosCorporativos() {
               className={`px-2 py-1 rounded-full text-[10px] font-bold ${
                 logo.estadoPublico
                   ? 'bg-info/10 text-info'
-                  : 'bg-slate-100 text-slate-600'
+                  : 'bg-muted text-muted-foreground'
               }`}
             >
               {logo.estadoPublico ? 'Publico' : 'Privado'}
@@ -640,7 +640,7 @@ export default function LogosCorporativos() {
       </Dialog>
 
       <Dialog open={!!selectedLogo} onOpenChange={() => setSelectedLogo(null)}>
-        <DialogContent className="max-w-4xl w-full p-0 overflow-hidden bg-black/90 border-none">
+        <DialogContent className="max-w-4xl w-full p-0 overflow-hidden bg-button/90 border-none">
           <div className="absolute top-2 right-2 z-50">
             <Button
               variant="secondary"
@@ -655,10 +655,10 @@ export default function LogosCorporativos() {
             {selectedLogo ? (
               <img src={selectedLogo.url} alt={selectedLogo.nombre} className="max-w-full max-h-full object-contain" />
             ) : (
-              <Loader2 className="animate-spin text-white" />
+              <Loader2 className="animate-spin text-button-foreground" />
             )}
           </div>
-          <div className="p-4 bg-white text-center">
+          <div className="p-4 bg-card text-center">
             <p className="font-medium text-sm">{selectedLogo?.nombre}</p>
             {selectedLogo?.id && (
               <div className="mt-3 flex items-center justify-center gap-3">
@@ -672,7 +672,7 @@ export default function LogosCorporativos() {
                   className={`px-2 py-1 rounded-full text-[10px] font-bold ${
                     selectedLogo?.estadoPublico
                       ? 'bg-info/10 text-info'
-                      : 'bg-slate-100 text-slate-600'
+                      : 'bg-muted text-muted-foreground'
                   }`}
                 >
                   {selectedLogo?.estadoPublico ? 'Publico' : 'Privado'}

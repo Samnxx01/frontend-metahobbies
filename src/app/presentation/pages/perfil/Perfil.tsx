@@ -368,8 +368,8 @@ export default function Perfil(): React.ReactElement {
                             </Avatar>
 
                             {imageLoading && (
-                                <div className="absolute inset-0 flex items-center justify-center bg-black/30 rounded-full">
-                                    <Loader2 className="w-8 h-8 md:w-10 md:h-10 animate-spin text-white" />
+                                <div className="absolute inset-0 flex items-center justify-center bg-button/30 rounded-full">
+                                    <Loader2 className="w-8 h-8 md:w-10 md:h-10 animate-spin text-button-foreground" />
                                 </div>
                             )}
 
@@ -606,8 +606,8 @@ export default function Perfil(): React.ReactElement {
                                 </AvatarFallback>
                             </Avatar>
                             {isUploading && (
-                                <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-full">
-                                    <Loader2 className="h-8 w-8 md:h-10 md:w-10 text-white animate-spin" />
+                                <div className="absolute inset-0 flex items-center justify-center bg-button/50 rounded-full">
+                                    <Loader2 className="h-8 w-8 md:h-10 md:w-10 text-button-foreground animate-spin" />
                                 </div>
                             )}
                         </div>

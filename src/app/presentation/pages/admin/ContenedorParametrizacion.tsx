@@ -596,8 +596,8 @@ export default function ContenedorParametrizacion(): React.ReactElement {
         <div className="flex items-center gap-3">
           <Layers className="w-6 h-6 text-primary" />
           <div>
-            <h1 className="text-xl font-semibold text-gray-900">Contenedores por Tenant</h1>
-            <p className="text-sm text-gray-500">
+            <h1 className="text-xl font-semibold text-foreground">Contenedores por Tenant</h1>
+            <p className="text-sm text-muted-foreground">
               Parametriza contenedores y sus conexiones de base de datos por tenant global
             </p>
           </div>
@@ -613,7 +613,7 @@ export default function ContenedorParametrizacion(): React.ReactElement {
                 <RefreshCw className={`w-4 h-4 mr-1 ${cargandoContenedores ? 'animate-spin' : ''}`} />
                 Actualizar
               </Button>
-              <Button size="sm" onClick={abrirCrearContenedor} className="bg-primary hover:bg-primary text-white">
+              <Button size="sm" onClick={abrirCrearContenedor} className="bg-primary hover:bg-primary text-button-foreground">
                 <Plus className="w-4 h-4 mr-1" />
                 Nuevo contenedor
               </Button>
@@ -629,7 +629,7 @@ export default function ContenedorParametrizacion(): React.ReactElement {
         </CardHeader>
         <CardContent>
           {cargandoInicial ? (
-            <div className="flex items-center gap-2 text-gray-400">
+            <div className="flex items-center gap-2 text-muted-foreground">
               <Loader2 className="w-4 h-4 animate-spin" />
               <span className="text-sm">Cargando tenants…</span>
             </div>
@@ -645,10 +645,10 @@ export default function ContenedorParametrizacion(): React.ReactElement {
                     {tenants.map((t) => (
                       <SelectItem key={t.iud} value={t.iud}>
                         <span className="flex items-center gap-2">
-                          <span className={`w-2 h-2 rounded-full ${t.estado ? 'bg-success' : 'bg-gray-300'}`} />
+                          <span className={`w-2 h-2 rounded-full ${t.estado ? 'bg-success' : 'bg-muted-foreground'}`} />
                           {t.corporativo?.razon_social || t.corporativo?.titulo || t.iud}
                           {t.corporativo?.nit_ruc_rtn && (
-                            <span className="text-xs text-gray-400">— {t.corporativo.nit_ruc_rtn}</span>
+                            <span className="text-xs text-muted-foreground">— {t.corporativo.nit_ruc_rtn}</span>
                           )}
                         </span>
                       </SelectItem>
@@ -680,12 +680,12 @@ export default function ContenedorParametrizacion(): React.ReactElement {
           </CardHeader>
           <CardContent className="p-0">
             {cargandoContenedores ? (
-              <div className="flex items-center justify-center py-10 text-gray-400">
+              <div className="flex items-center justify-center py-10 text-muted-foreground">
                 <Loader2 className="w-5 h-5 animate-spin mr-2" />
                 Cargando…
               </div>
             ) : contenedores.length === 0 ? (
-              <div className="flex flex-col items-center py-12 text-gray-400">
+              <div className="flex flex-col items-center py-12 text-muted-foreground">
                 <Layers className="w-8 h-8 mb-2 opacity-40" />
                 <p className="text-sm">Sin contenedores. Crea el primero.</p>
               </div>
@@ -713,10 +713,10 @@ export default function ContenedorParametrizacion(): React.ReactElement {
                         {/* Nombre con indentación */}
                         <TableCell>
                           <div className="flex items-center gap-1" style={{ paddingLeft: `${(c.nivel - 1) * 18}px` }}>
-                            {c.nivel > 1 && <ChevronRight className="w-3 h-3 text-gray-400 flex-shrink-0" />}
+                            {c.nivel > 1 && <ChevronRight className="w-3 h-3 text-muted-foreground flex-shrink-0" />}
                             <div>
-                              <p className="font-medium text-gray-800">{c.nombre}</p>
-                              {c.slug && <p className="text-xs text-gray-400">/{c.slug}</p>}
+                              <p className="font-medium text-foreground">{c.nombre}</p>
+                              {c.slug && <p className="text-xs text-muted-foreground">/{c.slug}</p>}
                             </div>
                           </div>
                         </TableCell>
@@ -724,12 +724,12 @@ export default function ContenedorParametrizacion(): React.ReactElement {
                         {/* Dominio */}
                         <TableCell>
                           {c.apisDominios ? (
-                            <div className="flex items-center gap-1 text-sm text-gray-700">
-                              <Globe className="w-3 h-3 text-gray-400 flex-shrink-0" />
+                            <div className="flex items-center gap-1 text-sm text-foreground">
+                              <Globe className="w-3 h-3 text-muted-foreground flex-shrink-0" />
                               <span className="truncate max-w-[140px]">{c.apisDominios.dominio}</span>
                             </div>
                           ) : (
-                            <span className="text-xs text-gray-400">—</span>
+                            <span className="text-xs text-muted-foreground">—</span>
                           )}
                         </TableCell>
 
@@ -737,8 +737,8 @@ export default function ContenedorParametrizacion(): React.ReactElement {
                         <TableCell>
                           {cfg ? (
                             <div className="space-y-1">
-                              <div className="flex items-center gap-1 text-sm text-gray-700">
-                                <Database className="w-3 h-3 text-gray-400 flex-shrink-0" />
+                              <div className="flex items-center gap-1 text-sm text-foreground">
+                                <Database className="w-3 h-3 text-muted-foreground flex-shrink-0" />
                                 <span className="font-mono text-xs truncate max-w-[120px]">{cfg.dbName}</span>
                               </div>
                               {migBadge && (
@@ -815,7 +815,7 @@ export default function ContenedorParametrizacion(): React.ReactElement {
                             >
                               {c.estado
                                 ? <ToggleRight className="w-4 h-4 text-success" />
-                                : <ToggleLeft className="w-4 h-4 text-gray-400" />}
+                                : <ToggleLeft className="w-4 h-4 text-muted-foreground" />}
                             </Button>
                           </div>
                         </TableCell>
@@ -854,7 +854,7 @@ export default function ContenedorParametrizacion(): React.ReactElement {
                 value={formContenedor.slug}
                 onChange={(e) => { setSlugManual(true); handleContenedorField('slug', e.target.value); }}
               />
-              <p className="text-xs text-gray-400">Auto-generado desde el nombre. Editable.</p>
+              <p className="text-xs text-muted-foreground">Auto-generado desde el nombre. Editable.</p>
             </div>
             <div className="space-y-1.5">
               <Label>Dominio API <span className="text-destructive">*</span></Label>
@@ -868,7 +868,7 @@ export default function ContenedorParametrizacion(): React.ReactElement {
                     return (
                       <SelectItem key={id} value={id}>
                         {d.dominio}
-                        {d.etiquetas && <span className="text-xs text-gray-400 ml-2">— {d.etiquetas}</span>}
+                        {d.etiquetas && <span className="text-xs text-muted-foreground ml-2">— {d.etiquetas}</span>}
                       </SelectItem>
                     );
                   })}
@@ -919,7 +919,7 @@ export default function ContenedorParametrizacion(): React.ReactElement {
             <Button variant="outline" onClick={() => setDialogContenedor(false)} disabled={guardandoContenedor}>
               Cancelar
             </Button>
-            <Button onClick={guardarContenedor} disabled={guardandoContenedor} className="bg-primary hover:bg-primary text-white">
+            <Button onClick={guardarContenedor} disabled={guardandoContenedor} className="bg-primary hover:bg-primary text-button-foreground">
               {guardandoContenedor
                 ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Guardando…</>
                 : editandoContenedor ? 'Guardar cambios' : 'Crear contenedor'}
@@ -940,10 +940,10 @@ export default function ContenedorParametrizacion(): React.ReactElement {
 
           {/* Resumen de estado si ya existe config */}
           {configDb && (
-            <div className="flex items-center justify-between bg-gray-50 border rounded-lg px-4 py-2 text-sm">
+            <div className="flex items-center justify-between bg-muted border rounded-lg px-4 py-2 text-sm">
               <div className="space-y-0.5">
-                <p className="font-medium text-gray-700">{configDb.dbName}</p>
-                <p className="text-xs text-gray-400">Pool: {configDb.poolName}</p>
+                <p className="font-medium text-foreground">{configDb.dbName}</p>
+                <p className="text-xs text-muted-foreground">Pool: {configDb.poolName}</p>
               </div>
               <div className="flex items-center gap-2">
                 {migBadgeFor(configDb.migrationStatus)}
@@ -974,7 +974,7 @@ export default function ContenedorParametrizacion(): React.ReactElement {
                 value={formDb.poolName}
                 onChange={(e) => setFormDb((p) => ({ ...p, poolName: e.target.value }))}
               />
-              <p className="text-xs text-gray-400">Identificador único del pool de conexiones para este contenedor.</p>
+              <p className="text-xs text-muted-foreground">Identificador único del pool de conexiones para este contenedor.</p>
             </div>
 
             {/* mongoUri */}
@@ -991,7 +991,7 @@ export default function ContenedorParametrizacion(): React.ReactElement {
                   />
                   <button
                     type="button"
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-muted-foreground"
                     onClick={() => setMostrarUri((v) => !v)}
                   >
                     {mostrarUri ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -1038,7 +1038,7 @@ export default function ContenedorParametrizacion(): React.ReactElement {
                   className="font-mono"
                 />
               )}
-              <p className="text-xs text-gray-400">
+              <p className="text-xs text-muted-foreground">
                 {basesDescubiertas.length > 0
                   ? 'Selecciona de las BDs descubiertas en el cluster.'
                   : 'O usa el botón de descubrimiento para ver las BDs disponibles en el cluster.'}
@@ -1072,7 +1072,7 @@ export default function ContenedorParametrizacion(): React.ReactElement {
                     {otrasConfigs.map((c) => (
                       <SelectItem key={c.iud} value={c.iud}>
                         <span className="font-mono text-xs">{c.dbName}</span>
-                        <span className="text-xs text-gray-400 ml-1">({c.poolName})</span>
+                        <span className="text-xs text-muted-foreground ml-1">({c.poolName})</span>
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -1090,7 +1090,7 @@ export default function ContenedorParametrizacion(): React.ReactElement {
                   onChange={(e) => setFormDb((p) => ({ ...p, backupReplicaDbName: e.target.value }))}
                   className="font-mono"
                 />
-                <p className="text-xs text-gray-400">
+                <p className="text-xs text-muted-foreground">
                   Nombre de la BD en el cluster del <strong>padre</strong> donde se replica esta BD como backup.
                   No puede coincidir con la BD operativa del padre.
                 </p>
@@ -1105,7 +1105,7 @@ export default function ContenedorParametrizacion(): React.ReactElement {
             <Button
               onClick={guardarConexionDb}
               disabled={guardandoDb}
-              className="bg-success hover:bg-success text-white"
+              className="bg-success hover:bg-success text-button-foreground"
             >
               {guardandoDb
                 ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Conectando…</>
@@ -1133,7 +1133,7 @@ export default function ContenedorParametrizacion(): React.ReactElement {
                 Tenant <span className="text-destructive">*</span>
               </Label>
               {pCargando && !pTenantId ? (
-                <div className="flex items-center gap-2 text-sm text-gray-400 h-9">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground h-9">
                   <Loader2 className="w-4 h-4 animate-spin" />
                   Cargando…
                 </div>
@@ -1153,7 +1153,7 @@ export default function ContenedorParametrizacion(): React.ReactElement {
                               : <DatabaseZap className="w-3.5 h-3.5 text-warning flex-shrink-0" />}
                             <span>{t.corporativo?.razon_social || t.corporativo?.titulo || t.iud}</span>
                             {t.corporativo?.nit_ruc_rtn && (
-                              <span className="text-xs text-gray-400">— {t.corporativo.nit_ruc_rtn}</span>
+                              <span className="text-xs text-muted-foreground">— {t.corporativo.nit_ruc_rtn}</span>
                             )}
                             {parametrizado && (
                               <span className="ml-auto text-xs text-success font-medium">BD activa</span>
@@ -1165,7 +1165,7 @@ export default function ContenedorParametrizacion(): React.ReactElement {
                   </SelectContent>
                 </Select>
               )}
-              <p className="text-xs text-gray-400">
+              <p className="text-xs text-muted-foreground">
                 <Database className="w-3 h-3 inline text-success mr-1" />BD activa = ya tiene conexión configurada ·
                 <DatabaseZap className="w-3 h-3 inline text-warning mx-1" />sin conexión
               </p>
@@ -1178,20 +1178,20 @@ export default function ContenedorParametrizacion(): React.ReactElement {
                   Contenedor <span className="text-destructive">*</span>
                 </Label>
                 {pCargando && pContenedores.length === 0 ? (
-                  <div className="flex items-center gap-2 text-sm text-gray-400 h-9">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground h-9">
                     <Loader2 className="w-4 h-4 animate-spin" />
                     Cargando contenedores…
                   </div>
                 ) : pContenedores.length === 0 ? (
                   /* ── Creación inline cuando no hay contenedores ── */
-                  <div className="border border-dashed border-gray-300 rounded-lg p-4 space-y-3 bg-gray-50">
-                    <div className="flex items-center gap-2 text-sm text-gray-500 font-medium">
+                  <div className="border border-dashed border-gray-300 rounded-lg p-4 space-y-3 bg-muted">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground font-medium">
                       <Layers className="w-4 h-4 text-primary" />
                       Sin contenedores — crea el primero para este tenant
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1 col-span-2">
-                        <Label className="text-xs text-gray-600">Nombre <span className="text-destructive">*</span></Label>
+                        <Label className="text-xs text-muted-foreground">Nombre <span className="text-destructive">*</span></Label>
                         <Input
                           placeholder="Ej. Producción Principal"
                           value={pNombreNuevo}
@@ -1202,7 +1202,7 @@ export default function ContenedorParametrizacion(): React.ReactElement {
                         />
                       </div>
                       <div className="space-y-1">
-                        <Label className="text-xs text-gray-600">Slug</Label>
+                        <Label className="text-xs text-muted-foreground">Slug</Label>
                         <Input
                           placeholder="produccion-principal"
                           value={pSlugNuevo}
@@ -1211,7 +1211,7 @@ export default function ContenedorParametrizacion(): React.ReactElement {
                         />
                       </div>
                       <div className="space-y-1">
-                        <Label className="text-xs text-gray-600">Dominio API <span className="text-destructive">*</span></Label>
+                        <Label className="text-xs text-muted-foreground">Dominio API <span className="text-destructive">*</span></Label>
                         <Select value={pDominioNuevo} onValueChange={setPDominioNuevo}>
                           <SelectTrigger>
                             <SelectValue placeholder="Selecciona…" />
@@ -1233,7 +1233,7 @@ export default function ContenedorParametrizacion(): React.ReactElement {
                       size="sm"
                       onClick={pCrearContenedor}
                       disabled={pCreandoNuevo || !pNombreNuevo.trim() || !pDominioNuevo}
-                      className="w-full bg-primary hover:bg-primary text-white"
+                      className="w-full bg-primary hover:bg-primary text-button-foreground"
                     >
                       {pCreandoNuevo
                         ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Creando…</>
@@ -1258,7 +1258,7 @@ export default function ContenedorParametrizacion(): React.ReactElement {
                                 {c.nivel > 1 ? '└ ' : ''}{c.nombre}
                               </span>
                               {cfg && (
-                                <span className="text-xs text-gray-400 font-mono">({cfg.dbName})</span>
+                                <span className="text-xs text-muted-foreground font-mono">({cfg.dbName})</span>
                               )}
                               {cfg && (
                                 <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${MIGRATION_BADGE[cfg.migrationStatus].cls}`}>
@@ -1330,7 +1330,7 @@ export default function ContenedorParametrizacion(): React.ReactElement {
                       />
                       <button
                         type="button"
-                        className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-muted-foreground"
                         onClick={() => setPMostrarUri((v) => !v)}
                       >
                         {pMostrarUri ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -1374,7 +1374,7 @@ export default function ContenedorParametrizacion(): React.ReactElement {
                       className="font-mono"
                     />
                   )}
-                  <p className="text-xs text-gray-400">
+                  <p className="text-xs text-muted-foreground">
                     {pBases.length > 0
                       ? 'Selecciona de las BDs descubiertas en el cluster.'
                       : 'O usa el botón de descubrimiento (lupa) para ver las BDs disponibles.'}
@@ -1402,7 +1402,7 @@ export default function ContenedorParametrizacion(): React.ReactElement {
             <Button
               onClick={pGuardarConexion}
               disabled={pGuardando || !pContenedor || !pFormDb.mongoUri.trim() || !pFormDb.dbName.trim()}
-              className="bg-success hover:bg-success text-white"
+              className="bg-success hover:bg-success text-button-foreground"
             >
               {pGuardando
                 ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Conectando…</>

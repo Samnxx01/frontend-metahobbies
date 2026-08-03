@@ -68,6 +68,34 @@ const subtotalRecepcionItem = (
   return subtotalLineaComprobanteEntrada(it.cantidadRecibida, it.costoUnitario);
 };
 
+const desgloseRecepcionItem = (
+  it: { sku: string; cantidadRecibida: number; costoUnitario: number; subtotal?: number },
+  ordenItems: InventarioOrdenCompra['items'] | undefined,
+) => {
+  const ordenItem = (ordenItems || []).find((row) => String(row.sku || '').toUpperCase() === String(it.sku || '').toUpperCase());
+  const total = subtotalRecepcionItem(it, ordenItems);
+  if (!ordenItem || Number(ordenItem.cantidadOrdenada || 0) <= 0) {
+    return { subtotalBruto: total, descuento: 0, baseGravable: total, iva: 0, total };
+  }
+  const proporcion = Number(it.cantidadRecibida || 0) / Number(ordenItem.cantidadOrdenada);
+  const brutoOrden = Number(ordenItem.cantidadOrdenada) * Number(ordenItem.costoUnitario || 0);
+  const descuentoOrden = Number(ordenItem.descuento || 0)
+    || brutoOrden * (Number(ordenItem.descuentoPorcentaje || 0) / 100);
+  const baseOrden = ordenItem.baseImpuestoAlGuardar != null
+    ? Number(ordenItem.baseImpuestoAlGuardar)
+    : Math.max(0, brutoOrden - descuentoOrden);
+  const ivaOrden = ordenItem.impuestos != null
+    ? Number(ordenItem.impuestos)
+    : baseOrden * (Number(ordenItem.tarifaReglaAlGuardar ?? ordenItem.impuestoPorcentaje ?? 0) / 100);
+  return {
+    subtotalBruto: brutoOrden * proporcion,
+    descuento: descuentoOrden * proporcion,
+    baseGravable: baseOrden * proporcion,
+    iva: ivaOrden * proporcion,
+    total,
+  };
+};
+
 export default function InventarioComprobanteEntradaModal({
   open,
   onOpenChange,
@@ -100,6 +128,15 @@ export default function InventarioComprobanteEntradaModal({
       0,
     );
   }, [dataUi, orden?.items]);
+  const resumen = useMemo(() => (dataUi?.recepcion?.items ?? []).reduce((acc, item) => {
+    const linea = desgloseRecepcionItem(item, orden?.items);
+    acc.subtotalBruto += linea.subtotalBruto;
+    acc.descuento += linea.descuento;
+    acc.baseGravable += linea.baseGravable;
+    acc.iva += linea.iva;
+    acc.total += linea.total;
+    return acc;
+  }, { subtotalBruto: 0, descuento: 0, baseGravable: 0, iva: 0, total: 0 }), [dataUi, orden?.items]);
 
   const reporteKardex = dataUi?.reporteKardex ?? [];
   const kardexRegistrado = reporteKardex.length > 0
@@ -322,7 +359,7 @@ export default function InventarioComprobanteEntradaModal({
                   </p>
                 ) : null}
                 {pendienteConfirmacion ? (
-                  <p className="mt-1 text-xs text-warning dark:text-warning">
+                  <p className="mt-1 rounded-sm bg-warning/10 px-2 py-1 text-xs text-foreground dark:bg-warning/15 dark:text-foreground">
                     {recepcionAutomatica
                       ? 'Al confirmar se aprueba el comprobante de entrada, se genera el comprobante contable (COMPROBANTE_ENTRADA) y se registra el kardex.'
                       : 'Al confirmar se aprueba el comprobante de entrada y se genera el comprobante contable (COMPROBANTE_ENTRADA). El kardex físico se registra después en Movimientos.'}
@@ -371,6 +408,13 @@ export default function InventarioComprobanteEntradaModal({
                   </TableBody>
                 </Table>
               </div>
+              <div className="ml-auto grid w-full max-w-sm gap-2 rounded-md border border-border bg-muted/40 p-3 text-sm text-foreground">
+                <div className="flex justify-between gap-4"><span>Subtotal bruto</span><span className="tabular-nums">{moneyCo(resumen.subtotalBruto)}</span></div>
+                <div className="flex justify-between gap-4"><span>Descuento</span><span className="tabular-nums">- {moneyCo(resumen.descuento)}</span></div>
+                <div className="flex justify-between gap-4"><span>Base gravable</span><span className="tabular-nums">{moneyCo(resumen.baseGravable)}</span></div>
+                <div className="flex justify-between gap-4"><span>IVA según tarifa</span><span className="tabular-nums">+ {moneyCo(resumen.iva)}</span></div>
+                <div className="flex justify-between gap-4 border-t border-border pt-2 font-semibold"><span>Total recibido</span><span className="tabular-nums">{moneyCo(resumen.total)}</span></div>
+              </div>
             </div>
 
             {reporteKardex.length > 0 ? (
@@ -400,4 +444,3 @@ export default function InventarioComprobanteEntradaModal({
     </Dialog>
   );
 }
-

@@ -80,12 +80,14 @@ export const GovernedButton = React.forwardRef<HTMLButtonElement, GovernedButton
     return (
       <Button
         ref={ref}
+        {...buttonProps}
+        id={buttonProps.id ?? `btn-${normalizedActionId.replace(/[^a-zA-Z0-9_-]+/g, '-')}`}
+        data-action-id={normalizedActionId}
         data-governed-action={normalizedActionId}
         data-governance-state={loading ? 'loading' : isAllowed ? 'allowed' : 'denied'}
         aria-label={buttonProps['aria-label'] ?? definition?.label}
         title={title ?? definition?.label}
         disabled={disabled || loading || !isAllowed}
-        {...buttonProps}
       >
         {children ?? definition?.label}
       </Button>

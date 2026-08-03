@@ -479,7 +479,7 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
             <nav className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ease-in-out ${transparent && !isScrolled ? "bg-transparent" : isScrolled ? "shadow-lg backdrop-blur-md bg-background/95" : "bg-background/80 backdrop-blur-md"}`}>
                 <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-[57px] md:h-16 flex items-center justify-between">
                     <div className="flex items-center h-full">
-                        <div className="dark:bg-white dark:rounded-lg dark:p-1.5 dark:shadow-sm">
+                        <div className="dark:bg-card dark:rounded-lg dark:p-1.5 dark:shadow-sm">
                             {/* LOGO RENDERIZADO AQUÍ */}
                             {logoLoading ? (
                                 <span className="text-xs text-muted-foreground italic px-1">

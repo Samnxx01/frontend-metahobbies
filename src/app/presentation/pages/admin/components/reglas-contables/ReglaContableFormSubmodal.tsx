@@ -199,7 +199,6 @@ export default function ReglaContableFormSubmodal({
       setSubmitting(true);
       const mostrarSelectorProductos = draft.aplicaEnCarrito || draft.aplicaEn === 'COMPRA';
       const categoriasAplicacion = mostrarSelectorProductos ? draft.categoriasAplicacion : [];
-      const productosAplicacion = draft.aplicaEn === 'COMPRA' ? draft.productosAplicacion : [];
       // PUT/POST normal de la regla: sin categoriasAplicacion/productosAplicacion (esos campos ya no
       // se persisten en ReglaContable, viven en ReglaContableAplicacion). `categoriasAplicacion` es la
       // única excepción: se sigue enviando aquí de forma transitoria para que el backend sincronice
@@ -219,14 +218,12 @@ export default function ReglaContableFormSubmodal({
         productosEspecificos: draft.aplicaEnCarrito ? draft.productosAplicacion : [],
         estado: draft.estado,
       };
-      let codigoFinal = registro?.codigo || draft.codigo.trim();
       if (esEdicion && registro) {
         const { msg } = await reglasContablesService.actualizar(registro.codigo, payloadBase);
         toast.success(msg || `Regla "${registro.codigo}" actualizada.`);
       } else {
-        codigoFinal = draft.codigo.trim();
         const { msg } = await reglasContablesService.crear({
-          codigo: codigoFinal,
+          codigo: draft.codigo.trim(),
           ...payloadBase,
           ...(tenantsSel.length > 0 ? { tenantIds: tenantsSel } : {}),
         });
@@ -236,12 +233,8 @@ export default function ReglaContableFormSubmodal({
       // de verdad que consume resolverTarifaAplicable, principalmente en ámbito COMPRA).
       // En creación sin selección no hay nada que reemplazar (y evita fallar si el tenant actual
       // no quedó incluido en los tenants autorizados).
-      if (esEdicion || categoriasAplicacion.length > 0 || productosAplicacion.length > 0) {
-        await reglasContablesService.reemplazarAplicacionesRegla(codigoFinal, {
-          categoriasAplicacion,
-          productosAplicacion,
-        });
-      }
+      // Las aplicaciones por proveedor y sus responsabilidades DIAN se administran
+      // en su panel independiente. Editar una tarifa no debe reemplazarlas.
       setDraft(draftInicial);
       onGuardada?.();
       onOpenChange(false);

@@ -161,14 +161,14 @@ function QrScannerModal({ onCufeDetectado, onClose }: QrScannerModalProps) {
   const handleClose = () => { detener(); onClose(); };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-      <div className="relative w-full max-w-sm mx-4 rounded-xl overflow-hidden bg-black shadow-2xl">
-        <div className="flex items-center justify-between px-4 py-3 bg-black/80">
-          <div className="flex items-center gap-2 text-white text-sm font-medium">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-button/70 backdrop-blur-sm">
+      <div className="relative w-full max-w-sm mx-4 rounded-xl overflow-hidden bg-button shadow-2xl">
+        <div className="flex items-center justify-between px-4 py-3 bg-button/80">
+          <div className="flex items-center gap-2 text-button-foreground text-sm font-medium">
             <Camera className="h-4 w-4" />
             Apunta al QR de la factura
           </div>
-          <button onClick={handleClose} className="text-white/70 hover:text-white">
+          <button onClick={handleClose} className="text-button-foreground/70 hover:text-button-foreground">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -203,7 +203,7 @@ function QrScannerModal({ onCufeDetectado, onClose }: QrScannerModalProps) {
         )}
 
         {!error && (
-          <p className="text-center text-xs text-white/50 py-3">
+          <p className="text-center text-xs text-button-foreground/50 py-3">
             Detectando automáticamente...
           </p>
         )}
@@ -598,15 +598,15 @@ const TIPO_EVENTO_INFO: Record<DianTrazabilidadTipoEvento, { label: string; icon
   ENVIO_FALLIDO: { label: 'Envío fallido', icon: XCircle, className: 'bg-destructive/10 text-destructive' },
   ACEPTADA_DIAN: { label: 'Aceptada DIAN', icon: CheckCircle2, className: 'bg-success/10 text-success' },
   RECHAZADA_DIAN: { label: 'Rechazada DIAN', icon: XCircle, className: 'bg-destructive/10 text-destructive' },
-  CONSULTA_ESTADO: { label: 'Consulta estado', icon: Search, className: 'bg-slate-100 text-slate-800' },
-  CONSULTA_CUFE: { label: 'Consulta CUFE', icon: Search, className: 'bg-slate-100 text-slate-800' },
+  CONSULTA_ESTADO: { label: 'Consulta estado', icon: Search, className: 'bg-muted text-foreground' },
+  CONSULTA_CUFE: { label: 'Consulta CUFE', icon: Search, className: 'bg-muted text-foreground' },
 };
 
 function EventoBadge({ tipoEvento }: { tipoEvento: DianTrazabilidadTipoEvento }) {
   const info = TIPO_EVENTO_INFO[tipoEvento] || {
     label: tipoEvento,
     icon: HelpCircle,
-    className: 'bg-slate-100 text-slate-800',
+    className: 'bg-muted text-foreground',
   };
   const Icon = info.icon;
   return (

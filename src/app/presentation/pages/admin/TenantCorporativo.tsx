@@ -52,7 +52,7 @@ const METHOD_STYLE: Record<HttpMethod, string> = {
 const ACTOR_STYLE: Record<EndpointActor, string> = {
   tenantSuperAdmin: 'bg-info/10 text-info border-info/20',
   tenantGlobal: 'bg-destructive/10 text-destructive border-destructive/20',
-  ambos: 'bg-slate-100 text-slate-700 border-slate-200',
+  ambos: 'bg-muted text-foreground border-slate-200',
 };
 
 const ENDPOINTS: EndpointSpec[] = [
@@ -513,7 +513,7 @@ const TenantCorporativo: React.FC = () => {
     <div className="space-y-6 p-4 md:p-6">
       <Card className="border-destructive/10">
         <CardHeader>
-          <CardTitle className="text-slate-900">Tenant Corporativo</CardTitle>
+          <CardTitle className="text-foreground">Tenant Corporativo</CardTitle>
           <CardDescription>
             Consola de gestion para tenants corporativos. Incluye creacion, permisos y catalogos. Ejecuta con JWT actual.
           </CardDescription>
@@ -537,14 +537,14 @@ const TenantCorporativo: React.FC = () => {
             </CardHeader>
             <CardContent className="grid gap-4 md:grid-cols-2">
               {sectionEndpoints.map((endpoint) => (
-                <div key={endpoint.id} className="rounded-xl border border-destructive/10 bg-white p-4">
+                <div key={endpoint.id} className="rounded-xl border border-destructive/10 bg-card p-4">
                   <div className="mb-2 flex items-center justify-between gap-2 flex-wrap">
                     <Badge className={METHOD_STYLE[endpoint.method]}>{endpoint.method}</Badge>
                     <Badge className={ACTOR_STYLE[endpoint.actor]}>{endpoint.actor}</Badge>
                   </div>
-                  <h3 className="text-xl font-semibold text-slate-900">{endpoint.title}</h3>
-                  <p className="mt-1 text-sm text-slate-600">{endpoint.description}</p>
-                  <div className="mt-3 rounded bg-slate-100 px-3 py-2 text-xs text-slate-800">{endpoint.path}</div>
+                  <h3 className="text-xl font-semibold text-foreground">{endpoint.title}</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">{endpoint.description}</p>
+                  <div className="mt-3 rounded bg-muted px-3 py-2 text-xs text-foreground">{endpoint.path}</div>
                   <div className="mt-3 grid grid-cols-2 gap-2">
                     <Button variant="outline" onClick={() => setEndpointModal(endpoint)}>
                       <Settings2 className="mr-2 h-4 w-4" />
@@ -571,7 +571,7 @@ const TenantCorporativo: React.FC = () => {
                 <div className="mt-1 flex flex-wrap items-center gap-2">
                   <Badge className={METHOD_STYLE[endpointModal.method]}>{endpointModal.method}</Badge>
                   <Badge className={ACTOR_STYLE[endpointModal.actor]}>{endpointModal.actor}</Badge>
-                  <code className="rounded bg-slate-100 px-2 py-1 text-xs">{endpointModal.path}</code>
+                  <code className="rounded bg-muted px-2 py-1 text-xs">{endpointModal.path}</code>
                 </div>
                 <div className="mt-2 flex items-start gap-2 rounded-md border border-info/10 bg-info/10 px-3 py-2 text-xs text-info">
                   <HelpCircle className="mt-0.5 h-4 w-4 shrink-0 text-info" />
@@ -604,26 +604,26 @@ const TenantCorporativo: React.FC = () => {
                       <div className="space-y-1">
                         <div className="flex flex-wrap gap-2">
                           {catalogItems.filter((c) => c.esDefault).map((c) => (
-                            <span key={c.iud} className="inline-flex items-center gap-1 rounded bg-slate-100 px-2 py-0.5 text-slate-600 font-mono">
-                              🔒 {c.tipo_comprador} <span className="text-slate-400">({c.sigla})</span>
+                            <span key={c.iud} className="inline-flex items-center gap-1 rounded bg-muted px-2 py-0.5 text-muted-foreground font-mono">
+                              🔒 {c.tipo_comprador} <span className="text-muted-foreground">({c.sigla})</span>
                             </span>
                           ))}
                           {catalogItems.filter((c) => !c.esDefault).map((c) => (
-                            <span key={c.iud} className="inline-flex items-center gap-1 rounded bg-white border border-slate-200 px-2 py-0.5 text-slate-700 font-mono">
-                              {c.tipo_comprador} <span className="text-slate-400">({c.sigla})</span>
+                            <span key={c.iud} className="inline-flex items-center gap-1 rounded bg-card border border-slate-200 px-2 py-0.5 text-foreground font-mono">
+                              {c.tipo_comprador} <span className="text-muted-foreground">({c.sigla})</span>
                             </span>
                           ))}
                         </div>
                       </div>
                     )}
                     {catalogItemsLoaded && catalogItems.length === 0 && (
-                      <p className="text-slate-500 italic">Sin catálogos registrados aún. Usa "Inicializar defaults" para crear CLIENTE y EMPLEADO.</p>
+                      <p className="text-muted-foreground italic">Sin catálogos registrados aún. Usa "Inicializar defaults" para crear CLIENTE y EMPLEADO.</p>
                     )}
                   </div>
                 )}
                 <div className="grid gap-3">
                   {endpointModal.fields.length === 0 && (
-                    <p className="text-sm text-slate-500">Este endpoint no requiere body adicional.</p>
+                    <p className="text-sm text-muted-foreground">Este endpoint no requiere body adicional.</p>
                   )}
                   {endpointModal.fields.map((field) => {
                     const opts = getOptionsForField(field.name);
@@ -654,7 +654,7 @@ const TenantCorporativo: React.FC = () => {
                             onChange={(e) => setField(endpointModal.id, field.name, e.target.value)}
                           />
                         ) : isMulti ? (
-                          <div className="rounded-lg border border-slate-300 bg-white p-2">
+                          <div className="rounded-lg border border-slate-300 bg-card p-2">
                             <div className="mb-2 flex flex-wrap gap-2">
                               <Button
                                 type="button"
@@ -673,22 +673,22 @@ const TenantCorporativo: React.FC = () => {
                               >
                                 Limpiar
                               </Button>
-                              <span className="ml-auto rounded bg-slate-100 px-2 py-1 text-xs text-slate-700">
+                              <span className="ml-auto rounded bg-muted px-2 py-1 text-xs text-foreground">
                                 Seleccionadas: {getField(endpointModal.id, field.name).split(',').map((i) => i.trim()).filter(Boolean).length}
                               </span>
                             </div>
-                            <div className="max-h-40 overflow-auto rounded-md border border-slate-200 bg-slate-50 p-2">
+                            <div className="max-h-40 overflow-auto rounded-md border border-slate-200 bg-muted p-2">
                               {loadingSelects ? (
-                                <p className="px-2 py-1 text-xs text-slate-400">Cargando acciones...</p>
+                                <p className="px-2 py-1 text-xs text-muted-foreground">Cargando acciones...</p>
                               ) : opts.length === 0 ? (
-                                <p className="px-2 py-1 text-xs text-slate-400">Sin acciones disponibles en el sistema</p>
+                                <p className="px-2 py-1 text-xs text-muted-foreground">Sin acciones disponibles en el sistema</p>
                               ) : (
                                 opts.map((option) => {
                                   const selected = new Set(
                                     getField(endpointModal.id, field.name).split(',').map((i) => i.trim()).filter(Boolean)
                                   );
                                   return (
-                                    <label key={option.id} className="mb-1 flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm hover:bg-white">
+                                    <label key={option.id} className="mb-1 flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm hover:bg-card">
                                       <input
                                         type="checkbox"
                                         checked={selected.has(option.id)}

@@ -92,18 +92,18 @@ export function aplicarPaletaEnApp(colores: ColoresPaleta): void {
 
     // COLOR_ACCENT → acento y secondary
     root.style.setProperty('--accent', hsl('COLOR_ACCENT'));
-    root.style.setProperty('--accent-foreground', hsl('COLOR_PRIMARY'));
+    root.style.setProperty('--accent-foreground', hsl('COLOR_TEXT'));
 
     // COLOR_SUNSET → botones de acción y tono secundario complementario
     const sunsetHsl = hsl('COLOR_SUNSET');
     root.style.setProperty('--button', sunsetHsl);
-    root.style.setProperty('--button-foreground', hsl('COLOR_PRIMARY'));
+    root.style.setProperty('--button-foreground', hsl('COLOR_TEXT'));
     root.style.setProperty('--secondary', sunsetHsl);
-    root.style.setProperty('--secondary-foreground', hsl('COLOR_PRIMARY'));
+    root.style.setProperty('--secondary-foreground', hsl('COLOR_TEXT'));
 
     // COLOR_LIGHT → muted, border, input
     root.style.setProperty('--muted', hsl('COLOR_LIGHT'));
-    root.style.setProperty('--muted-foreground', hsl('COLOR_PRIMARY'));
+    root.style.setProperty('--muted-foreground', hsl('COLOR_TEXT'));
     root.style.setProperty('--border', hsl('COLOR_LIGHT'));
     root.style.setProperty('--input', hsl('COLOR_LIGHT'));
 

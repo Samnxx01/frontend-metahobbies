@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { toast } from 'react-toastify';
 import { Button } from '@/components/ui/button';
 import { GOVERNANCE_PERMISSIONS_ACTION_IDS, GovernedButton } from '@/app/presentation/actions';
@@ -2442,7 +2442,7 @@ export const GobernanzaFormFieldsInner: React.FC<{
             ) : scopeJwtSaAlcanceJerarquiaValidado ? (
               <div className="rounded-md border border-success/20 bg-success/10 px-3 py-2 text-xs text-success">
                 Alcance JWT validado en{' '}
-                <code className="rounded bg-white/80 px-1">tenantJerarquiaCounter</code>. Puedes crear la regla DIOS y
+                <code className="rounded bg-card/80 px-1">tenantJerarquiaCounter</code>. Puedes crear la regla DIOS y
                 usar &quot;Sincronizar regla DIOS&quot; para alinear todas las vistas activas (el servidor valida configs NVL y rama).
               </div>
             ) : esJwtSoloTenantSuperAdmin ? (

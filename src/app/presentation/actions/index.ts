@@ -20,6 +20,8 @@ export {
   TENANT_USERS_ACTION_IDS,
   GOVERNANCE_PERMISSIONS_ACTION_IDS,
   PAYMENT_METHOD_ACTION_IDS,
+  INVENTORY_PURCHASE_ACTION_IDS,
+  INVENTORY_SKU_ACTION_IDS,
   getGovernedActionDefinition,
   groupGovernedActionsByModule,
   governanceEndpointActionId,

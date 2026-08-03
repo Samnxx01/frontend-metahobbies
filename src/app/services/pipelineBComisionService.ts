@@ -21,6 +21,15 @@ export type PipelineBComisionRegistro = {
   id: string;
   referenciaPersonalizada: string | null;
   estado: 'pendiente' | 'procesada' | string;
+  omisionCodigo?: string | null;
+  motivoEstado?: string | null;
+  aprobacion?: {
+    estado: 'NO_REQUERIDA' | 'PENDIENTE' | 'APROBADA' | 'RECHAZADA';
+    aprobadaPor: string | null;
+    aprobadaEn: string | null;
+    motivo: string | null;
+    comisionCalculada: number;
+  } | null;
   origenComision: string;
   montoBase: number;
   montoComisionTotal: number;
@@ -99,6 +108,14 @@ export type PipelineBComisionLineaProducto = {
   auditoriaPagoId?: string | null;
   carritoId?: string | null;
   confirmadaEn?: string | null;
+  generadorVenta?: { id: string; correo: string | null; nombre: string | null } | null;
+  terceroFacturado?: {
+    id: string | null;
+    nombre: string | null;
+    correo: string | null;
+    documento: string | null;
+    tipoDocumento: string | null;
+  } | null;
 };
 
 export type PipelineBProductoAgregado = {
@@ -115,8 +132,27 @@ export type PipelineBProductoAgregado = {
   baseComisionableTotal: number;
   comisionPotencialTotal: number;
   comisionMaterializadaTotal: number;
+  generadoresVenta?: Array<{ id: string; correo: string | null; nombre: string | null }>;
+  tercerosFacturados?: Array<{
+    id: string | null;
+    nombre: string | null;
+    correo: string | null;
+    documento: string | null;
+    tipoDocumento: string | null;
+  }>;
   ventasReferencias: string[];
   motivoSinRegla?: string | null;
+};
+
+export type PipelineBProductoConfigurado = {
+  relacionId: string;
+  productoId: string;
+  nombre: string | null;
+  sku: string | null;
+  tipo: string | null;
+  precio: number;
+  moneda: string;
+  reglasVentas: Array<{ codigo: string; porcentaje: number | null; aplica: boolean }>;
 };
 
 export type PipelineBVentaDetalle = {
@@ -128,6 +164,15 @@ export type PipelineBVentaDetalle = {
   confirmadaEn: string | null;
   comisionMaterializada: boolean;
   comisionId: string | null;
+  reencolamiento?: {
+    total: number;
+    conAfectacion: number;
+    sinAfectacion: number;
+    ultimo: string | null;
+    ultimoResultado: 'AFECTO' | 'SIN_CAMBIOS' | 'ERROR' | null;
+    distribucionCodigo: string | null;
+  } | null;
+  generadorVenta?: { id: string; correo: string | null; nombre: string | null } | null;
   lineasConRegla: PipelineBComisionLineaProducto[];
   lineasSinRegla: PipelineBComisionLineaProducto[];
   totales: {
@@ -149,6 +194,8 @@ export type PipelineBDetalleProductos = {
     baseComisionableTotal: number;
     comisionPotencialTotal: number;
     comisionMaterializadaTotal: number;
+    productosConfiguradosConRegla: number;
+    reglasVentasConfiguradas: number;
   };
   arbolComision?: {
     originType: string;
@@ -156,6 +203,7 @@ export type PipelineBDetalleProductos = {
     levels: Array<{ gen: number; percent: number }>;
   };
   productosConRegla: PipelineBProductoAgregado[];
+  productosConfiguradosConRegla: PipelineBProductoConfigurado[];
   productosSinRegla: PipelineBProductoAgregado[];
   lineasConRegla: PipelineBComisionLineaProducto[];
   lineasSinRegla: PipelineBComisionLineaProducto[];
@@ -242,6 +290,9 @@ export type PipelineBReencolarDetalle = {
   omitido: boolean;
   created: number;
   msg: string | null;
+  reencolamientoNumero: number;
+  afecto: boolean;
+  resultadoReencolamiento: 'AFECTO' | 'SIN_CAMBIOS' | 'ERROR' | null;
 };
 
 export type PipelineBReencolarResult = {
@@ -252,6 +303,8 @@ export type PipelineBReencolarResult = {
   omitidas: number;
   comisionesCreadas: number;
   errores?: number;
+  afectadas: number;
+  sinAfectacion: number;
   dryRun?: boolean;
   detalle: PipelineBReencolarDetalle[];
 };
@@ -291,6 +344,20 @@ const pipelineBComisionService = {
       },
     });
     return (response?.data ?? response) as PipelineBReencolarResult;
+  },
+
+  async aprobar(ventasComissionId: string) {
+    const response = await apiFetch(`/api/comisiones-pipeline-b/${ventasComissionId}/aprobar`, {
+      method: 'POST',
+    });
+    return (response?.data ?? response) as {
+      ventasComissionId: string;
+      calculoComisionVentaId: string;
+      baseComisionable: number;
+      porcentajeTotal: number;
+      comisionCalculada: number;
+      estado: string;
+    };
   },
 };
 

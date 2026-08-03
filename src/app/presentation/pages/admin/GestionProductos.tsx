@@ -32,6 +32,7 @@ import ConfigCatalogoProductosModal, {
 } from '@/app/presentation/pages/admin/components/ConfigCatalogoProductosModal';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import ModuleHelpButton from '@/app/presentation/components/common/ModuleHelpButton';
 import { GovernedButton, PRODUCT_ACTION_IDS } from '@/app/presentation/actions';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -41,6 +42,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Textarea } from '@/components/ui/textarea';
 import VentaWompiSecuenciaModal from '@/app/presentation/pages/admin/components/VentaWompiSecuenciaModal';
 import AlcanceReglasProductosModal from '@/app/presentation/pages/admin/components/reglas-contables/AlcanceReglasProductosModal';
+import ReglasContablesModal from '@/app/presentation/pages/admin/components/ReglasContablesModal';
+import pipelineBComisionService from '@/app/services/pipelineBComisionService';
 import { CircleHelp, DollarSign, Eye, FolderTree, Hash, Pencil, Plus, RefreshCw, Search, Settings2, Star, Trash2, X } from 'lucide-react';
 
 type DialogType = 'add' | 'edit' | 'view' | 'delete';
@@ -300,6 +303,8 @@ export default function GestionProductos(): React.ReactElement {
   const [openCatalogoConfigModal, setOpenCatalogoConfigModal] = useState(false);
   const [openVentaWompiSecuenciaModal, setOpenVentaWompiSecuenciaModal] = useState(false);
   const [openAlcanceReglasModal, setOpenAlcanceReglasModal] = useState(false);
+  const [openReglasContablesModal, setOpenReglasContablesModal] = useState(false);
+  const [reencolandoPipelineB, setReencolandoPipelineB] = useState(false);
   const [tiposReglaVentaRefreshKey, setTiposReglaVentaRefreshKey] = useState(0);
   const { config: limitesCatalogo, load: reloadLimitesCatalogo } = useProductoCatalogoConfig();
   const { tipos: tiposReglaVenta } = useTiposReglaVenta({
@@ -1322,11 +1327,26 @@ export default function GestionProductos(): React.ReactElement {
     if (ok) toast.success('Productos sincronizados desde la coleccion.');
   };
 
+  const reencolarPipelineB = async (): Promise<void> => {
+    setReencolandoPipelineB(true);
+    try {
+      const resultado = await pipelineBComisionService.reencolar({ scan: true, limit: 50, fixOrigen: true });
+      toast.success(resultado.msg || `Reencolado completado: ${resultado.evaluadas} venta(s) evaluada(s).`);
+    } catch (error) {
+      toast.error(errorMessage(error, 'No se pudo reencolar Pipeline B.'));
+    } finally {
+      setReencolandoPipelineB(false);
+    }
+  };
+
   return (
     <div className="p-4 md:p-6 lg:p-8">
       <div className="mb-6 flex flex-col gap-3 border-b pb-4 md:flex-row md:items-center md:justify-between">
-        <h1 className="text-2xl font-bold text-foreground md:text-3xl">Gestión de Productos</h1>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center justify-between gap-2 md:justify-start">
+          <h1 className="text-2xl font-bold text-foreground md:text-3xl">Gestión de Productos</h1>
+          <ModuleHelpButton id="btn-ayuda-modulo-productos" title="Ayuda de Gestión de Productos" description="Administra catálogo, inventario, publicación, reglas contables, reglas de venta, categorías y secuencias." details={["Las reglas contables determinan impuestos y su desglose.", "Las reglas de venta determinan comisiones.", "Sincronizar actualiza relaciones del catálogo.", "Reencolar recupera comisiones pendientes del Pipeline B."]} />
+        </div>
+        <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center">
           <GovernedButton actionId={PRODUCT_ACTION_IDS.MANAGE_RULE_SCOPE}
             variant="outline"
             onClick={() => setOpenAlcanceReglasModal(true)}
@@ -1367,6 +1387,23 @@ export default function GestionProductos(): React.ReactElement {
           </GovernedButton>
           <GovernedButton actionId={PRODUCT_ACTION_IDS.CREATE_CATEGORY} variant="outline" onClick={abrirCrearCategoriaPadre} className="rounded-lg">
             Crear Categoría Padre
+          </GovernedButton>
+          <GovernedButton actionId={PRODUCT_ACTION_IDS.MANAGE_ACCOUNTING_RULES}
+            variant="outline"
+            onClick={() => setOpenReglasContablesModal(true)}
+            className="flex items-center gap-2 rounded-lg"
+          >
+            <DollarSign className="h-4 w-4" />
+            Reglas contables
+          </GovernedButton>
+          <GovernedButton actionId={PRODUCT_ACTION_IDS.REQUEUE_PIPELINE_B}
+            variant="outline"
+            onClick={() => { void reencolarPipelineB(); }}
+            disabled={reencolandoPipelineB}
+            className="flex items-center gap-2 rounded-lg"
+          >
+            <RefreshCw className={`h-4 w-4 ${reencolandoPipelineB ? 'animate-spin' : ''}`} />
+            Reencolar
           </GovernedButton>
           <GovernedButton
             id="btn-parametrizar-tipos-producto"
@@ -2731,6 +2768,12 @@ export default function GestionProductos(): React.ReactElement {
         open={openAlcanceReglasModal}
         onOpenChange={setOpenAlcanceReglasModal}
         onSaved={() => { void loadData(); }}
+      />
+
+      <ReglasContablesModal
+        open={openReglasContablesModal}
+        onOpenChange={setOpenReglasContablesModal}
+        onReglasActualizadas={() => { void loadData(); }}
       />
     </div>
   );

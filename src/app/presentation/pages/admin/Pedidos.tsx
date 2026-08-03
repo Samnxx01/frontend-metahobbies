@@ -79,7 +79,7 @@ export default function Pedidos(): React.ReactElement {
             case 'Cancelado':
                 return 'bg-destructive/10 text-destructive border border-destructive/20 hover:bg-destructive/20';
             default:
-                return 'bg-gray-100 text-gray-600';
+                return 'bg-muted text-muted-foreground';
         }
     };
 

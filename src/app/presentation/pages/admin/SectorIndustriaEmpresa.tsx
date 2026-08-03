@@ -213,7 +213,7 @@ const SectorIndustriaEmpresa = () => {
                     <label className="text-xs font-semibold text-muted-foreground uppercase">
                       Sector Empresarial
                     </label>
-                    <div className="p-3 bg-white border rounded">
+                    <div className="p-3 bg-card border rounded">
                       {sectorExistente.sector_empresarial}
                     </div>
                   </div>
@@ -223,7 +223,7 @@ const SectorIndustriaEmpresa = () => {
                       <Users className="h-4 w-4" />
                       Número de Empleados
                     </label>
-                    <div className="p-3 bg-white border rounded font-semibold">
+                    <div className="p-3 bg-card border rounded font-semibold">
                       {sectorExistente.numero_empleados}
                     </div>
                   </div>

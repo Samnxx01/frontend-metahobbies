@@ -45,7 +45,7 @@ function ActivarConfirmPanel({
       <div className="flex gap-2">
         <Button
           size="sm"
-          className="bg-success hover:bg-success text-white"
+          className="bg-success hover:bg-success text-button-foreground"
           onClick={onConfirmar}
           disabled={fase === 'loading'}
         >
@@ -216,7 +216,7 @@ function ModalContent(): React.ReactElement {
                   const actionBtn = (
                     <Button
                       size="sm"
-                      className="bg-success hover:bg-success text-white shrink-0"
+                      className="bg-success hover:bg-success text-button-foreground shrink-0"
                       onClick={() => {
                         setActivando({ reglaId: rid, tenantId: tenantSelId });
                         setErrorActivar(null);

@@ -60,10 +60,10 @@ export function InventarioKardexControlDuplicadoAyudaDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 text-sm text-slate-700">
-          <section className="rounded-lg border bg-slate-50 p-4 space-y-2">
-            <p className="font-medium text-slate-900">omitirControlDuplicado = false (recomendado)</p>
-            <ul className="list-disc space-y-1 pl-5 text-slate-600">
+        <div className="space-y-4 text-sm text-foreground">
+          <section className="rounded-lg border bg-muted p-4 space-y-2">
+            <p className="font-medium text-foreground">omitirControlDuplicado = false (recomendado)</p>
+            <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
               <li>No omite la validación.</li>
               <li>
                 Si ya existe una salida o entrada para el mismo comprobante (ej. <strong>FACTUR-000005</strong>),
@@ -87,8 +87,8 @@ export function InventarioKardexControlDuplicadoAyudaDialog({
           </section>
 
           <section className="rounded-lg border p-4 space-y-2">
-            <p className="font-medium text-slate-900">Lo que este parámetro NO cambia</p>
-            <ul className="list-disc space-y-1 pl-5 text-slate-600">
+            <p className="font-medium text-foreground">Lo que este parámetro NO cambia</p>
+            <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
               <li>No anula la exigencia de factura CONFIRMADA en ventas ecommerce automáticas.</li>
               <li>
                 El botón <strong>Reaplicar kardex</strong> en Pedidos aprobados sigue bloqueado si ya hay salidas
@@ -178,14 +178,14 @@ export default function InventarioKardexControlDuplicadoModal({
           </div>
 
           {auditoria?.modificadoEn ? (
-            <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4 text-sm">
-              <p className="font-medium text-slate-900">Última modificación del parámetro</p>
-              <p className="mt-1 text-slate-600">
+            <div className="rounded-xl border border-slate-200 bg-muted/80 p-4 text-sm">
+              <p className="font-medium text-foreground">Última modificación del parámetro</p>
+              <p className="mt-1 text-muted-foreground">
                 {auditoria.usuarioCorreo || auditoria.usuarioId || 'Usuario desconocido'}
                 {' · '}
                 {formatFecha(auditoria.modificadoEn)}
               </p>
-              <p className="mt-1 text-xs text-slate-500">
+              <p className="mt-1 text-xs text-muted-foreground">
                 Cambió de {formatBool(auditoria.valorAnterior)} a {formatBool(auditoria.valorNuevo)}
               </p>
             </div>

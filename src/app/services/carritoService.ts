@@ -500,7 +500,55 @@ const carritoService = {
       data: (resp.data || []) as PedidoAprobado[],
     };
   },
+
+  async listarAuditoriasProducto(params: AuditoriaProductoFiltros = {}): Promise<{ total: number; data: AuditoriaProductoCheck[] }> {
+    const qs = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && String(value).trim()) qs.set(key, String(value));
+    });
+    const resp = await apiFetch(`/api/carrito/admin/auditorias-productos?${qs.toString()}`, { method: 'GET' });
+    return { total: Number(resp.total || 0), data: (resp.data || []) as AuditoriaProductoCheck[] };
+  },
+
+  async listarVentasReferencias(params: { q?: string; estado?: string; limit?: number; skip?: number } = {}): Promise<{ total: number; data: VentaReferenciaAdmin[] }> {
+    const qs = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && String(value).trim()) qs.set(key, String(value));
+    });
+    const query = qs.toString();
+    const resp = await apiFetch(`/api/carrito/admin/ventas-referencias${query ? `?${query}` : ''}`, { method: 'GET' });
+    return { total: Number(resp.total || 0), data: (resp.data || []) as VentaReferenciaAdmin[] };
+  },
 };
+
+export interface VentaReferenciaAdmin {
+  id: string;
+  ventaReferencia?: string | null;
+  estado: 'PENDIENTE' | 'CONFIRMADO' | 'CANCELADO' | string;
+  estadoPago?: string | null;
+  carritoId?: string | null;
+  referenciaPago?: string | null;
+  transactionId?: string | null;
+  monto?: number | null;
+  moneda?: string | null;
+  origenComision?: string | null;
+  confirmadaEn?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  terceroId?: { id?: string; nombreCompleto?: string; razonSocial?: string; nombre?: string; numeroDocumento?: string; correo?: string; email?: string } | null;
+  auditoriaPagoId?: { id?: string; referenciaPersonalizada?: string; transactionId?: string; emailCliente?: string; clienteNombre?: string; clienteDocumento?: string; estado?: string } | null;
+}
+
+export type AuditoriaProductoFiltros = {
+  q?: string; estado?: string; fechaDesde?: string; fechaHasta?: string; limit?: number; skip?: number;
+};
+
+export interface AuditoriaProductoCheck {
+  _id?: string; iud?: string; referenciaPersonalizada: string; referencia?: string | null;
+  transactionId?: string | null; estado: string; emailCliente: string; clienteDocumento?: string | null;
+  clienteNombre?: string | null; monto: number; montoCentavos: number; moneda: string; procesado: boolean; endpoint?: string;
+  carritoId?: string | null; fechaCreacion: string; fechaActualizacion?: string | null;
+}
 
 export interface PedidoAprobadoLinea {
   productoId: string | null;
@@ -513,6 +561,9 @@ export interface PedidoAprobadoLinea {
   precioVentaRelacion: number;
   precioSkuOrigen: number;
   costoUnitarioSku: number;
+  costoUnitarioMovimiento: number;
+  costoFuente: 'INVENTARIO_MOVIMIENTOS' | 'INVENTARIO_SALDOS';
+  movimientosKardex: number;
   stockActualKardex: number | null;
   margenUnitario: number;
   margenTotal: number;
@@ -529,6 +580,7 @@ export interface PedidoResumenMargen {
 
 export interface PedidoAprobado {
   id: string;
+  carritoId: string | null;
   invoiceId: string | null;
   invoiceNumber: string | null;
   invoiceEstado: string | null;
@@ -537,7 +589,7 @@ export interface PedidoAprobado {
   ventaReferencia: string | null;
   referenciaPago: string | null;
   pagoEstado: string;
-  fechaPedido: string;
+  fechaPedido: string | null;
   total: number;
   moneda: string;
   cantidadTotalUnidades: number;

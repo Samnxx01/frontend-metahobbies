@@ -138,7 +138,7 @@ export default function InventarioSkuModal({
                   { titulo: 'SKU', desc: 'Codigo unico del producto. No se puede modificar despues de crearlo. Usa un formato descriptivo: CAM-BAS-M.' },
                   { titulo: 'Codigo de barras', desc: '"Generar" lo crea desde el SKU. Manual: 8-14 caracteres alfanumericos (CODE 128) o exactamente 13 digitos (EAN-13) para pistola laser.' },
                   { titulo: 'Nombre', desc: 'Visible en kardex, comprobantes y catalogo. Se guarda en mayusculas.' },
-                  { titulo: 'Precio', desc: 'Precio base de venta. Las reglas de ventas pueden aplicar descuentos sobre este valor.' },
+                  { titulo: 'Precio', desc: 'Precio base persistido del producto. En edición es de solo lectura y no reemplaza el precio de productoVentaRelaciones.' },
                   { titulo: 'Tipo de producto', desc: 'FISICO (maneja stock en bodega), SERVICIO (sin stock), DIGITAL, etc. Define el comportamiento en ventas e inventario.' },
                   { titulo: 'Unidad de medida', desc: 'Como se cuantifica: UNIDAD, KG, MT, LT, etc. Aparece en kardex y comprobantes.' },
                   { titulo: 'Stock minimo (reserva)', desc: 'Unidades bloqueadas que no se ofrecen en venta. Disponible = Kardex total − Stock minimo. Colchon ante devoluciones o urgencias.' },
@@ -197,7 +197,19 @@ export default function InventarioSkuModal({
 
             <div className="space-y-2">
               <Label>Precio *</Label>
-              <Input type="number" min="1" value={form.precio} onChange={(event) => update('precio', event.target.value)} />
+              <Input
+                type="number"
+                min="1"
+                value={form.precio}
+                disabled={esEdicion}
+                readOnly={esEdicion}
+                onChange={(event) => update('precio', event.target.value)}
+              />
+              {esEdicion ? (
+                <p className="text-xs text-muted-foreground">
+                  Valor persistido. No modifica el precio comercial de la relación de venta.
+                </p>
+              ) : null}
             </div>
 
             <div className="space-y-2">

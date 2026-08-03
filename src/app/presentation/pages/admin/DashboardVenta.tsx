@@ -230,7 +230,7 @@ export default function DashboardVenta(): React.ReactElement {
     ];
 
     return (
-        <div className="flex-1 space-y-8 bg-gradient-to-b from-slate-50 via-white to-slate-100 p-4 md:p-6 lg:p-8">
+        <div className="flex-1 space-y-8 bg-gradient-to-b from-slate-50 via-background to-slate-100 p-4 md:p-6 lg:p-8">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
                 <div className="space-y-2">
                     <div className="inline-flex items-center gap-2 rounded-full border border-success/20 bg-success/10 px-3 py-1 text-xs font-medium uppercase tracking-[0.2em] text-success">
@@ -238,8 +238,8 @@ export default function DashboardVenta(): React.ReactElement {
                         Pipeline B
                     </div>
                     <div>
-                        <h1 className="text-3xl font-semibold tracking-tight text-slate-900">DashboardVenta</h1>
-                        <p className="max-w-3xl text-sm text-slate-600">
+                        <h1 className="text-3xl font-semibold tracking-tight text-foreground">DashboardVenta</h1>
+                        <p className="max-w-3xl text-sm text-muted-foreground">
                             Punto de conexión visual para ventas con atribución diferida, sponsor activo y comisión por origen.
                         </p>
                     </div>
@@ -257,7 +257,7 @@ export default function DashboardVenta(): React.ReactElement {
                         <CardDescription>Productos activos</CardDescription>
                         <CardTitle className="flex items-center justify-between text-2xl">
                             {resumen.totalProductos}
-                            <Boxes className="h-5 w-5 text-slate-400" />
+                            <Boxes className="h-5 w-5 text-muted-foreground" />
                         </CardTitle>
                     </CardHeader>
                 </Card>
@@ -295,10 +295,10 @@ export default function DashboardVenta(): React.ReactElement {
 
             <Tabs defaultValue="configuracion" className="space-y-6">
                 <TabsList className="grid w-full grid-cols-1 gap-2 bg-transparent p-0 md:grid-cols-4">
-                    <TabsTrigger value="configuracion" className="border bg-white shadow-sm">Configuración</TabsTrigger>
-                    <TabsTrigger value="conexion" className="border bg-white shadow-sm">Conexión</TabsTrigger>
-                    <TabsTrigger value="comisiones" className="border bg-white shadow-sm">Comisiones</TabsTrigger>
-                    <TabsTrigger value="catalogo" className="border bg-white shadow-sm">Catálogo</TabsTrigger>
+                    <TabsTrigger value="configuracion" className="border bg-card shadow-sm">Configuración</TabsTrigger>
+                    <TabsTrigger value="conexion" className="border bg-card shadow-sm">Conexión</TabsTrigger>
+                    <TabsTrigger value="comisiones" className="border bg-card shadow-sm">Comisiones</TabsTrigger>
+                    <TabsTrigger value="catalogo" className="border bg-card shadow-sm">Catálogo</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="configuracion" className="space-y-6">
@@ -333,12 +333,12 @@ export default function DashboardVenta(): React.ReactElement {
 
                                     <div className="space-y-2">
                                         <Label>Tipo de origen</Label>
-                                        <Input value="producto" disabled className="bg-slate-50" />
+                                        <Input value="producto" disabled className="bg-muted" />
                                     </div>
                                 </div>
 
                                 {selectedProducto && (
-                                    <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+                                    <div className="rounded-2xl border border-slate-200 bg-muted/80 p-4">
                                         <div className="flex flex-wrap items-center gap-2">
                                             <Badge variant="secondary">{selectedProducto.tipo}</Badge>
                                             <Badge variant="outline">{selectedProducto.moneda}</Badge>
@@ -349,8 +349,8 @@ export default function DashboardVenta(): React.ReactElement {
                                                 })}
                                             </Badge>
                                         </div>
-                                        <p className="mt-3 text-sm font-medium text-slate-900">{selectedProducto.nombre}</p>
-                                        <p className="mt-1 text-sm text-slate-600">
+                                        <p className="mt-3 text-sm font-medium text-foreground">{selectedProducto.nombre}</p>
+                                        <p className="mt-1 text-sm text-muted-foreground">
                                             {selectedProducto.descripcionCorta || selectedProducto.descripcion || 'Sin descripción corta.'}
                                         </p>
                                     </div>
@@ -361,8 +361,8 @@ export default function DashboardVenta(): React.ReactElement {
                                 <div className="space-y-3">
                                     <div className="flex items-center justify-between">
                                         <div>
-                                            <p className="text-sm font-medium text-slate-900">Niveles de comisión</p>
-                                            <p className="text-xs text-slate-500">Gen define posición. Percent define distribución.</p>
+                                            <p className="text-sm font-medium text-foreground">Niveles de comisión</p>
+                                            <p className="text-xs text-muted-foreground">Gen define posición. Percent define distribución.</p>
                                         </div>
                                         <Button variant="outline" size="sm" className="gap-2" onClick={addLevel}>
                                             <Plus className="h-4 w-4" />
@@ -374,7 +374,7 @@ export default function DashboardVenta(): React.ReactElement {
                                         {levels.map((level, index) => (
                                             <div
                                                 key={level.key}
-                                                className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 md:grid-cols-[0.7fr_1fr_auto]"
+                                                className="grid gap-3 rounded-2xl border border-slate-200 bg-card p-4 md:grid-cols-[0.7fr_1fr_auto]"
                                             >
                                                 <div className="space-y-2">
                                                     <Label>Gen</Label>
@@ -396,7 +396,7 @@ export default function DashboardVenta(): React.ReactElement {
                                                     <Button
                                                         variant="ghost"
                                                         size="icon"
-                                                        className="text-slate-500"
+                                                        className="text-muted-foreground"
                                                         onClick={() => removeLevel(level.key)}
                                                         disabled={levels.length === 1}
                                                     >
@@ -409,7 +409,7 @@ export default function DashboardVenta(): React.ReactElement {
                                 </div>
 
                                 <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                                    <p className="text-xs text-slate-500">
+                                    <p className="text-xs text-muted-foreground">
                                         Esta configuración alimenta el orquestador nuevo de PAYMENT_APPROVED para ventas producto.
                                     </p>
                                     <Button className="gap-2" onClick={() => void handleGuardar()} disabled={saving || loading}>
@@ -437,12 +437,12 @@ export default function DashboardVenta(): React.ReactElement {
                                         className={`rounded-2xl border p-4 ${item.ok ? 'border-success/20 bg-success/60' : 'border-warning/20 bg-warning/60'}`}
                                     >
                                         <div className="flex items-center justify-between gap-3">
-                                            <p className="text-sm font-medium text-slate-900">{item.label}</p>
+                                            <p className="text-sm font-medium text-foreground">{item.label}</p>
                                             <Badge variant={item.ok ? 'secondary' : 'outline'}>
                                                 {item.ok ? 'OK' : 'Pendiente'}
                                             </Badge>
                                         </div>
-                                        <p className="mt-2 text-xs text-slate-600">{item.detail}</p>
+                                        <p className="mt-2 text-xs text-muted-foreground">{item.detail}</p>
                                     </div>
                                 ))}
 
@@ -474,12 +474,12 @@ export default function DashboardVenta(): React.ReactElement {
                         </CardHeader>
                         <CardContent className="space-y-4">
                             {loading ? (
-                                <div className="flex items-center gap-2 text-sm text-slate-500">
+                                <div className="flex items-center gap-2 text-sm text-muted-foreground">
                                     <Loader2 className="h-4 w-4 animate-spin" />
                                     Cargando configuraciones...
                                 </div>
                             ) : configs.length === 0 ? (
-                                <div className="rounded-2xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500">
+                                <div className="rounded-2xl border border-dashed border-slate-300 p-8 text-center text-sm text-muted-foreground">
                                     Aún no hay configuraciones de comisión por origen.
                                 </div>
                             ) : (
@@ -504,8 +504,8 @@ export default function DashboardVenta(): React.ReactElement {
                                                 <CardContent className="space-y-3">
                                                     {config.levels.map((level) => (
                                                         <div key={`${config.originId}-${level.gen}`} className="flex items-center justify-between text-sm">
-                                                            <span className="font-medium text-slate-700">Gen {level.gen}</span>
-                                                            <span className="text-slate-500">{level.percent}%</span>
+                                                            <span className="font-medium text-foreground">Gen {level.gen}</span>
+                                                            <span className="text-muted-foreground">{level.percent}%</span>
                                                         </div>
                                                     ))}
                                                 </CardContent>
@@ -540,19 +540,19 @@ export default function DashboardVenta(): React.ReactElement {
                                         onClick={() => onSelectProducto(producto.iud)}
                                         className={`rounded-3xl border p-5 text-left transition ${selectedProductoId === producto.iud
                                             ? 'border-primary bg-primary/5 shadow-md'
-                                            : 'border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm'
+                                            : 'border-slate-200 bg-card hover:border-slate-300 hover:shadow-sm'
                                             }`}
                                     >
                                         <div className="flex items-start justify-between gap-3">
                                             <div>
-                                                <p className="text-sm font-semibold text-slate-900">{producto.nombre}</p>
-                                                <p className="mt-1 text-xs uppercase tracking-[0.18em] text-slate-500">{producto.tipo}</p>
+                                                <p className="text-sm font-semibold text-foreground">{producto.nombre}</p>
+                                                <p className="mt-1 text-xs uppercase tracking-[0.18em] text-muted-foreground">{producto.tipo}</p>
                                             </div>
                                             <Badge variant={configurado ? 'secondary' : 'outline'}>
                                                 {configurado ? 'Conectado' : 'Pendiente'}
                                             </Badge>
                                         </div>
-                                        <p className="mt-4 text-sm text-slate-600">
+                                        <p className="mt-4 text-sm text-muted-foreground">
                                             {(producto.descripcionCorta || producto.descripcion || 'Sin descripción').slice(0, 120)}
                                         </p>
                                     </button>

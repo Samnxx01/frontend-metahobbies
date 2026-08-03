@@ -192,7 +192,7 @@ export default function DesactivarRepresentante({
                             <div className={`grid gap-2 ${scopeInfo.canDelete ? 'sm:grid-cols-2' : 'sm:grid-cols-1'}`}>
                                 <button
                                     type="button"
-                                    className={`rounded-md border px-3 py-3 text-left text-sm ${selectedAction === 'DESACTIVAR' ? 'border-info/30 bg-info/10 text-info' : 'border-slate-200 bg-white text-slate-600'}`}
+                                    className={`rounded-md border px-3 py-3 text-left text-sm ${selectedAction === 'DESACTIVAR' ? 'border-info/30 bg-info/10 text-info' : 'border-slate-200 bg-card text-muted-foreground'}`}
                                     onClick={() => setSelectedAction('DESACTIVAR')}
                                 >
                                     <div className="font-medium">Desactivar</div>
@@ -201,7 +201,7 @@ export default function DesactivarRepresentante({
                                 {scopeInfo.canDelete && (
                                     <button
                                         type="button"
-                                        className={`rounded-md border px-3 py-3 text-left text-sm ${selectedAction === 'ELIMINAR' ? 'border-destructive/30 bg-destructive/10 text-destructive' : 'border-slate-200 bg-white text-slate-600'}`}
+                                        className={`rounded-md border px-3 py-3 text-left text-sm ${selectedAction === 'ELIMINAR' ? 'border-destructive/30 bg-destructive/10 text-destructive' : 'border-slate-200 bg-card text-muted-foreground'}`}
                                         onClick={() => setSelectedAction('ELIMINAR')}
                                     >
                                         <div className="font-medium">Eliminar</div>
@@ -249,7 +249,7 @@ export default function DesactivarRepresentante({
                             onClick={executeAction}
                             className={selectedAction === 'ELIMINAR'
                                 ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90'
-                                : 'bg-info text-white hover:bg-info'}
+                                : 'bg-info text-button-foreground hover:bg-info'}
                             disabled={isSubmitting}
                         >
                             {isSubmitting

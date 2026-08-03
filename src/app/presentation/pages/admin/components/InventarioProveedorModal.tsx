@@ -1,9 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Building2, Pencil, Plus, Save, Trash2 } from 'lucide-react';
+import { Building2, Loader2, Pencil, Plus, RefreshCw, Save, ShieldCheck, Trash2 } from 'lucide-react';
 import { toast } from 'react-toastify';
-import inventarioService, { type InventarioTipoProveedor } from '@/app/services/inventarioService';
+import inventarioService, { type InventarioProveedor, type InventarioTipoProveedor } from '@/app/services/inventarioService';
+import reglasContablesService, { type CatalogoCodigo } from '@/app/services/reglasContablesService';
 import { apiFetch } from '@/app/services/api';
 import { Button } from '@/components/ui/button';
+import { GovernedButton } from '@/app/presentation/actions';
+import type { ActionId } from '@/app/presentation/actions';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,6 +26,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
@@ -47,6 +51,8 @@ export type InventarioProveedorDraft = {
   paisId: string;
   departamentoId: string;
   ciudadId: string;
+  aplicaIva: boolean;
+  responsabilidadesFiscales: string[];
 };
 
 const draftInicial: InventarioProveedorDraft = {
@@ -59,7 +65,12 @@ const draftInicial: InventarioProveedorDraft = {
   paisId: '1',
   departamentoId: '',
   ciudadId: '',
+  aplicaIva: false,
+  responsabilidadesFiscales: [],
 };
+
+const RESPONSABILIDADES_OFICIALES = ['O-13', 'O-15', 'O-23', 'O-47', 'R-99-PN'] as const;
+const RESPONSABILIDAD_COMODIN = 'R-99-PN';
 
 type TipoProveedorDraft = {
   codigo: string;
@@ -80,6 +91,8 @@ type InventarioProveedorModalProps = {
   onSubmit: (draft: InventarioProveedorDraft) => Promise<void>;
   showTrigger?: boolean;
   triggerClassName?: string;
+  triggerActionId?: ActionId;
+  proveedor?: InventarioProveedor | null;
 };
 
 const getTipoProveedorId = (tipo: InventarioTipoProveedor): string =>
@@ -135,6 +148,8 @@ export default function InventarioProveedorModal({
   onSubmit,
   showTrigger = false,
   triggerClassName = '',
+  triggerActionId,
+  proveedor = null,
 }: InventarioProveedorModalProps): React.ReactElement {
   const [draft, setDraft] = useState<InventarioProveedorDraft>(draftInicial);
   const [tiposProveedor, setTiposProveedor] = useState<InventarioTipoProveedor[]>([]);
@@ -147,6 +162,26 @@ export default function InventarioProveedorModal({
   const [editingTipoId, setEditingTipoId] = useState<string | null>(null);
   const [tipoDeleteTarget, setTipoDeleteTarget] = useState<InventarioTipoProveedor | null>(null);
   const [tipoDeleteBusy, setTipoDeleteBusy] = useState<boolean>(false);
+  const [responsabilidades, setResponsabilidades] = useState<CatalogoCodigo[]>([]);
+  const [loadingResponsabilidades, setLoadingResponsabilidades] = useState<boolean>(false);
+  const [seedingResponsabilidades, setSeedingResponsabilidades] = useState<boolean>(false);
+
+  const cargarResponsabilidades = useCallback(async (): Promise<void> => {
+    try {
+      setLoadingResponsabilidades(true);
+      const data = await reglasContablesService.listarCatalogoCodigos('DIAN_RESPONSABILIDADES');
+      setResponsabilidades(
+        RESPONSABILIDADES_OFICIALES
+          .map((codigo) => data.find((item) => item.codigo.toUpperCase() === codigo))
+          .filter((item): item is CatalogoCodigo => Boolean(item))
+      );
+    } catch (error) {
+      console.error('Error cargando responsabilidades DIAN:', error);
+      setResponsabilidades([]);
+    } finally {
+      setLoadingResponsabilidades(false);
+    }
+  }, []);
 
   const refreshTiposProveedor = useCallback(async (): Promise<void> => {
     try {
@@ -182,9 +217,16 @@ export default function InventarioProveedorModal({
 
   useEffect(() => {
     if (!open) return;
-    setDraft(draftInicial);
+    setDraft(proveedor ? {
+      nombre: proveedor.nombre || '', nit: proveedor.nit || '', correo: proveedor.correo || '',
+      telefono: proveedor.telefono || '', direccion: proveedor.direccion || '',
+      tipoProveedorId: typeof proveedor.tipoProveedorId === 'string' ? proveedor.tipoProveedorId : proveedor.tipoProveedorId?._id || '',
+      paisId: proveedor.paisId || '1', departamentoId: proveedor.departamentoId || '', ciudadId: proveedor.ciudadId || '',
+      aplicaIva: proveedor.aplicaIva === true, responsabilidadesFiscales: [],
+    } : draftInicial);
     void cargarCatalogos();
-  }, [open]);
+    void cargarResponsabilidades();
+  }, [cargarResponsabilidades, open, proveedor]);
 
   useEffect(() => {
     if (!tipoModalOpen) {
@@ -202,6 +244,34 @@ export default function InventarioProveedorModal({
 
   const handleSubmit = async (): Promise<void> => {
     await onSubmit(draft);
+  };
+
+  const toggleResponsabilidad = (codigo: string): void => {
+    setDraft((prev) => {
+      const seleccion = prev.responsabilidadesFiscales;
+      if (seleccion.includes(codigo)) {
+        return { ...prev, responsabilidadesFiscales: seleccion.filter((item) => item !== codigo) };
+      }
+      return {
+        ...prev,
+        responsabilidadesFiscales: codigo === RESPONSABILIDAD_COMODIN
+          ? [RESPONSABILIDAD_COMODIN]
+          : [...seleccion.filter((item) => item !== RESPONSABILIDAD_COMODIN), codigo],
+      };
+    });
+  };
+
+  const crearCatalogoResponsabilidades = async (): Promise<void> => {
+    try {
+      setSeedingResponsabilidades(true);
+      const { msg } = await reglasContablesService.sembrarCatalogoCodigosOficiales();
+      toast.success(msg || 'Catálogo oficial DIAN creado.');
+      await cargarResponsabilidades();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message.replace(/^\[\d+\]\s*/, '') : 'No se pudo crear el catálogo DIAN.');
+    } finally {
+      setSeedingResponsabilidades(false);
+    }
   };
 
   const iniciarEdicionTipo = (tipo: InventarioTipoProveedor): void => {
@@ -297,7 +367,8 @@ export default function InventarioProveedorModal({
   return (
     <>
       {showTrigger ? (
-        <Button
+        <GovernedButton
+          actionId={triggerActionId || 'inventory.purchases.providers.create'}
           type="button"
           variant="outline"
           size="sm"
@@ -307,7 +378,7 @@ export default function InventarioProveedorModal({
         >
           <Building2 className="mr-2 h-4 w-4" />
           Nuevo proveedor
-        </Button>
+        </GovernedButton>
       ) : null}
 
       <Dialog open={open} onOpenChange={onOpenChange}>
@@ -315,7 +386,7 @@ export default function InventarioProveedorModal({
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Building2 className="h-5 w-5 text-primary" />
-              Nuevo proveedor
+              {proveedor ? 'Editar proveedor' : 'Nuevo proveedor'}
             </DialogTitle>
             <DialogDescription className="text-muted-foreground">
               Registra el proveedor para usar sus datos al crear ordenes de compra.
@@ -466,6 +537,66 @@ export default function InventarioProveedorModal({
                 className="resize-none border-input bg-background"
               />
             </div>
+
+            <label className="flex cursor-pointer items-center gap-3 self-end rounded-md border border-border bg-muted/20 px-3 py-2.5">
+              <Checkbox
+                checked={draft.aplicaIva}
+                onCheckedChange={(value) => setDraft((prev) => ({ ...prev, aplicaIva: value === true }))}
+                disabled={saving}
+              />
+              <span>
+                <span className="block text-sm font-medium text-foreground">Aplica IVA</span>
+                <span className="block text-xs text-muted-foreground">Las compras a este proveedor están gravadas.</span>
+              </span>
+            </label>
+
+            <div className="space-y-3 rounded-md border border-border bg-muted/20 p-3 sm:col-span-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <Label className="flex items-center gap-2">
+                    <ShieldCheck className="h-4 w-4 text-primary" />
+                    Obligaciones / responsabilidades fiscales DIAN
+                  </Label>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Relaciónalas ahora con el proveedor. R-99-PN excluye las demás opciones.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void crearCatalogoResponsabilidades()}
+                  disabled={loadingResponsabilidades || seedingResponsabilidades}
+                >
+                  {seedingResponsabilidades ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                  {responsabilidades.length ? 'Completar catálogo' : 'Crear catálogo DIAN'}
+                </Button>
+              </div>
+
+              {loadingResponsabilidades ? (
+                <p className="flex items-center text-sm text-muted-foreground">
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Cargando obligaciones...
+                </p>
+              ) : responsabilidades.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No hay obligaciones parametrizadas. Usa “Crear catálogo DIAN” para registrarlas sin salir del formulario.
+                </p>
+              ) : (
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {responsabilidades.map((item) => (
+                    <label key={item.codigo} className="flex cursor-pointer items-start gap-2 rounded-md border border-border bg-background p-2 text-sm">
+                      <Checkbox
+                        checked={draft.responsabilidadesFiscales.includes(item.codigo)}
+                        onCheckedChange={() => toggleResponsabilidad(item.codigo)}
+                        disabled={saving}
+                        className="mt-0.5"
+                      />
+                      <span><strong>{item.codigo}</strong> — {item.nombre}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           <DialogFooter className="gap-2 sm:gap-0">
@@ -474,7 +605,7 @@ export default function InventarioProveedorModal({
             </Button>
             <Button type="button" onClick={() => void handleSubmit()} disabled={saving}>
               <Save className="mr-2 h-4 w-4" />
-              Guardar proveedor
+              {proveedor ? 'Actualizar proveedor' : 'Guardar proveedor'}
             </Button>
           </DialogFooter>
         </DialogContent>

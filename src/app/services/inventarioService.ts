@@ -385,6 +385,7 @@ export interface InventarioProveedor {
   correo?: string;
   telefono?: string;
   direccion?: string;
+  aplicaIva?: boolean;
   tipoProveedorId?: InventarioTipoProveedor | string | null;
   tipoProveedorNombre?: string;
   paisId?: string;
@@ -426,6 +427,10 @@ export interface OrdenCompraItemLinea {
   impuestos?: number;
   /** Código de la ReglaContable usada para autocompletar `impuestoPorcentaje`; null si fue manual. */
   codigoReglaImpuesto?: string | null;
+  baseCalculoReglaAlGuardar?: string | null;
+  baseImpuestoAlGuardar?: number | null;
+  tarifaReglaAlGuardar?: number | null;
+  montoFijoReglaAlGuardar?: number | null;
   subtotal?: number;
   bodega: string;
   ubicacion?: UbicacionInventario;
@@ -624,8 +629,10 @@ export interface InventarioMovimiento {
   createdAt?: string;
   updatedAt?: string;
   auditoria?: {
+    usuarioId?: string | null;
     timestamp?: string;
     ipOrigen?: string;
+    usuarioNombre?: string | null;
     usuarioCorreo?: string | null;
   };
 }
@@ -672,17 +679,31 @@ export interface InventarioCausalAjuste {
   codigo: string;
   nombre: string;
   descripcion?: string;
+  tipoMovimientoId?: InventarioTipoMovimiento | string | null;
+  tipoMovimiento?: InventarioTipoMovimiento | null;
+  tipoMovimientoReferenciaId?: string | null;
+  tipoMovimientoRelacionValida?: boolean;
   estado: boolean;
 }
 
 export interface ComprobanteEntradaAjusteItem {
   lineaKey?: string;
+  ordenItemIndex?: number | null;
   sku: string;
   bodega: string;
   cantidadRecibida: number;
   costoUnitario: number;
   /** Subtotal alineado con la línea OC (proporcional); evita deriva por redondeo unitario. */
   subtotal?: number;
+  desglose?: {
+    precioUnitarioOrden: number;
+    subtotalBruto: number;
+    descuento: number;
+    baseGravable: number;
+    impuestoPorcentaje: number;
+    iva: number;
+    total: number;
+  } | null;
   disponibleKardex?: number;
   costoPromedioKardex?: number;
   movimientoKardexId?: string | null;
@@ -722,6 +743,13 @@ export interface ComprobanteEntradaDetalle {
     proveedor?: { nombre?: string; nit?: string } | null;
   } | null;
   items: ComprobanteEntradaAjusteItem[];
+  desglose?: {
+    subtotalBruto: number;
+    descuento: number;
+    baseGravable: number;
+    iva: number;
+    total: number;
+  };
   createdAt?: string;
   updatedAt?: string;
   puedeSalidaComprobante?: boolean;
@@ -1480,6 +1508,10 @@ const inventarioService = {
     return resp?.data as InventarioTipoMovimiento;
   },
 
+  async eliminarTipoMovimiento(id: string): Promise<void> {
+    await apiFetch(`/api/inventario/tipos-movimiento/${id}`, { method: 'DELETE' });
+  },
+
   async listarUnidadesMedida(): Promise<InventarioUnidadMedida[]> {
     const resp = await apiFetch('/api/inventario/unidades-medida', { method: 'GET' });
     return (resp?.data ?? []) as InventarioUnidadMedida[];
@@ -1681,6 +1713,7 @@ const inventarioService = {
     correo?: string;
     telefono?: string;
     direccion?: string;
+    aplicaIva?: boolean;
     tipoProveedorId?: string;
     paisId?: string;
     departamentoId?: string;
@@ -1688,6 +1721,29 @@ const inventarioService = {
   }): Promise<InventarioProveedor> {
     const resp = await apiFetch('/api/inventario/compras/proveedores', { method: 'POST', body: payload });
     return resp?.data as InventarioProveedor;
+  },
+
+  async actualizarComprobanteEntradaPendiente(
+    recepcionId: string,
+    payload: { items: Array<{ ordenItemIndex?: number | null; sku: string; cantidadRecibida: number }> },
+  ): Promise<RecepcionOrdenCompraResponse> {
+    const resp = await apiFetch(`/api/inventario/compras/recepciones/${encodeURIComponent(recepcionId)}`, {
+      method: 'PUT',
+      body: payload,
+    });
+    return (resp?.data || {}) as RecepcionOrdenCompraResponse;
+  },
+
+  async actualizarProveedorCompra(id: string, payload: {
+    nombre: string; nit: string; correo?: string; telefono?: string; direccion?: string;
+    aplicaIva?: boolean; tipoProveedorId?: string; paisId?: string; departamentoId?: string; ciudadId?: string;
+  }): Promise<InventarioProveedor> {
+    const resp = await apiFetch(`/api/inventario/compras/proveedores/${id}`, { method: 'PUT', body: payload });
+    return resp?.data as InventarioProveedor;
+  },
+
+  async eliminarProveedorCompra(id: string): Promise<void> {
+    await apiFetch(`/api/inventario/compras/proveedores/${id}`, { method: 'DELETE' });
   },
 
   async listarBodegas(): Promise<BodegaInventario[]> {
@@ -1722,7 +1778,7 @@ const inventarioService = {
   },
 
   async eliminarBodega(id: string): Promise<void> {
-    await apiFetch(`/api/inventario/bodegas/${id}`, { method: 'DELETE' });
+    await apiFetch(`/api/inventario/bodegas/${encodeURIComponent(id)}`, { method: 'DELETE' });
   },
 
   async listarComprobantesEntradaAjustes(limit = 200): Promise<ComprobanteEntradaAjuste[]> {
@@ -1799,6 +1855,7 @@ const inventarioService = {
     nombre: string;
     direccion: TipoAjuste;
     descripcion?: string;
+    tipoMovimientoId: string;
     estado?: boolean;
   }): Promise<InventarioApiResult<InventarioTipoAjuste>> {
     const resp = await apiFetch('/api/inventario/ajustes/tipos', { method: 'POST', body: payload }) as ApiResponsePayload<InventarioTipoAjuste>;
@@ -1811,6 +1868,7 @@ const inventarioService = {
       nombre?: string;
       direccion?: TipoAjuste;
       descripcion?: string;
+      tipoMovimientoId?: string;
       estado?: boolean;
     }
   ): Promise<InventarioApiResult<InventarioTipoAjuste>> {
