@@ -22,6 +22,7 @@ export {
   PAYMENT_METHOD_ACTION_IDS,
   INVENTORY_PURCHASE_ACTION_IDS,
   INVENTORY_SKU_ACTION_IDS,
+  INVENTORY_REPORT_ACTION_IDS,
   getGovernedActionDefinition,
   groupGovernedActionsByModule,
   governanceEndpointActionId,

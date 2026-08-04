@@ -4,6 +4,7 @@ import { toast } from 'react-toastify';
 import inventarioService, { type ComprobanteEntradaDetalle } from '@/app/services/inventarioService';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { GovernedButton, INVENTORY_REPORT_ACTION_IDS } from '@/app/presentation/actions';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import InventarioReporteKardexEntrada from './InventarioReporteKardexEntrada';
 import {
@@ -104,8 +105,8 @@ export default function InventarioReporteKardexModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[min(980px,calc(100vw-2rem))] max-w-none border-border bg-background text-foreground">
-        <DialogHeader>
+      <DialogContent className="flex max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-none flex-col overflow-hidden border-border bg-background p-3 text-foreground sm:max-h-[calc(100dvh-2rem)] sm:w-[calc(100vw-2rem)] sm:p-5 lg:w-[min(1180px,calc(100vw-3rem))]">
+        <DialogHeader className="shrink-0 pr-7 text-left">
           <DialogTitle className="flex flex-wrap items-center gap-2">
             Reporte kardex
             {tieneReporte ? <Badge variant="outline">inventarioMovimiento · inventarioSaldo</Badge> : null}
@@ -122,8 +123,8 @@ export default function InventarioReporteKardexModal({
             No hay información del reporte.
           </div>
         ) : (
-          <div className="space-y-4">
-            <div className="grid gap-3 rounded-md border border-border bg-muted/40 p-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain pr-0.5 sm:pr-1">
+            <div className="grid gap-3 rounded-md border border-border bg-muted/40 p-3 sm:grid-cols-2 xl:grid-cols-4">
               <div>
                 <p className="text-xs text-muted-foreground">Recepción</p>
                 <p className="font-mono text-sm font-semibold">{detalle.numeroRecepcion}</p>
@@ -164,40 +165,46 @@ export default function InventarioReporteKardexModal({
           </div>
         )}
 
-        <DialogFooter className="flex-wrap gap-2 sm:gap-0">
-          <Button type="button" variant="outline" size="sm" onClick={() => onOpenChange(false)}>
+        <DialogFooter className="grid shrink-0 grid-cols-1 gap-2 border-t border-border pt-3 sm:grid-cols-2 lg:flex lg:flex-wrap lg:justify-end">
+          <Button type="button" variant="outline" size="sm" className="w-full lg:w-auto" onClick={() => onOpenChange(false)}>
             Cerrar
           </Button>
-          <Button
+          <GovernedButton
+            actionId={INVENTORY_REPORT_ACTION_IDS.EXPORT_KARDEX_CSV}
             type="button"
             variant="outline"
             size="sm"
+            className="w-full lg:w-auto"
             disabled={!tieneReporte || loading}
             onClick={exportarCsv}
           >
             <Download className="mr-2 h-4 w-4" />
             Exportar CSV
-          </Button>
-          <Button
+          </GovernedButton>
+          <GovernedButton
+            actionId={INVENTORY_REPORT_ACTION_IDS.EXPORT_KARDEX_XLSX}
             type="button"
             variant="outline"
             size="sm"
+            className="w-full lg:w-auto"
             disabled={!tieneReporte || loading || exportandoSku}
             onClick={() => void exportarExcelSku()}
           >
             {exportandoSku ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileSpreadsheet className="mr-2 h-4 w-4" />}
             Exportar kardex SKU (.xlsx)
-          </Button>
-          <Button
+          </GovernedButton>
+          <GovernedButton
+            actionId={INVENTORY_REPORT_ACTION_IDS.PRINT_KARDEX}
             type="button"
             variant="outline"
             size="sm"
+            className="w-full lg:w-auto"
             disabled={!tieneReporte || loading}
             onClick={imprimir}
           >
             <Printer className="mr-2 h-4 w-4" />
             Imprimir / PDF
-          </Button>
+          </GovernedButton>
         </DialogFooter>
       </DialogContent>
     </Dialog>

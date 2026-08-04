@@ -366,10 +366,25 @@ const carritoService = {
       }
       throw new Error(msg);
     }
+    const contentType = String(response.headers['content-type'] || '').toLowerCase();
+    const blob = response.data as Blob;
+    if (!contentType.includes('application/pdf')) {
+      let msg = 'El servidor no devolvió un archivo PDF válido';
+      try {
+        const body = JSON.parse(await blob.text());
+        msg = body?.msg || msg;
+      } catch {
+        /* La respuesta no era JSON ni PDF. */
+      }
+      throw new Error(msg);
+    }
+    const signature = await blob.slice(0, 5).text();
+    if (signature !== '%PDF-') {
+      throw new Error('El comprobante recibido está corrupto o no tiene formato PDF.');
+    }
     const disposition = String(response.headers['content-disposition'] || '');
     const match = disposition.match(/filename="?([^"]+)"?/i);
     const fileName = match?.[1] || `pedido-mabs-${transactionId}.pdf`;
-    const blob = response.data as Blob;
     return { blob, fileName };
   },
 

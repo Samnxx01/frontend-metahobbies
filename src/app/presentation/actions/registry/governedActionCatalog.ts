@@ -106,6 +106,12 @@ export const INVENTORY_SKU_ACTION_IDS = {
   GENERATE_BARCODE: 'inventory.skus.barcode.generate',
 } as const satisfies Record<string, ActionId>;
 
+export const INVENTORY_REPORT_ACTION_IDS = {
+  EXPORT_KARDEX_CSV: 'inventory.reports.kardex.export-csv',
+  EXPORT_KARDEX_XLSX: 'inventory.reports.kardex.export-xlsx',
+  PRINT_KARDEX: 'inventory.reports.kardex.print',
+} as const satisfies Record<string, ActionId>;
+
 export const PAYMENT_METHOD_ACTION_IDS = {
   VIEW_COLOMBIA_BANKS: 'payments.banks.colombia.catalog.view',
 } as const satisfies Record<string, ActionId>;
@@ -210,6 +216,9 @@ export const GOVERNED_ACTION_CATALOG = [
   governedAction(INVENTORY_SKU_ACTION_IDS.DELETE, 'Eliminar SKU', 'inventory', 'Inventario', '/admin/inventory', 'skus', 'Catálogo SKU', 'DELETE', 'Elimina el SKU seleccionado.'),
   governedAction(INVENTORY_SKU_ACTION_IDS.EDIT, 'Editar SKU', 'inventory', 'Inventario', '/admin/inventory', 'skus', 'Catálogo SKU', 'UPDATE', 'Edita el SKU seleccionado.'),
   governedAction(INVENTORY_SKU_ACTION_IDS.GENERATE_BARCODE, 'Generar código de barras', 'inventory', 'Inventario', '/admin/inventory', 'skus', 'Catálogo SKU', 'EXECUTE', 'Genera un código de barras para el SKU seleccionado.'),
+  governedAction(INVENTORY_REPORT_ACTION_IDS.EXPORT_KARDEX_CSV, 'Exportar kardex CSV', 'inventory', 'Inventario', '/admin/inventory', 'reports', 'Reportes Kardex', 'EXECUTE', 'Exporta el reporte Kardex en formato CSV.'),
+  governedAction(INVENTORY_REPORT_ACTION_IDS.EXPORT_KARDEX_XLSX, 'Exportar kardex SKU', 'inventory', 'Inventario', '/admin/inventory', 'reports', 'Reportes Kardex', 'EXECUTE', 'Exporta el histórico Kardex del SKU en Excel.'),
+  governedAction(INVENTORY_REPORT_ACTION_IDS.PRINT_KARDEX, 'Imprimir reporte Kardex', 'inventory', 'Inventario', '/admin/inventory', 'reports', 'Reportes Kardex', 'EXECUTE', 'Imprime o guarda como PDF el reporte Kardex.'),
   governedAction(TENANT_USERS_ACTION_IDS.CREATE_SUPER_ADMIN, 'Crear usuario SuperAdmin', 'tenant-users', 'Usuarios Tenant', '/admin/usuarios-tenant', 'users', 'Usuarios', 'CREATE', 'Crea un usuario dentro del Tenant SuperAdmin autorizado.'),
   governedAction(TENANT_USERS_ACTION_IDS.CREATE_GLOBAL, 'Crear usuario Global', 'tenant-users', 'Usuarios Tenant', '/admin/usuarios-tenant', 'users', 'Usuarios', 'CREATE', 'Crea un usuario dentro del Tenant Global autorizado.'),
   governedAction(TENANT_USERS_ACTION_IDS.VIEW_HIERARCHY, 'Listar usuarios Tenant SA, TG y TC', 'tenant-users', 'Usuarios Tenant', '/admin/usuarios-tenant', 'users', 'Usuarios', 'VIEW', 'Abre el listado de usuarios de la jerarquía Tenant dentro del alcance autorizado.'),

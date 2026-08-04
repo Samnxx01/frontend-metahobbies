@@ -76,46 +76,46 @@ export default function HeroBanner({
     }, [activeSlide]);
 
     return (
-        <div className="w-full bg-background py-4 md:py-8 relative overflow-hidden">
-            <div className="container mx-auto px-4 lg:px-8 relative">
+        <div className="relative w-full overflow-hidden bg-background py-4 md:py-8">
+            <div className="relative mx-auto w-full max-w-7xl px-3 sm:px-4 lg:px-8">
                 <div
-                    className="relative overflow-hidden rounded-lg bg-card min-h-auto sm:min-h-[50vh] md:min-h-[60vh] lg:min-h-[500px] flex items-center bg-linear-to-br from-card to-muted"
+                    className="relative flex min-h-[470px] w-full items-center overflow-hidden rounded-lg bg-card bg-linear-to-br from-card to-muted sm:min-h-[500px] md:min-h-[520px]"
                 >
                     <div
-                        className="flex transition-transform duration-500 ease-in-out"
+                        className="flex w-full transition-transform duration-500 ease-in-out"
                         style={{ transform: `translateX(-${activeSlide * 100}%)` }}
                     >
                         {slides.map((slide) => (
                             <div
                                 key={slide.id}
-                                className="min-w-full flex flex-col md:flex-row items-center p-6 md:p-12 min-h-[350px] md:min-h-[450px] text-foreground"
+                                className="flex min-h-[470px] min-w-full max-w-full flex-col items-center justify-center gap-5 overflow-hidden px-12 py-6 text-foreground sm:min-h-[500px] sm:px-16 md:min-h-[520px] md:flex-row md:gap-8 md:px-14 md:py-10 lg:px-20"
                             >
-                                <div className="flex-1 pr-0 md:pr-12 mb-6 md:mb-0 text-center md:text-left z-10 relative">
-                                    <span className="mb-4 px-3 py-1 bg-secondary text-secondary-foreground font-bold text-xs rounded-full h-8 flex items-center">
+                                <div className="relative z-10 flex min-w-0 w-full flex-1 flex-col items-center text-center md:items-start md:text-left">
+                                    <span className="mb-3 inline-flex min-h-7 max-w-full items-center rounded-full bg-secondary px-3 py-1 text-xs font-bold text-secondary-foreground">
                                         {slide.badge}
                                     </span>
-                                    <h1 className="text-4xl md:text-6xl font-bold mb-4 leading-tight">
+                                    <h1 className="mb-3 max-w-full break-words text-[clamp(1.65rem,8vw,2.25rem)] font-bold leading-tight sm:text-4xl md:text-5xl lg:text-6xl">
                                         {slide.title}
                                     </h1>
-                                    <div className="flex items-center justify-center md:justify-start mb-6 gap-2">
-                                        <Truck className="h-6 w-6 text-muted-foreground" />
-                                        <p className="text-base md:text-lg text-muted-foreground font-medium">
+                                    <div className="mb-4 flex max-w-full items-start justify-center gap-2 md:justify-start">
+                                        <Truck className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground md:h-6 md:w-6" />
+                                        <p className="min-w-0 break-words text-sm font-medium text-muted-foreground sm:text-base md:text-lg">
                                             {slide.subtitle}
                                         </p>
                                     </div>
                                     <Button
                                         onClick={handleCtaClick}
-                                        className="rounded-full px-8 py-3 text-base font-semibold shadow-lg transition-all duration-300 ease-in-out hover:-translate-y-1"
+                                        className="max-w-full rounded-full px-5 py-2.5 text-sm font-semibold shadow-lg transition-all duration-300 ease-in-out hover:-translate-y-1 sm:px-8 sm:py-3 sm:text-base"
                                     >
                                         {slide.cta}
                                     </Button>
                                 </div>
 
-                                <div className="flex-1 text-center flex items-center justify-center relative z-0">
+                                <div className="relative z-0 flex min-w-0 w-full flex-1 items-center justify-center">
                                     <img
                                         src={slide.image}
                                         alt={slide.title}
-                                        className="w-full max-h-[200px] sm:max-h-[300px] md:max-h-[80%] max-w-sm h-auto object-cover transform perspective-[1000px] rotate-y-[-5deg] transition-transform duration-300 ease-in-out hover:rotate-y-0"
+                                        className="h-auto max-h-[180px] w-full max-w-[260px] object-contain transition-transform duration-300 ease-in-out sm:max-h-[230px] sm:max-w-xs md:max-h-[340px] md:max-w-sm md:perspective-[1000px] md:rotate-y-[-5deg] md:hover:rotate-y-0"
                                     />
                                 </div>
                             </div>
@@ -125,7 +125,7 @@ export default function HeroBanner({
                     <Button
                         variant="ghost"
                         size="icon"
-                        className="absolute left-4 top-1/2 -translate-y-1/2 z-20 bg-background/50 hover:bg-background/80"
+                        className="absolute left-2 top-1/2 z-20 -translate-y-1/2 bg-background/70 hover:bg-background/90 sm:left-4"
                         onClick={prevSlide}
                     >
                         <ChevronLeft className="h-6 w-6" />
@@ -133,14 +133,14 @@ export default function HeroBanner({
                     <Button
                         variant="ghost"
                         size="icon"
-                        className="absolute right-4 top-1/2 -translate-y-1/2 z-20 bg-background/50 hover:bg-background/80"
+                        className="absolute right-2 top-1/2 z-20 -translate-y-1/2 bg-background/70 hover:bg-background/90 sm:right-4"
                         onClick={nextSlide}
                     >
                         <ChevronRight className="h-6 w-6" />
                     </Button>
                 </div>
 
-                <div className="flex justify-center gap-2 mt-6">
+                <div className="mt-4 flex justify-center gap-2 sm:mt-6">
                     {slides.map((_, index) => (
                         <div
                             key={index}

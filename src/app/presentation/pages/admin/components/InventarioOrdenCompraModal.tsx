@@ -549,8 +549,8 @@ export default function InventarioOrdenCompraModal({
       ) : null}
 
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="w-[min(1120px,calc(100vw-2rem))] max-w-none overflow-visible border-border bg-background text-foreground">
-          <DialogHeader>
+        <DialogContent className="inset-0 left-0 top-0 flex h-[100dvh] max-h-none w-screen max-w-none translate-x-0 translate-y-0 flex-col gap-3 overflow-hidden rounded-none border-border bg-background p-3 text-foreground sm:left-1/2 sm:top-1/2 sm:h-auto sm:max-h-[calc(100dvh-2rem)] sm:w-[calc(100vw-2rem)] sm:max-w-[1120px] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-lg sm:p-6">
+          <DialogHeader className="shrink-0 pr-8">
             <DialogTitle className="flex items-center gap-2">
               <ClipboardList className="h-5 w-5 text-primary" />
               {esEdicion ? 'Editar orden de compra' : 'Nueva orden de compra'}
@@ -563,6 +563,7 @@ export default function InventarioOrdenCompraModal({
             </DialogDescription>
           </DialogHeader>
 
+          <div className="min-h-0 w-full flex-1 space-y-4 overflow-x-hidden overflow-y-scroll overscroll-y-contain pr-1 [-webkit-overflow-scrolling:touch] [touch-action:pan-y]">
           <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">
             <span className="text-muted-foreground">Número OC: </span>
             <span className="font-mono font-semibold text-foreground">
@@ -652,12 +653,61 @@ export default function InventarioOrdenCompraModal({
           <div className="space-y-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <Label className="text-base font-medium">Detalle de ítems</Label>
-              <Button type="button" size="sm" variant="outline" onClick={addLine} disabled={saving || enviando}>
+              <Button type="button" className="w-full sm:w-auto" size="sm" variant="outline" onClick={addLine} disabled={saving || enviando}>
                 <Plus className="mr-1 h-4 w-4" />
                 Agregar línea
               </Button>
             </div>
-            <div className="w-full overflow-x-auto rounded-md border border-border">
+            <div className="space-y-3 md:hidden">
+              {lines.map((line, index) => (
+                <article key={line.id} className="min-w-0 rounded-md border border-border bg-card p-3">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <p className="text-sm font-medium text-foreground">Ítem {index + 1}</p>
+                    <Button type="button" variant="outline" size="sm" className="text-destructive hover:text-destructive" onClick={() => removeLine(line.id)}>
+                      <Trash2 className="mr-2 h-4 w-4" /> Eliminar
+                    </Button>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-1.5">
+                      <Label>SKU</Label>
+                      <Input
+                        value={line.sku}
+                        onChange={(e) => {
+                          const sku = e.target.value.toUpperCase();
+                          updateLine(line.id, { sku });
+                          const exacto = productosConSku.find((producto) => String(producto.sku || '').trim().toUpperCase() === sku.trim());
+                          if (exacto) asignarProductoALinea(line.id, sku);
+                        }}
+                        onBlur={(e) => asignarProductoALinea(line.id, e.target.value)}
+                        placeholder="Buscar SKU"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Producto</Label>
+                      <Input value={line.nombreProducto} onChange={(e) => { updateLine(line.id, { nombreProducto: e.target.value }); asignarProductoPorNombreALinea(line.id, e.target.value); }} placeholder="Nombre del producto" />
+                    </div>
+                    <div className="space-y-1.5"><Label>Cantidad</Label><Input type="number" min="0" step="any" value={line.cantidad} onChange={(e) => updateLine(line.id, { cantidad: e.target.value })} /></div>
+                    <div className="space-y-1.5"><Label>Precio</Label><Input type="number" min="0" step="any" value={line.precioUnitario} onChange={(e) => updateLine(line.id, { precioUnitario: e.target.value })} /></div>
+                    <div className="space-y-1.5"><Label>Descuento (COP)</Label><Input type="number" min="0" step={1} value={line.descuento} onChange={(e) => updateLine(line.id, { descuento: e.target.value })} /></div>
+                    <div className="space-y-1.5"><Label>Impuesto %</Label><Input type="number" min="0" step="any" value={line.impuestoPorcentaje} onChange={(e) => updateLine(line.id, { impuestoPorcentaje: e.target.value, codigoReglaImpuesto: null, baseCalculoImpuesto: null, montoFijoImpuesto: 0, motivoReglaImpuesto: null })} /></div>
+                    <div className="space-y-1.5 sm:col-span-2">
+                      <Label>Bodega</Label>
+                      <Select value={line.bodega || ''} onValueChange={(v) => updateLine(line.id, { bodega: v })}>
+                        <SelectTrigger><SelectValue placeholder="Bodega" /></SelectTrigger>
+                        <SelectContent className="max-h-60 border-border bg-popover">
+                          {bodegasActivas.map((b) => <SelectItem key={String(b._id || b.iud || b.nombre)} value={b.nombre}>{b.nombre}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-3 border-t border-border pt-3 text-sm">
+                    <div><p className="text-xs text-muted-foreground">Subtotal</p><p className="font-medium tabular-nums">{moneyCo(calcSubtotalLinea(line))}</p></div>
+                    <div className="text-right"><p className="text-xs text-muted-foreground">Total</p><p className="font-semibold tabular-nums">{moneyCo(calcTotalLinea(line))}</p></div>
+                  </div>
+                </article>
+              ))}
+            </div>
+            <div className="hidden w-full overflow-x-auto rounded-md border border-border md:block">
               <Table className="w-full table-fixed [&_td]:px-2 [&_th]:px-2">
                 <TableHeader>
                   <TableRow>
@@ -852,13 +902,15 @@ export default function InventarioOrdenCompraModal({
               Subtotal por línea = cantidad × precio. Total por línea = subtotal + impuesto % sobre el subtotal − descuento en pesos.
             </p>
           </div>
+          </div>
 
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={saving || enviando}>
+          <DialogFooter className="shrink-0 gap-2 border-t border-border bg-background pt-3 sm:gap-0">
+            <Button type="button" className="w-full sm:w-auto" variant="outline" onClick={() => onOpenChange(false)} disabled={saving || enviando}>
               Cancelar
             </Button>
             <Button
               type="button"
+              className="w-full sm:w-auto"
               onClick={() => void guardar()}
               disabled={saving || enviando}
             >

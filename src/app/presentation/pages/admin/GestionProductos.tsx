@@ -59,7 +59,7 @@ interface ProductRow {
   tipo: string;
   moneda: string;
   monedaId: string;
-  precio: number;
+  precio: number | string;
   unidadMedida: string;
   stockMinimo: number;
   cantidadColoresRender: number;
@@ -171,7 +171,7 @@ const mapProduct = (producto: BackendProducto): ProductRow => {
     tipo: String(producto.tipo || origen?.tipo || 'PRODUCTO'),
     moneda: String(producto.moneda || origen?.moneda || 'COP'),
     monedaId: resolverMonedaIdProducto(producto),
-    precio: Number(producto.precio || origen?.precio || 0),
+    precio: Number(producto.productoVentaRelacion?.precio ?? producto.precio ?? origen?.precio ?? 0),
     unidadMedida: String(producto.unidadMedida || origen?.unidadMedida || 'UNIDAD'),
     stockMinimo: Number(producto.stockMinimo || origen?.stockMinimo || 0),
     cantidadColoresRender: Number(producto.productoVentaRelacion?.cantidadColoresRender || 0),
@@ -212,7 +212,7 @@ const toPayload = (product: ProductRow): AdminProductoPayload => ({
   sku: product.productoOrigenId ? undefined : product.sku || undefined,
   descripcion: product.descripcion || '',
   descripcionCorta: product.descripcionCorta || '',
-  precio: Number(product.precio || 0),
+  precio: Number(product.precio),
   moneda: product.moneda || 'COP',
   monedaId: product.monedaId || null,
   tipo: product.tipo,
@@ -254,7 +254,7 @@ const EMPTY_PRODUCT: ProductRow = {
   tipo: '',
   moneda: 'COP',
   monedaId: '',
-  precio: 0,
+  precio: '',
   unidadMedida: 'UNIDAD',
   stockMinimo: 0,
   cantidadColoresRender: 0,
@@ -1013,7 +1013,8 @@ export default function GestionProductos(): React.ReactElement {
       toast.error('El producto seleccionado no tiene stock disponible en inventario.');
       return;
     }
-    if (!form.nombre.trim() || !form.precio) {
+    const precioFormulario = Number(form.precio);
+    if (!form.nombre.trim() || String(form.precio).trim() === '' || !Number.isFinite(precioFormulario) || precioFormulario <= 0) {
       toast.error('Nombre y precio son obligatorios.');
       return;
     }
@@ -1025,7 +1026,7 @@ export default function GestionProductos(): React.ReactElement {
       toast.error(`La descripcion supera ${limitesCatalogo.descripcionMax} caracteres.`);
       return;
     }
-    if (precioMinimoCatalogo > 0 && form.precio < precioMinimoCatalogo) {
+    if (precioMinimoCatalogo > 0 && precioFormulario < precioMinimoCatalogo) {
       toast.error(
         `El precio no puede ser inferior al precio del producto en catálogo (${precioMinimoCatalogo.toLocaleString('es-CO')} ${form.moneda || 'COP'}).`,
       );
@@ -1340,13 +1341,13 @@ export default function GestionProductos(): React.ReactElement {
   };
 
   return (
-    <div className="p-4 md:p-6 lg:p-8">
-      <div className="mb-6 flex flex-col gap-3 border-b pb-4 md:flex-row md:items-center md:justify-between">
-        <div className="flex items-center justify-between gap-2 md:justify-start">
+    <div className="p-3 sm:p-4 md:p-6 lg:p-8">
+      <div className="mb-5 flex flex-col gap-4 border-b pb-4 sm:mb-6">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <h1 className="text-2xl font-bold text-foreground md:text-3xl">Gestión de Productos</h1>
           <ModuleHelpButton id="btn-ayuda-modulo-productos" title="Ayuda de Gestión de Productos" description="Administra catálogo, inventario, publicación, reglas contables, reglas de venta, categorías y secuencias." details={["Las reglas contables determinan impuestos y su desglose.", "Las reglas de venta determinan comisiones.", "Sincronizar actualiza relaciones del catálogo.", "Reencolar recupera comisiones pendientes del Pipeline B."]} />
         </div>
-        <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center">
+        <div className="grid w-full grid-cols-1 gap-2 min-[420px]:grid-cols-2 md:grid-cols-3 xl:flex xl:flex-wrap xl:items-center [&>*]:h-auto [&>*]:min-h-10 [&>*]:w-full [&>*]:whitespace-normal xl:[&>*]:w-auto">
           <GovernedButton actionId={PRODUCT_ACTION_IDS.MANAGE_RULE_SCOPE}
             variant="outline"
             onClick={() => setOpenAlcanceReglasModal(true)}
@@ -1422,7 +1423,7 @@ export default function GestionProductos(): React.ReactElement {
         </div>
       </div>
 
-      <div className="mb-6 max-w-xl">
+      <div className="mb-5 w-full sm:mb-6 sm:max-w-xl">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -1435,7 +1436,7 @@ export default function GestionProductos(): React.ReactElement {
       </div>
 
       <div className="overflow-x-auto rounded-lg border bg-card shadow-sm">
-        <Table>
+        <Table className="min-w-[1050px]">
           <TableHeader>
             <TableRow className="bg-muted/50 hover:bg-muted/50">
               <TableHead>Nombre</TableHead>
@@ -1484,7 +1485,7 @@ export default function GestionProductos(): React.ReactElement {
                 <TableCell>{producto.unidadMedida}</TableCell>
                 <TableCell>{obtenerStockKardexSku(producto.sku).toLocaleString('es-CO')}</TableCell>
                 <TableCell>{producto.cantidadColoresRender}</TableCell>
-                <TableCell className="font-semibold text-primary">${producto.precio.toFixed(2)} {producto.moneda}</TableCell>
+                <TableCell className="font-semibold text-primary">${Number(producto.precio || 0).toFixed(2)} {producto.moneda}</TableCell>
                 <TableCell>
                   <Switch checked={producto.destacado} onCheckedChange={() => { void onToggleDestacado(producto); }} />
                 </TableCell>
@@ -1509,9 +1510,9 @@ export default function GestionProductos(): React.ReactElement {
       </div>
 
       <Dialog open={openDialog} onOpenChange={(open) => (open ? setOpenDialog(true) : closeDialog())}>
-        <DialogContent className="flex max-h-[92vh] w-[min(96vw,1280px)] max-w-[min(96vw,1280px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(96vw,1280px)]">
-          <DialogHeader className="shrink-0 border-b px-6 py-4">
-            <div className="flex items-center justify-between gap-4 pr-8">
+        <DialogContent className="flex max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-none flex-col gap-0 overflow-hidden p-0 sm:max-h-[calc(100dvh-2rem)] sm:w-[calc(100vw-2rem)] lg:w-[min(1200px,calc(100vw-3rem))]">
+          <DialogHeader className="shrink-0 border-b px-3 py-3 sm:px-6 sm:py-4">
+            <div className="flex flex-col gap-3 pr-8 sm:flex-row sm:items-center sm:justify-between">
               <DialogTitle>
                 {dialogType === 'add' ? 'Agregar Nuevo Producto' : dialogType === 'edit' ? 'Editar Producto' : dialogType === 'view' ? 'Detalle del Producto' : 'Desactivar Producto'}
               </DialogTitle>
@@ -1520,7 +1521,7 @@ export default function GestionProductos(): React.ReactElement {
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="gap-2"
+                  className="w-full gap-2 sm:w-auto"
                   onClick={() => setOpenProductHelpDialog(true)}
                 >
                   <CircleHelp className="h-4 w-4" />
@@ -1716,7 +1717,7 @@ export default function GestionProductos(): React.ReactElement {
                       min={dialogType !== 'view' && precioMinimoCatalogo > 0 ? precioMinimoCatalogo : undefined}
                       value={current.precio}
                       disabled={dialogType === 'view'}
-                      onChange={(e) => setForm((prev) => ({ ...prev, precio: Number(e.target.value || 0) }))}
+                      onChange={(e) => setForm((prev) => ({ ...prev, precio: e.target.value }))}
                     />
                   </div>
                   {dialogType !== 'view' && precioMinimoCatalogo > 0 && (
@@ -2132,7 +2133,7 @@ export default function GestionProductos(): React.ReactElement {
       </Dialog>
 
       <Dialog open={openProductHelpDialog} onOpenChange={setOpenProductHelpDialog}>
-        <DialogContent className="sm:max-w-2xl">
+        <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-none overflow-y-auto overscroll-contain p-3 sm:max-h-[calc(100dvh-2rem)] sm:w-[calc(100vw-2rem)] sm:p-6 lg:w-[min(672px,calc(100vw-3rem))]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <CircleHelp className="h-5 w-5 text-primary" />
@@ -2175,7 +2176,7 @@ export default function GestionProductos(): React.ReactElement {
       </Dialog>
 
       <Dialog open={openCategoriesListDialog} onOpenChange={setOpenCategoriesListDialog}>
-        <DialogContent className="sm:max-w-3xl">
+        <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-none overflow-y-auto overscroll-contain p-3 sm:max-h-[calc(100dvh-2rem)] sm:w-[calc(100vw-2rem)] sm:p-6 lg:w-[min(768px,calc(100vw-3rem))]">
           <DialogHeader>
             <DialogTitle>Categorias creadas</DialogTitle>
             <DialogDescription>
@@ -2287,7 +2288,7 @@ export default function GestionProductos(): React.ReactElement {
       </Dialog>
 
       <Dialog open={Boolean(categoriaEdit)} onOpenChange={(open) => { if (!open) setCategoriaEdit(null); }}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+        <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-none overflow-y-auto overscroll-contain p-3 sm:max-h-[calc(100dvh-2rem)] sm:w-[calc(100vw-2rem)] sm:p-6 lg:w-[min(512px,calc(100vw-3rem))]">
           <DialogHeader>
             <DialogTitle>Parametrizar Categoría</DialogTitle>
             <DialogDescription>
@@ -2373,7 +2374,7 @@ export default function GestionProductos(): React.ReactElement {
       </Dialog>
 
       <Dialog open={openCategoryDialog} onOpenChange={(open) => (open ? setOpenCategoryDialog(true) : closeCategoryDialog())}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+        <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-none overflow-y-auto overscroll-contain p-3 sm:max-h-[calc(100dvh-2rem)] sm:w-[calc(100vw-2rem)] sm:p-6 lg:w-[min(512px,calc(100vw-3rem))]">
           <DialogHeader>
             <DialogTitle>
               {categoryCreateMode === 'subcategory'
@@ -2630,7 +2631,7 @@ export default function GestionProductos(): React.ReactElement {
       </Dialog>
 
       <Dialog open={openTypeDialog} onOpenChange={(open) => (open ? setOpenTypeDialog(true) : closeTypeDialog())}>
-        <DialogContent className="sm:max-w-3xl">
+        <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-none overflow-y-auto overscroll-contain p-3 sm:max-h-[calc(100dvh-2rem)] sm:w-[calc(100vw-2rem)] sm:p-6 lg:w-[min(768px,calc(100vw-3rem))]">
           <DialogHeader>
             <DialogTitle>Parametrizar Tipos de Producto</DialogTitle>
             <DialogDescription>Consulta, crea, edita o desactiva los tipos disponibles.</DialogDescription>

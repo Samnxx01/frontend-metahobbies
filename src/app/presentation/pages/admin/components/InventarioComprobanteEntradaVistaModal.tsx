@@ -152,8 +152,8 @@ export default function InventarioComprobanteEntradaVistaModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[min(980px,calc(100vw-2rem))] max-w-none border-border bg-background text-foreground">
-        <DialogHeader>
+      <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-[980px] overflow-y-auto border-border bg-background p-3 text-foreground sm:max-h-[calc(100dvh-2rem)] sm:w-[calc(100vw-2rem)] sm:p-6">
+        <DialogHeader className="space-y-3">
           <DialogTitle className="flex items-center gap-2">
             <FileText className="h-5 w-5 text-primary" />
             {(detalle?.reporteKardex?.length ?? 0) > 0
@@ -161,13 +161,13 @@ export default function InventarioComprobanteEntradaVistaModal({
               : 'Comprobante de entrada'}
           </DialogTitle>
           {pendienteConfirmacion && recepcionId ? (
-            <div className="absolute right-14 top-5 flex items-center gap-2">
+            <div className="flex flex-col gap-2 pr-8 sm:flex-row sm:flex-wrap">
               {editando ? (
                 <>
-                  <Button type="button" size="sm" variant="outline" onClick={() => setEditando(false)} disabled={guardando}>
+                  <Button type="button" className="w-full sm:w-auto" size="sm" variant="outline" onClick={() => setEditando(false)} disabled={guardando}>
                     <X className="mr-2 h-4 w-4" /> Cancelar edición
                   </Button>
-                  <Button type="button" size="sm" onClick={() => void guardarEdicion()} disabled={guardando}>
+                  <Button type="button" className="w-full sm:w-auto" size="sm" onClick={() => void guardarEdicion()} disabled={guardando}>
                     {guardando ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
                     {guardando ? 'Guardando...' : 'Guardar cambios'}
                   </Button>
@@ -179,6 +179,7 @@ export default function InventarioComprobanteEntradaVistaModal({
                     data-testid="editar-comprobante-entrada"
                     data-recepcion-id={recepcionId}
                     type="button"
+                    className="w-full sm:w-auto"
                     size="sm"
                     variant="outline"
                     onClick={() => setEditando(true)}
@@ -188,6 +189,7 @@ export default function InventarioComprobanteEntradaVistaModal({
                   </Button>
                   <Button
                     type="button"
+                    className="w-full sm:w-auto"
                     size="sm"
                     onClick={() => void onConfirmarComprobante?.(recepcionId)}
                     disabled={confirmando}
@@ -215,7 +217,7 @@ export default function InventarioComprobanteEntradaVistaModal({
           </div>
         ) : (
           <div className="space-y-4">
-            <div className="grid gap-3 rounded-md border border-border bg-muted/40 p-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid min-w-0 gap-3 rounded-md border border-border bg-muted/40 p-3 sm:grid-cols-2 lg:grid-cols-4">
               <div>
                 <p className="text-xs text-muted-foreground">Recepción</p>
                 <p className="font-mono text-sm font-semibold">{detalle.numeroRecepcion}</p>
@@ -252,7 +254,7 @@ export default function InventarioComprobanteEntradaVistaModal({
               {detalle.orden?.proveedor?.nombre ? (
                 <div className="sm:col-span-2">
                   <p className="text-xs text-muted-foreground">Proveedor</p>
-                  <p className="text-sm font-medium">{detalle.orden.proveedor.nombre}</p>
+                  <p className="break-words text-sm font-medium">{detalle.orden.proveedor.nombre}</p>
                   {detalle.orden.proveedor.nit ? (
                     <p className="text-xs text-muted-foreground">NIT {detalle.orden.proveedor.nit}</p>
                   ) : null}
@@ -265,7 +267,36 @@ export default function InventarioComprobanteEntradaVistaModal({
                 <p className="text-sm font-medium">Detalle de líneas</p>
                 <p className="text-sm font-semibold">Total: {moneyCo(total)}</p>
               </div>
-              <div className="overflow-x-auto rounded-md border border-border">
+              <div className="space-y-3 md:hidden">
+                {detalle.items.map((it) => {
+                  const key = it.lineaKey || `${it.sku}-${it.bodega}`;
+                  const calculada = desgloseEditado.find((row) => row.key === key);
+                  const subtotal = calculada?.total ?? Number(it.subtotal || 0);
+                  return (
+                    <article key={key} className="rounded-md border border-border bg-card p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <p className="min-w-0 break-words text-sm">{it.bodega}</p>
+                        <span className="shrink-0 font-mono text-xs text-muted-foreground">{it.sku}</span>
+                      </div>
+                      <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                        <div>
+                          <dt className="text-muted-foreground">Recibido</dt>
+                          <dd className="mt-1 tabular-nums">
+                            {editando ? (
+                              <Input type="number" min="0.01" step="0.01" className="h-9 w-full text-right" value={cantidades[key] ?? ''} onChange={(event) => setCantidades((actual) => ({ ...actual, [key]: event.target.value }))} />
+                            ) : formatQty(Number(it.cantidadRecibida || 0))}
+                          </dd>
+                        </div>
+                        <div><dt className="text-muted-foreground">Disponible kardex</dt><dd className="mt-1 tabular-nums">{formatQty(Number(it.disponibleKardex || 0))}</dd></div>
+                        <div><dt className="text-muted-foreground">Kardex</dt><dd className="mt-1"><Badge variant="outline" className={estadoKardexLineaBadgeClass(it.estadoKardex)}>{labelEstadoKardexLinea(it.estadoKardex)}</Badge></dd></div>
+                        <div><dt className="text-muted-foreground">Costo unitario</dt><dd className="mt-1 tabular-nums">{moneyCo(Number(it.costoUnitario || 0))}</dd></div>
+                        <div className="col-span-2 border-t border-border pt-2"><dt className="text-muted-foreground">Subtotal</dt><dd className="font-semibold tabular-nums">{moneyCo(subtotal)}</dd></div>
+                      </dl>
+                    </article>
+                  );
+                })}
+              </div>
+              <div className="hidden overflow-x-auto rounded-md border border-border md:block">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -318,7 +349,7 @@ export default function InventarioComprobanteEntradaVistaModal({
                   </TableBody>
                 </Table>
               </div>
-              <div className="ml-auto grid w-full max-w-sm gap-2 rounded-md border border-border bg-muted/40 p-3 text-sm">
+              <div className="ml-auto grid w-full gap-2 rounded-md border border-border bg-muted/40 p-3 text-sm sm:max-w-sm">
                 <div className="flex justify-between gap-4"><span>Subtotal bruto</span><span className="font-medium tabular-nums">{moneyCo(resumen.subtotalBruto)}</span></div>
                 <div className="flex justify-between gap-4"><span>Descuento</span><span className="font-medium tabular-nums">- {moneyCo(resumen.descuento)}</span></div>
                 <div className="flex justify-between gap-4"><span>Base gravable</span><span className="font-medium tabular-nums">{moneyCo(resumen.baseGravable)}</span></div>
@@ -333,8 +364,8 @@ export default function InventarioComprobanteEntradaVistaModal({
           </div>
         )}
 
-        <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+        <DialogFooter className="gap-2 sm:gap-0">
+          <Button type="button" className="w-full sm:w-auto" variant="outline" onClick={() => onOpenChange(false)}>
             Cerrar
           </Button>
         </DialogFooter>

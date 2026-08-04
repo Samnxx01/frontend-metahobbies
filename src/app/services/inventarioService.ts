@@ -29,6 +29,10 @@ export type MotivoMovimiento = string;
 export interface InventarioMotivoMovimiento {
   codigo: string;
   nombre: string;
+  descripcion?: string;
+  tipoMovimientoId?: InventarioTipoMovimiento | string | null;
+  tipoMovimiento?: InventarioTipoMovimiento | null;
+  tipoMovimientoReferenciaId?: string | null;
 }
 export type TipoAjuste = 'POSITIVO' | 'NEGATIVO';
 export type EstadoAjuste = 'SOLICITADO' | 'APROBADO' | 'RECHAZADO';
@@ -181,6 +185,8 @@ export interface InventarioConfig {
 }
 
 export interface EstadoOrdenCompraConfig {
+  _id?: string;
+  iud?: string;
   codigo: string;
   nombre: string;
   descripcion?: string;
@@ -192,6 +198,20 @@ export interface EstadoOrdenCompraConfig {
   estadoDestinoConfirmacion?: string;
   permiteComprobanteEntrada?: boolean;
   generaComprobanteContable?: boolean;
+  aplicaKardex?: boolean;
+  causalIds?: string[];
+}
+
+export interface TipoMovimientoEstadoRelacion {
+  tipoEstadoId: EstadoOrdenCompraConfig | string;
+  causalIds?: Array<InventarioCausalAjuste | string>;
+  esInicial: boolean;
+  permiteEditar: boolean;
+  permiteConfirmar: boolean;
+  estadoDestinoId?: EstadoOrdenCompraConfig | string | null;
+  aplicaKardex: boolean;
+  generaComprobanteContable: boolean;
+  activo: boolean;
 }
 
 export interface InventarioComprasConfig {
@@ -202,6 +222,8 @@ export interface InventarioComprasConfig {
   /** Tributo activo de DIAN_TRIBUTOS para la OC. 01 = IVA. */
   codigoDianImpuesto?: string;
 }
+
+export type TipoEstadoInventarioDominio = 'ORDEN_COMPRA' | 'RECEPCION_COMPRA' | 'INVENTORY_LEDGER';
 
 export interface InventarioProductosConfig {
   /** Ámbitos cuyas reglas aparecen en el formulario. Vacío = todas las activas. */
@@ -1033,6 +1055,44 @@ const inventarioService = {
       body: compras,
     });
     return resp?.data as InventarioConfig;
+  },
+
+  async listarTiposEstado(
+    dominio: TipoEstadoInventarioDominio,
+    options: { soloActivos?: boolean } = {},
+  ): Promise<EstadoOrdenCompraConfig[]> {
+    const resp = await apiFetch(
+      `/api/inventario/config/tipos-estado/${dominio}?soloActivos=${options.soloActivos !== false}`,
+      { method: 'GET' },
+    );
+    return (resp?.data ?? []) as EstadoOrdenCompraConfig[];
+  },
+
+  async guardarTiposEstado(
+    dominio: TipoEstadoInventarioDominio,
+    estados: EstadoOrdenCompraConfig[],
+  ): Promise<EstadoOrdenCompraConfig[]> {
+    const resp = await apiFetch(`/api/inventario/config/tipos-estado/${dominio}`, {
+      method: 'PUT',
+      body: { estados },
+    });
+    return (resp?.data ?? []) as EstadoOrdenCompraConfig[];
+  },
+
+  async listarEstadosTipoMovimiento(tipoMovimientoId: string): Promise<TipoMovimientoEstadoRelacion[]> {
+    const resp = await apiFetch(`/api/inventario/config/tipos-estado-flujo/${encodeURIComponent(tipoMovimientoId)}`, { method: 'GET' });
+    return (resp?.data ?? []) as TipoMovimientoEstadoRelacion[];
+  },
+
+  async guardarEstadosTipoMovimiento(
+    tipoMovimientoId: string,
+    relaciones: TipoMovimientoEstadoRelacion[],
+  ): Promise<TipoMovimientoEstadoRelacion[]> {
+    const resp = await apiFetch(`/api/inventario/config/tipos-estado-flujo/${encodeURIComponent(tipoMovimientoId)}`, {
+      method: 'PUT',
+      body: { relaciones },
+    });
+    return (resp?.data ?? []) as TipoMovimientoEstadoRelacion[];
   },
 
   async actualizarConfigProductos(productos: InventarioProductosConfig): Promise<InventarioConfig> {

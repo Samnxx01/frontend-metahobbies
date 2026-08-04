@@ -75,6 +75,7 @@ import InventarioTipoMovimientoModal, { type TipoMovimientoDraft } from './compo
 import InventarioKardexControlDuplicadoModal, {
   InventarioKardexControlDuplicadoAyudaDialog,
 } from './components/InventarioKardexControlDuplicadoModal';
+import InventarioEstadoOrdenCompraConfigModal from './components/InventarioEstadoOrdenCompraConfigModal';
 import InventarioUnidadMedidaModal, { type UnidadMedidaDraft } from './components/InventarioUnidadMedidaModal';
 import {
   AlertDialog,
@@ -114,11 +115,25 @@ const MONEY = new Intl.NumberFormat('es-CO', {
   maximumFractionDigits: 0,
 });
 
-const MOTIVOS_FALLBACK: InventarioMotivoMovimiento[] = [
-  { codigo: 'COMPRA', nombre: 'Compra' },
-  { codigo: 'VENTA', nombre: 'Venta' },
-  { codigo: 'OTRO', nombre: 'Otro' },
-];
+const idTipoMovimientoDeMotivo = (motivo: InventarioMotivoMovimiento): string => {
+  const relacion = motivo.tipoMovimientoId;
+  if (typeof relacion === 'string') return relacion.trim();
+  return String(
+    motivo.tipoMovimientoReferenciaId
+      || relacion?._id
+      || relacion?.iud
+      || motivo.tipoMovimiento?._id
+      || motivo.tipoMovimiento?.iud
+      || '',
+  ).trim();
+};
+
+const resolverMotivoPorTipo = (
+  motivos: InventarioMotivoMovimiento[],
+  tipoMovimientoId: string,
+): string => motivos.find(
+  (motivo) => idTipoMovimientoDeMotivo(motivo) === String(tipoMovimientoId || '').trim(),
+)?.codigo || '';
 /** Nombres de departamento (DANE) — alineado con DireccionCorporativa / catálogo paisId=1 */
 const DEPARTAMENTO_NOMBRES: Record<string, string> = {
   '1': 'Amazonas', '2': 'Antioquia', '3': 'Arauca', '4': 'Atlántico', '5': 'Bogotá D.C.',
@@ -181,7 +196,7 @@ const movimientoInicial: MovimientoForm = {
   bodegaDestino: '',
   cantidad: '',
   costoUnitario: '',
-  motivo: 'COMPRA',
+  motivo: '',
   motivoPersonalizado: '',
   documentoTipo: 'DOCUMENTO_SOPORTE',
   documentoNumero: '',
@@ -318,13 +333,14 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
   const [ordenCompraModalOpen, setOrdenCompraModalOpen] = useState(false);
   const [ordenEditando, setOrdenEditando] = useState<InventarioOrdenCompra | null>(null);
   const [ordenesCompra, setOrdenesCompra] = useState<InventarioOrdenCompra[]>([]);
-  const [motivosMovimiento, setMotivosMovimiento] = useState<InventarioMotivoMovimiento[]>(MOTIVOS_FALLBACK);
+  const [motivosMovimiento, setMotivosMovimiento] = useState<InventarioMotivoMovimiento[]>([]);
   const [comprobantesEntradaMov, setComprobantesEntradaMov] = useState<ComprobanteEntradaAjuste[]>([]);
   const [comprobanteVistaOpen, setComprobanteVistaOpen] = useState(false);
   const [comprobanteVistaId, setComprobanteVistaId] = useState<string | null>(null);
   const [reporteKardexOpen, setReporteKardexOpen] = useState(false);
   const [reporteKardexRecepcionId, setReporteKardexRecepcionId] = useState<string | null>(null);
   const [causalMotivoModalOpen, setCausalMotivoModalOpen] = useState(false);
+  const [estadosMovimientoModalOpen, setEstadosMovimientoModalOpen] = useState(false);
   const [comprobanteEntradaOpen, setComprobanteEntradaOpen] = useState(false);
   const [comprobanteEntradaData, setComprobanteEntradaData] = useState<RecepcionOrdenCompraResponse | null>(null);
   const [comprobanteEntradaDoc, setComprobanteEntradaDoc] = useState<DocumentoSoporte | null>(null);
@@ -578,7 +594,7 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
         bodega: '',
         cantidad: '',
         costoUnitario: '',
-        motivo: 'COMPRA',
+        motivo: resolverMotivoPorTipo(motivosMovimiento, tipoEntradaCompraId || prev.tipoMovimientoConfigId),
         tipo: 'ENTRADA',
         tipoMovimientoConfigId: tipoEntradaCompraId || prev.tipoMovimientoConfigId,
         documentoTipo: doc?.tipo || 'RECEPCION_OC',
@@ -598,7 +614,7 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
       bodega: linea.bodega,
       cantidad: String(Number(linea.cantidadRecibida || 0) || ''),
       costoUnitario: String(linea.costoUnitario ?? ''),
-      motivo: 'COMPRA',
+      motivo: resolverMotivoPorTipo(motivosMovimiento, tipoEntradaCompraId || prev.tipoMovimientoConfigId),
       documentoTipo: doc?.tipo || 'RECEPCION_OC',
       documentoNumero: doc?.numero || comprobante.numeroRecepcion,
     }));
@@ -618,7 +634,7 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
         bodega: '',
         cantidad: '',
         costoUnitario: '',
-        motivo: 'COMPRA',
+        motivo: resolverMotivoPorTipo(motivosMovimiento, prev.tipoMovimientoConfigId),
         documentoTipo: 'RECEPCION_OC',
         documentoNumero,
       }));
@@ -638,7 +654,7 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
       bodega: item.bodega,
       cantidad: cantidadReferencia > 0 ? String(cantidadReferencia) : '',
       costoUnitario: String(costoUnitarioCalculado),
-      motivo: 'COMPRA',
+      motivo: resolverMotivoPorTipo(motivosMovimiento, prev.tipoMovimientoConfigId),
       documentoTipo: 'RECEPCION_OC',
       documentoNumero,
     }));
@@ -680,13 +696,20 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
         const seleccionValida = kardexEntrada.some(
           (tipo) => idTipoMovimiento(tipo) === String(prev.tipoMovimientoConfigId || '').trim(),
         );
-        if (seleccionValida) return prev;
         const porDefecto = resolverTipoMovimientoKardexEntradaPorDefecto(tiposResp);
-        if (!porDefecto) return prev;
+        const tipoMovimientoConfigId = seleccionValida
+          ? prev.tipoMovimientoConfigId
+          : porDefecto
+            ? idTipoMovimiento(porDefecto)
+            : '';
+        const motivo = resolverMotivoPorTipo(causalesResp || [], tipoMovimientoConfigId);
+        if (tipoMovimientoConfigId === prev.tipoMovimientoConfigId && motivo === prev.motivo) return prev;
         return {
           ...prev,
           tipo: 'ENTRADA',
-          tipoMovimientoConfigId: idTipoMovimiento(porDefecto),
+          tipoMovimientoConfigId,
+          motivo,
+          motivoPersonalizado: '',
         };
       });
       if (!unidadesResp.some((unidad) => unidad.estado && unidad.codigo === skuForm.unidadMedida)) {
@@ -1105,7 +1128,7 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
       toast.error('Escribe el motivo del movimiento.');
       return;
     }
-    if (tipoSeleccionado.naturaleza === 'ENTRADA' && movimientoForm.motivo === 'COMPRA' && movimientoForm.ordenCompraId) {
+    if (tipoSeleccionado.naturaleza === 'ENTRADA' && movimientoForm.ordenCompraId) {
       const orden = ordenesCompra.find((oc) => getOrdenCompraId(oc) === movimientoForm.ordenCompraId);
       const itemIndex = Number(movimientoForm.ordenCompraItemIndex);
       const item = orden?.items?.[itemIndex];
@@ -1180,7 +1203,7 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
         return;
       }
 
-      if (tipoSeleccionado.naturaleza === 'ENTRADA' && movimientoForm.motivo === 'COMPRA' && movimientoForm.ordenCompraId) {
+      if (tipoSeleccionado.naturaleza === 'ENTRADA' && movimientoForm.ordenCompraId) {
         const itemIndex = Number(movimientoForm.ordenCompraItemIndex);
         const data = await inventarioService.registrarRecepcionOrdenCompra(movimientoForm.ordenCompraId, {
           confirmar: true,
@@ -1448,19 +1471,22 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
   };
 
   const aplicarMotivosDesdeCausales = (causales: Awaited<ReturnType<typeof inventarioService.listarCausalesAjuste>>): void => {
-    const motivosDesdeCausales = (causales || []).map((c) => ({
+    const motivosDesdeCausales = (causales || []).filter((c) => c.estado !== false).map((c) => ({
       codigo: c.codigo,
       nombre: c.nombre,
+      descripcion: c.descripcion,
+      tipoMovimientoId: c.tipoMovimientoId,
+      tipoMovimiento: c.tipoMovimiento,
+      tipoMovimientoReferenciaId: c.tipoMovimientoReferenciaId,
     }));
-    const merged = [...motivosDesdeCausales];
-    for (const fallback of MOTIVOS_FALLBACK) {
-      if (!merged.some((m) => m.codigo === fallback.codigo)) merged.push(fallback);
-    }
-    setMotivosMovimiento(merged);
-    const codigosValidos = new Set(merged.map((m) => m.codigo));
+    setMotivosMovimiento(motivosDesdeCausales);
+    const codigosValidos = new Set(motivosDesdeCausales.map((m) => m.codigo));
     setMovimientoForm((prev) => {
+      const motivoRelacionado = resolverMotivoPorTipo(motivosDesdeCausales, prev.tipoMovimientoConfigId);
+      if (motivoRelacionado === prev.motivo) return prev;
+      if (motivoRelacionado) return { ...prev, motivo: motivoRelacionado, motivoPersonalizado: '' };
       if (!prev.motivo || codigosValidos.has(prev.motivo)) return prev;
-      return { ...prev, motivo: merged[0]?.codigo || 'OTRO' };
+      return { ...prev, motivo: '', motivoPersonalizado: '' };
     });
   };
 
@@ -2365,6 +2391,7 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
             renderBodegaSelect={renderBodegaSelect}
             abrirModalTiposMovimiento={abrirModalTiposMovimiento}
             abrirModalCausalesMotivo={abrirModalCausalesMotivo}
+            abrirModalEstadosMovimiento={() => setEstadosMovimientoModalOpen(true)}
             abrirModalKardexControlDuplicado={abrirModalKardexControlDuplicado}
             abrirAyudaKardexControlDuplicado={abrirAyudaKardexControlDuplicado}
             kardexOmitirControlDuplicado={config?.kardex?.omitirControlDuplicado === true}
@@ -2466,6 +2493,14 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
             toast.success('Catálogo de motivos actualizado.');
           });
         }}
+      />
+
+      <InventarioEstadoOrdenCompraConfigModal
+        open={estadosMovimientoModalOpen}
+        onOpenChange={setEstadosMovimientoModalOpen}
+        dominio="INVENTORY_LEDGER"
+        title="Parametrización de estados — Movimientos de inventario"
+        description="Administre el flujo del kardex: estado inicial, confirmación, destino y comportamiento contable. Los estados desactivados se conservan para la trazabilidad histórica."
       />
 
       <InventarioTipoMovimientoModal

@@ -85,17 +85,13 @@ export function formatDiosRecursoJerarquiaTipo(row: Pick<DiosRecursoRow, 'suiteN
  * (rutaseguridads poblado en cada relación RELACION_RUTA).
  */
 export async function cargarJerarquiaRecursosDesdeCounter(): Promise<DiosJerarquiaRecursosCargados> {
-  const [suitesRes, modulosRes, formsRes, subFormsRes] = await Promise.all([
-    getJerarquiaOpcionesFromCounter({ nivelOrder: 1 }),
-    getJerarquiaOpcionesFromCounter({ nivelOrder: 2 }),
-    getJerarquiaOpcionesFromCounter({ nivelOrder: 3 }),
-    getJerarquiaOpcionesFromCounter({ nivelOrder: 4 }),
-  ]);
+  const jerarquiaRes = await getJerarquiaOpcionesFromCounter({ nivelOrder: 'all' });
+  const niveles = jerarquiaRes?.niveles || {};
 
-  const suites = activas(suitesRes?.data as CounterRoute[]);
-  const modulos = activas(modulosRes?.data as CounterRoute[]);
-  const formularios = activas(formsRes?.data as CounterRoute[]);
-  const subformularios = activas(subFormsRes?.data as CounterRoute[]);
+  const suites = activas(niveles['1'] as CounterRoute[]);
+  const modulos = activas(niveles['2'] as CounterRoute[]);
+  const formularios = activas(niveles['3'] as CounterRoute[]);
+  const subformularios = activas(niveles['4'] as CounterRoute[]);
 
   const suiteNameById = new Map<string, string>();
   for (const s of suites) {

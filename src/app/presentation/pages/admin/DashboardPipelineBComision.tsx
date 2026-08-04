@@ -335,6 +335,7 @@ export default function DashboardPipelineBComision(): React.ReactElement {
     const [reencolando, setReencolando] = useState(false);
     const [reencolarModalOpen, setReencolarModalOpen] = useState(false);
     const [aprobandoId, setAprobandoId] = useState<string | null>(null);
+    const [voucherDetalle, setVoucherDetalle] = useState<PipelineBComisionRegistro | null>(null);
     const [dashboard, setDashboard] = useState<PipelineBComisionDashboard | null>(null);
     const [estado, setEstado] = useState<PipelineBComisionQuery['estado']>('all');
     const [page, setPage] = useState(1);
@@ -488,7 +489,7 @@ export default function DashboardPipelineBComision(): React.ReactElement {
                         </SelectContent>
                     </Select>
 
-                    <Button variant="outline" className="gap-2" onClick={() => void loadDashboard({ sincronizar: true })} disabled={loading}>
+                    <Button variant="outline" className="gap-2" onClick={() => void loadDashboard()} disabled={loading}>
                         {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                         Actualizar
                     </Button>
@@ -720,6 +721,21 @@ export default function DashboardPipelineBComision(): React.ReactElement {
                                                 {venta.reencolamiento.sinAfectacion} sin cambios
                                             </Badge>
                                         ) : null}
+                                        {(venta?.distribucion?.asignaciones?.length ?? 0) > 0 ? (
+                                            <Badge className="bg-info/10 text-info-foreground">
+                                                Distribución{venta?.distribucion?.codigo ? ` ${venta.distribucion.codigo}` : ''}:
+                                                {' '}
+                                                {venta?.distribucion?.asignaciones.map((asignacion) => (
+                                                    `Gen${asignacion.gen} (${asignacion.percent}%) → ${formatPesos(asignacion.montoAsignado, venta?.moneda)}`
+                                                )).join(' · ')}
+                                            </Badge>
+                                        ) : venta?.aprobacion ? (
+                                            <Badge className="bg-warning/10 text-warning-foreground">
+                                                Aprobación {venta.aprobacion.estado.toLowerCase()}
+                                                {' · '}
+                                                {formatPesos(venta.aprobacion.comisionCalculada, venta?.moneda)}
+                                            </Badge>
+                                        ) : null}
                                     </div>
                                 </div>
 
@@ -801,6 +817,17 @@ export default function DashboardPipelineBComision(): React.ReactElement {
                                     <span>Total cobrado: <strong>{formatPesos(venta?.totales?.montoCobrado ?? 0, venta?.moneda)}</strong></span>
                                     <span>Comisión potencial: <strong className="text-info-foreground">{formatPesos(venta?.totales?.comisionPotencial ?? 0, venta?.moneda)}</strong></span>
                                     <span>Materializada: <strong className="text-success-foreground">{formatPesos(venta?.totales?.comisionMaterializada ?? 0, venta?.moneda)}</strong></span>
+                                    {venta?.distribucion ? (
+                                        <span>
+                                            Distribuido: <strong className="text-info-foreground">{formatPesos(venta.distribucion.montoDistribuido, venta?.moneda)}</strong>
+                                            {venta.distribucion.asignaciones.length > 0 ? (
+                                                <> ({venta.distribucion.asignaciones.map((asignacion) => (
+                                                    `Gen${asignacion.gen} ${asignacion.percent}%`
+                                                )).join(' · ')})</>
+                                            ) : null}
+                                            {venta.distribucion.estado ? ` · ${venta.distribucion.estado}` : ''}
+                                        </span>
+                                    ) : null}
                                 </div>
                             </div>
                             );
@@ -975,6 +1002,18 @@ export default function DashboardPipelineBComision(): React.ReactElement {
                                                             ))}
                                                         </div>
                                                     ) : null}
+                                                    {(row.vouchersArbol?.length || row.cadenaReferidos?.length) ? (
+                                                        <Button
+                                                            type="button"
+                                                            variant="outline"
+                                                            size="sm"
+                                                            className="mt-1 h-7 px-2 text-xs"
+                                                            onClick={() => setVoucherDetalle(row)}
+                                                        >
+                                                            <GitBranch className="mr-1 h-3.5 w-3.5" />
+                                                            Ver red
+                                                        </Button>
+                                                    ) : null}
                                                 </div>
                                             </TableCell>
                                             <TableCell className="align-top">{formatDate(row.fecha)}</TableCell>
@@ -1063,6 +1102,102 @@ export default function DashboardPipelineBComision(): React.ReactElement {
                                 </>
                             )}
                         </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            <AlertDialog
+                open={voucherDetalle !== null}
+                onOpenChange={(open) => {
+                    if (!open) setVoucherDetalle(null);
+                }}
+            >
+                <AlertDialogContent className="max-w-2xl">
+                    <AlertDialogHeader>
+                        <AlertDialogMedia className="bg-info/10">
+                            <GitBranch className="h-6 w-6 text-info-foreground" />
+                        </AlertDialogMedia>
+                        <AlertDialogTitle className="text-lg font-semibold text-foreground">
+                            Voucher {voucherDetalle?.referenciaPersonalizada || 'sin referencia'} · red de distribución
+                        </AlertDialogTitle>
+                        <AlertDialogDescription asChild>
+                            <div className="space-y-4 text-left text-sm text-muted-foreground">
+                                <div className="flex flex-wrap gap-4 rounded-lg border border-slate-200 bg-muted/40 px-3 py-2 text-xs">
+                                    <span>Comprador: <strong className="text-foreground">{voucherDetalle?.comprador?.correo || '—'}</strong></span>
+                                    <span>Base: <strong className="text-foreground">{formatMoney(voucherDetalle?.montoBase ?? 0)}</strong></span>
+                                    <span>Comisión: <strong className="text-success-foreground">{formatMoney(voucherDetalle?.montoComisionTotal ?? 0)}</strong></span>
+                                    <span>Estado: <strong className="text-foreground">{voucherDetalle?.estado || '—'}</strong></span>
+                                </div>
+
+                                <div>
+                                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-foreground/70">Red padre → rama</p>
+                                    {voucherDetalle?.cadenaReferidos?.length ? (
+                                        <div className="space-y-1.5">
+                                            {voucherDetalle.cadenaReferidos.map((nodo) => (
+                                                <div key={`red-${nodo.orden}`} className="flex items-center gap-2 text-xs">
+                                                    <Badge variant="outline" className="w-24 justify-center text-[10px]">
+                                                        {nodo.rol === 'comprador' ? 'Comprador' : `Gen ${nodo.gen}`}
+                                                    </Badge>
+                                                    <ArrowRight className="h-3 w-3 shrink-0 text-muted-foreground" />
+                                                    <span className="truncate text-foreground/85">{nodo.correo || nodo.userId || '—'}</span>
+                                                    {nodo.bypassMembresia ? (
+                                                        <Badge variant="outline" className="text-[10px]">Bypass</Badge>
+                                                    ) : null}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <p className="text-xs">Sin cadena de referidos registrada.</p>
+                                    )}
+                                </div>
+
+                                <div>
+                                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-foreground/70">Vouchers por generación</p>
+                                    {voucherDetalle?.vouchersArbol?.length ? (
+                                        <div className="overflow-x-auto rounded-lg border border-slate-200">
+                                            <Table>
+                                                <TableHeader>
+                                                    <TableRow>
+                                                        <TableHead className="text-xs">Gen</TableHead>
+                                                        <TableHead className="text-xs">Beneficiario</TableHead>
+                                                        <TableHead className="text-right text-xs">%</TableHead>
+                                                        <TableHead className="text-right text-xs">Base</TableHead>
+                                                        <TableHead className="text-right text-xs">Ganado</TableHead>
+                                                        <TableHead className="text-xs">Estado</TableHead>
+                                                    </TableRow>
+                                                </TableHeader>
+                                                <TableBody>
+                                                    {voucherDetalle.vouchersArbol.map((voucher) => (
+                                                        <TableRow key={`voucher-${voucher.gen}-${voucher.sponsorUserId || ''}`}>
+                                                            <TableCell className="text-xs font-medium">Gen {voucher.gen}</TableCell>
+                                                            <TableCell className="max-w-[180px] truncate text-xs">{voucher.sponsorCorreo || voucher.sponsorUserId || '—'}</TableCell>
+                                                            <TableCell className="text-right text-xs">{voucher.percent}%</TableCell>
+                                                            <TableCell className="text-right text-xs">{formatMoney(voucher.montoBaseComision)}</TableCell>
+                                                            <TableCell className="text-right text-xs font-semibold text-success-foreground">{formatMoney(voucher.montoGanado)}</TableCell>
+                                                            <TableCell className="text-xs">
+                                                                {voucher.materializado ? (
+                                                                    <Badge className="bg-success/10 text-success-foreground">Materializado</Badge>
+                                                                ) : (
+                                                                    <Badge className="bg-warning/10 text-warning-foreground">Potencial</Badge>
+                                                                )}
+                                                                {voucher.contadorComisiId ? (
+                                                                    <div className="mt-1 font-mono text-[10px] text-muted-foreground">{voucher.contadorComisiId}</div>
+                                                                ) : null}
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    ))}
+                                                </TableBody>
+                                            </Table>
+                                        </div>
+                                    ) : (
+                                        <p className="text-xs">Aún no hay vouchers materializados para esta comisión.</p>
+                                    )}
+                                </div>
+                            </div>
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cerrar</AlertDialogCancel>
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>

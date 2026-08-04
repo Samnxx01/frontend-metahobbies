@@ -172,6 +172,22 @@ export type PipelineBVentaDetalle = {
     ultimoResultado: 'AFECTO' | 'SIN_CAMBIOS' | 'ERROR' | null;
     distribucionCodigo: string | null;
   } | null;
+  distribucion?: {
+    codigo: string | null;
+    estado: 'procesada' | 'pendiente' | 'error' | string | null;
+    montoDistribuido: number;
+    asignaciones: Array<{
+      gen: number;
+      percent: number;
+      montoBaseComision: number;
+      montoAsignado: number;
+    }>;
+  } | null;
+  aprobacion?: {
+    estado: 'PENDIENTE' | 'APROBADA' | 'RECHAZADA' | string;
+    comisionCalculada: number;
+    aprobadaEn: string | null;
+  } | null;
   generadorVenta?: { id: string; correo: string | null; nombre: string | null } | null;
   lineasConRegla: PipelineBComisionLineaProducto[];
   lineasSinRegla: PipelineBComisionLineaProducto[];

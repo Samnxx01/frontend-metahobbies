@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ClipboardList, History, Package, Search } from 'lucide-react';
 import type {
   InventarioMovimiento,
@@ -45,7 +45,20 @@ export default function InventarioStockTab({
   etiquetaVista = 'Todas las bodegas',
 }: InventarioStockTabProps): React.ReactElement {
   const [historicoModalOpen, setHistoricoModalOpen] = useState(false);
+  const [paginaKardex, setPaginaKardex] = useState(1);
   const skuConsultado = stockFiltro.sku.trim().toUpperCase();
+
+  const KARDEX_PAGE_SIZE = 10;
+  const totalPaginasKardex = Math.max(1, Math.ceil(kardex.length / KARDEX_PAGE_SIZE));
+  const paginaKardexActual = Math.min(paginaKardex, totalPaginasKardex);
+  const kardexVisible = useMemo(
+    () => kardex.slice((paginaKardexActual - 1) * KARDEX_PAGE_SIZE, paginaKardexActual * KARDEX_PAGE_SIZE),
+    [kardex, paginaKardexActual],
+  );
+
+  useEffect(() => {
+    setPaginaKardex(1);
+  }, [kardex]);
 
   const historicoValor = useMemo(
     () => buildHistoricoValor(stockActual, kardex, skuConsultado),
@@ -204,7 +217,7 @@ export default function InventarioStockTab({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {kardex.map((mov) => (
+                {kardexVisible.map((mov) => (
                   <TableRow key={mov._id}>
                     <TableCell>{formatDate(fechaMovimiento ? fechaMovimiento(mov) : mov.createdAt)}</TableCell>
                     <TableCell>
@@ -244,6 +257,33 @@ export default function InventarioStockTab({
               </TableBody>
             </Table>
           </div>
+          {kardex.length > 0 ? (
+            <div className="mt-3 flex flex-col gap-2 text-sm sm:flex-row sm:items-center sm:justify-between">
+              <span className="text-muted-foreground">
+                {kardex.length} movimiento(s) · Página {paginaKardexActual} de {totalPaginasKardex}
+              </span>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={paginaKardexActual <= 1}
+                  onClick={() => setPaginaKardex((prev) => Math.max(1, prev - 1))}
+                >
+                  Anterior
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={paginaKardexActual >= totalPaginasKardex}
+                  onClick={() => setPaginaKardex((prev) => Math.min(totalPaginasKardex, prev + 1))}
+                >
+                  Siguiente
+                </Button>
+              </div>
+            </div>
+          ) : null}
         </CardContent>
       </Card>
 

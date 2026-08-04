@@ -2,6 +2,7 @@ import { apiFetch, apiFetchPublic, getHybridSpaFrontendPath, resolveSeguridadRut
 import { fetchAllSecurityRoutes } from './routeService';
 import { normalizeMongoId, normalizeMongoIdList, normalizeMongoIdOrNull, resolveApiEntityId } from '../utils/normalizeMongoId';
 import { resolveEntityPublicId } from '../utils/entityPublicId';
+import { fetchResolvedMenuTags } from './menuTagsRequest';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api';
 
@@ -438,11 +439,7 @@ export const getRouteMenuTags = async (params?: {
 export const resolveCurrentRouteMenuTags = async (params?: {
   menuTipo?: string;
 }): Promise<RouteMenuTagsResponse> => {
-  const search = new URLSearchParams();
-  if (params?.menuTipo) search.set('menuTipo', params.menuTipo);
-  const query = search.toString();
-  const url = `${API_BASE_URL}/seguridad/rutas/menu-tags/resolver/actual${query ? `?${query}` : ''}`;
-  const response = await apiFetch(url, { method: 'GET' });
+  const response = await fetchResolvedMenuTags(params?.menuTipo || 'USER_DROPDOWN');
   return response;
 };
 
@@ -576,10 +573,11 @@ export interface JerarquiaOpcionesCounterResponse {
   success: boolean;
   message?: string;
   total: number;
-  nivelOrder: number;
+  nivelOrder: number | 'all';
   padreRutaSeguridadId?: string | null;
   sourceCollection?: string;
   data: Route[];
+  niveles?: Record<string, Route[]>;
 }
 
 /** Opciones jerárquicas desde countertiponodorutas (Suite/Modulo/Formulario/SubFormulario). */
@@ -587,7 +585,7 @@ const JERARQUIA_OPCIONES_CACHE_TTL_MS = 45_000;
 const _jerarquiaOpcionesCache = new Map<string, { at: number; promise: Promise<JerarquiaOpcionesCounterResponse> }>();
 
 export const getJerarquiaOpcionesFromCounter = async (params: {
-  nivelOrder: number;
+  nivelOrder: number | 'all';
   padreRutaSeguridadId?: string | null;
   suiteRutaSeguridadId?: string | null;
   moduloRutaSeguridadId?: string | null;

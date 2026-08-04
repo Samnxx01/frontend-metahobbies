@@ -6,6 +6,7 @@ import {
 } from './api';
 import { invalidateSplashLogoCache } from './splashLogoService';
 import { normalizeRoutePath, toRelativeRoutePath } from './routePathNormalizer';
+import { fetchResolvedMenuTags } from './menuTagsRequest';
 
 const PRIVATE_HOME_ROUTE_CACHE_KEY = 'mabs_private_home_route';
 
@@ -1619,11 +1620,7 @@ export const getAdminHomeRoute = async (): Promise<string | null> => {
  */
 export const getMenuUsuarioRoutes = async (): Promise<MenuUsuarioItem[]> => {
     try {
-        const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "/api";
-        const result = await apiFetch(
-            `${API_BASE_URL}/seguridad/rutas/menu-tags/resolver/actual?menuTipo=USER_DROPDOWN`,
-            { method: 'GET', useAuth: true, logoutOn401: false }
-        );
+        const result = await fetchResolvedMenuTags('USER_DROPDOWN');
 
         if (!result?.success || !Array.isArray(result?.data)) return [];
 

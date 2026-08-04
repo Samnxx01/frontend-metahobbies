@@ -2,7 +2,12 @@ import { BrowserAgent } from '@newrelic/browser-agent/loaders/browser-agent';
 
 const env = import.meta.env;
 
-const enabled = env.VITE_NEW_RELIC_ENABLED === 'true';
+// La telemetría remota solo se inicia en builds no locales. En localhost el
+// beacon de New Relic puede ser bloqueado por CORS y ensucia la consola sin
+// aportar información sobre las llamadas reales al API de desarrollo.
+const localDevelopment = env.DEV
+  || (typeof window !== 'undefined' && ['localhost', '127.0.0.1'].includes(window.location.hostname));
+const enabled = env.VITE_NEW_RELIC_ENABLED === 'true' && !localDevelopment;
 const licenseKey = env.VITE_NEW_RELIC_BROWSER_LICENSE_KEY?.trim();
 const applicationID = env.VITE_NEW_RELIC_BROWSER_APPLICATION_ID?.trim();
 const allowedOrigins = (env.VITE_NEW_RELIC_DISTRIBUTED_TRACING_ORIGINS || '')

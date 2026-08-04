@@ -241,10 +241,11 @@ const filaResumenDesdeTipo = (row: DocumentoSoporteTipoConfig): FilaResumenSecue
   const prefijo = String(row.prefijo || derivarPrefijoDesdeCodigo(codigo)).trim().toUpperCase();
   const padding = clampSequenceDigits(row.padding ?? 6);
   const contador = toContadorNoNegativo(row.secuencia, row.siguiente);
+  // El contador refleja el último consecutivo emitido; próximo = contador + 1.
   const proximoConfig = Number(row.proximoConsecutivo);
-  const proximo = Math.max(1, Number.isFinite(proximoConfig) && proximoConfig >= 1
+  const proximo = Number.isFinite(proximoConfig) && proximoConfig >= 0
     ? Math.floor(proximoConfig)
-    : contador + 1);
+    : contador + 1;
   const emisionesBd = Math.max(0, Number(row.totalRecepciones) || 0);
   return {
     codigo,
@@ -693,17 +694,18 @@ export default function VentaWompiSecuenciaModal({
   /** Contador operativo (TIPO_CONFIG): lo que mueve reset / emitir / recalcular. */
   const contadorUltimo = toContadorNoNegativo(config.secuencia, config.siguiente);
   const contadorSiguiente = toContadorNoNegativo(config.siguiente, contadorUltimo);
+  // El contador refleja el último emitido; el próximo a emitir es contador + 1.
   const proximoConfig = Number(config.proximoConsecutivo);
   const siguienteEfectivo = sinTipoSeleccionado
     ? 0
-    : Math.max(1, Number.isFinite(proximoConfig) && proximoConfig >= 1
+    : (Number.isFinite(proximoConfig) && proximoConfig >= 0
       ? Math.floor(proximoConfig)
       : contadorSiguiente + 1);
   /** Emisiones guardadas en BD (no cambian con reset). */
   const emisionesHistoricas = Math.max(0, Number(config.totalRecepciones) || 0);
 
   const preview = useMemo(
-    () => (sinTipoSeleccionado || siguienteEfectivo < 1
+    () => (sinTipoSeleccionado
       ? '—'
       : formatDocNumero({ prefijo: prefijoTipo || 'DOC', padding: config.padding }, siguienteEfectivo)),
     [prefijoTipo, config.padding, siguienteEfectivo, sinTipoSeleccionado],
@@ -731,7 +733,7 @@ export default function VentaWompiSecuenciaModal({
       setResetConfirmOpen(false);
       await loadConfig(codigo);
       toast.success(
-        `${etiquetaSeleccionada} (${codigo}) reseteado. secuencia: 0 · siguiente: 0 · próximo: ${previewTrasReset}.`,
+        `${etiquetaSeleccionada} (${codigo}) reseteado. Histórico borrado · contador: 0 · próximo: ${previewTrasReset}.`,
       );
     } catch (error) {
       console.error('Error reseteando secuencia:', error);
@@ -757,7 +759,7 @@ export default function VentaWompiSecuenciaModal({
           + `${resultado.errores.length} con error.`,
         );
       } else {
-        toast.success(`Se resetearon ${resultado.reseteados} secuencias en billingSecuencial.`);
+        toast.success(`Se resetearon ${resultado.reseteados} secuencias en billingSecuencial (histórico borrado, próximo consecutivo: 1).`);
       }
     } catch (error) {
       console.error('Error reseteando todas las secuencias:', error);
@@ -886,9 +888,9 @@ export default function VentaWompiSecuenciaModal({
         }
       }}
     >
-      <DialogContent className="w-[min(520px,calc(100vw-2rem))] max-w-none border-destructive/20 bg-card">
-        <DialogHeader>
-          <DialogTitle className="text-foreground">
+      <DialogContent className="flex max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-[520px] flex-col overflow-hidden border-destructive/20 bg-card p-3 sm:max-h-[calc(100dvh-2rem)] sm:w-[calc(100vw-2rem)] sm:p-5">
+        <DialogHeader className="shrink-0 pr-7 text-left">
+          <DialogTitle className="break-words text-foreground">
             {nuevoTipoDraft.codigoOriginal ? 'Editar o duplicar tipo' : 'Nuevo tipo de referencia'}
           </DialogTitle>
           <DialogDescription className="text-muted-foreground">
@@ -897,7 +899,7 @@ export default function VentaWompiSecuenciaModal({
               : 'Define un tipo de secuencia de venta. El padre se guarda en facturacionSoporteDocumento.'}
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-3">
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain pr-0.5 sm:pr-1">
           <div className="space-y-2">
             <Label htmlFor="nuevo-tipo-selector">Nombre en selector *</Label>
             <Select
@@ -905,7 +907,7 @@ export default function VentaWompiSecuenciaModal({
               onValueChange={handleSeleccionTipoModal}
               disabled={creandoTipo}
             >
-              <SelectTrigger id="nuevo-tipo-selector">
+              <SelectTrigger id="nuevo-tipo-selector" className="w-full min-w-0">
                 <SelectValue placeholder="Selecciona un tipo o crea uno nuevo" />
               </SelectTrigger>
               <SelectContent>
@@ -969,12 +971,12 @@ export default function VentaWompiSecuenciaModal({
             />
           </div>
           <div className="space-y-2">
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex flex-col gap-2 min-[420px]:flex-row min-[420px]:items-center min-[420px]:justify-between">
               <Label htmlFor="nuevo-tipo-secuencia">Clasificación de emisión *</Label>
               <Button
                 type="button"
                 size="sm"
-                className="h-8 border-destructive/30 px-2 text-destructive hover:bg-destructive/10"
+                className="h-auto min-h-8 w-full whitespace-normal border-destructive/30 px-2 text-destructive hover:bg-destructive/10 min-[420px]:w-auto"
                 onClick={() => {
                   setAgregarClasificacionOpen((prev) => {
                     const next = !prev;
@@ -1004,7 +1006,7 @@ export default function VentaWompiSecuenciaModal({
               }}
               disabled={creandoTipo || cargandoClasificaciones || guardandoClasificacion || opcionesClasificacion.length === 0}
             >
-              <SelectTrigger id="nuevo-tipo-secuencia">
+              <SelectTrigger id="nuevo-tipo-secuencia" className="w-full min-w-0">
                 <SelectValue placeholder={
                   cargandoClasificaciones
                     ? 'Cargando...'
@@ -1033,7 +1035,7 @@ export default function VentaWompiSecuenciaModal({
                 <p className="text-xs text-muted-foreground">
                   Completa nombre y etiqueta y pulsa Guardar. El id (#1, #2…) se asigna solo al guardar; no se crea ningún registro hasta entonces.
                 </p>
-                <div className="grid gap-2 sm:grid-cols-2">
+                <div className="grid gap-2 min-[480px]:grid-cols-2">
                   <div className="space-y-1">
                     <Label htmlFor="parametrizar-clasificacion-nombre" className="text-xs">Nombre técnico</Label>
                     <Input
@@ -1087,20 +1089,21 @@ export default function VentaWompiSecuenciaModal({
               autoComplete="off"
             />
           </div>
-          <div className="rounded-md border border-destructive/10 bg-destructive/60 px-3 py-2">
+          <div className="min-w-0 rounded-md border border-destructive/10 bg-destructive/60 px-3 py-2">
             <p className="text-xs text-muted-foreground">Vista previa</p>
-            <p className="font-mono text-sm font-semibold text-destructive">{previewModalTipo}</p>
+            <p className="break-all font-mono text-sm font-semibold text-destructive">{previewModalTipo}</p>
           </div>
         </div>
-        <DialogFooter className="gap-2">
+        <DialogFooter className="grid shrink-0 grid-cols-1 gap-2 border-t border-border pt-3 min-[420px]:grid-cols-2 sm:flex sm:justify-end">
           <Button
             type="button"
             onClick={() => setNuevoTipoOpen(false)}
+            className="w-full sm:w-auto"
             disabled={creandoTipo}
           >
             Cancelar
           </Button>
-          <Button type="button" onClick={() => void guardarTipoDesdeModal()} disabled={creandoTipo}>
+          <Button type="button" className="h-auto min-h-10 w-full whitespace-normal sm:w-auto" onClick={() => void guardarTipoDesdeModal()} disabled={creandoTipo}>
             {creandoTipo
               ? 'Guardando...'
               : (esEdicionMismoCodigo ? 'Guardar cambios' : 'Insertar tipo')}
@@ -1110,34 +1113,35 @@ export default function VentaWompiSecuenciaModal({
     </Dialog>
 
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92vh] w-[min(900px,calc(100vw-2rem))] max-w-none overflow-y-auto border-slate-200 bg-card text-foreground shadow-xl">
-        <DialogHeader className="border-b border-slate-100 pb-4">
-          <DialogTitle className="flex items-center gap-2 text-foreground">
+      <DialogContent className="flex max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-none flex-col overflow-hidden border-slate-200 bg-card p-3 text-foreground shadow-xl sm:max-h-[calc(100dvh-2rem)] sm:w-[calc(100vw-2rem)] sm:p-5 lg:w-[min(1050px,calc(100vw-3rem))]">
+        <DialogHeader className="shrink-0 border-b border-border pb-3 pr-7 text-left sm:pb-4">
+          <DialogTitle className="flex min-w-0 flex-wrap items-center gap-2 break-words text-foreground">
             <Hash className="h-5 w-5 shrink-0 text-foreground" />
             Secuencias de venta · billingSecuencial
           </DialogTitle>
           <DialogDescription className="text-muted-foreground">
             Administra todos los contadores TIPO_CONFIG. El consecutivo avanza al emitir;
-            reset y recalcular no borran emisiones históricas.
+            recalcular sincroniza con las emisiones y resetear borra el histórico del tipo
+            (contador 0, próximo 1).
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain pr-0.5 sm:pr-1">
           {filasResumen.length > 0 ? (
             <div className="overflow-hidden rounded-lg border border-slate-200 bg-muted/50">
-              <div className="flex items-center justify-between gap-2 border-b border-slate-200 bg-card px-3 py-2">
-                <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+              <div className="flex flex-col gap-3 border-b border-border bg-card px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex min-w-0 flex-wrap items-center gap-2 text-sm font-medium text-foreground">
                   <Layers className="h-4 w-4 text-muted-foreground" />
                   {filasResumen.length}
                   {' '}
                   secuencias en billingSecuencial
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="grid grid-cols-1 gap-2 min-[480px]:grid-cols-3 sm:flex sm:flex-wrap sm:justify-end">
                   <Button
                     type="button"
                     size="sm"
                     variant="outline"
-                    className="h-8 border-slate-300 text-foreground"
+                    className="h-auto min-h-8 w-full whitespace-normal border-border text-foreground sm:w-auto"
                     disabled={loading || tiposEnriquecidos.length === 0}
                     onClick={exportarParametrizacion}
                   >
@@ -1147,7 +1151,7 @@ export default function VentaWompiSecuenciaModal({
                   <Button
                     type="button"
                     size="sm"
-                    className="h-8 border-slate-300 text-foreground"
+                    className="h-auto min-h-8 w-full whitespace-normal border-border text-foreground sm:w-auto"
                     disabled={loading || saving || reseteando || procesandoTodos}
                     onClick={() => void ejecutarRecalcularTodos()}
                   >
@@ -1157,7 +1161,7 @@ export default function VentaWompiSecuenciaModal({
                   <Button
                     type="button"
                     size="sm"
-                    className="h-8 border-destructive/40 text-destructive hover:bg-destructive/5"
+                    className="h-auto min-h-8 w-full whitespace-normal border-destructive/40 text-destructive hover:bg-destructive/5 sm:w-auto"
                     disabled={loading || saving || reseteando || procesandoTodos}
                     onClick={() => setResetTodosConfirmOpen(true)}
                   >
@@ -1166,8 +1170,8 @@ export default function VentaWompiSecuenciaModal({
                   </Button>
                 </div>
               </div>
-              <div className="max-h-52 overflow-auto">
-                <table className="w-full text-left text-xs">
+              <div className="max-h-52 overflow-auto overscroll-contain">
+                <table className="min-w-[720px] w-full text-left text-xs">
                   <thead className="sticky top-0 bg-muted text-muted-foreground">
                     <tr>
                       <th className="px-3 py-2 font-medium">Tipo</th>
@@ -1283,14 +1287,14 @@ export default function VentaWompiSecuenciaModal({
             )}
           </div>
 
-          <div id="parametrizacion-secuencia-form" className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-2 sm:col-span-2">
-              <div className="flex items-center justify-between gap-2">
+          <div id="parametrizacion-secuencia-form" className="grid gap-3 md:grid-cols-2">
+            <div className="space-y-2 md:col-span-2">
+              <div className="flex flex-col gap-2 min-[480px]:flex-row min-[480px]:items-center min-[480px]:justify-between">
                 <Label htmlFor="tipo-referencia-venta">Tipo de referencia *</Label>
                 <Button
                   type="button"
                   size="sm"
-                  className="h-8 border-slate-300 text-foreground hover:bg-muted"
+                  className="h-8 w-full border-border text-foreground hover:bg-muted min-[480px]:w-auto"
                   onClick={abrirModalTipo}
                   disabled={loading || saving || creandoTipo}
                 >
@@ -1326,7 +1330,7 @@ export default function VentaWompiSecuenciaModal({
               </Select>
             </div>
 
-            <div className="space-y-2 sm:col-span-2">
+            <div className="space-y-2 md:col-span-2">
               <Label htmlFor="wompi-seq-nombre">Nombre del tipo</Label>
               <Input
                 id="wompi-seq-nombre"
@@ -1338,7 +1342,7 @@ export default function VentaWompiSecuenciaModal({
               />
             </div>
 
-            <div className="space-y-2 sm:col-span-2">
+            <div className="space-y-2 md:col-span-2">
               <Label htmlFor="wompi-seq-descripcion">Descripción</Label>
               <Input
                 id="wompi-seq-descripcion"
@@ -1351,7 +1355,7 @@ export default function VentaWompiSecuenciaModal({
             </div>
 
             {prefijoTipo ? (
-              <div className="space-y-2 sm:col-span-2">
+              <div className="space-y-2 md:col-span-2">
                 <Label>Prefijo del tipo</Label>
                 <div className="rounded-md border border-border bg-muted/20 px-3 py-2 font-mono text-sm">
                   {prefijoTipo}
@@ -1409,7 +1413,7 @@ export default function VentaWompiSecuenciaModal({
             </div>
 
             {conLimite ? (
-              <div className="space-y-2 sm:col-span-2">
+              <div className="space-y-2 md:col-span-2">
                 <Label htmlFor="wompi-seq-max">Máximo de registros</Label>
                 <Input
                   id="wompi-seq-max"
@@ -1448,8 +1452,8 @@ export default function VentaWompiSecuenciaModal({
           ) : null}
         </div>
 
-        <DialogFooter className="flex flex-col gap-2 sm:flex-row sm:justify-between">
-          <div className="flex flex-wrap gap-2">
+        <DialogFooter className="grid shrink-0 grid-cols-1 gap-2 border-t border-border pt-3 lg:flex lg:flex-row lg:justify-between">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:flex lg:flex-wrap">
             <Button
               type="button"
               onClick={async () => {
@@ -1463,9 +1467,9 @@ export default function VentaWompiSecuenciaModal({
                   const recalculado = await billingSecuencialService.recalcularTipoConfig(codigo);
                   validarCodigoRespuestaApi(recalculado, codigo, 'El recálculo');
                   await loadConfig(codigo);
-                  const ultima = Math.max(0, Number(recalculado.secuencia) ?? Number(recalculado.siguiente) ?? 0);
+                  const proximoRecalc = Math.max(0, Number(recalculado.proximoConsecutivo) ?? Number(recalculado.siguiente) ?? 0);
                   toast.success(
-                    `${etiquetaSeleccionada} (${codigo}) recalculado: última=${ultima}, próximo=${Math.max(1, ultima + 1)}.`,
+                    `${etiquetaSeleccionada} (${codigo}) recalculado: próximo=${proximoRecalc}.`,
                   );
                 } catch (error) {
                   console.error('Error recalculando secuencia:', error);
@@ -1478,6 +1482,7 @@ export default function VentaWompiSecuenciaModal({
                   setLoading(false);
                 }
               }}
+              className="h-auto min-h-10 w-full whitespace-normal lg:w-auto"
               disabled={loading || saving || reseteando || procesandoTodos || sinTipoSeleccionado}
             >
               <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
@@ -1487,7 +1492,7 @@ export default function VentaWompiSecuenciaModal({
             </Button>
             <Button
               type="button"
-              className="border-destructive/50 text-destructive hover:bg-destructive/10"
+              className="h-auto min-h-10 w-full whitespace-normal border-destructive/50 text-destructive hover:bg-destructive/10 lg:w-auto"
               onClick={() => {
                 if (!codigoSeleccionadoFormulario) {
                   toast.error('Selecciona un tipo de referencia antes de resetear.');
@@ -1505,15 +1510,16 @@ export default function VentaWompiSecuenciaModal({
                   : 'Resetear secuencia')}
             </Button>
           </div>
-          <div className="flex gap-2">
+          <div className="grid grid-cols-2 gap-2 lg:flex">
             <Button
               type="button"
               onClick={() => onOpenChange(false)}
+              className="w-full lg:w-auto"
               disabled={saving}
             >
               Cancelar
             </Button>
-            <Button type="button" onClick={() => void save()} disabled={loading || saving || reseteando || sinTiposConfigurados || sinTipoSeleccionado}>
+            <Button type="button" className="w-full lg:w-auto" onClick={() => void save()} disabled={loading || saving || reseteando || sinTiposConfigurados || sinTipoSeleccionado}>
               <Save className="mr-2 h-4 w-4" />
               {saving ? 'Guardando...' : 'Guardar'}
             </Button>
@@ -1532,11 +1538,15 @@ export default function VentaWompiSecuenciaModal({
           <AlertDialogDescription asChild>
             <div className="space-y-3 text-sm text-muted-foreground">
               <p>
-                Se reiniciará el contador (secuencia y siguiente → 0) de
+                Se reiniciará el contador (contador → 0, próximo → 1) de
                 {' '}
                 <span className="font-semibold text-foreground">{filasResumen.length}</span>
                 {' '}
-                tipos en billingSecuencial. No se borran emisiones históricas.
+                tipos en billingSecuencial y se
+                {' '}
+                <span className="font-semibold text-destructive">borrarán sus emisiones históricas</span>
+                {' '}
+                (inventarioDocumentoSoporteSecuencia y billingSecuencial).
               </p>
               <ul className="max-h-36 overflow-auto rounded-md border border-border bg-muted px-3 py-2 text-xs">
                 {filasResumen.map((fila) => (
@@ -1599,8 +1609,14 @@ export default function VentaWompiSecuenciaModal({
               </div>
 
               <p>
-                Reinicia el contador de este tipo: secuencia y siguiente quedan en 0.
-                No se borran emisiones ni histórico en billingSecuencial.
+                Reinicia el contador de este tipo: contador queda en 0 y el próximo
+                consecutivo en 1.
+                {' '}
+                <span className="font-semibold text-destructive">
+                  Se borran las emisiones históricas del tipo
+                </span>
+                {' '}
+                en inventarioDocumentoSoporteSecuencia y billingSecuencial.
               </p>
 
               <div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-xs">
@@ -1629,14 +1645,14 @@ export default function VentaWompiSecuenciaModal({
                   <div className="min-w-0 space-y-2 rounded-md bg-card p-3">
                     <p className="border-b border-border pb-2 font-semibold text-foreground sm:hidden">Estado actual</p>
                     <p>
-                      secuencia:
+                      Contador:
                       {' '}
                       <span className="font-mono text-foreground">{contadorUltimo}</span>
                     </p>
                     <p>
-                      siguiente:
+                      Emisiones BD:
                       {' '}
-                      <span className="font-mono text-foreground">{contadorSiguiente}</span>
+                      <span className="font-mono text-foreground">{emisionesHistoricas}</span>
                     </p>
                     <p>
                       Próximo:
@@ -1647,12 +1663,12 @@ export default function VentaWompiSecuenciaModal({
                   <div className="min-w-0 space-y-2 rounded-md bg-card p-3">
                     <p className="border-b border-border pb-2 font-semibold text-foreground sm:hidden">Después del reset</p>
                     <p>
-                      secuencia:
+                      Contador:
                       {' '}
                       <span className="font-mono font-semibold text-foreground">0</span>
                     </p>
                     <p>
-                      siguiente:
+                      Emisiones BD:
                       {' '}
                       <span className="font-mono font-semibold text-foreground">0</span>
                     </p>

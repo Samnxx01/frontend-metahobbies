@@ -573,9 +573,9 @@ export default function PedidosAprobadosCarrito(): React.ReactElement {
         </Table>
       </div>
       <Dialog open={ventasOpen} onOpenChange={setVentasOpen}>
-        <DialogContent className="flex max-h-[92vh] w-[calc(100vw-1rem)] max-w-7xl flex-col overflow-hidden bg-card p-4 text-card-foreground sm:w-[95vw] sm:p-6">
-          <DialogHeader className="pr-8">
-            <div className="flex items-start justify-between gap-3">
+        <DialogContent className="flex max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-none flex-col overflow-hidden bg-card p-3 text-card-foreground sm:max-h-[calc(100dvh-2rem)] sm:w-[calc(100vw-2rem)] sm:p-5 lg:w-[min(1180px,calc(100vw-3rem))]">
+          <DialogHeader className="shrink-0 pr-8 text-left">
+            <div className="flex flex-col gap-3 min-[420px]:flex-row min-[420px]:items-start min-[420px]:justify-between">
               <DialogTitle className="flex min-w-0 items-center gap-2 text-base sm:text-lg">
                 <ReceiptText className="h-5 w-5 shrink-0 text-primary" /> Ventas referenciadas
               </DialogTitle>
@@ -587,16 +587,16 @@ export default function PedidosAprobadosCarrito(): React.ReactElement {
               />
             </div>
           </DialogHeader>
-          <div className="flex flex-col gap-3 md:flex-row">
+          <div className="grid shrink-0 grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_14rem_auto]">
             <Input
-              className="flex-1"
+              className="w-full min-w-0"
               value={ventasFiltros.q}
               onChange={(event) => setVentasFiltros((prev) => ({ ...prev, q: event.target.value }))}
               placeholder="Venta, referencia de pago, transacciÃ³n..."
               onKeyDown={(event) => event.key === 'Enter' && void cargarVentasReferencias()}
             />
             <select
-              className="h-10 w-full rounded-md border border-input bg-card px-3 text-sm text-card-foreground"
+              className="h-10 w-full min-w-0 rounded-md border border-input bg-card px-3 text-sm text-card-foreground"
               value={ventasFiltros.estado}
               onChange={(event) => {
                 const next = { ...ventasFiltros, estado: event.target.value };
@@ -607,13 +607,13 @@ export default function PedidosAprobadosCarrito(): React.ReactElement {
               <option value="">Todos los estados</option>
               {['PENDIENTE', 'CONFIRMADO', 'CANCELADO'].map((estado) => <option key={estado}>{estado}</option>)}
             </select>
-            <Button className="w-full md:w-auto" type="button" onClick={() => void cargarVentasReferencias()} disabled={ventasLoading}>
+            <Button className="h-10 w-full md:w-auto" type="button" onClick={() => void cargarVentasReferencias()} disabled={ventasLoading}>
               {ventasLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
               Consultar
             </Button>
           </div>
-          <p className="text-sm text-muted-foreground">{ventasTotal} registro(s) encontrados</p>
-          <div className="min-h-0 flex-1 overflow-auto rounded-md border border-border bg-card">
+          <p className="shrink-0 text-sm text-muted-foreground">{ventasTotal} registro(s) encontrados</p>
+          <div className="min-h-0 flex-1 overflow-auto overscroll-contain rounded-md border border-border bg-card">
             <Table className="min-w-[980px]">
               <TableHeader className="sticky top-0 z-10 bg-muted/95 backdrop-blur">
                 <TableRow>

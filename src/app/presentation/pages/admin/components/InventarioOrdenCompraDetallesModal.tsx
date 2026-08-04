@@ -140,7 +140,7 @@ export default function InventarioOrdenCompraDetallesModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[min(1120px,calc(100vw-2rem))] max-w-none border-border bg-background text-foreground">
+      <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-[1120px] overflow-y-auto border-border bg-background p-3 text-foreground sm:max-h-[calc(100dvh-2rem)] sm:w-[calc(100vw-2rem)] sm:p-6">
         <DialogHeader className="space-y-1">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <DialogTitle className="flex items-center gap-2">
@@ -163,7 +163,7 @@ export default function InventarioOrdenCompraDetallesModal({
           <div className="rounded-md border border-border bg-muted/40 p-4 text-sm text-muted-foreground">No hay orden seleccionada.</div>
         ) : (
           <div className="space-y-4">
-            <div className="grid gap-3 rounded-md border border-border bg-muted/40 p-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid min-w-0 gap-3 rounded-md border border-border bg-muted/40 p-3 sm:grid-cols-2 lg:grid-cols-4">
               <div>
                 <p className="text-xs text-muted-foreground">Número OC</p>
                 <p className="font-mono text-sm font-semibold text-foreground">{orden.numeroOrden}</p>
@@ -176,8 +176,8 @@ export default function InventarioOrdenCompraDetallesModal({
               </div>
               <div className="sm:col-span-2">
                 <p className="text-xs text-muted-foreground">Proveedor</p>
-                <p className="text-sm text-foreground">{orden.proveedor?.nombre}</p>
-                <p className="text-xs text-muted-foreground">NIT {orden.proveedor?.nit}</p>
+                <p className="break-words text-sm text-foreground">{orden.proveedor?.nombre}</p>
+                <p className="break-words text-xs text-muted-foreground">NIT {orden.proveedor?.nit}</p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Remisión</p>
@@ -204,7 +204,7 @@ export default function InventarioOrdenCompraDetallesModal({
             {orden.comprobanteContable?.numero ? (
               <div className="rounded-md border border-success/30 bg-success/5 p-3">
                 <p className="text-xs text-muted-foreground">Comprobante contable (orden de compra)</p>
-                <p className="font-mono text-sm font-semibold text-foreground">
+                <p className="break-all font-mono text-sm font-semibold text-foreground">
                   {orden.comprobanteContable.tipo ? `${orden.comprobanteContable.tipo} · ` : ''}
                   {orden.comprobanteContable.numero}
                 </p>
@@ -235,7 +235,38 @@ export default function InventarioOrdenCompraDetallesModal({
                   Total: <span className="tabular-nums">{moneyCo(resumen.total)}</span>
                 </p>
               </div>
-              <div className="overflow-x-auto rounded-md border border-border">
+              <div className="space-y-3 md:hidden">
+                {(orden.items ?? []).map((it, idx) => {
+                  const desglose = desgloseLinea(it);
+                  return (
+                    <article key={`${it.sku}-${it.bodega}-${idx}`} className="min-w-0 rounded-md border border-border bg-card p-3">
+                      <div className="flex min-w-0 items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="break-words text-sm font-medium text-foreground">{it.nombreProducto || '—'}</p>
+                          {it.descripcion ? <p className="mt-0.5 line-clamp-2 break-words text-xs text-muted-foreground">{it.descripcion}</p> : null}
+                        </div>
+                        <span className="shrink-0 font-mono text-xs text-muted-foreground">{it.sku}</span>
+                      </div>
+                      <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                        <div className="col-span-2 min-w-0">
+                          <dt className="text-muted-foreground">Bodega</dt>
+                          <dd className="break-words text-foreground">{it.bodega}</dd>
+                        </div>
+                        <div><dt className="text-muted-foreground">Cant. ordenada</dt><dd className="tabular-nums text-foreground">{Number(it.cantidadOrdenada ?? 0)}</dd></div>
+                        <div><dt className="text-muted-foreground">Cant. recibida</dt><dd className="tabular-nums text-foreground">{Number((it as { cantidadRecibida?: number }).cantidadRecibida ?? 0)}</dd></div>
+                        <div><dt className="text-muted-foreground">Precio</dt><dd className="tabular-nums text-foreground">{moneyCo(Number(it.costoUnitario ?? 0))}</dd></div>
+                        <div><dt className="text-muted-foreground">Descuento</dt><dd className="tabular-nums text-foreground">{textoDescuentoLinea(it)}</dd></div>
+                        <div><dt className="text-muted-foreground">Impuesto</dt><dd className="tabular-nums text-foreground">{desglose.tarifa}% · {moneyCo(desglose.impuesto)}</dd></div>
+                        <div><dt className="text-muted-foreground">Total línea</dt><dd className="font-semibold tabular-nums text-foreground">{moneyCo(desglose.totalLinea)}</dd></div>
+                      </dl>
+                    </article>
+                  );
+                })}
+                {(orden.items ?? []).length === 0 ? (
+                  <div className="rounded-md border border-border py-6 text-center text-sm text-muted-foreground">Sin ítems.</div>
+                ) : null}
+              </div>
+              <div className="hidden overflow-x-auto rounded-md border border-border md:block">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -279,7 +310,7 @@ export default function InventarioOrdenCompraDetallesModal({
                   </TableBody>
                 </Table>
               </div>
-              <div className="ml-auto w-full max-w-sm rounded-md border border-border bg-card p-3 text-sm">
+              <div className="ml-auto w-full rounded-md border border-border bg-card p-3 text-sm sm:max-w-sm">
                 <div className="flex justify-between gap-4 py-1 text-muted-foreground">
                   <span>Subtotal bruto</span>
                   <span className="tabular-nums text-foreground">{moneyCo(resumen.subtotal)}</span>
@@ -305,8 +336,8 @@ export default function InventarioOrdenCompraDetallesModal({
           </div>
         )}
 
-        <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={confirmando}>
+        <DialogFooter className="gap-2 sm:gap-0">
+          <Button type="button" className="w-full sm:w-auto" variant="outline" onClick={() => onOpenChange(false)} disabled={confirmando}>
             Cerrar
           </Button>
         </DialogFooter>

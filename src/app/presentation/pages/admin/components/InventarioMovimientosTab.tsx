@@ -1,5 +1,5 @@
 import React from 'react';
-import { Eye, FileSpreadsheet, CircleHelp, PackageSearch, Plus, RefreshCw, Save, Settings2, ShieldCheck, SlidersHorizontal } from 'lucide-react';
+import { Eye, FileSpreadsheet, CircleHelp, ClipboardList, PackageSearch, Plus, RefreshCw, Save, Settings2, ShieldCheck, SlidersHorizontal } from 'lucide-react';
 import type {
   ComprobanteEntradaAjuste,
   InventarioMotivoMovimiento,
@@ -59,6 +59,7 @@ type InventarioMovimientosTabProps = {
   renderBodegaSelect?: (value: string, onChange: (value: string) => void) => React.ReactElement;
   abrirModalTiposMovimiento?: () => void;
   abrirModalCausalesMotivo?: () => void;
+  abrirModalEstadosMovimiento?: () => void;
   abrirModalKardexControlDuplicado?: () => void;
   abrirAyudaKardexControlDuplicado?: () => void;
   kardexOmitirControlDuplicado?: boolean;
@@ -79,7 +80,7 @@ const movimientoFallback: MovimientoForm = {
   bodegaDestino: '',
   cantidad: '',
   costoUnitario: '',
-  motivo: 'OTRO',
+  motivo: '',
   motivoPersonalizado: '',
   documentoTipo: '',
   documentoNumero: '',
@@ -130,6 +131,7 @@ export default function InventarioMovimientosTab({
   renderBodegaSelect,
   abrirModalTiposMovimiento,
   abrirModalCausalesMotivo,
+  abrirModalEstadosMovimiento,
   abrirModalKardexControlDuplicado,
   abrirAyudaKardexControlDuplicado,
   kardexOmitirControlDuplicado = false,
@@ -150,15 +152,28 @@ export default function InventarioMovimientosTab({
   const saldosKardex = stockActual ?? [];
   const motivosList = motivos ?? [];
   const motivoActual = motivosList.find((m) => m.codigo === form.motivo);
+  const idTipoDeMotivo = (motivo: InventarioMotivoMovimiento): string => {
+    const relacion = motivo.tipoMovimientoId;
+    if (typeof relacion === 'string') return relacion.trim();
+    return String(
+      motivo.tipoMovimientoReferenciaId
+        || relacion?._id
+        || relacion?.iud
+        || motivo.tipoMovimiento?._id
+        || motivo.tipoMovimiento?.iud
+        || '',
+    ).trim();
+  };
+  const motivoParaTipo = (tipoMovimientoId: string): string => motivosList.find(
+    (motivo) => idTipoDeMotivo(motivo) === String(tipoMovimientoId || '').trim(),
+  )?.codigo || '';
 
   const tipoSeleccionado = tipos.find(
     (t) => idTipoMovimiento(t) === String(form.tipoMovimientoConfigId || '').trim(),
   );
   const esTraslado = esTrasladoBodega(tipoSeleccionado?.codigo);
   const esEntradaCompraPorTipo = form.tipo === 'ENTRADA' && esEntradaCompraTipo(tipoSeleccionado?.codigo);
-  const esEntradaCompraPorComprobante = form.tipo === 'ENTRADA'
-    && form.motivo === 'COMPRA'
-    && Boolean(form.recepcionCompraId);
+  const esEntradaCompraPorComprobante = form.tipo === 'ENTRADA' && Boolean(form.recepcionCompraId);
   const esEntradaCompra = esEntradaCompraPorTipo || esEntradaCompraPorComprobante;
   const esSalidaConComprobante = form.tipo === 'SALIDA' && !esTraslado;
   const esEntradaCompraConComprobante = esEntradaCompra;
@@ -338,6 +353,10 @@ export default function InventarioMovimientosTab({
                 <Settings2 className="mr-2 h-4 w-4" />
                 Parametrizar motivo
               </Button>
+              <Button type="button" variant="outline" onClick={abrirModalEstadosMovimiento ?? noop}>
+                <ClipboardList className="mr-2 h-4 w-4" />
+                Parametrizar estados
+              </Button>
               <Button type="button" variant="outline" onClick={abrirModalSku ?? noop}>
                 <Plus className="mr-2 h-4 w-4" />
                 Crear SKU
@@ -365,8 +384,8 @@ export default function InventarioMovimientosTab({
                 costoUnitario: '',
                 documentoTipo: traslado ? 'TRASLADO_BODEGA' : prev.documentoTipo,
                 documentoNumero: traslado ? '' : prev.documentoNumero,
-                motivo: traslado ? 'OTRO' : (selected?.naturaleza === 'SALIDA' ? prev.motivo : 'COMPRA'),
-                motivoPersonalizado: traslado || selected?.naturaleza !== 'SALIDA' ? '' : prev.motivoPersonalizado,
+                motivo: traslado ? '' : motivoParaTipo(value),
+                motivoPersonalizado: '',
               }));
             }}>
               <SelectTrigger>
@@ -709,14 +728,18 @@ export default function InventarioMovimientosTab({
               </div>
               <Select
                 value={form.motivo}
-                onValueChange={(value) => updateForm((prev) => ({
-                  ...prev,
-                  motivo: value as MotivoMovimiento,
-                  motivoPersonalizado: value === 'OTRO' ? prev.motivoPersonalizado : '',
-                  ...(value !== 'COMPRA' ? limpiarVinculosCompra() : { recepcionCompraId: '', recepcionLineaKey: '' }),
-                  ...(value === 'COMPRA' ? { recepcionCompraId: '', recepcionLineaKey: '' } : {}),
-                }))}
-                disabled={esEntradaCompraConComprobante}
+                onValueChange={(value) => {
+                  const causal = motivosList.find((motivo) => motivo.codigo === value);
+                  const tipoRelacionadoId = causal ? idTipoDeMotivo(causal) : '';
+                  const tipoRelacionado = tipos.find((tipo) => idTipoMovimiento(tipo) === tipoRelacionadoId);
+                  updateForm((prev) => ({
+                    ...prev,
+                    motivo: value as MotivoMovimiento,
+                    tipoMovimientoConfigId: tipoRelacionadoId || prev.tipoMovimientoConfigId,
+                    tipo: tipoRelacionado?.naturaleza === 'SALIDA' ? 'SALIDA' : 'ENTRADA',
+                    motivoPersonalizado: value === 'OTRO' ? prev.motivoPersonalizado : '',
+                  }));
+                }}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Selecciona motivo">
@@ -728,15 +751,31 @@ export default function InventarioMovimientosTab({
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  {motivosList
+                  {motivosList.length === 0 ? (
+                    <SelectItem value="__sin_causales" disabled>
+                      Sin causales parametrizadas
+                    </SelectItem>
+                  ) : motivosList
                     .filter((motivo) => String(motivo.codigo || '').trim().length > 0)
                     .map((motivo) => (
-                    <SelectItem key={motivo.codigo} value={motivo.codigo}>
-                      {motivo.nombre} ({motivo.codigo})
+                    <SelectItem key={motivo.codigo} value={motivo.codigo} className="py-2">
+                      <span className="flex flex-col items-start gap-0.5">
+                        <span>{motivo.nombre} ({motivo.codigo})</span>
+                        {motivo.descripcion?.trim() ? (
+                          <span className="text-xs font-normal text-muted-foreground">
+                            {motivo.descripcion.trim()}
+                          </span>
+                        ) : null}
+                      </span>
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              {motivoActual?.descripcion?.trim() ? (
+                <p className="text-xs text-muted-foreground">
+                  {motivoActual.descripcion.trim()}
+                </p>
+              ) : null}
               {requiereMotivoPersonalizado ? (
                 <Input
                   value={form.motivoPersonalizado}

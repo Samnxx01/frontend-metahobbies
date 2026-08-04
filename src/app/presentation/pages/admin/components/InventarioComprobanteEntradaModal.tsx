@@ -285,7 +285,7 @@ export default function InventarioComprobanteEntradaModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[min(980px,calc(100vw-2rem))] max-w-none border-border bg-background text-foreground">
+      <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-[980px] overflow-y-auto border-border bg-background p-3 text-foreground sm:max-h-[calc(100dvh-2rem)] sm:w-[calc(100vw-2rem)] sm:p-6">
         <DialogHeader className="space-y-1">
           <div className="flex flex-wrap items-start justify-between gap-3 pr-8">
             <DialogTitle className="flex items-center gap-2">
@@ -310,7 +310,7 @@ export default function InventarioComprobanteEntradaModal({
           </div>
         ) : (
           <div className="space-y-4">
-            <div className="grid gap-3 rounded-md border border-border bg-muted/40 p-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid min-w-0 gap-3 rounded-md border border-border bg-muted/40 p-3 sm:grid-cols-2 lg:grid-cols-4">
               <div>
                 <p className="text-xs text-muted-foreground">Recepción</p>
                 <p className="font-mono text-sm font-semibold text-foreground">{dataUi.recepcion.numeroRecepcion}</p>
@@ -343,7 +343,7 @@ export default function InventarioComprobanteEntradaModal({
               </div>
               <div className="sm:col-span-2">
                 <p className="text-xs text-muted-foreground">Comprobante contable (secuencia propia)</p>
-                <p className="font-mono text-sm font-semibold text-foreground">
+                <p className="break-all font-mono text-sm font-semibold text-foreground">
                   {comprobanteContable?.numero
                     ? `${comprobanteContable.tipo || 'COMPROBANTE_ENTRADA'} · ${comprobanteContable.numero}`
                     : pendienteConfirmacion ? 'Se asigna al confirmar' : '—'}
@@ -369,8 +369,8 @@ export default function InventarioComprobanteEntradaModal({
 
               <div className="sm:col-span-2 lg:col-span-4">
                 <p className="text-xs text-muted-foreground">Proveedor</p>
-                <p className="text-sm text-foreground">{orden.proveedor?.nombre}</p>
-                <p className="text-xs text-muted-foreground">NIT {orden.proveedor?.nit}</p>
+                <p className="break-words text-sm text-foreground">{orden.proveedor?.nombre}</p>
+                <p className="break-words text-xs text-muted-foreground">NIT {orden.proveedor?.nit}</p>
               </div>
             </div>
 
@@ -381,7 +381,25 @@ export default function InventarioComprobanteEntradaModal({
                   Total: <span className="tabular-nums">{moneyCo(total)}</span>
                 </p>
               </div>
-              <div className="overflow-x-auto rounded-md border border-border">
+              <div className="space-y-3 md:hidden">
+                {dataUi.recepcion.items.map((it, idx) => {
+                  const subtotal = subtotalRecepcionItem(it, orden?.items);
+                  return (
+                    <article key={`${it.sku}-${it.bodega}-${idx}`} className="rounded-md border border-border bg-card p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <p className="min-w-0 break-words text-sm text-foreground">{it.bodega}</p>
+                        <span className="shrink-0 font-mono text-xs text-muted-foreground">{it.sku}</span>
+                      </div>
+                      <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                        <div><dt className="text-muted-foreground">Cant. recibida</dt><dd className="tabular-nums text-foreground">{Number(it.cantidadRecibida ?? 0)}</dd></div>
+                        <div><dt className="text-muted-foreground">Costo unitario</dt><dd className="tabular-nums text-foreground">{moneyCo(Number(it.costoUnitario ?? 0))}</dd></div>
+                        <div className="col-span-2 border-t border-border pt-2"><dt className="text-muted-foreground">Subtotal</dt><dd className="font-semibold tabular-nums text-foreground">{moneyCo(subtotal)}</dd></div>
+                      </dl>
+                    </article>
+                  );
+                })}
+              </div>
+              <div className="hidden overflow-x-auto rounded-md border border-border md:block">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -408,7 +426,7 @@ export default function InventarioComprobanteEntradaModal({
                   </TableBody>
                 </Table>
               </div>
-              <div className="ml-auto grid w-full max-w-sm gap-2 rounded-md border border-border bg-muted/40 p-3 text-sm text-foreground">
+              <div className="ml-auto grid w-full gap-2 rounded-md border border-border bg-muted/40 p-3 text-sm text-foreground sm:max-w-sm">
                 <div className="flex justify-between gap-4"><span>Subtotal bruto</span><span className="tabular-nums">{moneyCo(resumen.subtotalBruto)}</span></div>
                 <div className="flex justify-between gap-4"><span>Descuento</span><span className="tabular-nums">- {moneyCo(resumen.descuento)}</span></div>
                 <div className="flex justify-between gap-4"><span>Base gravable</span><span className="tabular-nums">{moneyCo(resumen.baseGravable)}</span></div>
@@ -428,11 +446,12 @@ export default function InventarioComprobanteEntradaModal({
         )}
 
         <DialogFooter className="gap-2 sm:gap-0">
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={confirmando}>
+          <Button type="button" className="w-full sm:w-auto" variant="outline" onClick={() => onOpenChange(false)} disabled={confirmando}>
             Cerrar
           </Button>
           <Button
             type="button"
+            className="w-full sm:w-auto"
             variant="outline"
             onClick={imprimirComprobante}
             disabled={!dataUi || confirmando}

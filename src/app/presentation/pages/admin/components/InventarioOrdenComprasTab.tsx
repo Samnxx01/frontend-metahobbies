@@ -156,6 +156,19 @@ export default function InventarioOrdenComprasTab({
     () => (ordenesCompra.length > 0 ? ordenesCompra : localOrdenes),
     [ordenesCompra, localOrdenes],
   );
+
+  const ORDENES_PAGE_SIZE = 10;
+  const [paginaOrdenes, setPaginaOrdenes] = useState(1);
+  const totalPaginasOrdenes = Math.max(1, Math.ceil(ordenesUi.length / ORDENES_PAGE_SIZE));
+  const paginaOrdenesActual = Math.min(paginaOrdenes, totalPaginasOrdenes);
+  const ordenesVisibles = useMemo(
+    () => ordenesUi.slice((paginaOrdenesActual - 1) * ORDENES_PAGE_SIZE, paginaOrdenesActual * ORDENES_PAGE_SIZE),
+    [ordenesUi, paginaOrdenesActual],
+  );
+
+  useEffect(() => {
+    setPaginaOrdenes(1);
+  }, [ordenesUi.length]);
   const proveedoresUi = useMemo(
     () => (proveedoresCompra.length > 0 ? proveedoresCompra : localProveedores),
     [proveedoresCompra, localProveedores],
@@ -505,7 +518,7 @@ export default function InventarioOrdenComprasTab({
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {ordenesUi.map((oc) => (
+                    {ordenesVisibles.map((oc) => (
                         <TableRow key={getOrdenCompraId(oc)}>
                           <TableCell className="font-medium text-foreground">{oc.numeroOrden}</TableCell>
                           <TableCell>{oc.numeroRemision || '-'}</TableCell>
@@ -535,6 +548,31 @@ export default function InventarioOrdenComprasTab({
                     ))}
                   </TableBody>
                 </Table>
+                <div className="flex flex-col gap-2 border-t border-border px-3 py-2 text-sm sm:flex-row sm:items-center sm:justify-between">
+                  <span className="text-muted-foreground">
+                    {ordenesUi.length} orden(es) · Página {paginaOrdenesActual} de {totalPaginasOrdenes}
+                  </span>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={paginaOrdenesActual <= 1}
+                      onClick={() => setPaginaOrdenes((prev) => Math.max(1, prev - 1))}
+                    >
+                      Anterior
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={paginaOrdenesActual >= totalPaginasOrdenes}
+                      onClick={() => setPaginaOrdenes((prev) => Math.min(totalPaginasOrdenes, prev + 1))}
+                    >
+                      Siguiente
+                    </Button>
+                  </div>
+                </div>
               </div>
             )}
           </div>

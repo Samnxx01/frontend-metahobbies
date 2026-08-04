@@ -47,7 +47,31 @@ export default function InventarioReporteKardexEntrada({
         </div>
         <Badge variant="outline">Kardex confirmado</Badge>
       </div>
-      <div className="overflow-x-auto rounded-md border border-border">
+      <div className="space-y-2 md:hidden">
+        {lineas.map((linea) => {
+          const doc = linea.movimiento?.documentoRelacionado;
+          return (
+            <div key={`mobile-${linea.sku}-${linea.bodega}-${linea.movimientoKardexId || 'sin-id'}`} className="rounded-md border border-border bg-card p-3 text-sm">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="break-all font-mono text-xs font-semibold">{linea.sku}</p>
+                  <p className="break-words text-xs text-muted-foreground">{linea.bodega}</p>
+                </div>
+                <Badge variant="outline">Entrada {formatQty(Number(linea.movimiento?.cantidad || 0))}</Badge>
+              </div>
+              {!compact ? <p className="mt-2 text-xs">{labelTipoMovimiento(linea)}</p> : null}
+              <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+                <div><dt className="text-muted-foreground">Stock anterior</dt><dd className="font-medium tabular-nums">{formatQty(Number(linea.movimiento?.saldoBodega?.cantidadAnterior ?? 0))}</dd></div>
+                <div><dt className="text-muted-foreground">Stock posterior</dt><dd className="font-medium tabular-nums">{formatQty(Number(linea.movimiento?.saldoBodega?.cantidadPosterior ?? linea.saldo?.cantidadDisponible ?? 0))}</dd></div>
+                <div><dt className="text-muted-foreground">Saldo actual</dt><dd className="font-semibold tabular-nums">{formatQty(Number(linea.saldo?.cantidadDisponible ?? 0))}</dd></div>
+                {!compact ? <div><dt className="text-muted-foreground">Costo promedio</dt><dd className="font-medium tabular-nums">{moneyCo(Number(linea.saldo?.costoPromedioUnitario ?? linea.movimiento?.costoUnitario ?? 0))}</dd></div> : null}
+              </dl>
+              {!compact ? <p className="mt-3 break-all font-mono text-[11px] text-muted-foreground">{doc?.tipo && doc?.numero ? `${doc.tipo} · ${doc.numero}` : '—'}</p> : null}
+            </div>
+          );
+        })}
+      </div>
+      <div className="hidden overflow-x-auto rounded-md border border-border md:block">
         <Table>
           <TableHeader>
             <TableRow>
