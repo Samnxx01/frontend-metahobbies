@@ -1,12 +1,5 @@
 // Interfaces para componentes About/AboutUs
 
-export interface AboutUsConfig {
-  imagen: string;
-  tituloSecundario: string;
-  textoDescripcion: string;
-  puntosClave: readonly string[];
-}
-
 export interface PuntoClaveItemProps {
   punto: string;
   index: number;

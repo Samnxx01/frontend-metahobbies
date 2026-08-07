@@ -116,9 +116,37 @@ export const PAYMENT_METHOD_ACTION_IDS = {
   VIEW_COLOMBIA_BANKS: 'payments.banks.colombia.catalog.view',
 } as const satisfies Record<string, ActionId>;
 
+/** Módulo Publicidad: contenido del modal de inicio y de las secciones de página. */
+export const PUBLICIDAD_ACTION_IDS = {
+  REFRESH_LIST: 'publicidad.listado.refresh',
+  PREVIEW_SECTION: 'publicidad.seccion.preview',
+  PREVIEW_RECORD: 'publicidad.registro.preview',
+  CREATE_RECORD: 'publicidad.registro.create',
+  UPDATE_RECORD: 'publicidad.registro.update',
+  TOGGLE_RECORD: 'publicidad.registro.estado',
+  DELETE_RECORD: 'publicidad.registro.delete',
+  MANAGE_TYPES: 'publicidad.tipos.manage',
+} as const satisfies Record<string, ActionId>;
+
 const productAction = (id: ActionId, label: string, groupId: string, groupLabel: string, operation: GovernedActionDefinition['operation'], description: string): GovernedActionDefinition => ({
   id, label, moduleId: 'products', moduleLabel: 'Gestión de Productos', routePath: '/admin/productos',
   routeSecurity: { path: '/admin/productos', allowedCounterNodeTypes: ['FORMULARIO', 'SUBFORMULARIO'], allowedCounterLevelOrders: [3, 4] },
+  groupId, groupLabel, operation, description,
+});
+
+/** Ruta del panel de Publicidad; todos sus botones cuelgan de este único módulo. */
+const PUBLICIDAD_ROUTE_PATH = '/admin/publicidad';
+
+const publicidadAction = (
+  id: ActionId,
+  label: string,
+  groupId: string,
+  groupLabel: string,
+  operation: GovernedActionDefinition['operation'],
+  description: string,
+): GovernedActionDefinition => ({
+  id, label, moduleId: 'publicidad', moduleLabel: 'Publicidad', routePath: PUBLICIDAD_ROUTE_PATH,
+  routeSecurity: { path: PUBLICIDAD_ROUTE_PATH, allowedCounterNodeTypes: ['FORMULARIO', 'SUBFORMULARIO'], allowedCounterLevelOrders: [3, 4] },
   groupId, groupLabel, operation, description,
 });
 
@@ -245,6 +273,14 @@ export const GOVERNED_ACTION_CATALOG = [
   productAction(PRODUCT_ACTION_IDS.UPDATE_PRODUCT_TYPE, 'Editar tipo de producto', 'types', 'Tipos de producto', 'UPDATE', 'Edita un tipo de producto.'),
   productAction(PRODUCT_ACTION_IDS.DELETE_PRODUCT_TYPE, 'Desactivar tipo de producto', 'types', 'Tipos de producto', 'DELETE', 'Desactiva un tipo de producto.'),
   productAction(PRODUCT_ACTION_IDS.CREATE_PRODUCT, 'Agregar producto', 'products', 'Productos', 'CREATE', 'Abre el formulario de creación de productos.'),
+  publicidadAction(PUBLICIDAD_ACTION_IDS.REFRESH_LIST, 'Actualizar publicidades', 'toolbar', 'Barra principal', 'VIEW', 'Recarga el listado de publicidades registradas.'),
+  publicidadAction(PUBLICIDAD_ACTION_IDS.PREVIEW_SECTION, 'Vista previa de la seccion', 'toolbar', 'Barra principal', 'VIEW', 'Muestra como resuelve el contenido de la seccion en la pagina publica.'),
+  publicidadAction(PUBLICIDAD_ACTION_IDS.PREVIEW_RECORD, 'Vista previa del registro', 'rows', 'Acciones por registro', 'VIEW', 'Muestra el contenido del registro tal como lo vera el visitante.'),
+  publicidadAction(PUBLICIDAD_ACTION_IDS.CREATE_RECORD, 'Crear publicidad', 'form', 'Formulario', 'CREATE', 'Guarda una nueva publicidad con su imagen y contenido.'),
+  publicidadAction(PUBLICIDAD_ACTION_IDS.UPDATE_RECORD, 'Editar publicidad', 'rows', 'Acciones por registro', 'UPDATE', 'Carga el registro en el formulario y guarda sus cambios.'),
+  publicidadAction(PUBLICIDAD_ACTION_IDS.TOGGLE_RECORD, 'Activar o desactivar publicidad', 'rows', 'Acciones por registro', 'UPDATE', 'Cambia el estado del registro para publicarlo o retirarlo.'),
+  publicidadAction(PUBLICIDAD_ACTION_IDS.DELETE_RECORD, 'Eliminar publicidad', 'rows', 'Acciones por registro', 'DELETE', 'Elimina de forma permanente el registro y su imagen.'),
+  publicidadAction(PUBLICIDAD_ACTION_IDS.MANAGE_TYPES, 'Parametrizar tipos de publicidad', 'toolbar', 'Barra principal', 'UPDATE', 'Administra el catalogo de tipos que definen como se presenta cada contenido.'),
   {
     id: TENANT_GOVERNANCE_ACTION_IDS.OPEN_BUTTON_CATALOG,
     label: 'Parametrizar botones',

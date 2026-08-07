@@ -10,14 +10,20 @@ import { Button } from '@/components/ui/button';
 import {
     getPublicidadImageUrl,
     obtenerPublicidadModalActiva,
+    obtenerTiposPublicidad,
     type PublicidadModal,
-} from '@/app/services/publicidadService';
+} from '@/app/services/contenidoDestacadoService';
 import type { WelcomeModalProps } from '@/types/components';
+import { sanitizeRichText, richTextToPlain } from '@/app/utils/sanitizeRichText';
 
 interface ModalContent {
-    title: string;
+    /** HTML con los estilos parametrizados desde el panel. */
+    titleHtml: string;
+    /** Texto sin formato para el titulo accesible y las validaciones. */
+    titlePlain: string;
     subtitle: string;
-    body: string;
+    bodyHtml: string;
+    bodyPlain: string;
     price: string;
     buttonText: string;
     buttonLink: string;
@@ -25,11 +31,13 @@ interface ModalContent {
 }
 
 const toModalContent = (publicidad: PublicidadModal): ModalContent => ({
-    title: String(publicidad.tittle || '').trim(),
+    titleHtml: sanitizeRichText(publicidad.tittle),
+    titlePlain: richTextToPlain(publicidad.tittle),
     subtitle: String(publicidad.subtittle || '').trim(),
-    body: String(publicidad.body || '').trim(),
+    bodyHtml: sanitizeRichText(publicidad.body),
+    bodyPlain: richTextToPlain(publicidad.body),
     price: publicidad.price ? String(publicidad.price) : '',
-    buttonText: String(publicidad.buttonText || '').trim(),
+    buttonText: richTextToPlain(publicidad.buttonText),
     buttonLink: String(publicidad.buttonLink || '').trim(),
     imageUrl: getPublicidadImageUrl(publicidad),
 });
@@ -50,17 +58,26 @@ export default function WelcomeModal({
 
         const fetchModalContent = async (): Promise<void> => {
             try {
-                const publicidad = await obtenerPublicidadModalActiva({ path: location.pathname });
+                const [publicidad, tipos] = await Promise.all([
+                    obtenerPublicidadModalActiva({ path: location.pathname }),
+                    obtenerTiposPublicidad(),
+                ]);
                 if (!mounted) return;
 
-                if (!publicidad?.estado) {
+                // Solo se abre con contenido de tipo modal: un carrusel, un banner
+                // o una sección tienen su propio componente en la página.
+                const render = tipos.find((tipo) => tipo.codigo === publicidad?.presentacion)?.visual?.render
+                    || publicidad?.presentacion;
+                const esModal = !publicidad?.presentacion || render === 'MODAL';
+
+                if (!publicidad?.estado || !esModal) {
                     setModalContent(null);
                     setInternalOpen(false);
                     return;
                 }
 
                 const content = toModalContent(publicidad);
-                if (!content.title || !content.body) {
+                if (!content.titlePlain || !content.bodyPlain) {
                     setModalContent(null);
                     setInternalOpen(false);
                     return;
@@ -117,8 +134,8 @@ export default function WelcomeModal({
         <Dialog open={isOpen} onOpenChange={handleOpenChange}>
             <DialogContent className="w-[95%] max-h-[90vh] overflow-hidden border-none p-0 sm:w-[80%] md:max-w-[800px]">
                 <div className="sr-only">
-                    <DialogTitle>{modalContent.title}</DialogTitle>
-                    <DialogDescription>{modalContent.body}</DialogDescription>
+                    <DialogTitle>{modalContent.titlePlain}</DialogTitle>
+                    <DialogDescription>{modalContent.bodyPlain}</DialogDescription>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2">
@@ -130,9 +147,10 @@ export default function WelcomeModal({
                     />
 
                     <div className="flex flex-col justify-center p-6 sm:p-8">
-                        <h2 className="mb-3 text-3xl font-bold text-primary">
-                            {modalContent.title}
-                        </h2>
+                        <h2
+                            className="mb-3 text-3xl font-bold text-primary"
+                            dangerouslySetInnerHTML={{ __html: modalContent.titleHtml }}
+                        />
 
                         {modalContent.subtitle ? (
                             <p className="mb-3 text-lg font-semibold">
@@ -140,9 +158,10 @@ export default function WelcomeModal({
                             </p>
                         ) : null}
 
-                        <p className="mb-4 text-lg text-muted-foreground">
-                            {modalContent.body}
-                        </p>
+                        <div
+                            className="mb-4 text-lg text-muted-foreground"
+                            dangerouslySetInnerHTML={{ __html: modalContent.bodyHtml }}
+                        />
 
                         {modalContent.price ? (
                             <p className="mb-6 text-2xl font-semibold text-primary">

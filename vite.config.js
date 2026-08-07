@@ -7,6 +7,13 @@ export default defineConfig({
     resolve: {
         alias: { "@": path.resolve(__dirname, "./src") },
     },
+    // Las paginas se cargan por glob perezoso y las rutas se resuelven contra el
+    // backend, asi que Vite no ve estas dependencias al arrancar: las descubre al
+    // entrar a la vista y re-optimiza en caliente, invalidando los chunks ya
+    // servidos (504 Outdated Optimize Dep). Declararlas las pre-empaqueta de una.
+    optimizeDeps: {
+        include: ["jsbarcode"],
+    },
     server: {
         proxy: {
             "/api": {

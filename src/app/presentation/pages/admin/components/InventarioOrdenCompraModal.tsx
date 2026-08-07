@@ -895,6 +895,16 @@ export default function InventarioOrdenCompraModal({
                 </TableBody>
               </Table>
             </div>
+            {/* Con varias líneas el botón de arriba queda fuera de vista al hacer
+                scroll: se repite al pie para seguir agregando sin volver a subir. */}
+            {lines.length > 2 ? (
+              <div className="flex justify-end">
+                <Button type="button" className="w-full sm:w-auto" size="sm" variant="outline" onClick={addLine} disabled={saving || enviando}>
+                  <Plus className="mr-1 h-4 w-4" />
+                  Agregar línea
+                </Button>
+              </div>
+            ) : null}
             <p className="text-right text-sm font-semibold text-foreground">
               Total orden: <span className="tabular-nums">{moneyCo(totalOrden)}</span>
             </p>

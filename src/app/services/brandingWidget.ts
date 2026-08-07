@@ -53,6 +53,7 @@ export interface BrandingConfig {
       publicHome?: { path?: string; enabled?: boolean; rutaSeguridadId?: string | null };
       accountActivation?: { path?: string; enabled?: boolean; rutaSeguridadId?: string | null };
       reglasContablesCompleta?: { path?: string; enabled?: boolean; rutaSeguridadId?: string | null };
+      afiliadosUnirme?: { path?: string; enabled?: boolean; rutaSeguridadId?: string | null };
       allowedPaths?: string[];
     };
     [key: string]: unknown;

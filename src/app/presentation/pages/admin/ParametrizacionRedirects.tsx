@@ -39,6 +39,7 @@ interface RedirectFormState {
   publicHome: RedirectEntryState;
   accountActivation: RedirectEntryState;
   reglasContablesCompleta: RedirectEntryState;
+  afiliadosUnirme: RedirectEntryState;
   allowedPathsJson: string;
 }
 
@@ -64,6 +65,7 @@ const EMPTY_FORM: RedirectFormState = {
   publicHome: { path: '', enabled: true },
   accountActivation: { path: '', enabled: true },
   reglasContablesCompleta: { path: '', enabled: true },
+  afiliadosUnirme: { path: '', enabled: true },
   allowedPathsJson: '[]',
 };
 
@@ -80,6 +82,7 @@ const REDIRECT_FIELDS: Array<{
   { key: 'publicHome',     label: 'Home publica',     description: 'Fallback seguro cuando una ruta privada no aplica.' },
   { key: 'accountActivation', label: 'Activación de cuenta', description: 'Destino del botón Continuar en el resultado de activación de cuenta.' },
   { key: 'reglasContablesCompleta', label: 'Reglas contables (completa)', description: 'Destino del boton «Parametrizacion completa» del modal de reglas contables en Inventario.' },
+  { key: 'afiliadosUnirme', label: 'Programa de afiliados (Quiero Unirme)', description: 'Base del checkout de membresia por referido. El sistema agrega el token de Pipeline A al final del path.' },
 ];
 
 const parseAllowedPaths = (value: string): string[] => {
@@ -146,6 +149,7 @@ export default function ParametrizacionRedirects({
       publicHome:     { path: String(navigation?.publicHome?.path     || ''), enabled: navigation?.publicHome?.enabled     !== false, rutaSeguridadId: getRedirectRouteId(navigation?.publicHome) },
       accountActivation: { path: String(navigation?.accountActivation?.path || ''), enabled: navigation?.accountActivation?.enabled !== false, rutaSeguridadId: getRedirectRouteId(navigation?.accountActivation) },
       reglasContablesCompleta: { path: String(navigation?.reglasContablesCompleta?.path || ''), enabled: navigation?.reglasContablesCompleta?.enabled !== false, rutaSeguridadId: getRedirectRouteId(navigation?.reglasContablesCompleta) },
+      afiliadosUnirme: { path: String(navigation?.afiliadosUnirme?.path || ''), enabled: navigation?.afiliadosUnirme?.enabled !== false, rutaSeguridadId: getRedirectRouteId(navigation?.afiliadosUnirme) },
       allowedPathsJson: JSON.stringify(allowedPaths, null, 2),
     });
   };
@@ -256,6 +260,7 @@ export default function ParametrizacionRedirects({
             publicHome:     formData.publicHome,
             accountActivation: formData.accountActivation,
             reglasContablesCompleta: formData.reglasContablesCompleta,
+            afiliadosUnirme: formData.afiliadosUnirme,
             etiqueta: 'navegacion',
             allowedPaths,
           },

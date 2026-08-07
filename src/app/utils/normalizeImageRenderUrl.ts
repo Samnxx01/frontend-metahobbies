@@ -6,7 +6,12 @@ import {
 
 const IMG_FONDO_VER_PREFIX = '/api/front/imgFondo/ver/';
 const IMG_PERFIL_VER_PREFIX = '/api/imgPerfil/ver/';
-const PUBLICIDAD_IMAGEN_PREFIX = '/api/configuration/publicidad/modal/imagen/';
+/**
+ * Path neutro: los bloqueadores de anuncios cancelan las peticiones cuya URL
+ * contiene "publicidad" o "modal" (net::ERR_BLOCKED_BY_CLIENT), y la imagen
+ * nunca llega al navegador aunque el backend responda 200.
+ */
+const PUBLICIDAD_IMAGEN_PREFIX = '/api/configuration/contenido/destacado/media/';
 
 const API_IMAGE_ROUTE_RESOLVERS: Array<{
   pattern: RegExp;
@@ -17,6 +22,10 @@ const API_IMAGE_ROUTE_RESOLVERS: Array<{
   { pattern: /\/api\/imgFondo\/ver\/([^/?#]+)/i, prefix: '/api/imgFondo/ver/' },
   {
     pattern: /\/api\/configuration\/publicidad\/modal\/imagen\/([^/?#]+)/i,
+    prefix: PUBLICIDAD_IMAGEN_PREFIX,
+  },
+  {
+    pattern: /\/api\/configuration\/contenido\/destacado\/media\/([^/?#]+)/i,
     prefix: PUBLICIDAD_IMAGEN_PREFIX,
   },
 ];
@@ -49,20 +58,31 @@ function rebuildApiImagePath(path: string): string {
   return path;
 }
 
-/** URL relativa `/api/.../ver/{id}` con id público (iud) normalizado. */
+/**
+ * Antepone el origen de la API cuando está configurado.
+ * Sin esto, un `<img src="/api/...">` se pide al origen del frontend, que en
+ * despliegues con API en otro host devuelve 404 aunque el endpoint funcione.
+ * En dev (proxy de Vite) API_IMAGE_ORIGIN es vacío y la URL queda relativa.
+ */
+function withApiImageOrigin(path: string): string {
+  if (!path) return '';
+  return API_IMAGE_ORIGIN && path.startsWith('/api') ? `${API_IMAGE_ORIGIN}${path}` : path;
+}
+
+/** URL `/api/.../ver/{id}` con id público (iud) normalizado. */
 export function buildImgFondoVerUrl(id: unknown): string {
   const norm = normalizePublicIdForApi(id);
-  return norm ? `${IMG_FONDO_VER_PREFIX}${encodePublicIdForPath(norm)}` : '';
+  return norm ? withApiImageOrigin(`${IMG_FONDO_VER_PREFIX}${encodePublicIdForPath(norm)}`) : '';
 }
 
 export function buildImgPerfilVerUrl(id: unknown): string {
   const norm = normalizePublicIdForApi(id);
-  return norm ? `${IMG_PERFIL_VER_PREFIX}${encodePublicIdForPath(norm)}` : '';
+  return norm ? withApiImageOrigin(`${IMG_PERFIL_VER_PREFIX}${encodePublicIdForPath(norm)}`) : '';
 }
 
 export function buildPublicidadImagenUrl(id: unknown): string {
   const norm = normalizePublicIdForApi(id);
-  return norm ? `${PUBLICIDAD_IMAGEN_PREFIX}${encodePublicIdForPath(norm)}` : '';
+  return norm ? withApiImageOrigin(`${PUBLICIDAD_IMAGEN_PREFIX}${encodePublicIdForPath(norm)}`) : '';
 }
 
 /**

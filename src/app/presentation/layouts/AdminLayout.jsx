@@ -7,6 +7,7 @@ import { shouldShowAdminHerenciaSinPermisoAlert } from '@/app/services/routeServ
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert'
 import { AlertTriangle, Loader2 } from 'lucide-react'
 import { GovernanceButtonScopeProvider } from '@/app/presentation/actions'
+import ContenidoRuta from '@/app/presentation/components/contenido/ContenidoRuta'
 
 export default function AdminLayout() {
     const { user } = useAuth()
@@ -71,6 +72,9 @@ export default function AdminLayout() {
                 ) : (
                     <GovernanceButtonScopeProvider>
                         <Outlet />
+                        {/* Contenido administrado asociado a la ruta actual: se
+                            muestra solo si existe un registro activo para ella. */}
+                        <ContenidoRuta />
                     </GovernanceButtonScopeProvider>
                 )}
 

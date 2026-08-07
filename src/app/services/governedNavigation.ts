@@ -11,7 +11,8 @@ export type GovernedNavigationAction =
   | 'forgotPassword'
   | 'publicHome'
   | 'accountActivation'
-  | 'reglasContablesCompleta';
+  | 'reglasContablesCompleta'
+  | 'afiliadosUnirme';
 
 export interface GovernedNavigationEntry {
   path?: string;
@@ -27,6 +28,7 @@ export interface GovernedNavigationConfig {
   publicHome?: GovernedNavigationEntry;
   accountActivation?: GovernedNavigationEntry;
   reglasContablesCompleta?: GovernedNavigationEntry;
+  afiliadosUnirme?: GovernedNavigationEntry;
   allowedPaths?: string[];
 }
 
@@ -39,6 +41,8 @@ const DEFAULT_PATHS: Record<GovernedNavigationAction, string> = {
   publicHome: '/public/render/home',
   accountActivation: '',
   reglasContablesCompleta: '',
+  // Base del checkout de membresía por referido; el token va como segmento final.
+  afiliadosUnirme: '/membresia/pago',
 };
 
 const resolveDefaultFallback = (action: GovernedNavigationAction): string => {

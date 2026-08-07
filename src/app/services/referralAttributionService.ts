@@ -1,6 +1,25 @@
 import { apiFetch } from '@/app/services/api';
+import { getGovernedPath } from '@/app/services/governedNavigation';
+import {
+    esTokenReferidoAtribucionValido,
+    persistAttributionForReferidosFlow,
+} from '@/app/services/publicAttributionParams';
 
 export type AttributionLinkDestination = 'home' | 'productos' | 'referidos';
+
+/** Fallback si gobernanza no tiene parametrizado el destino del CTA de afiliados. */
+const UNIRME_BASE_PATH_FALLBACK = '/membresia/pago';
+
+/**
+ * Base del checkout de membresía por referido, parametrizable en
+ * Gobernanza → «Redirects del modulo» → «Programa de afiliados (Quiero Unirme)».
+ * El token de Pipeline A siempre se agrega como último segmento de esta base.
+ */
+export function getUnirmeBasePath(): string {
+    const governed = getGovernedPath('afiliadosUnirme', { fallback: UNIRME_BASE_PATH_FALLBACK });
+    const normalized = String(governed || UNIRME_BASE_PATH_FALLBACK).trim().replace(/\/+$/, '');
+    return normalized.startsWith('/') ? normalized : UNIRME_BASE_PATH_FALLBACK;
+}
 
 export interface ReferralAttributionPayload {
     guestSessionId?: string;
@@ -57,7 +76,7 @@ export function buildMembresiaReferidosUrl(
         params.set('originId', String(data.originId));
     }
     const query = params.toString();
-    return `${origin}/membresia/pago/${encodeURIComponent(data.jwtReferido)}${query ? `?${query}` : ''}`;
+    return `${origin}${getUnirmeBasePath()}/${encodeURIComponent(data.jwtReferido)}${query ? `?${query}` : ''}`;
 }
 
 /** Ruta interna (pathname + query) para react-router navigate. */
@@ -111,10 +130,27 @@ export async function generarEnlaceConAttribution(
     });
 }
 
-const SHORT_LINK_PATHS: Record<AttributionLinkDestination, string> = {
-    home: '/public/render/home',
-    productos: '/productos',
-    referidos: '/membresia/pago',
+/**
+ * Pipeline A sin enlace de invitación: el backend resuelve el sponsor desde
+ * USER_REFERIDOS_PADRE y devuelve un token de referido válido para el checkout.
+ */
+export async function generarEnlaceAttributionPadreDefecto(
+    payload: Pick<ReferralAttributionPayload, 'guestSessionId' | 'emailCliente' | 'originId'> = {},
+): Promise<ReferralAttributionResult> {
+    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api';
+    return apiFetch(`${API_BASE_URL}/referido/enlace/attribution/padre-defecto`, {
+        method: 'POST',
+        useAuth: false,
+        logoutOn401: false,
+        body: payload,
+    });
+}
+
+/** El destino de referidos sale de gobernanza; home/productos son fijos del módulo público. */
+const getShortLinkPath = (destination: AttributionLinkDestination): string => {
+    if (destination === 'referidos') return getUnirmeBasePath();
+    if (destination === 'productos') return '/productos';
+    return '/public/render/home';
 };
 
 /** Pipeline A — compra de membresía por referido (pipeline_a / source referidos). */
@@ -171,12 +207,17 @@ export function resolvePipelineBDestination(
     resolved: ResolvedAttributionLink,
 ): string {
     const redirect = String(resolved.redirectTo || 'home').trim().toLowerCase() as AttributionLinkDestination;
-    return SHORT_LINK_PATHS[redirect] || SHORT_LINK_PATHS.home;
+    return getShortLinkPath(redirect) || getShortLinkPath('home');
 }
 
+/** Reconoce el checkout de referidos aunque gobernanza haya movido la base del navigate. */
 export function isMembresiaReferidosPath(pathname = ''): boolean {
-    return /\/membresia\/pago\/?$/i.test(String(pathname || '').replace(/\/$/, ''))
-        || /\/membresia\/pago\//i.test(pathname);
+    const path = String(pathname || '').replace(/\/$/, '');
+    const bases = Array.from(new Set([getUnirmeBasePath(), UNIRME_BASE_PATH_FALLBACK]));
+    return bases.some((base) => {
+        const escaped = base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        return new RegExp(`^${escaped}(/|$)`, 'i').test(path);
+    });
 }
 
 /** Enlace corto: solo `?at=MABS-XXXXXX`. El sistema resuelve guestSessionId, ref y origen al abrirlo. */
@@ -186,7 +227,7 @@ export function buildShortAttributionUrl(
     origin = typeof window !== 'undefined' ? window.location.origin : '',
 ): string {
     const code = encodeURIComponent(String(codigoReferido || '').trim());
-    const path = SHORT_LINK_PATHS[destination] || SHORT_LINK_PATHS.home;
+    const path = getShortLinkPath(destination);
     return `${origin}${path}?at=${code}`;
 }
 
@@ -243,5 +284,92 @@ export async function resolveAttributionByGuestSession(
         return (response?.data ?? null) as ResolvedAttributionLink | null;
     } catch {
         return null;
+    }
+}
+
+/** Origen del token con el que se entra al checkout de membresía. */
+export type AccesoUnirmeOrigen = 'ENLACE_INVITACION' | 'PADRE_DEFECTO';
+
+export interface AccesoUnirmePipelineA {
+    ok: boolean;
+    /** Ruta interna lista para `navigate`: base gobernada + token de Pipeline A. */
+    path: string | null;
+    origen: AccesoUnirmeOrigen | null;
+}
+
+/**
+ * Resuelve el acceso del CTA «Quiero Unirme» garantizando token de Pipeline A.
+ *
+ * 1. Si la sesión trae un token de invitación, se valida contra el API de membresía
+ *    y se comprueba que su atribución sea Pipeline A (una atribución de venta /
+ *    Pipeline B no sirve para afiliarse).
+ * 2. Si no hay token, está vencido o pertenece a Pipeline B, se genera uno nuevo
+ *    contra el patrocinador raíz (USER_REFERIDOS_PADRE).
+ *
+ * Devuelve la ruta ya construida sobre la base parametrizada en gobernanza.
+ */
+export async function resolverAccesoUnirmePipelineA(
+    ctx: { ref?: string; guestSessionId?: string; originType?: string; originId?: string },
+): Promise<AccesoUnirmePipelineA> {
+    const ref = String(ctx.ref || '').trim();
+    const guestSessionId = String(ctx.guestSessionId || '').trim();
+
+    let sesionEsPipelineB = false;
+
+    if (ref && esTokenReferidoAtribucionValido(ref)) {
+        const resuelta = guestSessionId
+            ? await resolveAttributionByGuestSession(guestSessionId)
+            : null;
+        const esPipelineA = !resuelta || isPipelineReferidosAttribution(resuelta);
+        sesionEsPipelineB = Boolean(resuelta) && !esPipelineA;
+
+        if (esPipelineA && await validarTokenReferidoMembresia(ref, guestSessionId || undefined)) {
+            persistAttributionForReferidosFlow({
+                ref,
+                guestSessionId,
+                originType: ctx.originType || 'membresia',
+                originId: ctx.originId || '',
+                flow: 'referidos',
+            });
+
+            return {
+                ok: true,
+                path: buildMembresiaReferidosPath({
+                    jwtReferido: ref,
+                    guestSessionId,
+                    originType: ctx.originType || 'membresia',
+                    originId: ctx.originId || null,
+                }),
+                origen: 'ENLACE_INVITACION',
+            };
+        }
+    }
+
+    try {
+        const enlace = await generarEnlaceAttributionPadreDefecto({
+            // Una sesión ya tomada por Pipeline B no se reutiliza para no pisar esa atribución.
+            guestSessionId: sesionEsPipelineB ? undefined : (guestSessionId || undefined),
+        });
+
+        persistAttributionForReferidosFlow({
+            ref: enlace.jwtReferido,
+            guestSessionId: enlace.guestSessionId,
+            originType: enlace.originType || 'membresia',
+            originId: enlace.originId ? String(enlace.originId) : '',
+            flow: 'referidos',
+        });
+
+        return {
+            ok: true,
+            path: buildMembresiaReferidosPath({
+                jwtReferido: enlace.jwtReferido,
+                guestSessionId: enlace.guestSessionId,
+                originType: enlace.originType || 'membresia',
+                originId: enlace.originId ?? null,
+            }),
+            origen: 'PADRE_DEFECTO',
+        };
+    } catch {
+        return { ok: false, path: null, origen: null };
     }
 }
