@@ -178,6 +178,7 @@ export interface InventarioConfig {
   metodoBloqueadoDesdeAnioFiscal?: number | null;
   periodosCerrados: string[];
   compras?: InventarioComprasConfig;
+  reglasContables?: InventarioReglasContablesConfig;
   productos?: InventarioProductosConfig;
   kardex?: InventarioKardexConfig;
   documentosSoporte?: DocumentoSoporteTipoConfig[];
@@ -221,6 +222,19 @@ export interface InventarioComprasConfig {
   ambitosReglaImpuesto?: string[];
   /** Tributo activo de DIAN_TRIBUTOS para la OC. 01 = IVA. */
   codigoDianImpuesto?: string;
+  /** @deprecated El alcance se guarda en `InventarioConfig.reglasContables.tenantsCompartidos`. */
+  tenantsReglaImpuesto?: string[];
+  /**
+   * Tenants que comparten entre sí sus reglas contables (payload de escritura). Sus usuarios ven y
+   * usan el conjunto de todos ellos en compras, carrito/POS, factura electrónica y la matriz de
+   * aplicación. Vacío = cada tenant solo ve las suyas. No cambia quién puede editarlas.
+   */
+  tenantsCompartidosReglas?: string[];
+}
+
+export interface InventarioReglasContablesConfig {
+  /** Tenants que comparten sus reglas contables entre sí. */
+  tenantsCompartidos?: string[];
 }
 
 export type TipoEstadoInventarioDominio = 'ORDEN_COMPRA' | 'RECEPCION_COMPRA' | 'INVENTORY_LEDGER';

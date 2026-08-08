@@ -53,6 +53,17 @@ export interface AmbitoReglaContable {
 }
 
 /** Entrada del catálogo genérico de códigos por dominio (piloto: DIAN_TRIBUTOS, scope global). */
+/** Opción del multi-select «Usuarios/tenants que comparten estas reglas» en el alcance de OC. */
+export interface TenantAlcanceImpuesto {
+  tenantId: string;
+  label: string;
+  activo: boolean;
+  /** Cuántas reglas de impuesto es dueño este tenant. */
+  totalReglas: number;
+  esActual: boolean;
+  compartido: boolean;
+}
+
 export interface CatalogoCodigo {
   iud?: string;
   _id?: string;
@@ -173,6 +184,15 @@ const reglasContablesService = {
   async listarTenantsAutorizables(): Promise<Array<{ tenantId: string; label: string; esActual: boolean; esRaiz: boolean }>> {
     const resp = await apiFetch('/api/inventario/config/reglas-contables/tenants-autorizables', { method: 'GET' });
     return (resp?.data ?? []) as Array<{ tenantId: string; label: string; esActual: boolean; esRaiz: boolean }>;
+  },
+
+  /**
+   * Tenants existentes que pueden compartir entre sí las reglas de impuesto de compras
+   * («Alcance reglas OC»). `totalReglas` indica cuántas reglas es dueño cada uno.
+   */
+  async listarTenantsAlcanceImpuesto(): Promise<TenantAlcanceImpuesto[]> {
+    const resp = await apiFetch('/api/inventario/config/reglas-contables/tenants-alcance-impuesto', { method: 'GET' });
+    return (resp?.data ?? []) as TenantAlcanceImpuesto[];
   },
 
   // ──── Catálogo genérico de códigos (piloto DIAN_TRIBUTOS) ────────────
