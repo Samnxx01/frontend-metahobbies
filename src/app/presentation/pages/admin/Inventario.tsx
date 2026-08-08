@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'react-toastify';
 import {
   AlertTriangle,
@@ -71,6 +71,7 @@ import {
   resolverTipoMovimientoKardexEntradaPorDefecto,
 } from './inventario/inventarioTipoMovimientoKardex';
 import InventarioStockTab from './components/InventarioStockTab';
+import InventarioSkuStockSelect from './components/InventarioSkuStockSelect';
 import InventarioTipoMovimientoModal, { type TipoMovimientoDraft } from './components/InventarioTipoMovimientoModal';
 import InventarioKardexControlDuplicadoModal, {
   InventarioKardexControlDuplicadoAyudaDialog,
@@ -94,7 +95,6 @@ import ModuleHelpButton from '@/app/presentation/components/common/ModuleHelpBut
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
@@ -294,7 +294,6 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
   const [ajustes, setAjustes] = useState<AjusteInventario[]>([]);
   const [stockConsulta, setStockConsulta] = useState<InventarioSaldo | null>(null);
   const [stockFiltro, setStockFiltro] = useState({ sku: '' });
-  const [stockSkuQuery, setStockSkuQuery] = useState('');
   const [bodegaVistaStock, setBodegaVistaStock] = useState('');
   const [periodo, setPeriodo] = useState('');
   const [bodegaForm, setBodegaForm] = useState<BodegaFormState>(bodegaFormVacio);
@@ -429,15 +428,6 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
     [productosSku],
   );
 
-  const skuOptionsFiltradasStock = useMemo(() => {
-    const q = String(stockSkuQuery || '').trim().toUpperCase();
-    if (!q) return skuOptions;
-    return skuOptions.filter((producto) => {
-      const sku = String(producto.sku || '').trim().toUpperCase();
-      const nombre = String((producto as any).nombre || '').trim().toUpperCase();
-      return sku.includes(q) || nombre.includes(q);
-    });
-  }, [skuOptions, stockSkuQuery]);
   const tenantScope = user?.auth?.tenantScope || {};
   const nombreCorporativoImpresion = useMemo(() => {
     const currentUser = user as Record<string, any> | null;
@@ -1544,13 +1534,18 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
   // Si el catálogo de SKU ya está abierto (flujo de registrar movimiento de kardex),
   // el escaneo sigue alimentando su filtro como antes. Si no hay nada abierto, el
   // escaneo es una consulta rápida: se renderiza el modal de detalle del producto.
-  useBarcodeScanner((codigo) => {
+  // `useCallback` es obligatorio aquí: el efecto de `useBarcodeScanner` tiene `onScan`
+  // en sus deps, así que un arrow inline volvía a suscribir el listener global de
+  // keydown (fase de captura) en cada render del módulo.
+  const handleCodigoEscaneado = useCallback((codigo: string): void => {
     if (skuCatalogoOpen) {
       setFiltroEscaner(codigo);
       return;
     }
     setCodigoEscaneadoDetalle(codigo);
-  });
+  }, [skuCatalogoOpen]);
+
+  useBarcodeScanner(handleCodigoEscaneado);
 
   const abrirModalCrearSku = (): void => {
     setSkuEditandoId(null);
@@ -2210,50 +2205,13 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
     </Select>
   );
 
-  const renderSkuStockSelect = (): React.ReactElement => (
-    <div className="space-y-2">
-      <Input
-        value={stockSkuQuery}
-        onChange={(e) => setStockSkuQuery(e.target.value)}
-        placeholder="Buscar SKU o nombre..."
-      />
-      <Select
-        value={stockFiltro.sku || '__SIN_SKU__'}
-        onValueChange={(next) => {
-          const sku = next === '__SIN_SKU__' ? '' : next;
-          setStockFiltro((prev) => ({ ...prev, sku }));
-        }}
-      >
-        <SelectTrigger
-          className="border-input bg-background"
-          title={stockFiltro.sku
-            ? skuOptions.find((producto) => producto.sku === stockFiltro.sku)?.nombre || stockFiltro.sku
-            : 'Todos los SKU'}
-        >
-          <SelectValue placeholder={skuOptions.length ? 'Selecciona SKU' : 'Sin SKUs'} />
-        </SelectTrigger>
-        <SelectContent className="max-h-72 border-border bg-popover">
-          <SelectItem value="__SIN_SKU__">Todos</SelectItem>
-          {skuOptionsFiltradasStock.map((producto) => (
-            <SelectItem
-              key={getProductoId(producto) || producto.sku}
-              value={producto.sku || ''}
-              title={`Producto: ${producto.nombre || 'Sin nombre'}`}
-              aria-label={`${producto.sku}. ${producto.nombre || 'Sin nombre'}`}
-              className="group items-start"
-            >
-              <span className="flex min-w-0 flex-col">
-                <span className="font-medium">{producto.sku}</span>
-                <span className="hidden whitespace-normal pt-0.5 text-xs text-muted-foreground group-hover:block group-focus:block group-data-[highlighted]:block">
-                  Producto: {producto.nombre || 'Sin nombre'}
-                </span>
-              </span>
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
-  );
+  /**
+   * Identidad estable: `InventarioSkuStockSelect` está memoizado, así que un handler
+   * recreado en cada render anularía la memoización.
+   */
+  const handleStockSkuChange = useCallback((sku: string): void => {
+    setStockFiltro((prev) => (prev.sku === sku ? prev : { ...prev, sku }));
+  }, []);
 
   if (loading) {
     return (
@@ -2356,7 +2314,13 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
             stockActual={stockActual}
             kardex={kardex}
             money={MONEY}
-            renderSkuStockSelect={renderSkuStockSelect}
+            skuSelect={(
+              <InventarioSkuStockSelect
+                skuOptions={skuOptions}
+                value={stockFiltro.sku}
+                onChange={handleStockSkuChange}
+              />
+            )}
             consultarStock={consultarStock}
             formatDate={formatDate}
             fechaMovimiento={fechaMovimientoKardex}

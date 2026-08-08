@@ -98,6 +98,14 @@ type InventarioProveedorModalProps = {
 const getTipoProveedorId = (tipo: InventarioTipoProveedor): string =>
   String(tipo._id || tipo.iud || '');
 
+/** Id del tipo guardado en el proveedor: puede venir populado o como id crudo. */
+const getTipoIdDeProveedor = (proveedor: InventarioProveedor | null): string => {
+  const ref = proveedor?.tipoProveedorId;
+  if (!ref) return '';
+  if (typeof ref === 'string') return ref;
+  return String(ref._id || ref.iud || '');
+};
+
 const DEPARTAMENTO_NOMBRES: Record<string, string> = {
   '1': 'Amazonas',
   '2': 'Antioquia',
@@ -198,6 +206,26 @@ export default function InventarioProveedorModal({
     return dep?.ciudades || [];
   }, [departamentos, draft.departamentoId]);
 
+  /**
+   * El catalogo solo trae tipos activos. Si el proveedor tiene guardado uno que
+   * luego se desactivo o borro, sin esta opcion el selector caeria al placeholder
+   * y al guardar se enviaria vacio, borrando el dato sin que nadie lo pidiera.
+   */
+  const opcionesTipoProveedor = useMemo<InventarioTipoProveedor[]>(() => {
+    const guardadoId = draft.tipoProveedorId;
+    if (!guardadoId || tiposProveedor.some((tipo) => getTipoProveedorId(tipo) === guardadoId)) {
+      return tiposProveedor;
+    }
+    const ref = proveedor?.tipoProveedorId;
+    const nombre = (typeof ref === 'object' && ref !== null ? ref.nombre : '')
+      || proveedor?.tipoProveedorNombre
+      || 'Tipo no disponible';
+    return [
+      ...tiposProveedor,
+      { _id: guardadoId, codigo: '', nombre: `${nombre} (inactivo)`, estado: false },
+    ];
+  }, [draft.tipoProveedorId, proveedor, tiposProveedor]);
+
   const cargarCatalogos = async (): Promise<void> => {
     try {
       setLoadingCatalogos(true);
@@ -220,12 +248,36 @@ export default function InventarioProveedorModal({
     setDraft(proveedor ? {
       nombre: proveedor.nombre || '', nit: proveedor.nit || '', correo: proveedor.correo || '',
       telefono: proveedor.telefono || '', direccion: proveedor.direccion || '',
-      tipoProveedorId: typeof proveedor.tipoProveedorId === 'string' ? proveedor.tipoProveedorId : proveedor.tipoProveedorId?._id || '',
+      tipoProveedorId: getTipoIdDeProveedor(proveedor),
       paisId: proveedor.paisId || '1', departamentoId: proveedor.departamentoId || '', ciudadId: proveedor.ciudadId || '',
       aplicaIva: proveedor.aplicaIva === true, responsabilidadesFiscales: [],
     } : draftInicial);
     void cargarCatalogos();
     void cargarResponsabilidades();
+
+    // Las responsabilidades viven en su propia coleccion, no en el documento del
+    // proveedor: se piden aparte para que al editar lleguen marcadas las que ya
+    // tiene guardadas.
+    const proveedorId = String(proveedor?._id || (proveedor as { iud?: string } | null)?.iud || '');
+    if (!proveedorId) return;
+
+    let vigente = true;
+    void inventarioService
+      .listarResponsabilidadesProveedor(proveedorId)
+      .then((asignadas) => {
+        if (!vigente) return;
+        setDraft((prev) => ({
+          ...prev,
+          responsabilidadesFiscales: asignadas.map((item) => item.responsabilidadCodigo),
+        }));
+      })
+      .catch((error) => {
+        console.error('Error cargando responsabilidades del proveedor:', error);
+      });
+
+    return () => {
+      vigente = false;
+    };
   }, [cargarResponsabilidades, open, proveedor]);
 
   useEffect(() => {
@@ -437,7 +489,7 @@ export default function InventarioProveedorModal({
                   <SelectValue placeholder={loadingCatalogos ? 'Cargando tipos...' : 'Selecciona tipo'} />
                 </SelectTrigger>
                 <SelectContent className="border-border bg-popover text-popover-foreground">
-                  {tiposProveedor.map((tipo) => (
+                  {opcionesTipoProveedor.map((tipo) => (
                     <SelectItem key={getTipoProveedorId(tipo)} value={getTipoProveedorId(tipo)}>
                       {tipo.nombre}
                     </SelectItem>

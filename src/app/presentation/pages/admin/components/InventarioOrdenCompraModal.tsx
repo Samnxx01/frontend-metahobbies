@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ClipboardList, Plus, Save, Trash2 } from 'lucide-react';
+import { ClipboardList, Plus, RotateCcw, Save, Trash2 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import inventarioService, {
   type BodegaInventario,
@@ -33,6 +33,26 @@ import { getOrdenCompraId } from '@/app/presentation/pages/admin/utils/ordenComp
 
 const moneyCo = (n: number): string =>
   new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(n);
+
+/**
+ * Traducción accionable de `motivo` de `resolverTarifaAplicable` (backend). Espeja el mapa
+ * `MENSAJE_SIN_REGLA_IMPUESTO` de `inventarioComprasOrdenService`: el backend bloquea la orden con
+ * estos mismos casos, así que conviene que el usuario los vea antes de intentar guardar.
+ */
+const MOTIVO_SIN_REGLA: Record<string, string> = {
+  SIN_REGLAS_TRIBUTO_AMBITO:
+    'No hay ninguna regla contable de IVA activa para el ámbito de compras. Parametrízala en Reglas contables.',
+  PROVEEDOR_NO_DISPONIBLE: 'El proveedor no existe o está inactivo.',
+  PROVEEDOR_NO_APLICA_IVA:
+    'El proveedor no está marcado como responsable de IVA. Edítalo y activa «Aplica IVA».',
+  PROVEEDOR_NO_CUMPLE_REGLA:
+    'El proveedor no cumple ninguna regla contable de IVA de compras. Revisa la asignación regla ↔ proveedor y sus responsabilidades DIAN.',
+  PROVEEDOR_NO_INFORMADO: 'Selecciona el proveedor para resolver la regla contable de IVA.',
+};
+
+const mensajeMotivoSinRegla = (motivo: string | null): string =>
+  MOTIVO_SIN_REGLA[String(motivo || '').trim().toUpperCase()]
+  || 'No se pudo resolver la regla contable de IVA aplicable a la compra.';
 
 type LineId = string;
 
@@ -290,17 +310,17 @@ export default function InventarioOrdenCompraModal({
   };
 
   /**
-   * Consulta la tarifa de IVA parametrizada en "Reglas contables" para compras (aplicaEn=COMPRA,
-   * tipo=IVA) y autocompleta el campo "Imp. %" de la línea (junto con el código de la regla usada,
-   * para trazabilidad). Sigue siendo editable manualmente después; si el usuario lo edita a mano, el
-   * código de regla se limpia. Si no hay regla aplicable, deja el campo en 0.
+   * Consulta la tarifa de IVA parametrizada en "Reglas contables" para compras y autocompleta el
+   * campo "Imp. %" de la línea (junto con el código de la regla usada, para trazabilidad). Si el
+   * usuario edita el % a mano, el código de regla se limpia; `restaurarTarifaParametrizada` vuelve
+   * a llamar aquí para recuperarlo. Devuelve el resultado para que el llamador pueda avisar.
    */
   const aplicarTarifaImpuestoAutomatica = async (
     lineId: LineId,
     sku: string,
     productoId?: string,
     proveedorResolverId: string = proveedorId
-  ): Promise<void> => {
+  ): Promise<{ ok: boolean; tarifa: number; codigo: string | null; motivo: string | null }> => {
     if (!proveedorResolverId) {
       updateLine(lineId, {
         impuestoPorcentaje: '0',
@@ -309,7 +329,7 @@ export default function InventarioOrdenCompraModal({
         montoFijoImpuesto: 0,
         motivoReglaImpuesto: 'PROVEEDOR_NO_INFORMADO',
       });
-      return;
+      return { ok: false, tarifa: 0, codigo: null, motivo: 'PROVEEDOR_NO_INFORMADO' };
     }
     try {
       const resultadoTarifa = await reglasContablesService.obtenerTarifaAplicable({
@@ -320,15 +340,15 @@ export default function InventarioOrdenCompraModal({
       });
       const { tarifa, codigo, montoFijo, baseCalculo, esGeneral, sinReglas, motivo } = resultadoTarifa;
       if (sinReglas || (esGeneral && !codigo)) {
-        // Modo libre: sin reglas activas del alcance de compras, o ninguna regla resuelve
-        // para este producto — no se autocompleta ni se bloquea; el impuesto queda manual.
+        // Ninguna regla resuelve. El backend ya no acepta impuesto manual: bloqueará el guardado
+        // con este mismo `motivo`, así que se conserva para mostrarlo en la línea.
         updateLine(lineId, {
           codigoReglaImpuesto: null,
           baseCalculoImpuesto: null,
           montoFijoImpuesto: 0,
           motivoReglaImpuesto: motivo || 'SIN_REGLA_APLICABLE',
         });
-        return;
+        return { ok: false, tarifa: 0, codigo: null, motivo: motivo || 'SIN_REGLA_APLICABLE' };
       }
       // Regla activa del alcance: aplica su tarifa (la específica gana; la general es el
       // fallback del ámbito). El backend recalcula igual al guardar.
@@ -339,9 +359,32 @@ export default function InventarioOrdenCompraModal({
         montoFijoImpuesto: Number(montoFijo || 0),
         motivoReglaImpuesto: null,
       });
+      return { ok: true, tarifa: Number(tarifa ?? 0), codigo: codigo ?? null, motivo: null };
     } catch (error) {
       console.error('Error resolviendo tarifa de IVA aplicable a la compra:', error);
+      return { ok: false, tarifa: 0, codigo: null, motivo: 'ERROR_CONSULTA' };
     }
+  };
+
+  /**
+   * Vuelve a tomar la tarifa parametrizada en una línea cuyo "Imp. %" fue editado a mano.
+   * Solo toca los campos de impuesto: conserva cantidad, precio y descuento ya digitados
+   * (a diferencia de re-seleccionar el SKU, que reescribe el precio con el del catálogo).
+   */
+  const restaurarTarifaParametrizada = async (lineId: LineId): Promise<void> => {
+    const linea = lines.find((l) => l.id === lineId);
+    if (!linea) return;
+    const sku = String(linea.sku || '').trim();
+    if (!sku) {
+      toast.error('Selecciona primero el SKU de la línea.');
+      return;
+    }
+    const resultado = await aplicarTarifaImpuestoAutomatica(lineId, sku, linea.productoId);
+    if (resultado.ok) {
+      toast.success(`Tarifa parametrizada aplicada a ${sku.toUpperCase()}: ${resultado.tarifa}% (regla ${resultado.codigo}).`);
+      return;
+    }
+    toast.error(`No se pudo tomar la tarifa parametrizada para ${sku.toUpperCase()}. ${mensajeMotivoSinRegla(resultado.motivo)}`);
   };
 
   const cambiarProveedor = (id: string): void => {
@@ -423,14 +466,16 @@ export default function InventarioOrdenCompraModal({
   const totalOrden = useMemo(() => lines.reduce((acc, l) => acc + calcTotalLinea(l), 0), [lines]);
 
   const guardar = async (): Promise<void> => {
-    // Aviso informativo (no bloquea): líneas con impuesto manual, sin regla específica parametrizada.
+    // El backend ignora todo % digitado a mano y recalcula desde la ReglaContable parametrizada.
+    // Avisar antes de enviar evita que el usuario crea que su % se guardó tal cual.
     const lineasImpuestoManual = lines.filter(
       (l) => String(l.sku || '').trim() && !l.codigoReglaImpuesto && Number(l.impuestoPorcentaje) > 0
     );
     if (lineasImpuestoManual.length > 0) {
       toast.info(
-        `Impuesto manual (sin regla contable específica) en ${lineasImpuestoManual.length} línea(s): ` +
-        lineasImpuestoManual.map((l) => String(l.sku || '').trim().toUpperCase()).join(', ')
+        `El % digitado se reemplazará por la tarifa de la regla contable en ${lineasImpuestoManual.length} línea(s): ` +
+        lineasImpuestoManual.map((l) => String(l.sku || '').trim().toUpperCase()).join(', ') +
+        '. Usa «Usar tarifa parametrizada» para verla antes de guardar.'
       );
     }
     if (!proveedorId) {
@@ -689,7 +734,25 @@ export default function InventarioOrdenCompraModal({
                     <div className="space-y-1.5"><Label>Cantidad</Label><Input type="number" min="0" step="any" value={line.cantidad} onChange={(e) => updateLine(line.id, { cantidad: e.target.value })} /></div>
                     <div className="space-y-1.5"><Label>Precio</Label><Input type="number" min="0" step="any" value={line.precioUnitario} onChange={(e) => updateLine(line.id, { precioUnitario: e.target.value })} /></div>
                     <div className="space-y-1.5"><Label>Descuento (COP)</Label><Input type="number" min="0" step={1} value={line.descuento} onChange={(e) => updateLine(line.id, { descuento: e.target.value })} /></div>
-                    <div className="space-y-1.5"><Label>Impuesto %</Label><Input type="number" min="0" step="any" value={line.impuestoPorcentaje} onChange={(e) => updateLine(line.id, { impuestoPorcentaje: e.target.value, codigoReglaImpuesto: null, baseCalculoImpuesto: null, montoFijoImpuesto: 0, motivoReglaImpuesto: null })} /></div>
+                    <div className="space-y-1.5">
+                      <Label>Impuesto %</Label>
+                      <Input type="number" min="0" step="any" value={line.impuestoPorcentaje} onChange={(e) => updateLine(line.id, { impuestoPorcentaje: e.target.value, codigoReglaImpuesto: null, baseCalculoImpuesto: null, montoFijoImpuesto: 0, motivoReglaImpuesto: null })} />
+                      {line.codigoReglaImpuesto ? (
+                        <p className="text-[11px] leading-tight text-muted-foreground">{line.codigoReglaImpuesto}</p>
+                      ) : String(line.sku || '').trim() ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-auto gap-1 px-0 py-0 text-[11px] font-normal text-muted-foreground hover:text-foreground"
+                          onClick={() => { void restaurarTarifaParametrizada(line.id); }}
+                          title="Volver a tomar la tarifa de la regla contable parametrizada"
+                        >
+                          <RotateCcw className="h-3 w-3" />
+                          Usar tarifa parametrizada
+                        </Button>
+                      ) : null}
+                    </div>
                     <div className="space-y-1.5 sm:col-span-2">
                       <Label>Bodega</Label>
                       <Select value={line.bodega || ''} onValueChange={(v) => updateLine(line.id, { bodega: v })}>
@@ -861,6 +924,21 @@ export default function InventarioOrdenCompraModal({
                           }
                           placeholder="%"
                         />
+                        {line.codigoReglaImpuesto ? (
+                          <p className="mt-1 text-[11px] leading-tight text-muted-foreground">{line.codigoReglaImpuesto}</p>
+                        ) : String(line.sku || '').trim() ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="mt-1 h-auto w-full justify-end gap-1 px-0 py-0 text-[11px] font-normal text-muted-foreground hover:text-foreground"
+                            onClick={() => { void restaurarTarifaParametrizada(line.id); }}
+                            title="Volver a tomar la tarifa de la regla contable parametrizada"
+                          >
+                            <RotateCcw className="h-3 w-3" />
+                            Usar tarifa parametrizada
+                          </Button>
+                        ) : null}
                       </TableCell>
                       <TableCell className="align-top text-right text-sm font-medium tabular-nums">
                         {moneyCo(calcSubtotalLinea(line))}

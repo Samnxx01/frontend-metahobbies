@@ -23,7 +23,8 @@ type InventarioStockTabProps = {
   stockActual: StockActualItem[];
   kardex: InventarioMovimiento[];
   money: Intl.NumberFormat;
-  renderSkuStockSelect: () => React.ReactElement;
+  /** Buscador + selector de SKU. Es un nodo ya montado (no una render-prop) para no recrearlo en cada render del padre. */
+  skuSelect: React.ReactNode;
   consultarStock: () => Promise<void>;
   etiquetaVista?: string;
   formatDate: (value?: string | Date | null) => string;
@@ -37,7 +38,7 @@ export default function InventarioStockTab({
   stockActual,
   kardex,
   money,
-  renderSkuStockSelect,
+  skuSelect,
   consultarStock,
   formatDate,
   fechaMovimiento,
@@ -46,6 +47,7 @@ export default function InventarioStockTab({
 }: InventarioStockTabProps): React.ReactElement {
   const [historicoModalOpen, setHistoricoModalOpen] = useState(false);
   const [paginaKardex, setPaginaKardex] = useState(1);
+  const [paginaStock, setPaginaStock] = useState(1);
   const skuConsultado = stockFiltro.sku.trim().toUpperCase();
 
   const KARDEX_PAGE_SIZE = 10;
@@ -59,6 +61,21 @@ export default function InventarioStockTab({
   useEffect(() => {
     setPaginaKardex(1);
   }, [kardex]);
+
+  // `stockActual` llega sin límite desde el backend (`stockActualCombinadoEnriquecido`),
+  // así que pintar el array completo generaba tablas de miles de celdas en cada render.
+  // Los totales del encabezado los sigue calculando el padre sobre el array íntegro.
+  const STOCK_PAGE_SIZE = 25;
+  const totalPaginasStock = Math.max(1, Math.ceil(stockActual.length / STOCK_PAGE_SIZE));
+  const paginaStockActual = Math.min(paginaStock, totalPaginasStock);
+  const stockVisible = useMemo(
+    () => stockActual.slice((paginaStockActual - 1) * STOCK_PAGE_SIZE, paginaStockActual * STOCK_PAGE_SIZE),
+    [stockActual, paginaStockActual],
+  );
+
+  useEffect(() => {
+    setPaginaStock(1);
+  }, [stockActual]);
 
   const historicoValor = useMemo(
     () => buildHistoricoValor(stockActual, kardex, skuConsultado),
@@ -83,7 +100,7 @@ export default function InventarioStockTab({
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label>SKU</Label>
-              {renderSkuStockSelect()}
+              {skuSelect}
             </div>
             <Button className="w-full" onClick={() => void consultarStock()}>
               <Search className="mr-2 h-4 w-4" />
@@ -144,7 +161,7 @@ export default function InventarioStockTab({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {stockActual.map((item) => (
+                  {stockVisible.map((item) => (
                     <TableRow key={`${item.sku}-${item.bodega}`}>
                       <TableCell className="font-medium">{item.sku}</TableCell>
                       <TableCell>{item.bodega}</TableCell>
@@ -174,6 +191,33 @@ export default function InventarioStockTab({
                 </TableBody>
               </Table>
             </div>
+            {stockActual.length > STOCK_PAGE_SIZE ? (
+              <div className="mt-3 flex flex-col gap-2 text-sm sm:flex-row sm:items-center sm:justify-between">
+                <span className="text-muted-foreground">
+                  {stockActual.length} saldo(s) · Página {paginaStockActual} de {totalPaginasStock}
+                </span>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={paginaStockActual <= 1}
+                    onClick={() => setPaginaStock((prev) => Math.max(1, prev - 1))}
+                  >
+                    Anterior
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={paginaStockActual >= totalPaginasStock}
+                    onClick={() => setPaginaStock((prev) => Math.min(totalPaginasStock, prev + 1))}
+                  >
+                    Siguiente
+                  </Button>
+                </div>
+              </div>
+            ) : null}
           </CardContent>
         </Card>
       </div>

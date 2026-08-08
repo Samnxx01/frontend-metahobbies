@@ -102,6 +102,12 @@ export default function Proveedores(): React.ReactElement {
         direccion: draft.direccion.trim(), aplicaIva: draft.aplicaIva, tipoProveedorId: draft.tipoProveedorId || undefined,
         paisId: draft.paisId || undefined, departamentoId: draft.departamentoId || undefined, ciudadId: draft.ciudadId || undefined,
       });
+      // Viven en otra coleccion: el PUT del proveedor no las incluye, hay que
+      // reemplazar el set aparte. Vacio significa "sin cambios": el backend
+      // rechaza una seleccion vacia, no la interpreta como borrado.
+      if (draft.responsabilidadesFiscales.length) {
+        await inventarioService.guardarResponsabilidadesProveedor(proveedorEditar._id, draft.responsabilidadesFiscales);
+      }
       setProveedores((prev) => prev.map((item) => item._id === updated._id ? updated : item));
       setProveedorEditar(null);
       toast.success('Proveedor actualizado.');
