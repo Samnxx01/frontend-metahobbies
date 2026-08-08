@@ -77,11 +77,8 @@ export default function Proveedores(): React.ReactElement {
         paisId: draft.paisId || undefined,
         departamentoId: draft.departamentoId || undefined,
         ciudadId: draft.ciudadId || undefined,
+        responsabilidadesFiscales: draft.responsabilidadesFiscales,
       });
-      const proveedorId = String(created._id || (created as { iud?: string }).iud || '');
-      if (draft.responsabilidadesFiscales.length && proveedorId) {
-        await inventarioService.guardarResponsabilidadesProveedor(proveedorId, draft.responsabilidadesFiscales);
-      }
       setProveedores((prev) => [...prev, created].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')));
       setModalOpen(false);
       toast.success('Proveedor registrado.');
@@ -101,13 +98,10 @@ export default function Proveedores(): React.ReactElement {
         nombre: draft.nombre.trim(), nit: draft.nit.trim(), correo: draft.correo.trim(), telefono: draft.telefono.trim(),
         direccion: draft.direccion.trim(), aplicaIva: draft.aplicaIva, tipoProveedorId: draft.tipoProveedorId || undefined,
         paisId: draft.paisId || undefined, departamentoId: draft.departamentoId || undefined, ciudadId: draft.ciudadId || undefined,
+        // Viven en otra coleccion, pero viajan en el mismo payload: el backend las persiste en la
+        // misma transaccion. Vacio significa "sin cambios", nunca borrado.
+        responsabilidadesFiscales: draft.responsabilidadesFiscales,
       });
-      // Viven en otra coleccion: el PUT del proveedor no las incluye, hay que
-      // reemplazar el set aparte. Vacio significa "sin cambios": el backend
-      // rechaza una seleccion vacia, no la interpreta como borrado.
-      if (draft.responsabilidadesFiscales.length) {
-        await inventarioService.guardarResponsabilidadesProveedor(proveedorEditar._id, draft.responsabilidadesFiscales);
-      }
       setProveedores((prev) => prev.map((item) => item._id === updated._id ? updated : item));
       setProveedorEditar(null);
       toast.success('Proveedor actualizado.');

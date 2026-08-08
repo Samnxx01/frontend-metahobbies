@@ -1041,11 +1041,8 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
         paisId: draft.paisId || undefined,
         departamentoId: draft.departamentoId || undefined,
         ciudadId: draft.ciudadId || undefined,
+        responsabilidadesFiscales: draft.responsabilidadesFiscales,
       });
-      const proveedorId = String(created._id || (created as { iud?: string }).iud || '');
-      if (draft.responsabilidadesFiscales.length && proveedorId) {
-        await inventarioService.guardarResponsabilidadesProveedor(proveedorId, draft.responsabilidadesFiscales);
-      }
       setProveedoresCompra((prev) => [...prev, created].sort((a, b) => a.nombre.localeCompare(b.nombre)));
       setProveedorModalOpen(false);
       toast.success('Proveedor registrado.');

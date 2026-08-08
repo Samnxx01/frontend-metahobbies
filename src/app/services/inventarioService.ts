@@ -1792,6 +1792,8 @@ const inventarioService = {
     paisId?: string;
     departamentoId?: string;
     ciudadId?: string;
+    /** Códigos DIAN (Lista 48). El backend los persiste en la misma transacción. Vacío/ausente = sin cambios. */
+    responsabilidadesFiscales?: string[];
   }): Promise<InventarioProveedor> {
     const resp = await apiFetch('/api/inventario/compras/proveedores', { method: 'POST', body: payload });
     return resp?.data as InventarioProveedor;
@@ -1811,6 +1813,8 @@ const inventarioService = {
   async actualizarProveedorCompra(id: string, payload: {
     nombre: string; nit: string; correo?: string; telefono?: string; direccion?: string;
     aplicaIva?: boolean; tipoProveedorId?: string; paisId?: string; departamentoId?: string; ciudadId?: string;
+    /** Códigos DIAN (Lista 48). El backend los persiste en la misma transacción. Vacío/ausente = sin cambios. */
+    responsabilidadesFiscales?: string[];
   }): Promise<InventarioProveedor> {
     const resp = await apiFetch(`/api/inventario/compras/proveedores/${id}`, { method: 'PUT', body: payload });
     return resp?.data as InventarioProveedor;

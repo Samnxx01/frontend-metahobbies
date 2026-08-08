@@ -275,6 +275,7 @@ export default function InventarioOrdenComprasTab({
         paisId: draft.paisId || undefined,
         departamentoId: draft.departamentoId || undefined,
         ciudadId: draft.ciudadId || undefined,
+        responsabilidadesFiscales: draft.responsabilidadesFiscales,
       });
       setLocalProveedores((prev) => prev.map((item) => proveedorId(item) === id ? actualizado : item));
       onProveedorActualizado?.(actualizado);
