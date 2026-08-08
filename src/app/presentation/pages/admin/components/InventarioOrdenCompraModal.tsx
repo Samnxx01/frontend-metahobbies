@@ -168,12 +168,21 @@ export default function InventarioOrdenCompraModal({
   const [lines, setLines] = useState<OcLineDraft[]>([]);
   const [enviando, setEnviando] = useState(false);
   const [siguienteNumeroOrden, setSiguienteNumeroOrden] = useState('');
+  /**
+   * El backend ignora todo % digitado a mano y recalcula desde la ReglaContable. Para que el
+   * usuario no descubra el cambio recién en la orden guardada, el primer "Guardar orden" con
+   * líneas manuales no envía: reemplaza los % por los de la regla, los muestra en pantalla y pide
+   * confirmar. El segundo clic ya guarda. Se reinicia al abrir el modal y al cambiar de proveedor
+   * (ambos invalidan las tarifas resueltas).
+   */
+  const [tarifaManualConfirmada, setTarifaManualConfirmada] = useState(false);
 
   const ordenEdicionId = getOrdenCompraId(ordenEdicion);
   const esEdicion = Boolean(ordenEdicionId);
 
   useEffect(() => {
     if (!open) return;
+    setTarifaManualConfirmada(false);
     const b0 = bodegasActivas[0]?.nombre ?? '';
     if (esEdicion && ordenEdicion) {
       const oc = ordenEdicion;
@@ -310,6 +319,21 @@ export default function InventarioOrdenCompraModal({
   };
 
   /**
+   * Edición manual del "Imp. %": desliga la línea de su regla contable y anula la confirmación
+   * previa, para que el guardado vuelva a mostrar qué tarifa se aplicará realmente.
+   */
+  const editarImpuestoManual = (id: LineId, valor: string): void => {
+    setTarifaManualConfirmada(false);
+    updateLine(id, {
+      impuestoPorcentaje: valor,
+      codigoReglaImpuesto: null,
+      baseCalculoImpuesto: null,
+      montoFijoImpuesto: 0,
+      motivoReglaImpuesto: null,
+    });
+  };
+
+  /**
    * Consulta la tarifa de IVA parametrizada en "Reglas contables" para compras y autocompleta el
    * campo "Imp. %" de la línea (junto con el código de la regla usada, para trazabilidad). Si el
    * usuario edita el % a mano, el código de regla se limpia; `restaurarTarifaParametrizada` vuelve
@@ -389,6 +413,8 @@ export default function InventarioOrdenCompraModal({
 
   const cambiarProveedor = (id: string): void => {
     setProveedorId(id);
+    // Cambiar de proveedor cambia la regla aplicable: la confirmación anterior ya no vale.
+    setTarifaManualConfirmada(false);
     setLines((prev) => prev.map((linea) => linea.codigoReglaImpuesto
       ? { ...linea, impuestoPorcentaje: '0', codigoReglaImpuesto: null, baseCalculoImpuesto: null, montoFijoImpuesto: 0, motivoReglaImpuesto: null }
       : linea
@@ -466,18 +492,6 @@ export default function InventarioOrdenCompraModal({
   const totalOrden = useMemo(() => lines.reduce((acc, l) => acc + calcTotalLinea(l), 0), [lines]);
 
   const guardar = async (): Promise<void> => {
-    // El backend ignora todo % digitado a mano y recalcula desde la ReglaContable parametrizada.
-    // Avisar antes de enviar evita que el usuario crea que su % se guardó tal cual.
-    const lineasImpuestoManual = lines.filter(
-      (l) => String(l.sku || '').trim() && !l.codigoReglaImpuesto && Number(l.impuestoPorcentaje) > 0
-    );
-    if (lineasImpuestoManual.length > 0) {
-      toast.info(
-        `El % digitado se reemplazará por la tarifa de la regla contable en ${lineasImpuestoManual.length} línea(s): ` +
-        lineasImpuestoManual.map((l) => String(l.sku || '').trim().toUpperCase()).join(', ') +
-        '. Usa «Usar tarifa parametrizada» para verla antes de guardar.'
-      );
-    }
     if (!proveedorId) {
       toast.error('Selecciona un proveedor.');
       return;
@@ -507,6 +521,35 @@ export default function InventarioOrdenCompraModal({
     }
     if (!tieneRem && !tieneFac) {
       toast.error('Indica número de remisión o número de factura electrónico (uno solo).');
+      return;
+    }
+
+    // Última puerta antes de enviar: el backend ignora todo % digitado a mano y recalcula desde la
+    // ReglaContable. En el primer intento se resuelve la tarifa real, se pinta en pantalla (para que
+    // el usuario vea subtotales y totales definitivos) y se pide confirmar; el segundo clic guarda.
+    const lineasImpuestoManual = lines.filter(
+      (l) => String(l.sku || '').trim() && !l.codigoReglaImpuesto && Number(l.impuestoPorcentaje) > 0
+    );
+    if (lineasImpuestoManual.length > 0 && !tarifaManualConfirmada) {
+      const reemplazos: string[] = [];
+      const fallidas: string[] = [];
+      for (const linea of lineasImpuestoManual) {
+        const skuLinea = String(linea.sku || '').trim().toUpperCase();
+        const digitado = Number(linea.impuestoPorcentaje) || 0;
+        const resultado = await aplicarTarifaImpuestoAutomatica(linea.id, skuLinea, linea.productoId);
+        if (resultado.ok) reemplazos.push(`${skuLinea}: ${digitado}% → ${resultado.tarifa}% (${resultado.codigo})`);
+        else fallidas.push(`${skuLinea}: ${mensajeMotivoSinRegla(resultado.motivo)}`);
+      }
+      // Sin regla activa el backend rechaza la orden; no tiene sentido pedir confirmación.
+      if (fallidas.length > 0) {
+        toast.error(`No hay regla contable de IVA aplicable. ${fallidas.join(' | ')}`);
+        return;
+      }
+      setTarifaManualConfirmada(true);
+      toast.warning(
+        `El % digitado no se guarda: manda la regla contable. Se aplicó ${reemplazos.join(' | ')}. ` +
+        'Revisa los totales y pulsa «Guardar orden» de nuevo para confirmar.'
+      );
       return;
     }
 
@@ -736,7 +779,7 @@ export default function InventarioOrdenCompraModal({
                     <div className="space-y-1.5"><Label>Descuento (COP)</Label><Input type="number" min="0" step={1} value={line.descuento} onChange={(e) => updateLine(line.id, { descuento: e.target.value })} /></div>
                     <div className="space-y-1.5">
                       <Label>Impuesto %</Label>
-                      <Input type="number" min="0" step="any" value={line.impuestoPorcentaje} onChange={(e) => updateLine(line.id, { impuestoPorcentaje: e.target.value, codigoReglaImpuesto: null, baseCalculoImpuesto: null, montoFijoImpuesto: 0, motivoReglaImpuesto: null })} />
+                      <Input type="number" min="0" step="any" value={line.impuestoPorcentaje} onChange={(e) => editarImpuestoManual(line.id, e.target.value)} />
                       {line.codigoReglaImpuesto ? (
                         <p className="text-[11px] leading-tight text-muted-foreground">{line.codigoReglaImpuesto}</p>
                       ) : String(line.sku || '').trim() ? (
@@ -913,15 +956,7 @@ export default function InventarioOrdenCompraModal({
                           step="any"
                           className="border-input bg-background px-2 text-right"
                           value={line.impuestoPorcentaje}
-                          onChange={(e) =>
-                            updateLine(line.id, {
-                              impuestoPorcentaje: e.target.value,
-                              codigoReglaImpuesto: null,
-                              baseCalculoImpuesto: null,
-                              montoFijoImpuesto: 0,
-                              motivoReglaImpuesto: null,
-                            })
-                          }
+                          onChange={(e) => editarImpuestoManual(line.id, e.target.value)}
                           placeholder="%"
                         />
                         {line.codigoReglaImpuesto ? (
