@@ -636,6 +636,13 @@ export interface InventarioSaldo {
 export interface InventarioMovimiento {
   _id: string;
   sku: string;
+  /** Nombre del producto en catálogo, resuelto por SKU en el backend. Vacío si el SKU no existe. */
+  nombreProducto?: string;
+  /** Proveedor del movimiento. Solo entradas por comprobante de compra; el resto queda vacío. */
+  proveedorId?: string | null;
+  proveedorNombre?: string;
+  proveedorNit?: string;
+  numeroOrdenProveedor?: string | null;
   tipoMovimiento: TipoMovimiento;
   tipoMovimientoConfigId?: InventarioTipoMovimiento | string | null;
   motivo: MotivoMovimiento;
@@ -841,8 +848,27 @@ export interface InventarioValorHistoricoEntry {
   esPrimerRegistro?: boolean;
 }
 
+/** Opción del filtro «Proveedor» de la tabla de stock. `SIN_PROVEEDOR` agrupa lo no atribuible. */
+export interface ProveedorStockOpcion {
+  proveedorId: string;
+  proveedorNombre: string;
+  proveedorNit: string;
+}
+
 export interface StockActualItem {
   sku: string;
+  /** Nombre del producto en catálogo, resuelto por SKU en el backend. Vacío si el SKU no existe. */
+  nombreProducto?: string;
+  /**
+   * Proveedor dueño de estas unidades. El backend parte cada SKU+bodega en una fila por proveedor
+   * usando los lotes FIFO vigentes, así que `cantidadDisponible` y los valores son de ese proveedor.
+   * `null` = unidades sin cadena a una orden de compra (ajustes, traslados, carga inicial).
+   */
+  proveedorId?: string | null;
+  proveedorNombre?: string;
+  proveedorNit?: string;
+  /** Órdenes de compra que aportaron estas unidades. */
+  proveedorOrdenes?: string[];
   bodega: string;
   ubicacion?: UbicacionInventario;
   cantidadDisponible: number;
@@ -2029,12 +2055,25 @@ const inventarioService = {
     return { data: resp.data as AjusteInventario, msg: resp.msg };
   },
 
-  async stockActual(params?: { bodega?: string; sku?: string }): Promise<StockActualItem[]> {
+  async stockActual(params?: { bodega?: string; sku?: string; proveedorId?: string }): Promise<StockActualItem[]> {
     const resp = await apiFetch(
-      `/api/inventario/reportes/stock-actual${buildQuery({ bodega: params?.bodega, sku: params?.sku })}`,
+      `/api/inventario/reportes/stock-actual${buildQuery({
+        bodega: params?.bodega,
+        sku: params?.sku,
+        proveedorId: params?.proveedorId,
+      })}`,
       { method: 'GET' },
     );
     return (resp?.data ?? []) as StockActualItem[];
+  },
+
+  /** Proveedores presentes en el stock actual, para poblar el filtro de la tabla. */
+  async proveedoresStockActual(params?: { bodega?: string; sku?: string }): Promise<ProveedorStockOpcion[]> {
+    const resp = await apiFetch(
+      `/api/inventario/reportes/stock-actual/proveedores${buildQuery({ bodega: params?.bodega, sku: params?.sku })}`,
+      { method: 'GET' },
+    );
+    return (resp?.data ?? []) as ProveedorStockOpcion[];
   },
 };
 

@@ -11,11 +11,17 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 type StockFiltro = {
   sku: string;
 };
+
+/** Valor del selector para no filtrar. Radix Select no admite `value=""`. */
+const TODOS_PROVEEDORES = '__TODOS__';
+/** Agrupa las unidades sin cadena a una orden de compra. Espeja `SIN_PROVEEDOR` del backend. */
+const SIN_PROVEEDOR = 'SIN_PROVEEDOR';
 
 type InventarioStockTabProps = {
   stockFiltro: StockFiltro;
@@ -48,6 +54,7 @@ export default function InventarioStockTab({
   const [historicoModalOpen, setHistoricoModalOpen] = useState(false);
   const [paginaKardex, setPaginaKardex] = useState(1);
   const [paginaStock, setPaginaStock] = useState(1);
+  const [filtroProveedor, setFiltroProveedor] = useState<string>(TODOS_PROVEEDORES);
   const skuConsultado = stockFiltro.sku.trim().toUpperCase();
 
   const KARDEX_PAGE_SIZE = 10;
@@ -65,17 +72,37 @@ export default function InventarioStockTab({
   // `stockActual` llega sin límite desde el backend (`stockActualCombinadoEnriquecido`),
   // así que pintar el array completo generaba tablas de miles de celdas en cada render.
   // Los totales del encabezado los sigue calculando el padre sobre el array íntegro.
+  // El backend ya devuelve una fila por SKU + bodega + proveedor, así que el filtro es un
+  // subconjunto exacto de lo cargado: se resuelve en cliente, sin ida y vuelta al servidor.
+  const proveedoresDisponibles = useMemo(() => {
+    const mapa = new Map<string, string>();
+    for (const item of stockActual) {
+      const id = item.proveedorId || SIN_PROVEEDOR;
+      if (!mapa.has(id)) mapa.set(id, item.proveedorNombre || 'Sin proveedor');
+    }
+    return [...mapa.entries()]
+      .map(([proveedorId, proveedorNombre]) => ({ proveedorId, proveedorNombre }))
+      .sort((a, b) => a.proveedorNombre.localeCompare(b.proveedorNombre, 'es'));
+  }, [stockActual]);
+
+  const stockFiltrado = useMemo(
+    () => (filtroProveedor === TODOS_PROVEEDORES
+      ? stockActual
+      : stockActual.filter((item) => (item.proveedorId || SIN_PROVEEDOR) === filtroProveedor)),
+    [stockActual, filtroProveedor],
+  );
+
   const STOCK_PAGE_SIZE = 25;
-  const totalPaginasStock = Math.max(1, Math.ceil(stockActual.length / STOCK_PAGE_SIZE));
+  const totalPaginasStock = Math.max(1, Math.ceil(stockFiltrado.length / STOCK_PAGE_SIZE));
   const paginaStockActual = Math.min(paginaStock, totalPaginasStock);
   const stockVisible = useMemo(
-    () => stockActual.slice((paginaStockActual - 1) * STOCK_PAGE_SIZE, paginaStockActual * STOCK_PAGE_SIZE),
-    [stockActual, paginaStockActual],
+    () => stockFiltrado.slice((paginaStockActual - 1) * STOCK_PAGE_SIZE, paginaStockActual * STOCK_PAGE_SIZE),
+    [stockFiltrado, paginaStockActual],
   );
 
   useEffect(() => {
     setPaginaStock(1);
-  }, [stockActual]);
+  }, [stockActual, filtroProveedor]);
 
   const historicoValor = useMemo(
     () => buildHistoricoValor(stockActual, kardex, skuConsultado),
@@ -133,8 +160,30 @@ export default function InventarioStockTab({
               <CardTitle className="flex items-center gap-2"><Package className="h-5 w-5" /> Stock actual</CardTitle>
               <CardDescription>
                 Saldos en <span className="font-medium text-foreground">{etiquetaVista}</span>.
+                Una fila por proveedor: el saldo se atribuye por lotes FIFO vigentes.
                 Valor inicial = primer registro kardex; valor actual = saldo vigente.
               </CardDescription>
+              {proveedoresDisponibles.length > 1 ? (
+                <div className="mt-3 flex items-center gap-2">
+                  <Label htmlFor="filtro-proveedor-stock" className="text-xs font-medium">Proveedor</Label>
+                  <Select value={filtroProveedor} onValueChange={setFiltroProveedor}>
+                    <SelectTrigger id="filtro-proveedor-stock" className="h-8 w-64 text-sm">
+                      <SelectValue placeholder="Todos los proveedores" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={TODOS_PROVEEDORES}>Todos los proveedores</SelectItem>
+                      {proveedoresDisponibles.map((proveedor) => (
+                        <SelectItem key={proveedor.proveedorId} value={proveedor.proveedorId}>
+                          {proveedor.proveedorNombre}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {filtroProveedor !== TODOS_PROVEEDORES ? (
+                    <span className="text-xs text-muted-foreground">{stockFiltrado.length} fila(s)</span>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
             <Button
               type="button"
@@ -153,6 +202,7 @@ export default function InventarioStockTab({
                 <TableHeader>
                   <TableRow>
                     <TableHead>SKU</TableHead>
+                    <TableHead>Proveedor</TableHead>
                     <TableHead>Bodega</TableHead>
                     <TableHead className="text-right">Disponible</TableHead>
                     <TableHead className="text-right">Costo prom.</TableHead>
@@ -162,8 +212,19 @@ export default function InventarioStockTab({
                 </TableHeader>
                 <TableBody>
                   {stockVisible.map((item) => (
-                    <TableRow key={`${item.sku}-${item.bodega}`}>
-                      <TableCell className="font-medium">{item.sku}</TableCell>
+                    <TableRow key={`${item.sku}-${item.bodega}-${item.proveedorId || SIN_PROVEEDOR}`}>
+                      <TableCell className="font-medium">
+                        {item.sku}
+                        {item.nombreProducto ? (
+                          <span className="block text-xs font-normal text-muted-foreground">{item.nombreProducto}</span>
+                        ) : null}
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-sm">{item.proveedorNombre || 'Sin proveedor'}</span>
+                        {item.proveedorOrdenes?.length ? (
+                          <span className="block text-xs text-muted-foreground">{item.proveedorOrdenes.join(', ')}</span>
+                        ) : null}
+                      </TableCell>
                       <TableCell>{item.bodega}</TableCell>
                       <TableCell className="text-right">{Number(item.cantidadDisponible || 0).toLocaleString('es-CO')}</TableCell>
                       <TableCell className="text-right">{money.format(Number(item.costoPromedioUnitario || 0))}</TableCell>
@@ -250,6 +311,7 @@ export default function InventarioStockTab({
                   <TableHead>Fecha</TableHead>
                   <TableHead>Tipo</TableHead>
                   <TableHead>SKU</TableHead>
+                  <TableHead>Proveedor</TableHead>
                   <TableHead>Documento</TableHead>
                   <TableHead>Ejecutado por</TableHead>
                   <TableHead className="text-right">Cantidad</TableHead>
@@ -269,7 +331,18 @@ export default function InventarioStockTab({
                         {getTipoMovimientoLabel(mov)}
                       </Badge>
                     </TableCell>
-                    <TableCell>{mov.sku}</TableCell>
+                    <TableCell>
+                      {mov.sku}
+                      {mov.nombreProducto ? (
+                        <span className="block text-xs text-muted-foreground">{mov.nombreProducto}</span>
+                      ) : null}
+                    </TableCell>
+                    <TableCell>
+                      <span className="text-sm">{mov.proveedorNombre || '—'}</span>
+                      {mov.numeroOrdenProveedor ? (
+                        <span className="block text-xs text-muted-foreground">{mov.numeroOrdenProveedor}</span>
+                      ) : null}
+                    </TableCell>
                     <TableCell>{mov.documentoRelacionado?.tipo} {mov.documentoRelacionado?.numero}</TableCell>
                     <TableCell>
                       <span className="block text-sm">{mov.auditoria?.usuarioNombre || mov.auditoria?.usuarioCorreo || 'Sistema'}</span>
