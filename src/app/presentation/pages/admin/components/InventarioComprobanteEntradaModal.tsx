@@ -56,6 +56,10 @@ export type InventarioComprobanteEntradaModalProps = {
 
 const getOrdenFromData = (data: RecepcionOrdenCompraResponse | null): InventarioOrdenCompra | null => data?.orden ?? null;
 
+const nombreProductoRecepcion = (sku: string, ordenItems: InventarioOrdenCompra['items'] | undefined): string =>
+  ordenItems?.find((item) => String(item.sku || '').toUpperCase() === String(sku || '').toUpperCase())?.nombreProducto
+  || 'Producto sin nombre';
+
 const subtotalRecepcionItem = (
   it: { sku: string; cantidadRecibida: number; costoUnitario: number; subtotal?: number },
   ordenItems: InventarioOrdenCompra['items'] | undefined,
@@ -387,7 +391,7 @@ export default function InventarioComprobanteEntradaModal({
                   return (
                     <article key={`${it.sku}-${it.bodega}-${idx}`} className="rounded-md border border-border bg-card p-3">
                       <div className="flex items-start justify-between gap-3">
-                        <p className="min-w-0 break-words text-sm text-foreground">{it.bodega}</p>
+                        <div className="min-w-0"><p className="break-words text-sm font-medium text-foreground">{nombreProductoRecepcion(it.sku, orden?.items)}</p><p className="text-xs text-muted-foreground">{it.bodega}</p><p className="text-xs text-muted-foreground">{orden?.proveedor?.nombre || 'Proveedor no identificado'}</p></div>
                         <span className="shrink-0 font-mono text-xs text-muted-foreground">{it.sku}</span>
                       </div>
                       <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
@@ -403,7 +407,8 @@ export default function InventarioComprobanteEntradaModal({
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>SKU</TableHead>
+                      <TableHead>Producto / SKU</TableHead>
+                      <TableHead>Proveedor</TableHead>
                       <TableHead>Bodega</TableHead>
                       <TableHead className="text-right">Cant. recibida</TableHead>
                       <TableHead className="text-right">Costo unit.</TableHead>
@@ -415,7 +420,8 @@ export default function InventarioComprobanteEntradaModal({
                       const subtotal = subtotalRecepcionItem(it, orden?.items);
                       return (
                         <TableRow key={`${it.sku}-${it.bodega}-${idx}`}>
-                          <TableCell className="font-mono text-xs">{it.sku}</TableCell>
+                          <TableCell><span className="block text-sm font-medium">{nombreProductoRecepcion(it.sku, orden?.items)}</span><span className="block font-mono text-xs text-muted-foreground">{it.sku}</span></TableCell>
+                          <TableCell><span className="block text-sm">{orden?.proveedor?.nombre || 'Proveedor no identificado'}</span>{orden?.proveedor?.nit ? <span className="block text-xs text-muted-foreground">NIT {orden.proveedor.nit}</span> : null}</TableCell>
                           <TableCell className="text-sm text-foreground">{it.bodega}</TableCell>
                           <TableCell className="text-right tabular-nums">{Number(it.cantidadRecibida ?? 0)}</TableCell>
                           <TableCell className="text-right tabular-nums">{moneyCo(Number(it.costoUnitario ?? 0))}</TableCell>

@@ -26,6 +26,13 @@ const csvCell = (value: string | number): string => {
   return raw;
 };
 
+const tokenCss = (nombre: string): string => {
+  if (typeof document === 'undefined') throw new Error('La paleta activa no esta disponible para imprimir.');
+  const valor = getComputedStyle(document.documentElement).getPropertyValue(nombre).trim();
+  if (!valor) throw new Error(`Falta el token dinamico ${nombre} de la paleta activa.`);
+  return valor;
+};
+
 export const descargarReporteKardexCsv = (
   detalle: Pick<ComprobanteEntradaDetalle, 'numeroRecepcion' | 'reporteKardex'>,
 ): void => {
@@ -33,7 +40,10 @@ export const descargarReporteKardexCsv = (
   if (!lineas.length) return;
 
   const header = [
+    'Producto',
     'SKU',
+    'Proveedor',
+    'NIT proveedor',
     'Bodega',
     'Tipo movimiento',
     'Motivo',
@@ -50,7 +60,10 @@ export const descargarReporteKardexCsv = (
   const rows = lineas.map((linea) => {
     const doc = linea.movimiento?.documentoRelacionado;
     return [
+      linea.nombreProducto || '',
       linea.sku,
+      linea.proveedor?.nombre || '',
+      linea.proveedor?.nit || '',
       linea.bodega,
       labelTipoMovimiento(linea),
       linea.movimiento?.motivo || 'COMPRA',
@@ -94,7 +107,8 @@ export const imprimirReporteKardex = (
     const doc = linea.movimiento?.documentoRelacionado;
     return `
       <tr>
-        <td>${escapePrintHtml(linea.sku)}</td>
+        <td><strong>${escapePrintHtml(linea.nombreProducto || 'Producto sin nombre')}</strong><br><span class="muted mono">${escapePrintHtml(linea.sku)}</span></td>
+        <td>${escapePrintHtml(linea.proveedor?.nombre || 'Proveedor no identificado')}<br><span class="muted">${escapePrintHtml(linea.proveedor?.nit ? `NIT ${linea.proveedor.nit}` : '')}</span></td>
         <td>${escapePrintHtml(linea.bodega)}</td>
         <td>${escapePrintHtml(labelTipoMovimiento(linea))}</td>
         <td class="num">${escapePrintHtml(formatQty(Number(linea.movimiento?.cantidad || 0)))}</td>
@@ -106,6 +120,14 @@ export const imprimirReporteKardex = (
       </tr>
     `;
   }).join('');
+
+  const colorFondo = tokenCss('--background');
+  const colorTexto = tokenCss('--foreground');
+  const colorTarjeta = tokenCss('--card');
+  const colorTarjetaTexto = tokenCss('--card-foreground');
+  const colorMuted = tokenCss('--muted');
+  const colorMutedTexto = tokenCss('--muted-foreground');
+  const colorBorde = tokenCss('--border');
 
   const footer: PrintDocumentFooterConfig = options.printFooter ?? {
     row: {
@@ -132,7 +154,7 @@ export const imprimirReporteKardex = (
       <table>
         <thead>
           <tr>
-            <th>SKU</th><th>Bodega</th><th>Tipo mov.</th>
+            <th>Producto / SKU</th><th>Proveedor</th><th>Bodega</th><th>Tipo mov.</th>
             <th class="num">Cant.</th><th class="num">Stock ant.</th><th class="num">Stock post.</th>
             <th class="num">Saldo act.</th><th class="num">Costo prom.</th><th>Documento</th>
           </tr>
@@ -147,14 +169,18 @@ export const imprimirReporteKardex = (
     bodyHtml,
     footer,
     extraStyles: `
+      html, body { background: hsl(${colorFondo}); color: hsl(${colorTexto}); }
       h1 { margin: 0 0 14px; font-size: 18px; }
-      .card { border: 1px solid #d1d5db; border-radius: 8px; padding: 16px; }
+      .card { border: 1px solid hsl(${colorBorde}); border-radius: 8px; padding: 16px; background: hsl(${colorTarjeta}); color: hsl(${colorTarjetaTexto}); }
       .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 24px; margin-bottom: 14px; }
-      .label { color: #6b7280; font-size: 11px; margin-bottom: 3px; }
+      .label, .muted { color: hsl(${colorMutedTexto}); font-size: 11px; margin-bottom: 3px; }
       .value { font-weight: 700; }
       .mono { font-family: Consolas, monospace; }
       table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-      th, td { border-bottom: 1px solid #e5e7eb; padding: 8px 6px; text-align: left; font-size: 11px; }
+      th { background: hsl(${colorMuted}); color: hsl(${colorMutedTexto}); }
+      th, td { border-bottom: 1px solid hsl(${colorBorde}); padding: 8px 6px; text-align: left; font-size: 11px; }
+      .print-doc-footer { background: hsl(${colorFondo}); color: hsl(${colorTexto}); border-color: hsl(${colorBorde}); }
+      .print-doc-footer-center, .print-doc-footer-line--bold { color: hsl(${colorTexto}); }
       .num { text-align: right; font-variant-numeric: tabular-nums; }
       .strong { font-weight: 700; }
     `,

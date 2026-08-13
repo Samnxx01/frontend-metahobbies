@@ -163,7 +163,7 @@ export default function InventarioStockTab({
                 Una fila por proveedor: el saldo se atribuye por lotes FIFO vigentes.
                 Valor inicial = primer registro kardex; valor actual = saldo vigente.
               </CardDescription>
-              {proveedoresDisponibles.length > 1 ? (
+              {proveedoresDisponibles.length > 0 ? (
                 <div className="mt-3 flex items-center gap-2">
                   <Label htmlFor="filtro-proveedor-stock" className="text-xs font-medium">Proveedor</Label>
                   <Select value={filtroProveedor} onValueChange={setFiltroProveedor}>
@@ -201,6 +201,7 @@ export default function InventarioStockTab({
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead>Producto</TableHead>
                     <TableHead>SKU</TableHead>
                     <TableHead>Proveedor</TableHead>
                     <TableHead>Bodega</TableHead>
@@ -213,12 +214,10 @@ export default function InventarioStockTab({
                 <TableBody>
                   {stockVisible.map((item) => (
                     <TableRow key={`${item.sku}-${item.bodega}-${item.proveedorId || SIN_PROVEEDOR}`}>
-                      <TableCell className="font-medium">
-                        {item.sku}
-                        {item.nombreProducto ? (
-                          <span className="block text-xs font-normal text-muted-foreground">{item.nombreProducto}</span>
-                        ) : null}
+                      <TableCell>
+                        <span className="block text-sm font-semibold">{item.nombreProducto || 'Producto sin nombre'}</span>
                       </TableCell>
+                      <TableCell className="font-mono text-xs">{item.sku}</TableCell>
                       <TableCell>
                         <span className="text-sm">{item.proveedorNombre || 'Sin proveedor'}</span>
                         {item.proveedorOrdenes?.length ? (
@@ -310,6 +309,7 @@ export default function InventarioStockTab({
                 <TableRow>
                   <TableHead>Fecha</TableHead>
                   <TableHead>Tipo</TableHead>
+                  <TableHead>Producto</TableHead>
                   <TableHead>SKU</TableHead>
                   <TableHead>Proveedor</TableHead>
                   <TableHead>Documento</TableHead>
@@ -331,12 +331,8 @@ export default function InventarioStockTab({
                         {getTipoMovimientoLabel(mov)}
                       </Badge>
                     </TableCell>
-                    <TableCell>
-                      {mov.sku}
-                      {mov.nombreProducto ? (
-                        <span className="block text-xs text-muted-foreground">{mov.nombreProducto}</span>
-                      ) : null}
-                    </TableCell>
+                    <TableCell>{mov.nombreProducto || 'Producto sin nombre'}</TableCell>
+                    <TableCell className="font-mono text-xs">{mov.sku}</TableCell>
                     <TableCell>
                       <span className="text-sm">{mov.proveedorNombre || '—'}</span>
                       {mov.numeroOrdenProveedor ? (

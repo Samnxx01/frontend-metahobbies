@@ -44,6 +44,33 @@ export function hexToHsl(hex: string): string {
     return `${hDeg} ${sPct}% ${lPct}%`;
 }
 
+const hexToRgb = (hex: string): [number, number, number] => {
+    const clean = String(hex || '').replace('#', '');
+    const full = clean.length === 3 ? clean.split('').map(c => c + c).join('') : clean.padEnd(6, '0');
+    return [0, 2, 4].map(offset => parseInt(full.slice(offset, offset + 2), 16) || 0) as [number, number, number];
+};
+
+const luminancia = (hex: string): number => {
+    const rgb = hexToRgb(hex).map(value => {
+        const channel = value / 255;
+        return channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+    });
+    return (0.2126 * rgb[0]) + (0.7152 * rgb[1]) + (0.0722 * rgb[2]);
+};
+
+const contraste = (a: string, b: string): number => {
+    const [claro, oscuro] = [luminancia(a), luminancia(b)].sort((x, y) => y - x);
+    return (claro + 0.05) / (oscuro + 0.05);
+};
+
+/** Conserva COLOR_TEXT cuando es legible; si no, elige negro o blanco con contraste WCAG. */
+const textoLegible = (fondo: string, preferido: string): string => {
+    if (contraste(fondo, preferido) >= 4.5) return hexToHsl(preferido);
+    return contraste(fondo, '#000000') >= contraste(fondo, '#FFFFFF')
+        ? hexToHsl('#000000')
+        : hexToHsl('#FFFFFF');
+};
+
 /**
  * Mapeo de colores del email (PaletaColores) → variables CSS de la app.
  * Cada entrada: [variableCSS, valorHSL]
@@ -80,30 +107,29 @@ export function aplicarPaletaEnApp(colores: ColoresPaleta): void {
     root.style.setProperty('--background', hsl('COLOR_BG'));
 
     // COLOR_TEXT → color de texto principal en toda la app
-    root.style.setProperty('--foreground', hsl('COLOR_TEXT'));
-    root.style.setProperty('--card-foreground', hsl('COLOR_TEXT'));
-    root.style.setProperty('--popover-foreground', hsl('COLOR_TEXT'));
+    root.style.setProperty('--foreground', textoLegible(colores.COLOR_BG, colores.COLOR_TEXT));
+    root.style.setProperty('--card-foreground', textoLegible(colores.COLOR_CHAMPAGNE, colores.COLOR_TEXT));
+    root.style.setProperty('--popover-foreground', textoLegible(colores.COLOR_CHAMPAGNE, colores.COLOR_TEXT));
 
     // COLOR_PRIMARY → color dominante de la app
     root.style.setProperty('--primary', hsl('COLOR_PRIMARY'));
     root.style.setProperty('--ring', hsl('COLOR_PRIMARY'));
-    // foreground del primary siempre blanco (legibilidad sobre el color)
-    root.style.setProperty('--primary-foreground', '0 0% 100%');
+    root.style.setProperty('--primary-foreground', textoLegible(colores.COLOR_PRIMARY, colores.COLOR_TEXT));
 
     // COLOR_ACCENT → acento y secondary
     root.style.setProperty('--accent', hsl('COLOR_ACCENT'));
-    root.style.setProperty('--accent-foreground', hsl('COLOR_TEXT'));
+    root.style.setProperty('--accent-foreground', textoLegible(colores.COLOR_ACCENT, colores.COLOR_TEXT));
 
     // COLOR_SUNSET → botones de acción y tono secundario complementario
     const sunsetHsl = hsl('COLOR_SUNSET');
     root.style.setProperty('--button', sunsetHsl);
-    root.style.setProperty('--button-foreground', hsl('COLOR_TEXT'));
+    root.style.setProperty('--button-foreground', textoLegible(colores.COLOR_SUNSET, colores.COLOR_TEXT));
     root.style.setProperty('--secondary', sunsetHsl);
-    root.style.setProperty('--secondary-foreground', hsl('COLOR_TEXT'));
+    root.style.setProperty('--secondary-foreground', textoLegible(colores.COLOR_SUNSET, colores.COLOR_TEXT));
 
     // COLOR_LIGHT → muted, border, input
     root.style.setProperty('--muted', hsl('COLOR_LIGHT'));
-    root.style.setProperty('--muted-foreground', hsl('COLOR_TEXT'));
+    root.style.setProperty('--muted-foreground', textoLegible(colores.COLOR_LIGHT, colores.COLOR_TEXT));
     root.style.setProperty('--border', hsl('COLOR_LIGHT'));
     root.style.setProperty('--input', hsl('COLOR_LIGHT'));
 
@@ -113,16 +139,16 @@ export function aplicarPaletaEnApp(colores: ColoresPaleta): void {
 
     // COLOR_PRIMARY también como destructive (tono de marca)
     root.style.setProperty('--destructive', hsl('COLOR_PRIMARY'));
-    root.style.setProperty('--destructive-foreground', '0 0% 100%');
+    root.style.setProperty('--destructive-foreground', textoLegible(colores.COLOR_PRIMARY, colores.COLOR_TEXT));
 
     // Estados semánticos — mapeados a la paleta para que nada quede quemado:
     // success→ACCENT, warning→SUNSET, info→LIGHT; texto de estado con COLOR_TEXT.
     root.style.setProperty('--success', hsl('COLOR_ACCENT'));
-    root.style.setProperty('--success-foreground', hsl('COLOR_TEXT'));
+    root.style.setProperty('--success-foreground', textoLegible(colores.COLOR_ACCENT, colores.COLOR_TEXT));
     root.style.setProperty('--warning', hsl('COLOR_SUNSET'));
-    root.style.setProperty('--warning-foreground', hsl('COLOR_TEXT'));
+    root.style.setProperty('--warning-foreground', textoLegible(colores.COLOR_SUNSET, colores.COLOR_TEXT));
     root.style.setProperty('--info', hsl('COLOR_LIGHT'));
-    root.style.setProperty('--info-foreground', hsl('COLOR_TEXT'));
+    root.style.setProperty('--info-foreground', textoLegible(colores.COLOR_LIGHT, colores.COLOR_TEXT));
 
     // Persistir en localStorage para restaurar al recargar
     localStorage.setItem('mabs_paleta_activa', JSON.stringify(colores));

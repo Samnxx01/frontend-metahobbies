@@ -489,6 +489,8 @@ export interface RecepcionOrdenCompraPayload {
 
 export interface ReporteKardexEntradaLinea {
   sku: string;
+  nombreProducto?: string | null;
+  proveedor?: { id?: string | null; nombre?: string | null; nit?: string | null } | null;
   bodega: string;
   movimientoKardexId?: string | null;
   movimientoLedgerId?: string | null;
@@ -733,6 +735,7 @@ export interface ComprobanteEntradaAjusteItem {
   lineaKey?: string;
   ordenItemIndex?: number | null;
   sku: string;
+  nombreProducto?: string | null;
   bodega: string;
   cantidadRecibida: number;
   costoUnitario: number;

@@ -275,7 +275,10 @@ export default function InventarioComprobanteEntradaVistaModal({
                   return (
                     <article key={key} className="rounded-md border border-border bg-card p-3">
                       <div className="flex items-start justify-between gap-3">
-                        <p className="min-w-0 break-words text-sm">{it.bodega}</p>
+                        <div className="min-w-0">
+                          <p className="break-words text-sm font-medium">{it.nombreProducto || 'Producto sin nombre'}</p>
+                          <p className="text-xs text-muted-foreground">{it.bodega}</p>
+                        </div>
                         <span className="shrink-0 font-mono text-xs text-muted-foreground">{it.sku}</span>
                       </div>
                       <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
@@ -300,7 +303,8 @@ export default function InventarioComprobanteEntradaVistaModal({
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>SKU</TableHead>
+                      <TableHead>Producto</TableHead>
+                      <TableHead>Proveedor</TableHead>
                       <TableHead>Bodega</TableHead>
                       <TableHead className="text-right">Recibido</TableHead>
                       <TableHead className="text-right">Disp. kardex</TableHead>
@@ -315,7 +319,11 @@ export default function InventarioComprobanteEntradaVistaModal({
                       const subtotal = calculada?.total ?? Number(it.subtotal || 0);
                       return (
                         <TableRow key={it.lineaKey || `${it.sku}-${it.bodega}`}>
-                          <TableCell className="font-mono text-xs">{it.sku}</TableCell>
+                          <TableCell>
+                            <span className="block text-sm font-medium">{it.nombreProducto || 'Producto sin nombre'}</span>
+                            <span className="block font-mono text-xs text-muted-foreground">{it.sku}</span>
+                          </TableCell>
+                          <TableCell><span className="block text-sm">{detalle.orden?.proveedor?.nombre || 'Proveedor no identificado'}</span>{detalle.orden?.proveedor?.nit ? <span className="block text-xs text-muted-foreground">NIT {detalle.orden.proveedor.nit}</span> : null}</TableCell>
                           <TableCell>{it.bodega}</TableCell>
                           <TableCell className="text-right tabular-nums">
                             {editando ? (

@@ -658,14 +658,14 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
         inventarioService.listarBodegas(),
         inventarioService.stockActual(),
         inventarioService.listarAjustes({ estado: ajusteFiltro }),
-        productosService.listarProductosAdmin({ estadoCatalogo: 'ACTIVO' }),
+        productosService.listarProductosAdmin({ estadoCatalogo: 'ACTIVO', resumenInventario: true }),
         inventarioService.listarTiposMovimientoAdmin(),
         inventarioService.listarUnidadesMedidaAdmin(),
         inventarioService.listarTiposUnidadMedida(),
-        inventarioService.listarProveedoresCompra(),
-        inventarioService.listarOrdenesCompra({ limit: 50 }),
+        Promise.resolve([]),
+        Promise.resolve([]),
         inventarioService.listarCausalesAjuste(),
-        inventarioService.listarComprobantesEntradaMovimientos(200),
+        Promise.resolve([]),
         productosService.listarTiposProducto(),
       ]);
       setConfig(configResp);
@@ -777,6 +777,25 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
     return () => {
       cancelled = true;
     };
+  }, [activeTab, loading]);
+
+  /** Catálogos pesados requeridos por Movimientos; no bloquean la pestaña Stock inicial. */
+  useEffect(() => {
+    if (activeTab !== 'movimientos' || loading) return;
+    let cancelled = false;
+    void Promise.all([
+      inventarioService.listarProveedoresCompra(),
+      inventarioService.listarOrdenesCompra({ limit: 50 }),
+      inventarioService.listarComprobantesEntradaMovimientos(200),
+    ]).then(([proveedores, ordenes, comprobantes]) => {
+      if (cancelled) return;
+      setProveedoresCompra(proveedores);
+      setOrdenesCompra(ordenes);
+      setComprobantesEntradaMov(comprobantes);
+    }).catch((error) => {
+      if (!cancelled) console.error('Error cargando datos de movimientos:', error);
+    });
+    return () => { cancelled = true; };
   }, [activeTab, loading]);
 
   /** Si el menú dinámico (GET tarjetas) no incluye la pestaña activa, ir a la primera visible. */

@@ -264,6 +264,7 @@ export interface FiltrosProductos {
   tipo?: string;
   estadoCatalogo?: string;
   destacado?: boolean;
+  resumenInventario?: boolean;
 }
 
 export interface AdminProductoPayload {
@@ -393,6 +394,7 @@ const productosService = {
     if (filtros.categoria) params.set('categoria', filtros.categoria);
     if (filtros.tipo) params.set('tipo', filtros.tipo);
     if (filtros.estadoCatalogo) params.set('estadoCatalogo', filtros.estadoCatalogo);
+    if (filtros.resumenInventario) params.set('resumenInventario', 'true');
     const query = params.toString() ? `?${params.toString()}` : '';
     const resp = await apiFetch(`/api/productos/listar${query}`, { method: 'GET' });
     return (resp?.data ?? []) as BackendProducto[];

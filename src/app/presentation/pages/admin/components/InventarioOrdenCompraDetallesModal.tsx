@@ -249,6 +249,10 @@ export default function InventarioOrdenCompraDetallesModal({
                       </div>
                       <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
                         <div className="col-span-2 min-w-0">
+                          <dt className="text-muted-foreground">Proveedor</dt>
+                          <dd className="break-words text-foreground">{orden.proveedor?.nombre || 'Proveedor no identificado'}{orden.proveedor?.nit ? ` · NIT ${orden.proveedor.nit}` : ''}</dd>
+                        </div>
+                        <div className="col-span-2 min-w-0">
                           <dt className="text-muted-foreground">Bodega</dt>
                           <dd className="break-words text-foreground">{it.bodega}</dd>
                         </div>
@@ -272,6 +276,7 @@ export default function InventarioOrdenCompraDetallesModal({
                     <TableRow>
                       <TableHead>SKU</TableHead>
                       <TableHead>Producto</TableHead>
+                      <TableHead>Proveedor</TableHead>
                       <TableHead>Bodega</TableHead>
                       <TableHead className="text-right">Cant. ord.</TableHead>
                       <TableHead className="text-right">Cant. rec.</TableHead>
@@ -290,6 +295,7 @@ export default function InventarioOrdenCompraDetallesModal({
                           <p className="text-sm text-foreground">{it.nombreProducto || '—'}</p>
                           {it.descripcion ? <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{it.descripcion}</p> : null}
                         </TableCell>
+                        <TableCell><span className="block text-sm">{orden.proveedor?.nombre || 'Proveedor no identificado'}</span>{orden.proveedor?.nit ? <span className="block text-xs text-muted-foreground">NIT {orden.proveedor.nit}</span> : null}</TableCell>
                         <TableCell className="text-sm text-foreground">{it.bodega}</TableCell>
                         <TableCell className="text-right tabular-nums">{Number(it.cantidadOrdenada ?? 0)}</TableCell>
                         <TableCell className="text-right tabular-nums">{Number((it as { cantidadRecibida?: number }).cantidadRecibida ?? 0)}</TableCell>
@@ -302,7 +308,7 @@ export default function InventarioOrdenCompraDetallesModal({
                     ))}
                     {(orden.items ?? []).length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={10} className="py-6 text-center text-sm text-muted-foreground">
+                        <TableCell colSpan={11} className="py-6 text-center text-sm text-muted-foreground">
                           Sin ítems.
                         </TableCell>
                       </TableRow>

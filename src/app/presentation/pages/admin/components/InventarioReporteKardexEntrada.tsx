@@ -54,8 +54,10 @@ export default function InventarioReporteKardexEntrada({
             <div key={`mobile-${linea.sku}-${linea.bodega}-${linea.movimientoKardexId || 'sin-id'}`} className="rounded-md border border-border bg-card p-3 text-sm">
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <p className="break-all font-mono text-xs font-semibold">{linea.sku}</p>
+                  <p className="break-words text-sm font-semibold">{linea.nombreProducto || 'Producto sin nombre'}</p>
+                  <p className="break-all font-mono text-xs text-muted-foreground">{linea.sku}</p>
                   <p className="break-words text-xs text-muted-foreground">{linea.bodega}</p>
+                  <p className="break-words text-xs text-muted-foreground">{linea.proveedor?.nombre || 'Proveedor no identificado'}{linea.proveedor?.nit ? ` · NIT ${linea.proveedor.nit}` : ''}</p>
                 </div>
                 <Badge variant="outline">Entrada {formatQty(Number(linea.movimiento?.cantidad || 0))}</Badge>
               </div>
@@ -75,7 +77,9 @@ export default function InventarioReporteKardexEntrada({
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead>Producto</TableHead>
               <TableHead>SKU</TableHead>
+              <TableHead>Proveedor</TableHead>
               <TableHead>Bodega</TableHead>
               {!compact ? <TableHead>Tipo mov.</TableHead> : null}
               <TableHead className="text-right">Cant. entrada</TableHead>
@@ -91,7 +95,9 @@ export default function InventarioReporteKardexEntrada({
               const doc = linea.movimiento?.documentoRelacionado;
               return (
                 <TableRow key={`${linea.sku}-${linea.bodega}-${linea.movimientoKardexId || 'sin-id'}`}>
+                  <TableCell><span className="block text-sm font-medium">{linea.nombreProducto || 'Producto sin nombre'}</span></TableCell>
                   <TableCell className="font-mono text-xs">{linea.sku}</TableCell>
+                  <TableCell><span className="block text-sm">{linea.proveedor?.nombre || 'Proveedor no identificado'}</span>{linea.proveedor?.nit ? <span className="block text-xs text-muted-foreground">NIT {linea.proveedor.nit}</span> : null}</TableCell>
                   <TableCell className="text-sm">{linea.bodega}</TableCell>
                   {!compact ? (
                     <TableCell className="text-xs text-foreground">{labelTipoMovimiento(linea)}</TableCell>

@@ -152,6 +152,11 @@ export default function InventarioReporteKardexModal({
                   </p>
                 ) : null}
               </div>
+              <div className="sm:col-span-2">
+                <p className="text-xs text-muted-foreground">Proveedor</p>
+                <p className="text-sm font-medium">{detalle.orden?.proveedor?.nombre || 'Proveedor no identificado'}</p>
+                {detalle.orden?.proveedor?.nit ? <p className="text-xs text-muted-foreground">NIT {detalle.orden.proveedor.nit}</p> : null}
+              </div>
             </div>
 
             {tieneReporte ? (
