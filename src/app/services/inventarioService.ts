@@ -798,6 +798,8 @@ export interface ComprobanteEntradaDetalle {
   puedeSalidaComprobante?: boolean;
 }
 
+const detalleComprobanteEnCurso = new Map<string, Promise<ComprobanteEntradaDetalle>>();
+
 export interface AjusteInventario {
   _id?: string;
   iud?: string;
@@ -1897,10 +1899,19 @@ const inventarioService = {
   },
 
   async obtenerDetalleComprobanteEntrada(recepcionId: string): Promise<ComprobanteEntradaDetalle> {
-    const resp = await apiFetch(`/api/inventario/compras/recepciones/${encodeURIComponent(recepcionId)}/detalle`, {
+    const id = String(recepcionId || '').trim();
+    const existente = detalleComprobanteEnCurso.get(id);
+    if (existente) return existente;
+
+    const solicitud = apiFetch(`/api/inventario/compras/recepciones/${encodeURIComponent(id)}/detalle`, {
       method: 'GET',
-    });
-    return resp?.data as ComprobanteEntradaDetalle;
+    }).then((resp) => resp?.data as ComprobanteEntradaDetalle);
+    detalleComprobanteEnCurso.set(id, solicitud);
+    try {
+      return await solicitud;
+    } finally {
+      if (detalleComprobanteEnCurso.get(id) === solicitud) detalleComprobanteEnCurso.delete(id);
+    }
   },
 
   async registrarTraslado(payload: {
