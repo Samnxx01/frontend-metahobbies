@@ -908,7 +908,7 @@ export default function PaletaRutasPage() {
                             <div className="border-t border-border" />
                             <div className="space-y-4">
                                 {COLOR_META.map(({ key, label, afecta }) => (
-                                    <div key={key} className="flex items-start gap-4 p-3 rounded-lg border border-border bg-card">
+                                    <div key={key} className="flex items-start gap-4 p-3 rounded-lg border border-border bg-card text-card-foreground">
                                         <div className="flex flex-col items-center gap-2 shrink-0">
                                             <div
                                                 className="w-12 h-12 rounded-lg border-2 border-border shadow-sm"

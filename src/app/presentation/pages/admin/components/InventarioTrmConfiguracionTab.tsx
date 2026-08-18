@@ -1,7 +1,7 @@
 import React from 'react';
 import { toast } from 'react-toastify';
 import { axiosClient } from '@/app/services/api';
-import { CalendarDays, DollarSign, RefreshCcw, Save, Settings } from 'lucide-react';
+import { CalendarDays, CreditCard, DollarSign, RefreshCcw, Save, Settings } from 'lucide-react';
 import inventarioService, {
   type InventarioConfig,
   type InventarioTrmHistorico,
@@ -21,6 +21,7 @@ import MetodosPagoParametrizacion from '../ParametrizacionPagos/MetodosPagoParam
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -92,6 +93,7 @@ export default function InventarioTrmConfiguracionTab({
   const [sincronizandoMonedas, setSincronizandoMonedas] = React.useState(false);
   const [ultimaActualizacion, setUltimaActualizacion] = React.useState<string | null>(null);
   const [monedaModalOpen, setMonedaModalOpen] = React.useState(false);
+  const [metodosPagoModalOpen, setMetodosPagoModalOpen] = React.useState(false);
   const monedaConfig = React.useMemo(() => toMonedaDraft(config?.monedaInventario), [config?.monedaInventario]);
   const [monedaDraft, setMonedaDraft] = React.useState<MonedaInventarioDraft>(monedaConfig);
   const monedaOptions = React.useMemo(() => {
@@ -463,7 +465,43 @@ export default function InventarioTrmConfiguracionTab({
 
     <ReglasContablesParametrizacion saving={saving} />
 
-    <MetodosPagoParametrizacion saving={saving} />
+    <Card className="border-primary/20">
+      <CardHeader>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-primary">
+              <CreditCard className="h-5 w-5" />
+              Métodos de pago
+            </CardTitle>
+            <CardDescription>
+              Parametrice los métodos de pago disponibles y su mapeo al medio de pago DIAN para la facturación electrónica.
+            </CardDescription>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setMetodosPagoModalOpen(true)}
+            disabled={saving}
+          >
+            <Settings className="mr-2 h-4 w-4" />
+            Configurar métodos de pago
+          </Button>
+        </div>
+      </CardHeader>
+    </Card>
+
+    <Dialog open={metodosPagoModalOpen} onOpenChange={setMetodosPagoModalOpen}>
+      <DialogContent className="max-h-[90dvh] w-[min(96vw,72rem)] max-w-none overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <CreditCard className="h-5 w-5" />
+            Métodos de pago
+          </DialogTitle>
+        </DialogHeader>
+        <MetodosPagoParametrizacion embedded saving={saving} />
+      </DialogContent>
+    </Dialog>
     </div>
   );
 }

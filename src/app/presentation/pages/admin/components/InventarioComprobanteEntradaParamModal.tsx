@@ -68,6 +68,23 @@ const resolverTipoDocumentoDefault = (rows: DocumentoSoporteTipoConfig[]): strin
   return activos[0]?.codigo || TIPO_DOCUMENTO_ENTRADA_FISICA;
 };
 
+const numeroRecepcionParaOrden = (
+  orden: InventarioOrdenCompra | null,
+  config: DocumentoSoporteTipoConfig | null,
+): string => {
+  if (!orden || !config) return '';
+  const consecutivo = Number(String(orden.numeroOrden || '').match(/(\d+)$/)?.[1] || 0);
+  if (!Number.isInteger(consecutivo) || consecutivo < 1) return '';
+  const prefijo = String(config.prefijo || 'REC').trim().replace(/-+$/, '') || 'REC';
+  const padding = Math.max(1, Number(config.padding) || 6);
+  return `${prefijo}-${String(consecutivo).padStart(padding, '0')}`;
+};
+
+const consecutivoOrdenCompra = (orden: InventarioOrdenCompra | null): number | null => {
+  const consecutivo = Number(String(orden?.numeroOrden || '').match(/(\d+)$/)?.[1] || 0);
+  return Number.isInteger(consecutivo) && consecutivo > 0 ? consecutivo : null;
+};
+
 const USO_TIPO_CATALOGO: Record<string, string> = {
   RECEPCION_OC: 'Comprobante fisico · este paso',
   COMPROBANTE_ENTRADA: 'Contable · al confirmar entrada',
@@ -119,9 +136,11 @@ export default function InventarioComprobanteEntradaParamModal({
   );
 
   const numeroSugerido = useMemo(
-    () => nextDocNumero(TIPO_DOCUMENTO_ENTRADA_FISICA, tiposDoc).numero,
-    [tiposDoc],
+    () => numeroRecepcionParaOrden(orden, tipoEntradaConfig)
+      || nextDocNumero(TIPO_DOCUMENTO_ENTRADA_FISICA, tiposDoc).numero,
+    [orden, tipoEntradaConfig, tiposDoc],
   );
+  const consecutivoSeleccionado = useMemo(() => consecutivoOrdenCompra(orden), [orden]);
 
   const canPreview =
     Boolean(orden)
@@ -182,6 +201,16 @@ export default function InventarioComprobanteEntradaParamModal({
       }));
     }
   }, [open, values.documentoTipo, tiposDoc, tieneSecuenciaEntrada]);
+
+  useEffect(() => {
+    if (!open || !orden || !tipoEntradaConfig) return;
+    const numeroOrden = numeroRecepcionParaOrden(orden, tipoEntradaConfig);
+    if (!numeroOrden) return;
+    setValues((actual) => {
+      if (actual.documentoTipo === TIPO_DOCUMENTO_ENTRADA_FISICA && actual.documentoNumero === numeroOrden) return actual;
+      return { ...actual, documentoTipo: TIPO_DOCUMENTO_ENTRADA_FISICA, documentoNumero: numeroOrden };
+    });
+  }, [open, orden, tipoEntradaConfig]);
 
   return (
     <Dialog
@@ -250,7 +279,9 @@ export default function InventarioComprobanteEntradaParamModal({
                         disabled={!esEntradaFisica}
                         className={esEntradaFisica ? undefined : 'opacity-60'}
                       >
-                        {labelDocumentoSoporte(t)} · {uso}
+                        {t.codigo === TIPO_DOCUMENTO_ENTRADA_FISICA && numeroSugerido
+                          ? `${t.codigo} · ${numeroSugerido}`
+                          : labelDocumentoSoporte(t)} · {uso}
                       </SelectItem>
                     );
                   })}
@@ -258,7 +289,10 @@ export default function InventarioComprobanteEntradaParamModal({
               </Select>
               {tipoEntradaConfig ? (
                 <p className="text-xs text-muted-foreground">
-                  Prefijo {tipoEntradaConfig.prefijo} · {tipoEntradaConfig.padding} digitos · siguiente #{tipoEntradaConfig.siguiente}
+                  Prefijo {tipoEntradaConfig.prefijo} · {tipoEntradaConfig.padding} digitos ·{' '}
+                  {consecutivoSeleccionado
+                    ? `consecutivo OC #${consecutivoSeleccionado}`
+                    : `siguiente global #${tipoEntradaConfig.siguiente}`}
                 </p>
               ) : null}
               {!tieneSecuenciaEntrada ? (
@@ -286,7 +320,8 @@ export default function InventarioComprobanteEntradaParamModal({
                   variant="outline"
                   disabled={saving || !tieneSecuenciaEntrada}
                   onClick={() => {
-                    const { numero } = nextDocNumero(TIPO_DOCUMENTO_ENTRADA_FISICA, tiposDoc);
+                    const numero = numeroRecepcionParaOrden(orden, tipoEntradaConfig)
+                      || nextDocNumero(TIPO_DOCUMENTO_ENTRADA_FISICA, tiposDoc).numero;
                     if (numero) {
                       setValues((p) => ({
                         ...p,
@@ -308,7 +343,19 @@ export default function InventarioComprobanteEntradaParamModal({
 
           <div className="space-y-2">
             <Label>Orden de compra</Label>
-            <Select value={values.ordenId} onValueChange={(ordenId) => setValues((p) => ({ ...p, ordenId }))}>
+            <Select
+              value={values.ordenId}
+              onValueChange={(ordenId) => {
+                const ordenSeleccionada = ordenesSorted.find((oc) => getOrdenCompraId(oc) === ordenId) ?? null;
+                const numeroOrden = numeroRecepcionParaOrden(ordenSeleccionada, tipoEntradaConfig);
+                setValues((p) => ({
+                  ...p,
+                  ordenId,
+                  documentoTipo: TIPO_DOCUMENTO_ENTRADA_FISICA,
+                  documentoNumero: numeroOrden || p.documentoNumero,
+                }));
+              }}
+            >
               <SelectTrigger className="border-input bg-background">
                 <SelectValue
                   placeholder={
@@ -358,8 +405,9 @@ export default function InventarioComprobanteEntradaParamModal({
                 return;
               }
               const numeroDigitado = values.documentoNumero.trim();
-              const expected = nextDocNumero(tipo, tiposDoc).numero;
-              const numeroFinal = numeroDigitado || expected;
+              const expected = numeroRecepcionParaOrden(orden, tipoEntradaConfig)
+                || nextDocNumero(tipo, tiposDoc).numero;
+              const numeroFinal = expected || numeroDigitado;
               if (!numeroFinal) return;
 
               try {
@@ -385,15 +433,17 @@ export default function InventarioComprobanteEntradaParamModal({
                   documentoSoporte: { tipo, numero: numeroFinal },
                   items,
                 });
+                const numeroAsignado = String(data?.recepcion?.numeroRecepcion || numeroFinal).trim();
+                setValues((actual) => ({ ...actual, documentoNumero: numeroAsignado }));
                 const serverRows = await inventarioService.listarDocumentosSoporte();
                 setTiposDoc(tiposCatalogoActivos(serverRows));
                 toast.info(
-                  `Borrador ${numeroFinal} creado. Confirme el comprobante para mover inventario y ocupar la secuencia.`,
+                  `Borrador ${numeroAsignado} creado. Confirme el comprobante para ocupar la secuencia.`,
                   { autoClose: 10000 },
                 );
                 onPreview({
                   data,
-                  documentoSoporte: { tipo, numero: numeroFinal },
+                  documentoSoporte: { tipo, numero: numeroAsignado },
                 });
               } catch (error) {
                 console.error('Error registrando comprobante de entrada:', error);
@@ -419,7 +469,9 @@ export default function InventarioComprobanteEntradaParamModal({
           const activos = tiposCatalogoActivos(serverRows);
           setTiposDoc(activos);
           const tipoActual = TIPO_DOCUMENTO_ENTRADA_FISICA;
-          const { numero } = nextDocNumero(tipoActual, activos);
+          const configEntrada = activos.find((row) => row.codigo === tipoActual) ?? null;
+          const numero = numeroRecepcionParaOrden(orden, configEntrada)
+            || nextDocNumero(tipoActual, activos).numero;
           setValues((p) => ({
             ...p,
             documentoTipo: tipoActual,

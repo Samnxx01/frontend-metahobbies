@@ -196,7 +196,7 @@ const ReferralChain = ({ chain }: { chain: ReferralChainNode[] }) => {
                                         ${node.isDestino
                                             ? 'bg-primary/10 text-primary border-primary/25'
                                             : node.isOrigen
-                                                ? 'bg-success/10 dark:bg-success/30 text-success dark:text-success border-success/30 dark:border-success'
+                                                ? 'bg-success/10 dark:bg-success/30 text-success-foreground dark:text-success-foreground border-success/30 dark:border-success'
                                                 : 'bg-muted/60 text-muted-foreground border-border/60'
                                         }
                                     `}
@@ -574,7 +574,7 @@ function GestionReferidos(): React.ReactElement {
                             <div className="space-y-2">
                                 <div className="flex items-center justify-between">
                                     <TrendingUp className="h-5 w-5 text-success" />
-                                    <Badge variant="secondary" className="text-xs bg-success/10 text-success border-success/20">
+                                    <Badge variant="secondary" className="text-xs bg-success/10 text-success-foreground border-success/20">
                                         Comisiones
                                     </Badge>
                                 </div>
@@ -593,7 +593,7 @@ function GestionReferidos(): React.ReactElement {
                             <div className="space-y-2">
                                 <div className="flex items-center justify-between">
                                     <Clock className="h-5 w-5 text-warning" />
-                                    <Badge variant="secondary" className="text-xs bg-warning/10 text-warning border-warning/20">
+                                    <Badge variant="secondary" className="text-xs bg-warning/10 text-warning-foreground border-warning/20">
                                         Pendiente
                                     </Badge>
                                 </div>
@@ -667,11 +667,11 @@ function GestionReferidos(): React.ReactElement {
                                     </div>
                                     <div className="p-3 rounded-lg bg-success/10 dark:bg-success/30 border border-success/20 dark:border-success">
                                         <p className="text-xs text-muted-foreground mb-1">Pagado</p>
-                                        <p className="text-sm font-semibold text-success">{formatCurrency(totales.totalPagado)}</p>
+                                        <p className="text-sm font-semibold text-success-foreground">{formatCurrency(totales.totalPagado)}</p>
                                     </div>
                                     <div className="p-3 rounded-lg bg-warning/10 dark:bg-warning/30 border border-warning/20 dark:border-warning">
                                         <p className="text-xs text-muted-foreground mb-1">Pendiente</p>
-                                        <p className="text-sm font-semibold text-warning">{formatCurrency(totales.totalPendiente)}</p>
+                                        <p className="text-sm font-semibold text-warning-foreground">{formatCurrency(totales.totalPendiente)}</p>
                                     </div>
                                 </div>
 
@@ -702,8 +702,8 @@ function GestionReferidos(): React.ReactElement {
                                                                             variant="secondary"
                                                                             className={
                                                                                 voucher.status === 'pagado'
-                                                                                    ? 'bg-success/10 text-success border-success/30 dark:bg-success dark:text-success'
-                                                                                    : 'bg-warning/10 text-warning border-warning/30 dark:bg-warning dark:text-warning'
+                                                                                    ? 'bg-success/10 text-success-foreground border-success/30 dark:bg-success dark:text-success-foreground'
+                                                                                    : 'bg-warning/10 text-warning-foreground border-warning/30 dark:bg-warning dark:text-warning-foreground'
                                                                             }
                                                                         >
                                                                             {voucher.status === 'pagado' ? (

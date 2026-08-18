@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { toast } from 'react-toastify';
-import { CheckCircle2, FileSearch, Link2, Search, ShieldAlert, ShieldCheck } from 'lucide-react';
+import { CheckCircle2, FileSearch, FileText, Link2, Search, ShieldAlert, ShieldCheck } from 'lucide-react';
 import inventarioService, {
   type InventoryLedgerMovement,
   type LedgerByInvoiceResponse,
@@ -8,9 +8,11 @@ import inventarioService, {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import ConfigComprobante from './ConfigComprobante';
 
 const MONEY = new Intl.NumberFormat('es-CO', {
   style: 'currency',
@@ -92,6 +94,7 @@ export default function InventarioConciliacionTab(): React.ReactElement {
   const [invoiceId, setInvoiceId] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<LedgerByInvoiceResponse | null>(null);
+  const [comprobantesModalOpen, setComprobantesModalOpen] = useState(false);
 
   const consultar = async (): Promise<void> => {
     const id = invoiceId.trim();
@@ -162,6 +165,38 @@ export default function InventarioConciliacionTab(): React.ReactElement {
           </div>
         </CardContent>
       </Card>
+
+      <Card>
+        <CardHeader>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="h-5 w-5 text-primary" />
+                Comprobantes contables
+              </CardTitle>
+              <CardDescription>
+                Consulta y registra comprobantes contables (numero de secuencia parametrizable) con auditoria del ejecutor.
+              </CardDescription>
+            </div>
+            <Button type="button" variant="outline" size="sm" onClick={() => setComprobantesModalOpen(true)}>
+              <FileText className="mr-2 h-4 w-4" />
+              Abrir comprobantes contables
+            </Button>
+          </div>
+        </CardHeader>
+      </Card>
+
+      <Dialog open={comprobantesModalOpen} onOpenChange={setComprobantesModalOpen}>
+        <DialogContent className="max-h-[90dvh] w-[min(96vw,80rem)] max-w-none overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              Comprobantes contables
+            </DialogTitle>
+          </DialogHeader>
+          <ConfigComprobante embedded />
+        </DialogContent>
+      </Dialog>
 
       {result ? (
         <Card>

@@ -259,6 +259,18 @@ export interface BackendProductoActualizado extends BackendProducto {
   sincronizarCarritoRecomendado?: boolean;
 }
 
+export interface ProductoPrecioHistorialItem {
+  iud?: string;
+  productoId: string;
+  sku: string;
+  precioAnterior: number;
+  precioNuevo: number;
+  moneda: string;
+  usuarioId?: { correo?: string; nombre_cliente?: string } | string | null;
+  ipOrigen?: string | null;
+  fechaEjecucion: string;
+}
+
 export interface FiltrosProductos {
   categoria?: string;
   tipo?: string;
@@ -438,6 +450,11 @@ const productosService = {
   async actualizarProductoAdmin(id: string, payload: Partial<AdminProductoPayload>): Promise<BackendProductoActualizado> {
     const resp = await apiFetch(`/api/productos/admin/${id}`, { method: 'PUT', body: payload });
     return resp?.data as BackendProductoActualizado;
+  },
+
+  async obtenerHistorialPrecioProducto(id: string): Promise<{ total: number; data: ProductoPrecioHistorialItem[] }> {
+    const resp = await apiFetch(`/api/productos/admin/${id}/historial-precio?limit=50`, { method: 'GET' });
+    return { total: Number(resp?.total || 0), data: (resp?.data || []) as ProductoPrecioHistorialItem[] };
   },
 
   async obtenerLimitesCatalogo(): Promise<ProductoCatalogoLimites> {

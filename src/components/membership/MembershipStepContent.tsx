@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import FormField from '@/components/common/FormField';
-import metodoPagoService, { type MetodoPagoCatalogo } from '@/app/services/metodoPagoService';
+import metodoPagoService, { type MetodoPagoPadre } from '@/app/services/metodoPagoService';
 import type { BeneficioMembresiaPago } from '@/app/services/brandingWidget';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
@@ -15,7 +15,8 @@ import {
   Shield,
   Zap,
   Gift,
-  TrendingUp
+  TrendingUp,
+  Loader2
 } from 'lucide-react';
 
 interface PersonalInfo {
@@ -67,25 +68,32 @@ export default function MembershipStepContent({
   METODO_PAGO_CODIGO,
   MONEDA = 'COP',
   BENEFICIOS_PAGO = [],
+  token,
 }: MembershipStepContentProps): React.ReactElement | null {
-  const [metodosPago, setMetodosPago] = useState<MetodoPagoCatalogo[]>([]);
+  const [metodosPago, setMetodosPago] = useState<MetodoPagoPadre[]>([]);
+  const [cargandoMetodosPago, setCargandoMetodosPago] = useState(true);
 
   useEffect(() => {
     if (step !== 2) return;
 
     let mounted = true;
-    metodoPagoService.listarActivos()
+    setCargandoMetodosPago(true);
+    metodoPagoService.listarPadresReferido(token)
       .then((data) => {
-        if (mounted) setMetodosPago(data);
+        if (mounted) setMetodosPago(data.filter((metodo) => metodo.estado));
       })
-      .catch(() => {
+      .catch((error) => {
+        console.error('Error cargando métodos de pago:', error);
         if (mounted) setMetodosPago([]);
+      })
+      .finally(() => {
+        if (mounted) setCargandoMetodosPago(false);
       });
 
     return () => {
       mounted = false;
     };
-  }, [step]);
+  }, [step, token]);
 
   const paymentMethods = useMemo(() => {
     const presentationByCode = {
@@ -106,39 +114,30 @@ export default function MembershipStepContent({
       },
     };
 
-    const configuredMethods = metodosPago.flatMap((method) => {
-      const code = method.codigo.trim().toLowerCase();
-      const normalizedCode = code === 'tarjeta' ? 'card' : code;
-      const presentation = presentationByCode[normalizedCode as keyof typeof presentationByCode];
-      if (!presentation) return [];
+    const detectarTipo = (method: MetodoPagoPadre): keyof typeof presentationByCode | null => {
+      const code = method.codigo.trim().toUpperCase();
+      if (code.includes('PSE')) return 'pse';
+      if (code.includes('NEQUI')) return 'nequi';
+      if (code.includes('TARJET') || code.includes('CARD') || code.includes('CREDIT') || code.includes('DEBIT')) return 'card';
+      return null;
+    };
 
+    const porTipo = new Map<keyof typeof presentationByCode, MetodoPagoPadre>();
+    metodosPago.forEach((method) => {
+      const tipo = detectarTipo(method);
+      if (tipo && !porTipo.has(tipo)) porTipo.set(tipo, method);
+    });
+
+    const ordenVisualizacion: Array<keyof typeof presentationByCode> = ['nequi', 'card', 'pse'];
+    return ordenVisualizacion.flatMap((tipo) => {
+      const method = porTipo.get(tipo);
+      if (!method) return [];
       return [{
-        ...presentation,
-        name: method.nombre,
+        ...presentationByCode[tipo],
+        name: method.nombreMetodoPago,
         description: method.descripcion || '',
       }];
     });
-
-    if (configuredMethods.length > 0) return configuredMethods;
-
-    // Respaldo temporal mientras se completa la parametrización del catálogo.
-    return [
-      {
-        ...presentationByCode.nequi,
-        name: 'Nequi',
-        description: 'Paga desde tu cuenta Nequi',
-      },
-      {
-        ...presentationByCode.card,
-        name: 'Tarjeta',
-        description: 'Crédito o débito',
-      },
-      {
-        ...presentationByCode.pse,
-        name: 'PSE',
-        description: 'Débito desde tu banco',
-      },
-    ];
   }, [metodosPago]);
 
   switch (step) {
@@ -308,8 +307,8 @@ export default function MembershipStepContent({
                       : 'text-muted-foreground'
                       }`} />
                     <div className="text-center">
-                      <div className="font-semibold text-sm">{method.name}</div>
-                      <div className="text-xs text-muted-foreground">{method.description}</div>
+                      <div className="font-semibold text-sm line-clamp-1" title={method.name}>{method.name}</div>
+                      <div className="text-xs text-muted-foreground line-clamp-2" title={method.description}>{method.description}</div>
                     </div>
                     {formData.paymentInfo.paymentMethod === method.id && (
                       <CheckCircle2 className="absolute -top-2 -right-2 w-5 h-5 text-primary" />
@@ -319,9 +318,14 @@ export default function MembershipStepContent({
               </button>
             ))}
           </div>
-          {paymentMethods.length === 0 && (
+          {cargandoMetodosPago ? (
+            <div className="flex items-center justify-center gap-2 py-4 text-sm text-muted-foreground">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Cargando métodos de pago...
+            </div>
+          ) : paymentMethods.length === 0 && (
             <p className="text-sm text-center text-muted-foreground">
-              No hay métodos de pago disponibles.
+              No hay métodos de pago disponibles. Contacta al administrador para activar al menos uno.
             </p>
           )}
 

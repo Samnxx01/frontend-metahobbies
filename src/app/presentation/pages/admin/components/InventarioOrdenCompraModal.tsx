@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { ClipboardList, Plus, RotateCcw, Save, Trash2 } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { ClipboardList, FileJson, Loader2, Plus, RotateCcw, Save, Trash2 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import inventarioService, {
   type BodegaInventario,
@@ -167,6 +167,8 @@ export default function InventarioOrdenCompraModal({
   const [proveedorId, setProveedorId] = useState('');
   const [lines, setLines] = useState<OcLineDraft[]>([]);
   const [enviando, setEnviando] = useState(false);
+  const [importandoJson, setImportandoJson] = useState(false);
+  const archivoJsonRef = useRef<HTMLInputElement>(null);
   const [siguienteNumeroOrden, setSiguienteNumeroOrden] = useState('');
   /**
    * El backend ignora todo % digitado a mano y recalcula desde la ReglaContable. Para que el
@@ -179,6 +181,27 @@ export default function InventarioOrdenCompraModal({
 
   const ordenEdicionId = getOrdenCompraId(ordenEdicion);
   const esEdicion = Boolean(ordenEdicionId);
+
+  const importarOrdenesJson = async (event: React.ChangeEvent<HTMLInputElement>): Promise<void> => {
+    const archivo = event.target.files?.[0];
+    event.target.value = '';
+    if (!archivo) return;
+    if (!/\.(json|txt)$/i.test(archivo.name)) {
+      toast.error('Selecciona un archivo JSON o TXT exportado por MongoDB Compass.');
+      return;
+    }
+    try {
+      setImportandoJson(true);
+      const resultado = await inventarioService.importarOrdenesCompraJson(archivo);
+      for (const orden of resultado.ordenes) await onCreated(orden);
+      toast.success(`${resultado.total} orden(es) importada(s) en estado de verificación.`);
+      onOpenChange(false);
+    } catch (error) {
+      toast.error(mensajeErrorComprasInventario(error, 'No se pudo importar el archivo JSON.'));
+    } finally {
+      setImportandoJson(false);
+    }
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -649,6 +672,34 @@ export default function InventarioOrdenCompraModal({
                 ? ' Solo editable en Verificación; el consecutivo OC no cambia.'
                 : ' El número OC lo genera el servidor al crear; la fecha de creación también.'}
             </DialogDescription>
+            {!esEdicion ? (
+              <div className="pt-2">
+                <input
+                  ref={archivoJsonRef}
+                  type="file"
+                  accept=".json,.txt,application/json,text/plain"
+                  className="hidden"
+                  onChange={(event) => void importarOrdenesJson(event)}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={saving || enviando || importandoJson}
+                  onClick={() => archivoJsonRef.current?.click()}
+                >
+                  {importandoJson ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <FileJson className="mr-2 h-4 w-4" />
+                  )}
+                  {importandoJson ? 'Importando...' : 'Cargar órdenes JSON'}
+                </Button>
+                <span className="ml-2 text-xs text-muted-foreground">
+                  Se crearán abiertas, con consecutivo y auditoría nuevos.
+                </span>
+              </div>
+            ) : null}
           </DialogHeader>
 
           <div className="min-h-0 w-full flex-1 space-y-4 overflow-x-hidden overflow-y-scroll overscroll-y-contain pr-1 [-webkit-overflow-scrolling:touch] [touch-action:pan-y]">

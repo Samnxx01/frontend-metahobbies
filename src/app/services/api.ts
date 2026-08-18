@@ -276,7 +276,7 @@ export const apiFetch = async (
         const duracionMs = Math.round(performance.now() - inicioMs);
         if (duracionMs >= UMBRAL_PETICION_LENTA_MS) {
             reportarPeticionLentaFrontend({
-                endpoint: String(resolvedEndpoint).split('?')[0],
+                endpoint: String(endpoint).split('?')[0],
                 metodo: String(requestOptions.method || 'GET').toUpperCase(),
                 status: statusRespuesta,
                 duracionMs,

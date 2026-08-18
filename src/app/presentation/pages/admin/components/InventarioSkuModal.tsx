@@ -1,11 +1,13 @@
 import React, { useMemo, useState } from 'react';
-import { ChevronDown, ChevronUp, CircleHelp, RefreshCw, Save, SlidersHorizontal } from 'lucide-react';
+import { toast } from 'react-toastify';
+import { ChevronDown, ChevronUp, CircleHelp, History, Loader2, RefreshCw, Save, SlidersHorizontal } from 'lucide-react';
 import type { InventarioUnidadMedida } from '@/app/services/inventarioService';
-import type { BackendTipoProducto } from '@/app/services/productosService';
+import productosService, { type BackendTipoProducto, type ProductoPrecioHistorialItem } from '@/app/services/productosService';
 import {
   generarCodigoBarrasDesdeSkú,
   normalizarCodigoBarrasAlfanumerico,
 } from '@/app/presentation/pages/admin/inventario/inventarioBarcodeUtils';
+import { formatearFechaHoraColombia } from '@/app/utils/fechaColombia';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -18,6 +20,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+
+const formatCOP = (value: number): string =>
+  new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(value);
 
 export type SkuForm = {
   sku: string;
@@ -36,6 +41,8 @@ type InventarioSkuModalProps = {
   open: boolean;
   saving: boolean;
   mode?: 'create' | 'edit';
+  /** Id del producto en edición; habilita el botón de historial de precio. */
+  productoId?: string | null;
   form: SkuForm;
   unidadesMedida: InventarioUnidadMedida[];
   tiposProducto: BackendTipoProducto[];
@@ -58,6 +65,7 @@ export default function InventarioSkuModal({
   open,
   saving,
   mode = 'create',
+  productoId = null,
   form,
   unidadesMedida,
   tiposProducto,
@@ -71,8 +79,25 @@ export default function InventarioSkuModal({
 }: InventarioSkuModalProps): React.ReactElement {
   const esEdicion = mode === 'edit';
   const [ayudaVisible, setAyudaVisible] = useState(false);
+  const [historialOpen, setHistorialOpen] = useState(false);
+  const [historialLoading, setHistorialLoading] = useState(false);
+  const [historial, setHistorial] = useState<ProductoPrecioHistorialItem[]>([]);
   const update = (field: keyof SkuForm, value: string): void => {
     onFormChange({ ...form, [field]: value });
+  };
+  const abrirHistorial = async (): Promise<void> => {
+    if (!productoId) return;
+    setHistorialOpen(true);
+    setHistorialLoading(true);
+    try {
+      const resp = await productosService.obtenerHistorialPrecioProducto(productoId);
+      setHistorial(resp.data);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No se pudo cargar el historial de precio.');
+      setHistorial([]);
+    } finally {
+      setHistorialLoading(false);
+    }
   };
   const codigoExcluido = normalizarCodigoBarrasAlfanumerico(excluirCodigoBarras);
   const codigosExistentesSet = useMemo(
@@ -94,6 +119,7 @@ export default function InventarioSkuModal({
     update('codigoBarras', candidato);
   };
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       {/* flex+max-h para fijar header/footer y hacer scroll solo en el cuerpo */}
       <DialogContent className="flex max-h-[92dvh] w-[calc(100%-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
@@ -105,18 +131,33 @@ export default function InventarioSkuModal({
               <DialogTitle className="leading-tight">
                 {esEdicion ? 'Editar SKU de inventario' : 'Crear SKU de inventario'}
               </DialogTitle>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-8 shrink-0 gap-1 px-2 text-muted-foreground"
-                onClick={() => setAyudaVisible((v) => !v)}
-                aria-label="Ayuda del formulario"
-              >
-                <CircleHelp className="h-4 w-4" />
-                <span className="hidden sm:inline">Ayuda</span>
-                {ayudaVisible ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-              </Button>
+              <div className="flex shrink-0 items-center gap-1">
+                {esEdicion && productoId ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 gap-1 px-2 text-muted-foreground"
+                    onClick={() => void abrirHistorial()}
+                    aria-label="Historial de cambios de precio"
+                  >
+                    <History className="h-4 w-4" />
+                    <span className="hidden sm:inline">Historial</span>
+                  </Button>
+                ) : null}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 gap-1 px-2 text-muted-foreground"
+                  onClick={() => setAyudaVisible((v) => !v)}
+                  aria-label="Ayuda del formulario"
+                >
+                  <CircleHelp className="h-4 w-4" />
+                  <span className="hidden sm:inline">Ayuda</span>
+                  {ayudaVisible ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                </Button>
+              </div>
             </div>
             <DialogDescription className="mt-1">
               {esEdicion
@@ -138,7 +179,7 @@ export default function InventarioSkuModal({
                   { titulo: 'SKU', desc: 'Codigo unico del producto. No se puede modificar despues de crearlo. Usa un formato descriptivo: CAM-BAS-M.' },
                   { titulo: 'Codigo de barras', desc: '"Generar" lo crea desde el SKU. Manual: 8-14 caracteres alfanumericos (CODE 128) o exactamente 13 digitos (EAN-13) para pistola laser.' },
                   { titulo: 'Nombre', desc: 'Visible en kardex, comprobantes y catalogo. Se guarda en mayusculas.' },
-                  { titulo: 'Precio', desc: 'Precio base persistido del producto. En edición es de solo lectura y no reemplaza el precio de productoVentaRelaciones.' },
+                  { titulo: 'Precio', desc: 'Precio base persistido del producto. Cambiarlo no reemplaza el precio comercial de productoVentaRelaciones y queda registrado en el historial de precio.' },
                   { titulo: 'Tipo de producto', desc: 'FISICO (maneja stock en bodega), SERVICIO (sin stock), DIGITAL, etc. Define el comportamiento en ventas e inventario.' },
                   { titulo: 'Unidad de medida', desc: 'Como se cuantifica: UNIDAD, KG, MT, LT, etc. Aparece en kardex y comprobantes.' },
                   { titulo: 'Stock minimo (reserva)', desc: 'Unidades bloqueadas que no se ofrecen en venta. Disponible = Kardex total − Stock minimo. Colchon ante devoluciones o urgencias.' },
@@ -201,13 +242,11 @@ export default function InventarioSkuModal({
                 type="number"
                 min="1"
                 value={form.precio}
-                disabled={esEdicion}
-                readOnly={esEdicion}
                 onChange={(event) => update('precio', event.target.value)}
               />
               {esEdicion ? (
                 <p className="text-xs text-muted-foreground">
-                  Valor persistido. No modifica el precio comercial de la relación de venta.
+                  Valor persistido. No modifica el precio comercial de la relación de venta. Cada cambio queda en el historial.
                 </p>
               ) : null}
             </div>
@@ -317,5 +356,53 @@ export default function InventarioSkuModal({
 
       </DialogContent>
     </Dialog>
+
+      <Dialog open={historialOpen} onOpenChange={setHistorialOpen}>
+        <DialogContent className="max-h-[80dvh] overflow-y-auto sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <History className="h-4 w-4" />
+              Historial de precio
+            </DialogTitle>
+            <DialogDescription>
+              SKU {form.sku || '—'} · cambios del precio base del producto.
+            </DialogDescription>
+          </DialogHeader>
+          {historialLoading ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : historial.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              Este producto no tiene cambios de precio registrados.
+            </p>
+          ) : (
+            <ul className="divide-y divide-border">
+              {historial.map((item) => {
+                const usuario = typeof item.usuarioId === 'object' && item.usuarioId
+                  ? item.usuarioId.nombre_cliente || item.usuarioId.correo
+                  : null;
+                return (
+                  <li key={item.iud || `${item.fechaEjecucion}-${item.precioNuevo}`} className="py-3 text-sm">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-medium">
+                        {formatCOP(item.precioAnterior)} <span className="text-muted-foreground">→</span>{' '}
+                        {formatCOP(item.precioNuevo)}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {formatearFechaHoraColombia(item.fechaEjecucion)}
+                      </span>
+                    </div>
+                    {usuario ? (
+                      <p className="mt-0.5 text-xs text-muted-foreground">Por {usuario}</p>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

@@ -66,10 +66,15 @@ export default function InventarioOrdenCompraDetallesModal({
   onOrdenActualizada,
 }: InventarioOrdenCompraDetallesModalProps): React.ReactElement {
   const [ordenLocal, setOrdenLocal] = useState<InventarioOrdenCompra | null>(null);
-  const [confirmando, setConfirmando] = useState(false);
+  // Set de ids en confirmación (no un solo booleano): el modal se queda montado y puede
+  // reabrirse con OTRA orden mientras una confirmación anterior sigue corriendo en segundo
+  // plano — un booleano único dejaba el botón de la orden nueva bloqueado por la vieja.
+  const [confirmandoIds, setConfirmandoIds] = useState<Set<string>>(new Set());
   const [cargandoDetalle, setCargandoDetalle] = useState(false);
 
   const orden = ordenLocal ?? ordenProp;
+  const ordenIdActual = getOrdenCompraId(orden);
+  const confirmando = Boolean(ordenIdActual && confirmandoIds.has(ordenIdActual));
   const mostrarConfirmar = Boolean(orden && puedeConfirmarOrdenCompra(orden.estado, estadosOrden));
   const resumen = useMemo(() => (orden?.items ?? []).reduce(
     (acc, item) => {
@@ -109,11 +114,19 @@ export default function InventarioOrdenCompraDetallesModal({
 
   const confirmarOrden = async (): Promise<void> => {
     const ordenId = getOrdenCompraId(orden);
-    if (!ordenId || !mostrarConfirmar) {
+    if (!ordenId || !mostrarConfirmar || !orden) {
       if (!ordenId) toast.error('No se pudo identificar la orden de compra.');
       return;
     }
-    setConfirmando(true);
+    const numeroOrden = orden.numeroOrden;
+
+    // Confirmar genera movimientos + comprobante contable por cada ítem de la orden — puede
+    // tardar varios segundos. Cerramos el modal ya y avisamos por toast al terminar, en vez
+    // de dejar el formulario bloqueado esperando la respuesta. El resultado igual se refleja
+    // en la tabla vía onOrdenActualizada, aunque el modal ya esté cerrado o muestre otra orden.
+    onOpenChange(false);
+    setConfirmandoIds((prev) => new Set(prev).add(ordenId));
+    const toastId = toast.loading(`Confirmando orden ${numeroOrden}...`);
     try {
       const data = await inventarioService.confirmarOrdenCompra(ordenId);
       const base = data?.orden ?? orden;
@@ -126,15 +139,31 @@ export default function InventarioOrdenCompraDetallesModal({
           confirmadoEn: new Date().toISOString(),
         },
       };
-      setOrdenLocal(actualizada);
+      // Solo pisa el estado local si el modal sigue mostrando ESTA orden — si mientras
+      // tanto se abrió otra, no queremos sobreescribirla con datos de la confirmación vieja.
+      if (getOrdenCompraId(ordenLocal ?? ordenProp) === ordenId) {
+        setOrdenLocal(actualizada);
+      }
       onOrdenActualizada?.(actualizada);
-      toast.success(
-        `Orden ${orden.numeroOrden} confirmada. Comprobante contable ${data?.comprobanteContable?.numero || ''} generado.`
-      );
+      toast.update(toastId, {
+        render: `Orden ${numeroOrden} confirmada. Comprobante contable ${data?.comprobanteContable?.numero || ''} generado.`,
+        type: 'success',
+        isLoading: false,
+        autoClose: 6000,
+      });
     } catch (error) {
-      toast.error(error instanceof Error ? error.message.replace(/^\[\d+\]\s*/, '') : 'No se pudo confirmar la orden.');
+      toast.update(toastId, {
+        render: error instanceof Error ? error.message.replace(/^\[\d+\]\s*/, '') : 'No se pudo confirmar la orden.',
+        type: 'error',
+        isLoading: false,
+        autoClose: 8000,
+      });
     } finally {
-      setConfirmando(false);
+      setConfirmandoIds((prev) => {
+        const next = new Set(prev);
+        next.delete(ordenId);
+        return next;
+      });
     }
   };
 

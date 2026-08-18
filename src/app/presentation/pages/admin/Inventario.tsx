@@ -497,7 +497,7 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
 
     try {
       setConfirmandoComprobanteId(id);
-      const data = await inventarioService.confirmarRecepcionOrdenCompra(id, {
+      const data = await inventarioService.registrarKardexRecepcionOrdenCompra(id, {
         estado: true,
         aplicarKardex: true,
         confirmar: true,
@@ -1172,7 +1172,7 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
       setSaving(true);
       if (esEntradaCompraPorTipo && movimientoForm.recepcionCompraId) {
         // Subproceso manual: el comprobante (recepción) ya existe en borrador; aquí se confirma para aplicar kardex+contable.
-        const data = await inventarioService.confirmarRecepcionOrdenCompra(movimientoForm.recepcionCompraId, {
+        const data = await inventarioService.registrarKardexRecepcionOrdenCompra(movimientoForm.recepcionCompraId, {
           estado: true,
           aplicarKardex: true,
           confirmar: true,
@@ -1425,7 +1425,7 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
 
     const payloadBase = {
       nombre,
-      ...(!skuEditandoId ? { precio } : {}),
+      precio,
       moneda: 'COP' as const,
       tipo: skuForm.tipo || 'FISICO',
       unidadMedida: skuForm.unidadMedida,
@@ -1590,7 +1590,7 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
         sku,
         codigoBarras: String(producto.codigoBarras || ''),
         nombre: String(producto.nombre || ''),
-        precio: String(Number(producto.precio || 0) || ''),
+        precio: producto.precio != null ? String(producto.precio) : '',
         tipo: String(producto.tipo || 'FISICO'),
         unidadMedida: String(producto.unidadMedida || 'UNIDAD'),
         stockMinimo: String(Number(producto.stockMinimo || 0)),
@@ -2516,6 +2516,7 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
         open={skuModalOpen}
         saving={saving}
         mode={skuEditandoId ? 'edit' : 'create'}
+        productoId={skuEditandoId}
         form={skuForm}
         unidadesMedida={unidadesMedida}
         tiposProducto={tiposProducto}

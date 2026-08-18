@@ -20,6 +20,16 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -187,6 +197,8 @@ export default function ParametrizacionMenu() {
   const [formularioRoutes, setFormularioRoutes] = useState<FormularioRutaOption[]>([]);
   const [routeCatalog, setRouteCatalog] = useState<RouteCatalogItem[]>([]);
   const [menuTags, setMenuTags] = useState<RouteMenuTag[]>([]);
+  const [tagDeleteTarget, setTagDeleteTarget] = useState<RouteMenuTag | null>(null);
+  const [tagDeleteBusy, setTagDeleteBusy] = useState(false);
   const [savingAcciones, setSavingAcciones] = useState<Record<string, boolean>>({});
   const [sincronizandoContadores, setSincronizandoContadores] = useState(false);
   const [tagForm, setTagForm] = useState<MenuTagFormState>(EMPTY_TAG_FORM);
@@ -734,6 +746,17 @@ export default function ParametrizacionMenu() {
     }
   };
 
+  const confirmarEliminarTag = async (): Promise<void> => {
+    if (!tagDeleteTarget) return;
+    setTagDeleteBusy(true);
+    try {
+      await handleDeleteTag(tagDeleteTarget.iud);
+      setTagDeleteTarget(null);
+    } finally {
+      setTagDeleteBusy(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -1103,7 +1126,7 @@ export default function ParametrizacionMenu() {
                       <Button type="button" variant="outline" size="icon" onClick={() => populateTagForm(tag)}>
                         <Pencil className="h-4 w-4" />
                       </Button>
-                      <Button type="button" variant="outline" size="icon" onClick={() => handleDeleteTag(tag.iud)}>
+                      <Button type="button" variant="outline" size="icon" onClick={() => setTagDeleteTarget(tag)}>
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
@@ -1351,6 +1374,39 @@ export default function ParametrizacionMenu() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog
+        open={!!tagDeleteTarget}
+        onOpenChange={(open) => {
+          if (!open && !tagDeleteBusy) setTagDeleteTarget(null);
+        }}
+      >
+        <AlertDialogContent className="border-border bg-background">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-foreground">Eliminar tag de menu</AlertDialogTitle>
+            <AlertDialogDescription>
+              {tagDeleteTarget ? (
+                <>
+                  Se eliminara permanentemente el tag <span className="font-semibold text-foreground">{tagDeleteTarget.label}</span> ({tagDeleteTarget.codigo}). Esta accion no se puede deshacer.
+                </>
+              ) : null}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <AlertDialogCancel disabled={tagDeleteBusy}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={(event) => {
+                event.preventDefault();
+                void confirmarEliminarTag();
+              }}
+              disabled={tagDeleteBusy}
+            >
+              {tagDeleteBusy ? 'Eliminando...' : 'Eliminar'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
     </div>
   );

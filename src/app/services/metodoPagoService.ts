@@ -36,9 +36,17 @@ export interface MetodoPagoPadre {
 type ApiResponsePayload<T> = { ok?: boolean; data?: T; msg?: string; total?: number };
 export type MetodoPagoApiResult<T> = { data: T; msg?: string };
 
+/** Headers de auth para el checkout público de membresía (guest sin sesión admin). */
+const headersReferido = (token?: string): { referidos: string; Authorization: string } | undefined =>
+  token?.trim() ? { referidos: token, Authorization: `Bearer ${token}` } : undefined;
+
 const metodoPagoService = {
-  async listarActivos(): Promise<MetodoPagoCatalogo[]> {
-    const resp = await apiFetch('/api/inventario/config/metodos-pago', { method: 'GET' });
+  /** @param tokenReferido - requerido en el checkout público de membresía; el admin logueado no lo necesita. */
+  async listarActivos(tokenReferido?: string): Promise<MetodoPagoCatalogo[]> {
+    const resp = await apiFetch('/api/inventario/config/metodos-pago', {
+      method: 'GET',
+      headers: headersReferido(tokenReferido),
+    });
     return (resp?.data ?? []) as MetodoPagoCatalogo[];
   },
 
@@ -68,8 +76,27 @@ const metodoPagoService = {
     return { data: resp.data as MetodoPagoCatalogo, msg: resp.msg };
   },
 
-  async listarPadres(): Promise<MetodoPagoPadre[]> {
-    const resp = await apiFetch('/api/inventario/config/metodos-pago/padres', { method: 'GET' });
+  /** @param tokenReferido - requerido en el checkout público de membresía; el admin logueado no lo necesita. */
+  async listarPadres(tokenReferido?: string): Promise<MetodoPagoPadre[]> {
+    const resp = await apiFetch('/api/inventario/config/metodos-pago/padres', {
+      method: 'GET',
+      headers: headersReferido(tokenReferido),
+    });
+    return (resp?.data ?? []) as MetodoPagoPadre[];
+  },
+
+  /**
+   * Checkout público de membresía (guest sin sesión admin, autenticado con token de
+   * referido) o admin logueado. Endpoint dedicado bajo el namespace de membresía, separado
+   * del panel admin (`/inventario/config/metodos-pago/padres`), que acepta ambos tipos de
+   * token.
+   * @param tokenReferido - requerido en el checkout público; el admin logueado no lo necesita.
+   */
+  async listarPadresReferido(tokenReferido?: string): Promise<MetodoPagoPadre[]> {
+    const resp = await apiFetch('/api/membresia/seguridad/listar/metodos-pago/referido', {
+      method: 'GET',
+      headers: headersReferido(tokenReferido),
+    });
     return (resp?.data ?? []) as MetodoPagoPadre[];
   },
 

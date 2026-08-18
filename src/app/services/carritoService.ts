@@ -534,6 +534,18 @@ const carritoService = {
     const resp = await apiFetch(`/api/carrito/admin/ventas-referencias${query ? `?${query}` : ''}`, { method: 'GET' });
     return { total: Number(resp.total || 0), data: (resp.data || []) as VentaReferenciaAdmin[] };
   },
+
+  async previsualizarVentaManual(items: Array<Record<string, unknown>>): Promise<{ data: Record<string, any> }> {
+    return apiFetch('/api/carrito/admin/venta-manual/previsualizar', { method: 'POST', body: { items } });
+  },
+
+  async listarReferidoresBypassPipelineB(): Promise<{ data: Array<Record<string, any>> }> {
+    return apiFetch('/api/carrito/admin/venta-manual/referidores', { method: 'GET' });
+  },
+
+  async crearVentaManual(payload: Record<string, unknown>): Promise<{ data: Record<string, any> }> {
+    return apiFetch('/api/carrito/admin/venta-manual', { method: 'POST', body: payload });
+  },
 };
 
 export interface VentaReferenciaAdmin {

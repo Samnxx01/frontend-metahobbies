@@ -126,6 +126,11 @@ const DB_EMPTY: DbForm = {
 export default function ContenedorParametrizacion(): React.ReactElement {
   // Datos maestros
   const [tenants, setTenants] = useState<TenantDisponible[]>([]);
+  // Sin filtrar por tenantGlobal (a diferencia de `tenants`): incluye toda empresa aunque
+  // todavía no tenga tenantGlobal vinculado, para la tabla "Perfiles corporativos".
+  const [todosCorporativos, setTodosCorporativos] = useState<TenantDisponible[]>([]);
+  const [contenedoresVisibles, setContenedoresVisibles] = useState<Contenedor[]>([]);
+  const [cargandoVisibles, setCargandoVisibles] = useState(false);
   const [dominios, setDominios] = useState<Dominio[]>([]);
   const [contenedores, setContenedores] = useState<Contenedor[]>([]);
   const [dbConfigs, setDbConfigs] = useState<TenantDbConfig[]>([]);
@@ -176,17 +181,73 @@ export default function ContenedorParametrizacion(): React.ReactElement {
   const [mostrarUri, setMostrarUri] = useState(false);
   const [basesDescubiertas, setBasesDescubiertas] = useState<string[]>([]);
 
-  // ── Carga inicial: tenants + dominios ──
+  // ── Carga inicial: tenants + dominios + contenedores visibles (para la tabla por perfil) ──
   useEffect(() => {
     setCargandoInicial(true);
-    Promise.all([contenedorService.listarTenantsDisponibles(), listarDominios()])
-      .then(([t, d]) => {
-        if (t.ok) setTenants(t.data ?? []);
+    setCargandoVisibles(true);
+    Promise.all([
+      contenedorService.listarTenantsDisponibles(),
+      listarDominios(),
+      contenedorService.listarVisibles(),
+    ])
+      .then(([t, d, v]) => {
+        if (t.ok) {
+          const data = t.data ?? [];
+          setTodosCorporativos(data);
+          // Esta pantalla opera por tenantGlobal (contenedores/config BD se listan por
+          // tenantGlobalId): una empresa que aún no tiene tenantGlobal vinculado llega con
+          // iud:'' desde el backend (ese endpoint es compartido con otra pantalla que sí la
+          // admite, usando corporativo.iud). Para el selector de arriba no sirve — y si hay
+          // más de una, duplica la key '' en el <SelectItem>. La filtramos.
+          setTenants(data.filter((tenant) => tenant.iud));
+        }
         if (d.success) setDominios(d.data ?? []);
+        if (v.ok) setContenedoresVisibles(v.data ?? []);
       })
       .catch(() => toast.error('Error cargando datos iniciales'))
-      .finally(() => setCargandoInicial(false));
+      .finally(() => {
+        setCargandoInicial(false);
+        setCargandoVisibles(false);
+      });
   }, []);
+
+  // ── Contenedores agrupados por perfil corporativo, para la tabla "Perfiles corporativos" ──
+  const contenedoresPorCorporativo = useMemo(() => {
+    const map = new Map<string, Contenedor[]>();
+    for (const c of contenedoresVisibles) {
+      const cid = c.corporativo?.iud || c.corporativo?._id || '';
+      if (!cid) continue;
+      const lista = map.get(cid) ?? [];
+      lista.push(c);
+      map.set(cid, lista);
+    }
+    return map;
+  }, [contenedoresVisibles]);
+
+  const perfilesConContenedores = useMemo(() => {
+    const vistos = new Set<string>();
+    return todosCorporativos
+      .filter((t) => {
+        const cid = t.corporativo?.iud;
+        if (!cid || vistos.has(cid)) return false;
+        vistos.add(cid);
+        return true;
+      })
+      .map((t) => {
+        const cid = t.corporativo!.iud;
+        return {
+          corporativoId: cid,
+          razonSocial: t.corporativo?.razon_social || t.corporativo?.titulo || 'Sin nombre',
+          nit: t.corporativo?.nit_ruc_rtn || '',
+          tenantGlobalId: t.iud || '',
+          contenedoresDelPerfil: contenedoresPorCorporativo.get(cid) ?? [],
+        };
+      })
+      .sort((a, b) =>
+        b.contenedoresDelPerfil.length - a.contenedoresDelPerfil.length
+        || a.razonSocial.localeCompare(b.razonSocial)
+      );
+  }, [todosCorporativos, contenedoresPorCorporativo]);
 
   // ── Cargar contenedores + configs de BD para el tenant seleccionado ──
   const cargarTenant = useCallback((id: string) => {
@@ -661,6 +722,95 @@ export default function ContenedorParametrizacion(): React.ReactElement {
                   {tenantLabel}
                 </Badge>
               )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Perfiles corporativos → sus contenedores */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Layers className="w-4 h-4 text-primary" />
+            Perfiles corporativos
+            {perfilesConContenedores.length > 0 && (
+              <Badge className="ml-1 bg-primary/10 text-primary border-0">{perfilesConContenedores.length}</Badge>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          {cargandoVisibles ? (
+            <div className="flex items-center justify-center py-10 text-muted-foreground">
+              <Loader2 className="w-5 h-5 animate-spin mr-2" />
+              Cargando…
+            </div>
+          ) : perfilesConContenedores.length === 0 ? (
+            <div className="flex flex-col items-center py-12 text-muted-foreground">
+              <Layers className="w-8 h-8 mb-2 opacity-40" />
+              <p className="text-sm">Sin perfiles corporativos registrados.</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[30%]">Perfil corporativo</TableHead>
+                    <TableHead>Tenant</TableHead>
+                    <TableHead>Contenedores</TableHead>
+                    <TableHead className="text-right">Acciones</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {perfilesConContenedores.map((p) => (
+                    <TableRow key={p.corporativoId}>
+                      <TableCell>
+                        <p className="font-medium text-foreground">{p.razonSocial}</p>
+                        {p.nit && <p className="text-xs text-muted-foreground">{p.nit}</p>}
+                      </TableCell>
+                      <TableCell>
+                        {p.tenantGlobalId ? (
+                          <Badge variant="outline" className="text-success border-success/20 bg-success/10">
+                            Vinculado
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-warning border-warning/20 bg-warning/10">
+                            Sin tenant
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {p.contenedoresDelPerfil.length === 0 ? (
+                          <span className="text-xs text-muted-foreground">Sin contenedores</span>
+                        ) : (
+                          <div className="flex flex-wrap gap-1 max-w-md">
+                            {p.contenedoresDelPerfil.map((c) => (
+                              <Badge
+                                key={c.iud}
+                                variant="outline"
+                                className={`text-xs ${c.estado ? '' : 'opacity-50'}`}
+                                title={c.displayLabel || c.nombre}
+                              >
+                                {c.nombre}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {p.tenantGlobalId && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleTenantChange(p.tenantGlobalId)}
+                          >
+                            Ver
+                          </Button>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </div>
           )}
         </CardContent>

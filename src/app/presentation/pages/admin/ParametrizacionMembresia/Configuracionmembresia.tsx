@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { toast } from 'react-toastify';
+import { swalFire as Swal } from '@/lib/sweetalert';
 import { apiFetch } from '@/app/services/api';
 import productosService, { type BackendTipoProducto } from '@/app/services/productosService';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -21,7 +22,7 @@ import {
 import { Separator } from '@/components/ui/separator';
 import {
     Loader2, Plus, RefreshCw, Tag, AlertCircle, Pencil,
-    CheckCircle2, XCircle, DollarSign, ListFilter, CircleHelp,
+    CheckCircle2, XCircle, DollarSign, ListFilter, CircleHelp, Trash2,
 } from 'lucide-react';
 import {
     MEMBRESIA_PRECIO_CREATE_URL,
@@ -90,29 +91,65 @@ interface TipoPagoOption {
     nombre: string;
     descripcion?: string;
     estado?: boolean;
+    /** Vigencia parametrizable en horas (ej: Diario=24, Quincenal=360, Mensual=720, Anual=8760). */
+    duracionHoras?: number | null;
 }
+
+/** Presets de vigencia sugeridos para no tener que calcular las horas a mano. */
+const PRESETS_DURACION_PAGO: { label: string; horas: number }[] = [
+    { label: 'Diario', horas: 24 },
+    { label: 'Quincenal', horas: 15 * 24 },
+    { label: 'Mensual', horas: 30 * 24 },
+    { label: 'Anual', horas: 365 * 24 },
+];
+
+const formatearDuracion = (horas: number | null | undefined): string => {
+    if (!horas || horas <= 0) return 'Sin vigencia definida';
+    if (horas % 24 === 0) {
+        const dias = horas / 24;
+        return `${dias} ${dias === 1 ? 'día' : 'días'} (${horas} h)`;
+    }
+    return `${horas} h`;
+};
 
 const normalizarTipoPago = (raw: unknown): TipoPagoOption | null => {
     if (typeof raw === 'string') {
         const nombre = raw.trim();
-        return nombre ? { codigo: nombre, nombre, estado: true } : null;
+        return nombre ? { codigo: nombre, nombre, estado: true, duracionHoras: null } : null;
     }
     if (!raw || typeof raw !== 'object') return null;
     const row = raw as Record<string, unknown>;
     const nombre = String(row.nombre ?? row.tipo ?? row.tipoPagos ?? '').trim();
     if (!nombre) return null;
+    const duracionRaw = row.duracionHoras;
+    const duracionHoras = duracionRaw === null || duracionRaw === undefined || duracionRaw === ''
+        ? null
+        : Number(duracionRaw);
     return {
         codigo: String(row.codigo ?? row.id ?? row.iud ?? nombre).trim(),
         nombre,
         descripcion: String(row.descripcion ?? '').trim(),
         estado: row.estado !== false && row.activo !== false,
+        duracionHoras: Number.isFinite(duracionHoras) ? duracionHoras : null,
     };
 };
 
+// Usada con la fuente autoritativa (catálogo de tipos de pago): reemplaza por completo,
+// así reflejan altas/ediciones/bajas hechas desde el modal de parametrización.
 const agregarTiposSinDuplicar = (actuales: TipoPagoOption[], nuevos: TipoPagoOption[]) => {
     const mapa = new Map(actuales.map(tipo => [tipo.nombre.toLocaleUpperCase(), tipo]));
     nuevos.forEach(tipo => mapa.set(tipo.nombre.toLocaleUpperCase(), tipo));
     return Array.from(mapa.values()).filter(tipo => tipo.estado !== false);
+};
+
+// Usada con nombres derivados de membresías ya creadas (solo el string tipoPagos, sin
+// duración/descripción): únicamente rellena tipos que el catálogo aún no conoce, nunca
+// pisa un registro existente — si no, cada recarga de la tabla borraba la duración
+// parametrizada por venir de un string plano sin ese dato.
+const agregarTiposFaltantes = (actuales: TipoPagoOption[], nuevos: TipoPagoOption[]) => {
+    const existentes = new Set(actuales.map(tipo => tipo.nombre.toLocaleUpperCase()));
+    const faltantes = nuevos.filter(tipo => tipo.estado !== false && !existentes.has(tipo.nombre.toLocaleUpperCase()));
+    return faltantes.length ? [...actuales, ...faltantes] : actuales;
 };
 
 const normalizarPrecioDesdeCentavos = (valor: number | string | null | undefined) =>
@@ -139,8 +176,10 @@ export default function ConfiguracionMembresia() {
     const [metodosPago, setMetodosPago] = useState<MetodoPagoOption[]>([]);
     const [loadingOpcionesPago, setLoadingOpcionesPago] = useState(false);
     const [modalTipoPago, setModalTipoPago] = useState(false);
-    const [tipoPagoDraft, setTipoPagoDraft] = useState<TipoPagoOption>({ codigo: '', nombre: '', descripcion: '', estado: true });
+    const [tipoPagoDraft, setTipoPagoDraft] = useState<TipoPagoOption>({ codigo: '', nombre: '', descripcion: '', estado: true, duracionHoras: null });
+    const [duracionUnidad, setDuracionUnidad] = useState<'HORAS' | 'DIAS'>('DIAS');
     const [guardandoTipoPago, setGuardandoTipoPago] = useState(false);
+    const [eliminandoTipoPagoCodigo, setEliminandoTipoPagoCodigo] = useState<string | null>(null);
 
     // Tabla de membresías
     const [membresias, setMembresias] = useState<MembresiaPrecioRow[]>([]);
@@ -183,7 +222,7 @@ export default function ConfiguracionMembresia() {
             const tiposRegistrados = rows
                 .map(row => normalizarTipoPago(row.tipoPagos))
                 .filter((tipo): tipo is TipoPagoOption => tipo !== null);
-            setTiposPago(actuales => agregarTiposSinDuplicar(actuales, tiposRegistrados));
+            setTiposPago(actuales => agregarTiposFaltantes(actuales, tiposRegistrados));
         } catch { /* no bloqueante */ }
         finally { setLoadingMembresias(false); }
     }, []);
@@ -235,17 +274,49 @@ export default function ConfiguracionMembresia() {
                         codigo: codigo || undefined,
                         nombre: tipoPagoDraft.nombre.trim(),
                         descripcion: tipoPagoDraft.descripcion?.trim() || '',
+                        duracionHoras: tipoPagoDraft.duracionHoras || null,
                         estado: tipoPagoDraft.estado !== false,
                     },
                 }
             );
             toast.success('Tipo de pago guardado.');
-            setTipoPagoDraft({ codigo: '', nombre: '', descripcion: '', estado: true });
+            setTipoPagoDraft({ codigo: '', nombre: '', descripcion: '', estado: true, duracionHoras: null });
+            setDuracionUnidad('DIAS');
             await cargarOpcionesPago();
         } catch (error: any) {
             mostrarError(error.message || 'No se pudo guardar el tipo de pago.');
         } finally {
             setGuardandoTipoPago(false);
+        }
+    };
+
+    const eliminarTipoPago = async (tipo: TipoPagoOption) => {
+        if (!tipo.codigo || eliminandoTipoPagoCodigo) return;
+        const confirmacion = await Swal({
+            title: '¿Eliminar tipo de pago?',
+            text: `Se eliminará "${tipo.nombre}". Si alguna membresía ya lo usa, no se podrá eliminar hasta reasignarla.`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'Sí, eliminar',
+            cancelButtonText: 'Cancelar',
+            confirmButtonColor: '#dc2626',
+        });
+        if (!confirmacion.isConfirmed) return;
+        setEliminandoTipoPagoCodigo(tipo.codigo);
+        try {
+            await apiFetch(`/api/membresia/seguridad/parametrizacion/tipos-pago/${encodeURIComponent(tipo.codigo)}`, {
+                method: 'DELETE',
+            });
+            toast.success('Tipo de pago eliminado.');
+            setTiposPago(actuales => actuales.filter(t => t.codigo !== tipo.codigo));
+            if (tipoPagoDraft.codigo === tipo.codigo) {
+                setTipoPagoDraft({ codigo: '', nombre: '', descripcion: '', estado: true, duracionHoras: null });
+                setDuracionUnidad('DIAS');
+            }
+        } catch (error: any) {
+            mostrarError(error.message || 'No se pudo eliminar el tipo de pago.');
+        } finally {
+            setEliminandoTipoPagoCodigo(null);
         }
     };
 
@@ -858,19 +929,100 @@ export default function ConfiguracionMembresia() {
                                 onChange={e => setTipoPagoDraft(p => ({ ...p, descripcion: e.target.value }))}
                             />
                         </FieldWrapper>
+                        <FieldWrapper
+                            label="Duración de vigencia"
+                            hint="opcional"
+                        >
+                            <div className="flex flex-wrap gap-1.5">
+                                {PRESETS_DURACION_PAGO.map(preset => (
+                                    <button
+                                        type="button"
+                                        key={preset.label}
+                                        className={`rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${tipoPagoDraft.duracionHoras === preset.horas
+                                            ? 'border-primary bg-primary/10 text-primary'
+                                            : 'border-border text-muted-foreground hover:bg-muted'
+                                            }`}
+                                        onClick={() => {
+                                            setTipoPagoDraft(p => ({ ...p, duracionHoras: preset.horas }));
+                                            setDuracionUnidad(preset.horas % 24 === 0 && preset.horas > 24 ? 'DIAS' : 'HORAS');
+                                        }}
+                                    >
+                                        {preset.label} · {preset.horas % 24 === 0 ? `${preset.horas / 24} d` : `${preset.horas} h`}
+                                    </button>
+                                ))}
+                            </div>
+                            <div className="mt-2 flex items-center gap-2">
+                                <Input
+                                    type="number"
+                                    min={0}
+                                    step="any"
+                                    placeholder="Cantidad"
+                                    value={
+                                        tipoPagoDraft.duracionHoras
+                                            ? String(duracionUnidad === 'DIAS' ? tipoPagoDraft.duracionHoras / 24 : tipoPagoDraft.duracionHoras)
+                                            : ''
+                                    }
+                                    onChange={e => {
+                                        const valor = e.target.value === '' ? null : Number(e.target.value);
+                                        setTipoPagoDraft(p => ({
+                                            ...p,
+                                            duracionHoras: valor === null || !Number.isFinite(valor)
+                                                ? null
+                                                : (duracionUnidad === 'DIAS' ? valor * 24 : valor),
+                                        }));
+                                    }}
+                                    className="h-9 text-sm"
+                                />
+                                <Select value={duracionUnidad} onValueChange={v => setDuracionUnidad(v as 'HORAS' | 'DIAS')}>
+                                    <SelectTrigger className="h-9 w-28 shrink-0 text-sm">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="HORAS">Horas</SelectItem>
+                                        <SelectItem value="DIAS">Días</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <p className="mt-1 text-[11px] text-muted-foreground">
+                                {formatearDuracion(tipoPagoDraft.duracionHoras)} · define cada cuánto vence una membresía con este tipo de pago.
+                            </p>
+                        </FieldWrapper>
                         <div className="space-y-2">
                             {tiposPago.map(tipo => (
-                                <button
-                                    type="button"
+                                <div
                                     key={tipo.codigo}
-                                    className="flex w-full items-center justify-between rounded-md border p-2 text-left text-sm"
-                                    onClick={() => setTipoPagoDraft(tipo)}
+                                    className="flex w-full items-center gap-2 rounded-md border p-2 text-sm"
                                 >
-                                    <span>{tipo.nombre}</span>
-                                    <Badge variant={tipo.estado === false ? 'secondary' : 'outline'}>
-                                        {tipo.estado === false ? 'Inactivo' : 'Activo'}
-                                    </Badge>
-                                </button>
+                                    <button
+                                        type="button"
+                                        className="flex flex-1 items-center justify-between text-left"
+                                        onClick={() => {
+                                            setTipoPagoDraft(tipo);
+                                            setDuracionUnidad(tipo.duracionHoras && tipo.duracionHoras % 24 === 0 ? 'DIAS' : 'HORAS');
+                                        }}
+                                    >
+                                        <span className="flex flex-col">
+                                            <span>{tipo.nombre}</span>
+                                            <span className="text-[11px] text-muted-foreground">{formatearDuracion(tipo.duracionHoras)}</span>
+                                        </span>
+                                        <Badge variant={tipo.estado === false ? 'secondary' : 'outline'}>
+                                            {tipo.estado === false ? 'Inactivo' : 'Activo'}
+                                        </Badge>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        title={`Eliminar ${tipo.nombre}`}
+                                        aria-label={`Eliminar ${tipo.nombre}`}
+                                        disabled={eliminandoTipoPagoCodigo === tipo.codigo}
+                                        className="shrink-0 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
+                                        onClick={() => void eliminarTipoPago(tipo)}
+                                    >
+                                        {eliminandoTipoPagoCodigo === tipo.codigo
+                                            ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                            : <Trash2 className="h-3.5 w-3.5" />
+                                        }
+                                    </button>
+                                </div>
                             ))}
                         </div>
                     </div>

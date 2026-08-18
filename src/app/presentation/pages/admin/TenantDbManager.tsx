@@ -1,4 +1,5 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { swalFire as Swal } from '@/lib/sweetalert';
 import {
@@ -79,7 +80,6 @@ const NOMBRE_CONTENEDOR_MANUAL = '__manual__';
 const CONTENEDOR_RAIZ = '__root__';
 const buildCorporativoMapKey = (corporativoId?: string | null) =>
   corporativoId ? `corp:${corporativoId}` : '';
-const DEBUG_CONTENEDORES = true;
 
 const getContenedorLabel = (contenedor: ContenedorParametrizacion) =>
   contenedor.displayLabel || contenedor.pathLabels?.join(' > ') || contenedor.nombre;
@@ -226,6 +226,11 @@ type DialogoConexionModo = 'crear' | 'editar';
 // ─── Componente principal ─────────────────────────────────────────────────────
 
 export default function TenantDbManager() {
+  // Ruta de nivel superior montada vía rutas dinámicas: se renderiza dentro de un
+  // Dialog abierto por defecto (ver return) para heredar el botón "Agrandar" de
+  // DialogContent. Al cerrarlo, se navega hacia atrás en el historial.
+  const navigate = useNavigate();
+
   // ── Estado general ──
   const [configs, setConfigs] = useState<TenantDbConfig[]>([]);
   const [loading, setLoading] = useState(false);
@@ -282,6 +287,23 @@ export default function TenantDbManager() {
   const [removerSyncTarget, setRemoverSyncTarget] = useState<{ config: TenantDbConfig; coleccion: string } | null>(null);
   const [removerSyncDropCollection, setRemoverSyncDropCollection] = useState(true);
   const [removerSyncLoading, setRemoverSyncLoading] = useState(false);
+
+  // ── Sync masivo (todas las colecciones de una config) ──
+  type SyncMasivoItemEstado = 'pendiente' | 'en-proceso' | 'ok' | 'error';
+  interface SyncMasivoItem {
+    coleccion: string;
+    sourceConfigId: string;
+    modo: 'full' | 'incremental';
+    filtro: Record<string, unknown> | null;
+    estado: SyncMasivoItemEstado;
+    copiados?: number;
+    error?: string;
+  }
+  const [dlgSyncMasivo, setDlgSyncMasivo] = useState(false);
+  const [syncMasivoTarget, setSyncMasivoTarget] = useState<TenantDbConfig | null>(null);
+  const [syncMasivoItems, setSyncMasivoItems] = useState<SyncMasivoItem[]>([]);
+  const [syncMasivoRunning, setSyncMasivoRunning] = useState(false);
+  const syncMasivoCancelRef = useRef(false);
 
   // ── Pool ──
   const [pool, setPool] = useState<{ pool: Record<string, { readyState: number; nombre: string }>; watchersActivos: string[] } | null>(null);
@@ -382,11 +404,6 @@ export default function TenantDbManager() {
   }, []);
 
   const cargarContenedoresTenant = useCallback(async (tenantGlobalId: string, corporativoId?: string) => {
-    const debugPrefix = '[TenantDbManager][contenedores]';
-    if (DEBUG_CONTENEDORES) {
-      console.log(`${debugPrefix} inicio`, { tenantGlobalId, corporativoId });
-    }
-
     try {
       if (corporativoId) {
         const porCorporativo = await tenantDbService.obtenerCorporativoConContenedores(corporativoId);
@@ -394,15 +411,6 @@ export default function TenantDbManager() {
           ? porCorporativo.data.contenedores
           : [];
         const tenantResuelto = String(porCorporativo?.data?.tenantGlobal?.iud || tenantGlobalId);
-
-        if (DEBUG_CONTENEDORES) {
-          console.log(`${debugPrefix} preview corporativo`, {
-            corporativoId,
-            tenantResuelto,
-            total: contenedoresCorporativo.length,
-            contenedores: contenedoresCorporativo,
-          });
-        }
 
         if (contenedoresCorporativo.length > 0) {
           setContenedoresPorTenant((prev) => {
@@ -414,9 +422,6 @@ export default function TenantDbManager() {
             }
             return next;
           });
-          if (DEBUG_CONTENEDORES) {
-            toast.info(`Debug contenedores: preview corporativo devolvio ${contenedoresCorporativo.length}`);
-          }
           return;
         }
       }
@@ -428,31 +433,13 @@ export default function TenantDbManager() {
           ? preview.data.contenedores
           : [];
 
-        if (DEBUG_CONTENEDORES) {
-          console.log(`${debugPrefix} preview tenant`, {
-            tenantGlobalId,
-            total: contenedoresPreview.length,
-            contenedores: contenedoresPreview,
-          });
-        }
-
         if (contenedoresPreview.length > 0) {
           setContenedoresPorTenant((prev) => new Map(prev).set(tenantGlobalId, contenedoresPreview));
-          if (DEBUG_CONTENEDORES) {
-            toast.info(`Debug contenedores: preview tenant devolvio ${contenedoresPreview.length}`);
-          }
           return;
         }
 
         const listado = await tenantDbService.listarContenedores(tenantGlobalId, true);
         const contenedoresListado = Array.isArray(listado?.data) ? listado.data : [];
-        if (DEBUG_CONTENEDORES) {
-          console.log(`${debugPrefix} listado tenant`, {
-            tenantGlobalId,
-            total: contenedoresListado.length,
-            contenedores: contenedoresListado,
-          });
-        }
         if (contenedoresListado.length > 0) {
           setContenedoresPorTenant((prev) => {
             const next = new Map(prev);
@@ -462,9 +449,6 @@ export default function TenantDbManager() {
             }
             return next;
           });
-          if (DEBUG_CONTENEDORES) {
-            toast.info(`Debug contenedores: listado tenant devolvio ${contenedoresListado.length}`);
-          }
           return;
         }
       }
@@ -474,22 +458,12 @@ export default function TenantDbManager() {
         const contenedoresCorporativo = Array.isArray(porCorporativo?.data?.contenedores)
           ? porCorporativo.data.contenedores
           : [];
-        if (DEBUG_CONTENEDORES) {
-          console.log(`${debugPrefix} fallback corporativo`, {
-            corporativoId,
-            total: contenedoresCorporativo.length,
-            contenedores: contenedoresCorporativo,
-          });
-        }
         setContenedoresPorTenant((prev) => {
           const next = new Map(prev);
           next.set(tenantGlobalId, contenedoresCorporativo);
           next.set(buildCorporativoMapKey(corporativoId), contenedoresCorporativo);
           return next;
         });
-        if (DEBUG_CONTENEDORES) {
-          toast.info(`Debug contenedores: fallback corporativo devolvio ${contenedoresCorporativo.length}`);
-        }
         return;
       }
 
@@ -501,19 +475,7 @@ export default function TenantDbManager() {
         }
         return next;
       });
-      if (DEBUG_CONTENEDORES) {
-        console.warn(`${debugPrefix} sin resultados`, { tenantGlobalId, corporativoId });
-        toast.warning('Debug contenedores: todos los endpoints devolvieron 0 registros');
-      }
     } catch (err: any) {
-      if (DEBUG_CONTENEDORES) {
-        console.error(`${debugPrefix} error`, {
-          tenantGlobalId,
-          corporativoId,
-          message: err?.message,
-          error: err,
-        });
-      }
       toast.error(err?.message ?? 'Error cargando contenedores');
     }
   }, []);
@@ -523,14 +485,6 @@ export default function TenantDbManager() {
       const res = await tenantDbService.listarContenedoresVisibles();
       const data = Array.isArray(res?.data) ? res.data : [];
       setContenedoresVisibles(data);
-
-      if (DEBUG_CONTENEDORES) {
-        console.log('[TenantDbManager][contenedores] visibles superadmin', {
-          total: data.length,
-          contenedores: data,
-        });
-      }
-
       return data;
     } catch (err: any) {
       if (!silent) {
@@ -714,14 +668,6 @@ export default function TenantDbManager() {
   };
 
   const handleAbrirParametrizacion = (tenant: TenantDisponible) => {
-    if (DEBUG_CONTENEDORES) {
-      console.log('[TenantDbManager][contenedores] abrir modal parametrizacion', {
-        tenantDisponible: tenant,
-        corporativoId: tenant.corporativo?.iud,
-        tenantGlobalId: tenant.iud,
-      });
-      toast.info(`Debug modal: abriendo con tenant ${tenant.iud.slice(0, 8)} y corporativo ${tenant.corporativo?.iud?.slice(0, 8) || 'N/A'}`);
-    }
     setTenantParaParametrizar(tenant);
     setFormContenedor({ parentContenedorId: '', nombre: '', apisDominios: '', dominioFrontend: '', descripcion: '' });
     setNombreContenedorSeleccionado(NOMBRE_CONTENEDOR_MANUAL);
@@ -773,15 +719,6 @@ export default function TenantDbManager() {
   // Reacciona a los datos ya cargados (autoseleccionar nombre de contenedor) sin volver a pedirlos.
   useEffect(() => {
     if (!dlgParametrizacion || !tenantParaParametrizar) return;
-
-    if (DEBUG_CONTENEDORES) {
-      console.log('[TenantDbManager][contenedores] estado modal', {
-        tenantGlobalId: tenantParaParametrizar.iud,
-        corporativoId: tenantParaParametrizar.corporativo?.iud,
-        totalActual: contenedoresActualesTenant.length,
-        contenedoresActualesTenant,
-      });
-    }
 
     if (nombresExistentesTenant.length === 1 && !formContenedor.nombre.trim()) {
       const unicoNombre = nombresExistentesTenant[0];
@@ -1138,6 +1075,117 @@ export default function TenantDbManager() {
     }
   };
 
+  const abrirDlgSyncMasivo = (config: TenantDbConfig) => {
+    // Filtra nombres vacíos y duplicados: hay configs legacy con entradas corruptas en
+    // coleccionesSync (ver el bug de coleccionesSync:null ya corregido en backend) que
+    // podían dejar más de una entrada con el mismo nombre de colección.
+    const vistos = new Set<string>();
+    const colsActivas = (config.coleccionesSync ?? []).filter((c) => {
+      if (!c.estado) return false;
+      const nombre = String(c.coleccion || '').trim();
+      if (!nombre || vistos.has(nombre)) return false;
+      vistos.add(nombre);
+      return true;
+    });
+    if (!colsActivas.length) {
+      toast.warning('No hay colecciones sincronizadas para sincronizar');
+      return;
+    }
+    setSyncMasivoTarget(config);
+    setSyncMasivoItems(colsActivas.map((col) => ({
+      coleccion: col.coleccion,
+      sourceConfigId: resolveSourceConfigIdFromCol(col),
+      modo: col.modo,
+      filtro: col.filtro,
+      estado: 'pendiente',
+    })));
+    syncMasivoCancelRef.current = false;
+    setDlgSyncMasivo(true);
+  };
+
+  // Sincroniza cada colección con su propia llamada a /ejecutar (misma ruta que usa
+  // el botón individual "Sincronizar datos"), en secuencia, actualizando el estado
+  // por fila para que el modal muestre el progreso en vivo. Un fallo en una colección
+  // no detiene el resto: cada una es independiente (su propia transacción en el backend).
+  // Sigue corriendo aunque el usuario cierre el modal (cerrar no cancela, solo oculta) —
+  // el progreso se ve igual via el toast con contador en vivo.
+  const iniciarSyncMasivo = async () => {
+    if (!syncMasivoTarget || syncMasivoRunning) return;
+    const id = resolverConfigId(syncMasivoTarget);
+    const total = syncMasivoItems.length;
+    syncMasivoCancelRef.current = false;
+    setSyncMasivoRunning(true);
+
+    const toastId = toast.loading(`Sincronizando: 0/${total} colecciones`);
+    let hechas = 0;
+    let fallidas = 0;
+
+    for (let i = 0; i < syncMasivoItems.length; i += 1) {
+      if (syncMasivoCancelRef.current) break;
+      const item = syncMasivoItems[i];
+      if (!item.sourceConfigId) {
+        setSyncMasivoItems(prev => prev.map((it, idx) => idx === i
+          ? { ...it, estado: 'error', error: 'Sin conexión padre/origen resuelta' }
+          : it));
+        fallidas += 1;
+        toast.update(toastId, { render: `Sincronizando: ${hechas + fallidas}/${total} colecciones (${fallidas} con error)` });
+        continue;
+      }
+
+      setSyncMasivoItems(prev => prev.map((it, idx) => idx === i ? { ...it, estado: 'en-proceso' } : it));
+      try {
+        const res = await tenantDbService.ejecutarSync(id, {
+          sourceConfigId: item.sourceConfigId,
+          coleccion: item.coleccion,
+          modo: item.modo,
+          filtro: item.filtro,
+        });
+        setSyncMasivoItems(prev => prev.map((it, idx) => idx === i
+          ? { ...it, estado: 'ok', copiados: res.data?.copiados ?? 0 }
+          : it));
+        hechas += 1;
+      } catch (err: any) {
+        setSyncMasivoItems(prev => prev.map((it, idx) => idx === i
+          ? { ...it, estado: 'error', error: err?.message ?? 'Error ejecutando sync' }
+          : it));
+        fallidas += 1;
+      }
+      toast.update(toastId, {
+        render: `Sincronizando: ${hechas + fallidas}/${total} colecciones${fallidas ? ` (${fallidas} con error)` : ''}`,
+      });
+    }
+
+    const cancelado = syncMasivoCancelRef.current;
+    toast.update(toastId, {
+      render: cancelado
+        ? `Cancelado: ${hechas + fallidas}/${total} colecciones procesadas (${fallidas} con error)`
+        : fallidas > 0
+          ? `Listo con errores: ${hechas}/${total} colecciones, ${fallidas} fallaron`
+          : `Sincronización completa: ${hechas}/${total} colecciones`,
+      type: cancelado ? 'warning' : fallidas > 0 ? 'warning' : 'success',
+      isLoading: false,
+      autoClose: 6000,
+    });
+
+    setSyncMasivoRunning(false);
+    void cargarConfigs();
+  };
+
+  const cancelarSyncMasivo = () => {
+    syncMasivoCancelRef.current = true;
+  };
+
+  // Cerrar el modal NO cancela el proceso: solo lo oculta. La sincronización sigue
+  // corriendo en segundo plano (el estado vive en el componente, no en el modal) y el
+  // usuario puede seguir usando el resto de la pantalla mientras tanto.
+  const cerrarDlgSyncMasivo = () => {
+    setDlgSyncMasivo(false);
+    if (!syncMasivoRunning) {
+      setSyncMasivoTarget(null);
+      setSyncMasivoItems([]);
+    }
+  };
+
   const handleRemoverSyncLegacy = async (config: TenantDbConfig, coleccion: string) => {
     if (!window.confirm(`¿Remover "${coleccion}" del sync?`)) return;
     const id = resolverConfigId(config);
@@ -1194,6 +1242,8 @@ export default function TenantDbManager() {
     let coleccionesObjetivo = [...syncForm.colecciones];
     let omitidasPorExistentes = 0;
 
+    // Fase de resolución (rápida, una sola petición): sí se espera con el modal abierto,
+    // para poder avisar si no hay nada que configurar antes de cerrarlo.
     setSyncSaving(true);
     try {
       if (syncForm.modo === 'full') {
@@ -1223,8 +1273,27 @@ export default function TenantDbManager() {
         );
         return;
       }
+    } catch (err: any) {
+      toast.error(err?.message ?? 'Error resolviendo colecciones a sincronizar');
+      return;
+    } finally {
+      setSyncSaving(false);
+    }
 
-      for (const coleccion of coleccionesObjetivo) {
+    // A partir de aquí puede ser lento (una petición por colección, con creación de
+    // watcher incluida) — cerramos el modal para no bloquear el formulario y avisamos
+    // el avance con un toast en vivo en vez de dejar el botón girando en silencio.
+    setDlgSync(false);
+    setSyncCollections([]);
+    setSyncPreview(null);
+
+    const total = coleccionesObjetivo.length;
+    const toastId = toast.loading(`Configurando sincronización: 0/${total} colecciones`);
+    let hechas = 0;
+    let fallidas = 0;
+
+    for (const coleccion of coleccionesObjetivo) {
+      try {
         await tenantDbService.configurarSync(targetConfigId, {
           sourceConfigId: syncForm.sourceConfigId,
           coleccion,
@@ -1232,22 +1301,24 @@ export default function TenantDbManager() {
           modo: syncForm.modo,
           filtro: null,
         });
+        hechas += 1;
+      } catch {
+        fallidas += 1;
       }
-
-      toast.success(
-        syncForm.modo === 'full'
-          ? `Se agregaron ${coleccionesObjetivo.length} colecciones nuevas del padre${omitidasPorExistentes > 0 ? ` (${omitidasPorExistentes} ya estaban sincronizadas)` : ''}`
-          : `Se guardaron ${coleccionesObjetivo.length} sincronizaciones selectivas`
-      );
-      setDlgSync(false);
-      setSyncCollections([]);
-      setSyncPreview(null);
-      void cargarConfigs();
-    } catch (err: any) {
-      toast.error(err?.message ?? 'Error configurando sincronizacion');
-    } finally {
-      setSyncSaving(false);
+      toast.update(toastId, {
+        render: `Configurando sincronización: ${hechas + fallidas}/${total} colecciones${fallidas ? ` (${fallidas} con error)` : ''}`,
+      });
     }
+
+    toast.update(toastId, {
+      render: fallidas > 0
+        ? `Listo con errores: ${hechas}/${total} colecciones configuradas, ${fallidas} fallaron`
+        : `Se configuraron ${hechas} colecciones${omitidasPorExistentes > 0 ? ` (${omitidasPorExistentes} ya estaban sincronizadas)` : ''}`,
+      type: fallidas > 0 ? 'warning' : 'success',
+      isLoading: false,
+      autoClose: 6000,
+    });
+    void cargarConfigs();
   };
 
   const handleAbrirSyncDatos = (config: TenantDbConfig, col: SyncColeccion) => {
@@ -1307,23 +1378,47 @@ export default function TenantDbManager() {
       return;
     }
 
-    const key = `${targetConfigId}:${syncDataTarget.col.coleccion}`;
-    setSyncManualLoading(key);
+    let filtro: Record<string, unknown> | null;
     try {
-      const filtro = parseSyncFiltro(syncDataForm.filtroTexto);
+      filtro = parseSyncFiltro(syncDataForm.filtroTexto);
+    } catch (err: any) {
+      toast.error(err?.message ?? 'Filtro invalido');
+      return;
+    }
+
+    const coleccion = syncDataTarget.col.coleccion;
+    const key = `${targetConfigId}:${coleccion}`;
+
+    // La sincronización de una sola colección ya puede tardar varios segundos (watcher,
+    // escritura transaccional) — cerramos el modal y avisamos por toast al terminar, en
+    // vez de dejar el formulario bloqueado esperando la respuesta.
+    setDlgSyncDatos(false);
+    setSyncPreview(null);
+    setSyncManualLoading(key);
+
+    const toastId = toast.loading(`Sincronizando "${coleccion}"...`);
+    try {
       const res = await tenantDbService.ejecutarSync(targetConfigId, {
         sourceConfigId,
-        coleccion: syncDataTarget.col.coleccion,
+        coleccion,
         modo: syncDataForm.modo,
         filtro,
         selectedIds: syncDataForm.modo === 'incremental' ? syncDataForm.selectedIds : null,
       });
-      toast.success(`Sync completado: ${res.data?.copiados ?? 0} documentos copiados`);
-      setDlgSyncDatos(false);
-      setSyncPreview(null);
+      toast.update(toastId, {
+        render: `Sync completado (${coleccion}): ${res.data?.copiados ?? 0} documentos copiados`,
+        type: 'success',
+        isLoading: false,
+        autoClose: 5000,
+      });
       void cargarConfigs();
     } catch (err: any) {
-      toast.error(err?.message ?? 'Error ejecutando sincronizacion');
+      toast.update(toastId, {
+        render: err?.message ?? `Error ejecutando sincronización de "${coleccion}"`,
+        type: 'error',
+        isLoading: false,
+        autoClose: 8000,
+      });
     } finally {
       setSyncManualLoading(null);
     }
@@ -1369,7 +1464,10 @@ export default function TenantDbManager() {
   // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
-    <div className="p-6 space-y-6">
+    <Dialog open onOpenChange={(next) => { if (!next) navigate(-1); }}>
+      <DialogContent className="flex max-h-[95dvh] w-[min(97vw,90rem)] max-w-none flex-col overflow-y-auto p-4 sm:p-6">
+        <DialogTitle className="sr-only">Conexiones de BD por Tenant</DialogTitle>
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center gap-3">
@@ -1629,6 +1727,19 @@ export default function TenantDbManager() {
                             Ninguna colección coincide con &quot;{syncFiltroTexto}&quot;.
                           </p>
                       ) : (
+                        <div className="space-y-3">
+                        <div className="flex justify-end">
+                          <Button
+                            type="button"
+                            variant="default"
+                            size="sm"
+                            onClick={() => abrirDlgSyncMasivo(cfg)}
+                            title="Abrir sincronización masiva de todas las colecciones guardadas"
+                          >
+                            <Play className="w-3 h-3 mr-1" />
+                            Sincronizar todo ({colsActivas.length})
+                          </Button>
+                        </div>
                         <div className="overflow-x-auto">
                         <Table>
                           <TableHeader>
@@ -1695,6 +1806,7 @@ export default function TenantDbManager() {
                             })}
                           </TableBody>
                         </Table>
+                        </div>
                         </div>
                       )}
                     </CardContent>
@@ -2867,6 +2979,100 @@ export default function TenantDbManager() {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={dlgSyncMasivo} onOpenChange={(open) => { if (!open) cerrarDlgSyncMasivo(); }}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Play className="h-5 w-5" />
+              Sincronizar todo — {syncMasivoTarget?.poolName || syncMasivoTarget?.dbName}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-3 py-2">
+            <p className="text-xs text-muted-foreground">
+              Ejecuta el sync manual de cada colección guardada, una por una, con su propia conexión origen, modo y filtro.
+              {' '}Un fallo en una colección no detiene a las demás.
+            </p>
+
+            <div className="max-h-[50vh] overflow-y-auto rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Colección</TableHead>
+                    <TableHead>Modo</TableHead>
+                    <TableHead>Estado</TableHead>
+                    <TableHead className="text-right">Detalle</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {syncMasivoItems.map((item, idx) => (
+                    <TableRow key={`${item.coleccion || 'sin-nombre'}-${idx}`}>
+                      <TableCell className="font-mono text-sm">{item.coleccion}</TableCell>
+                      <TableCell>
+                        <Badge variant="secondary" className="text-xs">{item.modo}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        {item.estado === 'pendiente' && (
+                          <span className="flex items-center gap-1 text-muted-foreground text-xs">
+                            <Clock className="w-3 h-3" /> Pendiente
+                          </span>
+                        )}
+                        {item.estado === 'en-proceso' && (
+                          <span className="flex items-center gap-1 text-warning text-xs">
+                            <Loader2 className="w-3 h-3 animate-spin" /> Sincronizando
+                          </span>
+                        )}
+                        {item.estado === 'ok' && (
+                          <span className="flex items-center gap-1 text-success text-xs">
+                            <CheckCircle2 className="w-3 h-3" /> Listo
+                          </span>
+                        )}
+                        {item.estado === 'error' && (
+                          <span className="flex items-center gap-1 text-destructive text-xs">
+                            <XCircle className="w-3 h-3" /> Error
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right text-xs text-muted-foreground">
+                        {item.estado === 'ok' && `${item.copiados ?? 0} documentos`}
+                        {item.estado === 'error' && <span className="text-destructive">{item.error}</span>}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+
+            <p className="text-xs text-muted-foreground">
+              {syncMasivoItems.filter(i => i.estado === 'ok').length} listas,{' '}
+              {syncMasivoItems.filter(i => i.estado === 'error').length} con error,{' '}
+              {syncMasivoItems.filter(i => i.estado === 'pendiente').length} pendientes de {syncMasivoItems.length} colecciones
+            </p>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={cerrarDlgSyncMasivo}>
+              Cerrar
+            </Button>
+            {syncMasivoRunning && (
+              <Button variant="outline" onClick={cancelarSyncMasivo} title="Detiene el proceso; lo ya sincronizado no se revierte">
+                Cancelar sincronización
+              </Button>
+            )}
+            <Button
+              disabled={syncMasivoRunning || syncMasivoItems.every(i => i.estado === 'ok')}
+              onClick={() => void iniciarSyncMasivo()}
+            >
+              {syncMasivoRunning
+                ? <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                : <Play className="w-4 h-4 mr-2" />
+              }
+              Iniciar sincronización
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog
         open={dlgRemoverSync}
         onOpenChange={(open) => {
@@ -3195,6 +3401,8 @@ export default function TenantDbManager() {
         </DialogContent>
       </Dialog>
     </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 

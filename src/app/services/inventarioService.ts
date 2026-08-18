@@ -977,6 +977,13 @@ export interface InventarioComprobanteContable {
   ipOrigenEjecutor?: string | null;
 }
 
+export interface InventarioComprobantesContablesPage {
+  data: InventarioComprobanteContable[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
 export interface CrearComprobanteContablePayload {
   sku: string;
   direction: 'IN' | 'OUT';
@@ -1551,9 +1558,19 @@ const inventarioService = {
     return resp?.data as LedgerByInvoiceResponse;
   },
 
-  async listarComprobantesContables(): Promise<InventarioComprobanteContable[]> {
-    const resp = await apiFetch('/api/inventario/config/comprobantes-contables', { method: 'GET' });
-    return (resp?.data ?? []) as InventarioComprobanteContable[];
+  async listarComprobantesContables(
+    params: { page?: number; limit?: number; q?: string } = {},
+  ): Promise<InventarioComprobantesContablesPage> {
+    const resp = await apiFetch(
+      `/api/inventario/config/comprobantes-contables${buildQuery(params)}`,
+      { method: 'GET' },
+    );
+    return {
+      data: Array.isArray(resp?.data) ? resp.data as InventarioComprobanteContable[] : [],
+      total: Number(resp?.total || 0),
+      page: Number(resp?.page || params.page || 1),
+      limit: Number(resp?.limit || params.limit || 20),
+    };
   },
 
   async previewSiguienteNumeroComprobante(codigo: string): Promise<SiguienteNumeroComprobantePreview> {
@@ -1746,6 +1763,22 @@ const inventarioService = {
     return resp?.data as InventarioOrdenCompra;
   },
 
+  async importarOrdenesCompraJson(archivo: File): Promise<{
+    total: number;
+    ordenes: InventarioOrdenCompra[];
+  }> {
+    const formData = new FormData();
+    formData.append('archivo', archivo);
+    const resp = await apiFetch('/api/inventario/compras/ordenes/importar-json', {
+      method: 'POST',
+      body: formData,
+    });
+    return {
+      total: Number(resp?.total || 0),
+      ordenes: Array.isArray(resp?.ordenes) ? resp.ordenes as InventarioOrdenCompra[] : [],
+    };
+  },
+
   async actualizarOrdenCompra(
     id: string,
     payload: {
@@ -1810,6 +1843,29 @@ const inventarioService = {
       aplicoKardex: data.aplicoKardex,
       msg: typeof resp?.msg === 'string' ? resp.msg : data.msg,
     };
+  },
+
+  async registrarKardexRecepcionOrdenCompra(
+    recepcionId: string,
+    payload: { estado?: boolean; confirmar?: boolean; aplicarKardex?: boolean } = {}
+  ): Promise<RecepcionOrdenCompraResponse> {
+    const resp = await apiFetch(`/api/inventario/compras/recepciones/${recepcionId}/kardex`, {
+      method: 'POST',
+      body: payload,
+    });
+    const data = (resp?.data || {}) as RecepcionOrdenCompraResponse;
+    return { ...data, msg: typeof resp?.msg === 'string' ? resp.msg : data.msg };
+  },
+
+  async anularRecepcionOrdenCompra(
+    recepcionId: string,
+    justificacion: string
+  ): Promise<RecepcionOrdenCompraResponse> {
+    const resp = await apiFetch(`/api/inventario/compras/recepciones/${recepcionId}/anular`, {
+      method: 'POST',
+      body: { justificacion },
+    });
+    return (resp?.data || {}) as RecepcionOrdenCompraResponse;
   },
 
   async crearProveedorCompra(payload: {

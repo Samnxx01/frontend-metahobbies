@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { CheckCircle2, FileText, Loader2 } from 'lucide-react';
+import { Ban, CheckCircle2, FileText, Loader2 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import inventarioService from '@/app/services/inventarioService';
 import type { InventarioOrdenCompra, RecepcionOrdenCompraResponse } from '@/app/services/inventarioService';
@@ -111,6 +111,9 @@ export default function InventarioComprobanteEntradaModal({
   onConfirmed,
 }: InventarioComprobanteEntradaModalProps): React.ReactElement {
   const [confirmando, setConfirmando] = useState(false);
+  const [anulando, setAnulando] = useState(false);
+  const [anulacionOpen, setAnulacionOpen] = useState(false);
+  const [justificacionAnulacion, setJustificacionAnulacion] = useState('');
   const [dataLocal, setDataLocal] = useState<RecepcionOrdenCompraResponse | null>(null);
 
   const dataUi = dataLocal ?? data;
@@ -120,6 +123,7 @@ export default function InventarioComprobanteEntradaModal({
   const pendienteConfirmacion = estadoRecepcion === 'PENDIENTE_APROBACION';
   const recepcionId = getRecepcionCompraId(dataUi?.recepcion);
   const mostrarConfirmar = pendienteConfirmacion && Boolean(recepcionId);
+  const mostrarAnular = Boolean(recepcionId) && estadoRecepcion !== 'ANULADA';
 
   React.useEffect(() => {
     if (open) setDataLocal(data);
@@ -173,6 +177,30 @@ export default function InventarioComprobanteEntradaModal({
       );
     } finally {
       setConfirmando(false);
+    }
+  };
+
+  const anularComprobante = async (): Promise<void> => {
+    if (!recepcionId || justificacionAnulacion.trim().length < 5) {
+      toast.error('Indique una justificacion de al menos 5 caracteres.');
+      return;
+    }
+    try {
+      setAnulando(true);
+      const result = await inventarioService.anularRecepcionOrdenCompra(
+        recepcionId,
+        justificacionAnulacion.trim(),
+      );
+      const merged = { ...(dataUi || {}), ...result } as RecepcionOrdenCompraResponse;
+      setDataLocal(merged);
+      onConfirmed?.(merged);
+      setAnulacionOpen(false);
+      setJustificacionAnulacion('');
+      toast.success('Comprobante anulado. El kardex solo fue reversado cuando existian movimientos.');
+    } catch (error) {
+      toast.error(mensajeErrorComprasInventario(error, 'No se pudo anular el comprobante.'));
+    } finally {
+      setAnulando(false);
     }
   };
 
@@ -299,7 +327,7 @@ export default function InventarioComprobanteEntradaModal({
             {mostrarConfirmar ? (
               <Button type="button" size="sm" onClick={() => void confirmarComprobante()} disabled={confirmando}>
                 {confirmando ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
-                {recepcionAutomatica ? 'Confirmar y kardex' : 'Confirmar comprobante'}
+                Confirmar comprobante
               </Button>
             ) : null}
           </div>
@@ -452,6 +480,11 @@ export default function InventarioComprobanteEntradaModal({
         )}
 
         <DialogFooter className="gap-2 sm:gap-0">
+          {mostrarAnular ? (
+            <Button type="button" className="w-full sm:w-auto" variant="destructive" onClick={() => setAnulacionOpen(true)} disabled={confirmando || anulando}>
+              <Ban className="mr-2 h-4 w-4" /> Anular comprobante
+            </Button>
+          ) : null}
           <Button type="button" className="w-full sm:w-auto" variant="outline" onClick={() => onOpenChange(false)} disabled={confirmando}>
             Cerrar
           </Button>
@@ -465,6 +498,31 @@ export default function InventarioComprobanteEntradaModal({
             Imprimir / PDF
           </Button>
         </DialogFooter>
+        <Dialog open={anulacionOpen} onOpenChange={setAnulacionOpen}>
+          <DialogContent className="w-[calc(100vw-2rem)] max-w-md border-border bg-background text-foreground">
+            <DialogHeader>
+              <DialogTitle>Anular comprobante de entrada</DialogTitle>
+              <DialogDescription>
+                Indique la justificacion. Si existen movimientos de kardex se crearán reversiones independientes; si no existen, solo cambia el estado.
+              </DialogDescription>
+            </DialogHeader>
+            <textarea
+              value={justificacionAnulacion}
+              onChange={(event) => setJustificacionAnulacion(event.target.value)}
+              rows={4}
+              maxLength={500}
+              placeholder="Motivo de la anulacion"
+              className="w-full resize-y rounded-md border border-border bg-background p-3 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring"
+            />
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setAnulacionOpen(false)} disabled={anulando}>Cancelar</Button>
+              <Button type="button" variant="destructive" onClick={() => void anularComprobante()} disabled={anulando || justificacionAnulacion.trim().length < 5}>
+                {anulando ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Ban className="mr-2 h-4 w-4" />}
+                Confirmar anulacion
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </DialogContent>
     </Dialog>
   );

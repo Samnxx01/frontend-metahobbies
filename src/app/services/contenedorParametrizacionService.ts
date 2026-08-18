@@ -118,6 +118,10 @@ export const contenedorService = {
   listarPorTenant: (tenantGlobalId: string): Promise<OkResponse<Contenedor[]>> =>
     apiFetch(`${BASE}/contenedores/${tenantGlobalId}`, { method: 'GET' }),
 
+  /** Todos los contenedores visibles para el superadmin, cada uno con su corporativo embebido. */
+  listarVisibles: (): Promise<OkResponse<Contenedor[]>> =>
+    apiFetch(`${BASE}/contenedores-visibles`, { method: 'GET' }),
+
   crear: (tenantGlobalId: string, payload: CrearContenedorPayload): Promise<OkResponse<Contenedor>> =>
     apiFetch(`${BASE}/contenedores/${tenantGlobalId}`, { method: 'POST', body: payload }),
 

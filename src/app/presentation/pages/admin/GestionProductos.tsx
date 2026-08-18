@@ -44,6 +44,7 @@ import VentaWompiSecuenciaModal from '@/app/presentation/pages/admin/components/
 import AlcanceReglasProductosModal from '@/app/presentation/pages/admin/components/reglas-contables/AlcanceReglasProductosModal';
 import ReglasContablesModal from '@/app/presentation/pages/admin/components/ReglasContablesModal';
 import pipelineBComisionService from '@/app/services/pipelineBComisionService';
+import { GobernanzaModuloSearchableSelect } from '@/app/presentation/pages/admin/gobernanza/GobernanzaModuloSearchableSelect';
 import { CircleHelp, DollarSign, Eye, FolderTree, Hash, Pencil, Plus, RefreshCw, Search, Settings2, Star, Trash2, X } from 'lucide-react';
 
 type DialogType = 'add' | 'edit' | 'view' | 'delete';
@@ -1560,22 +1561,20 @@ export default function GestionProductos(): React.ReactElement {
                   {dialogType === 'view' ? (
                     <Input id="sku" value={current.sku} disabled />
                   ) : (
-                    <select
+                    <GobernanzaModuloSearchableSelect
                       id="sku"
                       value={form.sku}
-                      onChange={(e) => onSelectProductSku(e.target.value)}
+                      onValueChange={onSelectProductSku}
                       disabled={productosConSku.length === 0}
-                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    >
-                      <option value="">
-                        {productosConSku.length > 0 ? 'Selecciona producto' : 'No hay productos con stock disponible'}
-                      </option>
-                      {productosConSku.map((producto) => (
-                        <option key={producto.id} value={producto.sku}>
-                          {producto.nombre} | Stock {obtenerStockKardexSku(producto.sku).toLocaleString('es-CO')}
-                        </option>
-                      ))}
-                    </select>
+                      placeholder={productosConSku.length > 0 ? 'Selecciona producto' : 'No hay productos con stock disponible'}
+                      searchPlaceholder="Buscar producto…"
+                      emptyMessage="Sin productos que coincidan"
+                      options={productosConSku.map((producto) => ({
+                        value: producto.sku,
+                        searchText: `${producto.nombre} ${producto.sku}`,
+                        label: `${producto.nombre} | Stock ${obtenerStockKardexSku(producto.sku).toLocaleString('es-CO')}`,
+                      }))}
+                    />
                   )}
                   <p className="text-xs text-muted-foreground">
                     {dialogType === 'view' ? detalleUnidadMedida(current.unidadMedida) : detalleUnidadMedida(form.unidadMedida)}

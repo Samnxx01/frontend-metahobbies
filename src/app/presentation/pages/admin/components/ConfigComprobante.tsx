@@ -4,6 +4,7 @@ import inventarioService, {
   type CrearComprobanteContablePayload,
   type InventarioComprobanteContable,
 } from '@/app/services/inventarioService';
+import productosService, { type BackendProducto } from '@/app/services/productosService';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -78,7 +79,12 @@ const emptyForm = (codigo = 'COMPROBANTE_CONTABLE'): CrearComprobanteContablePay
   },
 });
 
-export default function ConfigComprobante(): React.ReactElement {
+export type ConfigComprobanteProps = {
+  /** Cuando es true, omite su propio `<Card>` contenedor (para montarse dentro de un Dialog). */
+  embedded?: boolean;
+};
+
+export default function ConfigComprobante({ embedded = false }: ConfigComprobanteProps = {}): React.ReactElement {
   const [rows, setRows] = React.useState<InventarioComprobanteContable[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
@@ -88,13 +94,20 @@ export default function ConfigComprobante(): React.ReactElement {
   const [tiposDoc, setTiposDoc] = React.useState<DocumentoSoporteTipoConfig[]>([]);
   const [siguientePreview, setSiguientePreview] = React.useState('');
   const [form, setForm] = React.useState<CrearComprobanteContablePayload>(() => emptyForm());
+  const [productos, setProductos] = React.useState<BackendProducto[]>([]);
+  const [productosLoading, setProductosLoading] = React.useState(false);
+
+  const productosConSku = React.useMemo(
+    () => productos.filter((p) => String(p.sku || '').trim()),
+    [productos],
+  );
 
   const cargarComprobantes = React.useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      const data = await inventarioService.listarComprobantesContables();
-      setRows(data);
+      const result = await inventarioService.listarComprobantesContables();
+      setRows(result.data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudieron cargar los comprobantes contables.');
       setRows([]);
@@ -108,6 +121,19 @@ export default function ConfigComprobante(): React.ReactElement {
     const activos = data.filter((t) => t.activo);
     setTiposDoc(data);
     return activos;
+  }, []);
+
+  const cargarProductos = React.useCallback(async () => {
+    setProductosLoading(true);
+    try {
+      const data = await productosService.listarProductosAdmin({ estadoCatalogo: 'ACTIVO' });
+      setProductos(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudieron cargar los productos del catálogo.');
+      setProductos([]);
+    } finally {
+      setProductosLoading(false);
+    }
   }, []);
 
   const refrescarSiguienteNumero = React.useCallback(async (codigo: string) => {
@@ -141,7 +167,7 @@ export default function ConfigComprobante(): React.ReactElement {
     if (!modalOpen) return;
     let cancelled = false;
     void (async () => {
-      const activos = await cargarTiposDocumento();
+      const [activos] = await Promise.all([cargarTiposDocumento(), cargarProductos()]);
       if (cancelled) return;
       const codigo = activos[0]?.codigo || 'COMPROBANTE_CONTABLE';
       setForm(emptyForm(codigo));
@@ -150,7 +176,7 @@ export default function ConfigComprobante(): React.ReactElement {
     return () => {
       cancelled = true;
     };
-  }, [modalOpen, cargarTiposDocumento, refrescarSiguienteNumero]);
+  }, [modalOpen, cargarTiposDocumento, cargarProductos, refrescarSiguienteNumero]);
 
   const guardarComprobante = async (): Promise<void> => {
     setSaving(true);
@@ -179,7 +205,125 @@ export default function ConfigComprobante(): React.ReactElement {
     }
   };
 
-  return (
+  const cuerpoComprobantes = (
+    <>
+      {error ? (
+        <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+          {error}
+        </div>
+      ) : null}
+      <div className="overflow-x-auto rounded-md border border-border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Comprobante</TableHead>
+              <TableHead>Ejecutado por</TableHead>
+              <TableHead>Creado</TableHead>
+              <TableHead>Actualizado</TableHead>
+              <TableHead>Movs</TableHead>
+              <TableHead>Productos</TableHead>
+              <TableHead>Entrada</TableHead>
+              <TableHead>Salida</TableHead>
+              <TableHead>Valor neto</TableHead>
+              <TableHead>Tipo mov.</TableHead>
+              <TableHead>Hash</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {loading ? (
+              <TableRow>
+                <TableCell colSpan={11} className="py-8 text-center text-sm text-muted-foreground">
+                  Cargando comprobantes contables...
+                </TableCell>
+              </TableRow>
+            ) : rows.length ? (
+              rows.map((row) => {
+                const neto = Number(row.valorEntrada || 0) - Number(row.valorSalida || 0);
+                return (
+                  <TableRow key={row.id}>
+                    <TableCell className="min-w-48">
+                      <div className="font-medium text-foreground">{row.tipo}</div>
+                      <div className="font-mono text-xs text-muted-foreground">{row.numero}</div>
+                      {row.comprobanteEntrada?.numero ? (
+                        <div className="mt-1 text-xs text-muted-foreground">
+                          Entrada: {row.comprobanteEntrada.tipo || 'RECEPCION'} · {row.comprobanteEntrada.numero}
+                        </div>
+                      ) : null}
+                    </TableCell>
+                    <TableCell className="min-w-40">
+                      <div className="text-sm text-foreground">{textoUsuarioComprobante(row.usuario)}</div>
+                      {row.usuario?.correo && row.usuario?.nombre ? (
+                        <div className="text-xs text-muted-foreground">{row.usuario.correo}</div>
+                      ) : null}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap text-sm">
+                      {formatDate(row.creadoEn || row.fechaPrimera)}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap text-sm">
+                      {formatDate(row.actualizadoEn || row.fechaUltima)}
+                    </TableCell>
+                    <TableCell>{row.totalMovimientos}</TableCell>
+                    <TableCell>{row.totalProductos}</TableCell>
+                    <TableCell>
+                      <div>{qty(row.cantidadEntrada)}</div>
+                      <div className="text-xs text-muted-foreground">{money(row.valorEntrada)}</div>
+                    </TableCell>
+                    <TableCell>
+                      <div>{qty(row.cantidadSalida)}</div>
+                      <div className="text-xs text-muted-foreground">{money(row.valorSalida)}</div>
+                    </TableCell>
+                    <TableCell className={neto >= 0 ? 'text-success' : 'text-destructive'}>
+                      {money(neto)}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex max-w-56 flex-wrap gap-1">
+                        {row.tiposMovimiento.map((tipo) => (
+                          <Badge
+                            key={tipo}
+                            variant="outline"
+                            className="border-border bg-card font-normal text-foreground"
+                            title={tipo}
+                          >
+                            {labelTipoMovimientoLedger(tipo)}
+                          </Badge>
+                        ))}
+                      </div>
+                    </TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground">{shortHash(row.ultimoHash)}</TableCell>
+                  </TableRow>
+                );
+              })
+            ) : (
+              <TableRow>
+                <TableCell colSpan={11} className="py-8 text-center text-sm text-muted-foreground">
+                  No hay comprobantes contables registrados.
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </div>
+    </>
+  );
+
+  const acciones = (
+    <div className="flex flex-wrap justify-end gap-2">
+      <Button type="button" variant="outline" size="sm" onClick={() => setConfigOpen(true)}>
+        <Settings2 className="h-4 w-4" />
+        Secuencias
+      </Button>
+      <Button type="button" size="sm" onClick={() => setModalOpen(true)} disabled={loading || saving}>
+        <Plus className="h-4 w-4" />
+        Nuevo
+      </Button>
+      <Button type="button" variant="outline" size="sm" onClick={() => void cargarComprobantes()} disabled={loading}>
+        {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+        Actualizar
+      </Button>
+    </div>
+  );
+
+  const modales = (
     <>
       <InventarioDocumentoSoporteConfigModal
         open={configOpen}
@@ -229,12 +373,29 @@ export default function ConfigComprobante(): React.ReactElement {
             </div>
             <div className="space-y-2">
               <Label>SKU</Label>
-              <Input
+              <Select
                 value={form.sku}
-                onChange={(event) => setForm((prev) => ({ ...prev, sku: event.target.value }))}
-                placeholder="SKU-PRODUCTO"
-                disabled={saving}
-              />
+                onValueChange={(value) => setForm((prev) => ({ ...prev, sku: value }))}
+                disabled={saving || productosLoading}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={productosLoading ? 'Cargando productos...' : 'Selecciona un SKU'} />
+                </SelectTrigger>
+                <SelectContent className="max-h-72">
+                  {productosConSku.map((p) => (
+                    <SelectItem key={p.sku} value={p.sku as string}>
+                      {p.sku} · {p.nombre}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {productosLoading
+                  ? 'Cargando catálogo de productos...'
+                  : productosConSku.length
+                    ? 'Solo productos activos con SKU registrado en el catálogo.'
+                    : 'No hay productos activos con SKU en el catálogo.'}
+              </p>
             </div>
             <div className="space-y-2">
               <Label>Direccion</Label>
@@ -297,14 +458,36 @@ export default function ConfigComprobante(): React.ReactElement {
             <Button type="button" variant="outline" onClick={() => setModalOpen(false)} disabled={saving}>
               Cancelar
             </Button>
-            <Button type="button" onClick={() => void guardarComprobante()} disabled={saving}>
+            <Button type="button" onClick={() => void guardarComprobante()} disabled={saving || !form.sku}>
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
               Guardar
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </>
+  );
 
+  if (embedded) {
+    return (
+      <>
+        {modales}
+        <div className="space-y-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <p className="text-sm text-muted-foreground">
+              Un comprobante = numero de secuencia parametrizable (documentos soporte) con auditoria del ejecutor.
+            </p>
+            {acciones}
+          </div>
+          <div className="space-y-3">{cuerpoComprobantes}</div>
+        </div>
+      </>
+    );
+  }
+
+  return (
+    <>
+      {modales}
       <Card>
         <CardHeader className="flex flex-col gap-4 space-y-0 md:flex-row md:items-start md:justify-between">
           <div className="space-y-1.5">
@@ -316,118 +499,10 @@ export default function ConfigComprobante(): React.ReactElement {
               Un comprobante = numero de secuencia parametrizable (documentos soporte) con auditoria del ejecutor.
             </CardDescription>
           </div>
-          <div className="flex flex-wrap justify-end gap-2">
-            <Button type="button" variant="outline" size="sm" onClick={() => setConfigOpen(true)}>
-              <Settings2 className="h-4 w-4" />
-              Secuencias
-            </Button>
-            <Button type="button" size="sm" onClick={() => setModalOpen(true)} disabled={loading || saving}>
-              <Plus className="h-4 w-4" />
-              Nuevo
-            </Button>
-            <Button type="button" variant="outline" size="sm" onClick={() => void cargarComprobantes()} disabled={loading}>
-              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-              Actualizar
-            </Button>
-          </div>
+          {acciones}
         </CardHeader>
         <CardContent className="space-y-3">
-          {error ? (
-            <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-              {error}
-            </div>
-          ) : null}
-          <div className="overflow-x-auto rounded-md border border-border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Comprobante</TableHead>
-                  <TableHead>Ejecutado por</TableHead>
-                  <TableHead>Creado</TableHead>
-                  <TableHead>Actualizado</TableHead>
-                  <TableHead>Movs</TableHead>
-                  <TableHead>Productos</TableHead>
-                  <TableHead>Entrada</TableHead>
-                  <TableHead>Salida</TableHead>
-                  <TableHead>Valor neto</TableHead>
-                  <TableHead>Tipo mov.</TableHead>
-                  <TableHead>Hash</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {loading ? (
-                  <TableRow>
-                    <TableCell colSpan={11} className="py-8 text-center text-sm text-muted-foreground">
-                      Cargando comprobantes contables...
-                    </TableCell>
-                  </TableRow>
-                ) : rows.length ? (
-                  rows.map((row) => {
-                    const neto = Number(row.valorEntrada || 0) - Number(row.valorSalida || 0);
-                    return (
-                      <TableRow key={row.id}>
-                        <TableCell className="min-w-48">
-                          <div className="font-medium text-foreground">{row.tipo}</div>
-                          <div className="font-mono text-xs text-muted-foreground">{row.numero}</div>
-                          {row.comprobanteEntrada?.numero ? (
-                            <div className="mt-1 text-xs text-muted-foreground">
-                              Entrada: {row.comprobanteEntrada.tipo || 'RECEPCION'} · {row.comprobanteEntrada.numero}
-                            </div>
-                          ) : null}
-                        </TableCell>
-                        <TableCell className="min-w-40">
-                          <div className="text-sm text-foreground">{textoUsuarioComprobante(row.usuario)}</div>
-                          {row.usuario?.correo && row.usuario?.nombre ? (
-                            <div className="text-xs text-muted-foreground">{row.usuario.correo}</div>
-                          ) : null}
-                        </TableCell>
-                        <TableCell className="whitespace-nowrap text-sm">
-                          {formatDate(row.creadoEn || row.fechaPrimera)}
-                        </TableCell>
-                        <TableCell className="whitespace-nowrap text-sm">
-                          {formatDate(row.actualizadoEn || row.fechaUltima)}
-                        </TableCell>
-                        <TableCell>{row.totalMovimientos}</TableCell>
-                        <TableCell>{row.totalProductos}</TableCell>
-                        <TableCell>
-                          <div>{qty(row.cantidadEntrada)}</div>
-                          <div className="text-xs text-muted-foreground">{money(row.valorEntrada)}</div>
-                        </TableCell>
-                        <TableCell>
-                          <div>{qty(row.cantidadSalida)}</div>
-                          <div className="text-xs text-muted-foreground">{money(row.valorSalida)}</div>
-                        </TableCell>
-                        <TableCell className={neto >= 0 ? 'text-success' : 'text-destructive'}>
-                          {money(neto)}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex max-w-56 flex-wrap gap-1">
-                            {row.tiposMovimiento.map((tipo) => (
-                              <Badge
-                                key={tipo}
-                                variant="outline"
-                                className="border-border bg-card font-normal text-foreground"
-                                title={tipo}
-                              >
-                                {labelTipoMovimientoLedger(tipo)}
-                              </Badge>
-                            ))}
-                          </div>
-                        </TableCell>
-                        <TableCell className="font-mono text-xs text-muted-foreground">{shortHash(row.ultimoHash)}</TableCell>
-                      </TableRow>
-                    );
-                  })
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={11} className="py-8 text-center text-sm text-muted-foreground">
-                      No hay comprobantes contables registrados.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
+          {cuerpoComprobantes}
         </CardContent>
       </Card>
     </>
