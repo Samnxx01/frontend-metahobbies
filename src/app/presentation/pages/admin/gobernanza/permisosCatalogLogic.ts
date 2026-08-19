@@ -11,6 +11,7 @@ import {
   findReglasPorTenantSuperAdmin,
   resolveTenantSuperAdminIdForHerenciaSelect,
   vistaIdEnCounterFormularioSubformulario,
+  safeAccionEtiqueta,
   type Vista,
   type Accion,
   type HeredaGlobalOption,
@@ -184,7 +185,7 @@ export function computePermisosCatalog(
           (Array.isArray(herencia?.acciones) ? herencia.acciones : []).forEach((a: any) => {
             const id = getId(a);
             if (!id) return;
-            addAccion({ id, label: String(a?.etiquetas || a?.method || id), method: String(a?.method || '') });
+            addAccion({ id, label: safeAccionEtiqueta(a?.etiquetas, String(a?.method || id)), method: String(a?.method || '') });
           });
         });
         // Si hay vistas de herencias propias del TG, retornarlas; sino caer al last resort
@@ -210,7 +211,7 @@ export function computePermisosCatalog(
             (Array.isArray(herenciaConDatos?.acciones) ? herenciaConDatos.acciones : []).forEach((a: any) => {
               const id = getId(a);
               if (!id) return;
-              addAccion({ id, label: String(a?.etiquetas || a?.method || id), method: String(a?.method || '') });
+              addAccion({ id, label: safeAccionEtiqueta(a?.etiquetas, String(a?.method || id)), method: String(a?.method || '') });
             });
             return;
           }
@@ -249,7 +250,7 @@ export function computePermisosCatalog(
             .map((a: any) => {
               const id = getId(a);
               if (!id) return null;
-              return { id, label: String(a?.etiquetas || a?.method || id), method: String(a?.method || '') };
+              return { id, label: safeAccionEtiqueta(a?.etiquetas, String(a?.method || id)), method: String(a?.method || '') };
             })
             .filter(Boolean) as Accion[];
           if (vistasCatalogo.length && accionesCatalogo.length) {
@@ -312,7 +313,7 @@ export function computePermisosCatalog(
             if (!id) return null;
             return {
               id,
-              label: String(a?.etiquetas || a?.method || id),
+              label: safeAccionEtiqueta(a?.etiquetas, String(a?.method || id)),
               method: String(a?.method || ''),
             };
           })
@@ -493,7 +494,7 @@ export function computePermisosCatalog(
             if (!id) return null;
             return {
               id,
-              label: String(a?.etiquetas || a?.method || id),
+              label: safeAccionEtiqueta(a?.etiquetas, String(a?.method || id)),
               method: String(a?.method || ''),
             };
           })

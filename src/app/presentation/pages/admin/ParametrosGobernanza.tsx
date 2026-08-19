@@ -217,6 +217,7 @@ import {
   isTenantSuperAdminScopeOption,
   toMongoIdQueryParam,
   resolveTenantSuperAdminIdForHerenciaSelect,
+  safeAccionEtiqueta,
 } from './gobernanza/parametrosGobernanzaPureHelpers';
 
 const REGLAS_GLOBALES_ENDPOINT_IDS = new Set([
@@ -1356,7 +1357,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
           .filter((a: any) => a?.estadoAccion !== false)
           .map((a: any) => ({
             id: gobernanzaEntityId(a),
-            label: String(a?.etiquetas || a?.method || gobernanzaEntityId(a) || ''),
+            label: safeAccionEtiqueta(a?.etiquetas, String(a?.method || gobernanzaEntityId(a) || '')),
             method: String(a?.method || ''),
           }))
           .filter((a: Accion) => a.id);
@@ -1370,7 +1371,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
           arr.forEach((a: any) => {
             const id = String(a?._id || a || '');
             if (!id || map.has(id)) return;
-            map.set(id, { id, label: String(a?.etiquetas || a?.method || id), method: String(a?.method || '') });
+            map.set(id, { id, label: safeAccionEtiqueta(a?.etiquetas, String(a?.method || id)), method: String(a?.method || '') });
           });
         });
         const fromHerencia = Array.from(map.values());
@@ -1385,7 +1386,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
           .filter((a: any) => a?.estadoAccion !== false)
           .map((a: any) => ({
             id: gobernanzaEntityId(a),
-            label: String(a?.etiquetas || a?.method || a?.label || gobernanzaEntityId(a) || ''),
+            label: safeAccionEtiqueta(a?.etiquetas, String(a?.method || a?.label || gobernanzaEntityId(a) || '')),
             method: String(a?.method || ''),
           }))
           .filter((a: Accion) => a.id);
@@ -1433,7 +1434,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
           const rowsFallback = Array.isArray(fallbackAcciones?.acciones) ? fallbackAcciones.acciones : [];
           const mapped = rowsFallback
             .filter((a: any) => a?.estadoAccion !== false)
-            .map((a: any) => ({ id: String(a?._id || a?.id || ''), label: String(a?.etiquetas || a?.method || a?._id || ''), method: String(a?.method || '') }))
+            .map((a: any) => ({ id: String(a?._id || a?.id || ''), label: safeAccionEtiqueta(a?.etiquetas, String(a?.method || a?._id || '')), method: String(a?.method || '') }))
             .filter((a: Accion) => a.id);
           if (mapped.length) accionesResolved = mapped;
         } catch (_error) {

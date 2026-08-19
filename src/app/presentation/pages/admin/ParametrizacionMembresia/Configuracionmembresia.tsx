@@ -134,24 +134,6 @@ const normalizarTipoPago = (raw: unknown): TipoPagoOption | null => {
     };
 };
 
-// Usada con la fuente autoritativa (catálogo de tipos de pago): reemplaza por completo,
-// así reflejan altas/ediciones/bajas hechas desde el modal de parametrización.
-const agregarTiposSinDuplicar = (actuales: TipoPagoOption[], nuevos: TipoPagoOption[]) => {
-    const mapa = new Map(actuales.map(tipo => [tipo.nombre.toLocaleUpperCase(), tipo]));
-    nuevos.forEach(tipo => mapa.set(tipo.nombre.toLocaleUpperCase(), tipo));
-    return Array.from(mapa.values()).filter(tipo => tipo.estado !== false);
-};
-
-// Usada con nombres derivados de membresías ya creadas (solo el string tipoPagos, sin
-// duración/descripción): únicamente rellena tipos que el catálogo aún no conoce, nunca
-// pisa un registro existente — si no, cada recarga de la tabla borraba la duración
-// parametrizada por venir de un string plano sin ese dato.
-const agregarTiposFaltantes = (actuales: TipoPagoOption[], nuevos: TipoPagoOption[]) => {
-    const existentes = new Set(actuales.map(tipo => tipo.nombre.toLocaleUpperCase()));
-    const faltantes = nuevos.filter(tipo => tipo.estado !== false && !existentes.has(tipo.nombre.toLocaleUpperCase()));
-    return faltantes.length ? [...actuales, ...faltantes] : actuales;
-};
-
 const normalizarPrecioDesdeCentavos = (valor: number | string | null | undefined) =>
     Number(valor || 0) / 100;
 
@@ -219,10 +201,6 @@ export default function ConfiguracionMembresia() {
             const raw = Array.isArray(res?.data) ? res.data as MembresiaPrecioApiRow[] : [];
             const rows = raw.map(normalizeMembresiaPrecioFromApi).filter((m): m is MembresiaPrecioRow => m !== null);
             setMembresias(rows);
-            const tiposRegistrados = rows
-                .map(row => normalizarTipoPago(row.tipoPagos))
-                .filter((tipo): tipo is TipoPagoOption => tipo !== null);
-            setTiposPago(actuales => agregarTiposFaltantes(actuales, tiposRegistrados));
         } catch { /* no bloqueante */ }
         finally { setLoadingMembresias(false); }
     }, []);
@@ -238,10 +216,10 @@ export default function ConfiguracionMembresia() {
             const tipos = (Array.isArray(tiposRaw) ? tiposRaw : [])
                 .map(normalizarTipoPago)
                 .filter((tipo): tipo is TipoPagoOption => tipo !== null);
-            setTiposPago(actuales => agregarTiposSinDuplicar(actuales, tipos));
+            setTiposPago(tipos);
             setMetodosPago(Array.isArray(data.metodosPago) ? data.metodosPago : []);
         } catch {
-            // Los tipos usados por las membresías se conservan como catálogo de respaldo.
+            setTiposPago([]);
         } finally {
             setLoadingOpcionesPago(false);
         }

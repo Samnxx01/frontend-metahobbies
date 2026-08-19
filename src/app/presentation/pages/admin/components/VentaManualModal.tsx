@@ -37,6 +37,11 @@ const esDocumentoEmpresa = (tipo: TipoDocumentoCatalogo): boolean => {
   const texto = `${tipo.codigo} ${tipo.nombre}`.toUpperCase();
   return texto.includes('NIT') || tipo.codigo === '31';
 };
+const esMetodoEfectivo = (metodo: MetodoPagoPadre | undefined): boolean => {
+  if (!metodo) return false;
+  return [metodo.codigo, metodo.catalogoMetodoCodigo, metodo.pasarelaPago]
+    .some((valor) => String(valor || '').trim().toUpperCase() === 'EFECTIVO');
+};
 
 export default function VentaManualModal({ open, onOpenChange, onCreated }: Props): React.ReactElement {
   const [productos, setProductos] = useState<BackendProducto[]>([]);
@@ -94,6 +99,12 @@ export default function VentaManualModal({ open, onOpenChange, onCreated }: Prop
       .catch((e) => toast.error(e instanceof Error ? e.message : 'No se pudo cargar productos y stock.'))
       .finally(() => setLoading(false));
   }, [open]);
+  useEffect(() => {
+    if (!metodoPagoCodigo) return;
+    if (esMetodoEfectivo(metodosPago.find((metodo) => metodo.codigo === metodoPagoCodigo))) {
+      setPagoYaRecibido(true);
+    }
+  }, [metodoPagoCodigo, metodosPago]);
   const ciudades = useMemo(
     () => departamentos.find((item) => item.departamentoId === cliente.departamentoId)?.ciudades || [],
     [departamentos, cliente.departamentoId],

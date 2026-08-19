@@ -9,7 +9,7 @@ import inventarioService, {
 import type { BackendProducto } from '@/app/services/productosService';
 import reglasContablesService, { type BaseCalculoRegla } from '@/app/services/reglasContablesService';
 import { Button } from '@/components/ui/button';
-import { GovernedButton } from '@/app/presentation/actions';
+import { GovernedButton, INVENTORY_PURCHASE_ACTION_IDS } from '@/app/presentation/actions';
 import type { ActionId } from '@/app/presentation/actions';
 import {
   Dialog,
@@ -681,7 +681,8 @@ export default function InventarioOrdenCompraModal({
                   className="hidden"
                   onChange={(event) => void importarOrdenesJson(event)}
                 />
-                <Button
+                <GovernedButton
+                  actionId={INVENTORY_PURCHASE_ACTION_IDS.IMPORT_ORDERS_JSON}
                   type="button"
                   variant="outline"
                   size="sm"
@@ -694,7 +695,7 @@ export default function InventarioOrdenCompraModal({
                     <FileJson className="mr-2 h-4 w-4" />
                   )}
                   {importandoJson ? 'Importando...' : 'Cargar órdenes JSON'}
-                </Button>
+                </GovernedButton>
                 <span className="ml-2 text-xs text-muted-foreground">
                   Se crearán abiertas, con consecutivo y auditoría nuevos.
                 </span>

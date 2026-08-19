@@ -47,6 +47,15 @@ export const GOBERNANZA_MODULOS_CATALOGO: GobernanzaModuloCatalogo[] = [
     orden: 25,
   },
   {
+    slug: 'reglas-tg',
+    section: 'reglas',
+    label: 'Reglas Tenant Global',
+    description: 'Reglas de jerarquía por tenant global concreto (audiencia tenantGlobal).',
+    frontPathSegment: 'reglas-tenant-global',
+    icon: Scale,
+    orden: 26,
+  },
+  {
     slug: 'politica-bypass',
     section: 'permisos',
     label: 'Políticas de bypass',

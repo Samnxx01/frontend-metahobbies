@@ -91,6 +91,7 @@ export const INVENTORY_PURCHASE_ACTION_IDS = {
   MANAGE_ACCOUNTING_RULES: 'inventory.purchases.accounting-rules.manage',
   CREATE_PROVIDER: 'inventory.purchases.providers.create',
   CREATE_ORDER: 'inventory.purchases.orders.create',
+  IMPORT_ORDERS_JSON: 'inventory.purchases.orders.import-json',
   EDIT_PROVIDER: 'inventory.purchases.providers.update',
   DEACTIVATE_PROVIDER: 'inventory.purchases.providers.deactivate',
 } as const satisfies Record<string, ActionId>;
@@ -234,6 +235,7 @@ export const GOVERNED_ACTION_CATALOG = [
   governedAction(INVENTORY_PURCHASE_ACTION_IDS.MANAGE_ACCOUNTING_RULES, 'Reglas contables', 'inventory', 'Inventario', '/admin/inventory', 'purchases', 'Orden/compras', 'UPDATE', 'Administra las reglas contables aplicables a compras.'),
   governedAction(INVENTORY_PURCHASE_ACTION_IDS.CREATE_PROVIDER, 'Nuevo proveedor', 'inventory', 'Inventario', '/admin/inventory', 'providers', 'Proveedores', 'CREATE', 'Crea un proveedor para las órdenes de compra.'),
   governedAction(INVENTORY_PURCHASE_ACTION_IDS.CREATE_ORDER, 'Nueva orden de compra', 'inventory', 'Inventario', '/admin/inventory', 'purchase-orders', 'Órdenes de compra', 'CREATE', 'Crea una nueva orden de compra.'),
+  governedAction(INVENTORY_PURCHASE_ACTION_IDS.IMPORT_ORDERS_JSON, 'Cargar órdenes JSON', 'inventory', 'Inventario', '/admin/inventory', 'purchase-orders', 'Órdenes de compra', 'CREATE', 'Crea órdenes de compra abiertas en lote desde un archivo JSON.'),
   governedAction(INVENTORY_PURCHASE_ACTION_IDS.EDIT_PROVIDER, 'Editar proveedor', 'inventory', 'Inventario', '/admin/inventory', 'providers', 'Proveedores', 'UPDATE', 'Edita los datos del proveedor seleccionado.'),
   governedAction(INVENTORY_PURCHASE_ACTION_IDS.DEACTIVATE_PROVIDER, 'Desactivar proveedor', 'inventory', 'Inventario', '/admin/inventory', 'providers', 'Proveedores', 'DELETE', 'Desactiva el proveedor seleccionado.'),
   governedAction(INVENTORY_SKU_ACTION_IDS.REFRESH_CATALOG, 'Actualizar catálogo SKU', 'inventory', 'Inventario', '/admin/inventory', 'skus', 'Catálogo SKU', 'VIEW', 'Recarga el catálogo de SKU desde la base de datos.'),

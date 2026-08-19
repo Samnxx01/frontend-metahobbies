@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { apiFetch } from '@/app/services/api';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -12,15 +13,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { ParametrosGobernanzaWithRouting } from './gobernanza';
-
-/** Endpoints de reglas por **tenant global** concreto (no reglas DIOS). */
-export const REGLAS_TENANT_GLOBAL_IDS = [
-  'tenant-crear-global-reglas',
-  'tenant-listar-reglas',
-  'tenant-actualizar-global-reglas',
-  'tenant-desactivar-global-reglas',
-];
+import ParametrosGobernanza from './ParametrosGobernanza';
+import { GOBERNANZA_TIPO_SECTION_REGLAS_TG } from './gobernanza/gobernanzaActionIds';
 
 type ActorContext = {
   scope?: string | null;
@@ -236,8 +230,13 @@ export function ReglasTenantGlobalesLista() {
   );
 }
 
-/** Formularios ParametrosGobernanza: crear/listar/actualizar/desactivar reglas **por tenant global**. */
+/**
+ * Menú dinámico: operaciones de reglas **por tenant global** publicadas en gobernanzaModuloConfigs
+ * cuyo tipo (gobernanzaModuloTipos) tiene section «reglas-tg». Nada de endpoints quemados: al
+ * parametrizar un nuevo formulario (crear/listar/actualizar/desactivar) aparece aquí solo.
+ */
 export function ReglasTenantGlobalOperaciones() {
+  const { pathname } = useLocation();
   return (
     <Card>
       <CardHeader>
@@ -248,11 +247,16 @@ export function ReglasTenantGlobalOperaciones() {
         </CardDescription>
       </CardHeader>
       <CardContent className="px-0 pb-0 pt-2">
-        <ParametrosGobernanzaWithRouting
+        <ParametrosGobernanza
           mode="full"
-          initialSection="tenant"
-          lockedSection="tenant"
-          allowedEndpointIds={REGLAS_TENANT_GLOBAL_IDS}
+          initialSection="reglas"
+          lockedSection="reglas"
+          inlineModuloSlug="reglas-tg"
+          shellVariant="compact"
+          enableCardDesignEditor={false}
+          menuPath={pathname}
+          operacionesHub
+          tipoSection={GOBERNANZA_TIPO_SECTION_REGLAS_TG}
         />
       </CardContent>
     </Card>

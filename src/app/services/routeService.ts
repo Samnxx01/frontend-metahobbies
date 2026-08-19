@@ -561,16 +561,18 @@ const resolveAdminActorTipoFromToken = (): AdminActorTipo => {
     }
 };
 
-/** Cache corto: mismo payload que ParametrosGobernanza (`actor.saJerarquiaTieneCorporativoEnCounters`). */
-let _saJerarquiaCorpSelectsCache: { at: number; value: boolean | null } | null = null;
 const SA_JERARQUIA_CORP_CACHE_TTL_MS = 60_000;
 
+/** Cache corto compartido con el mismo payload de `/creacion/usu/tenant/global/selects`. */
+let _saPuedeBypassHerenciaCache: { at: number; value: boolean | null } | null = null;
+
 /**
- * `true`: hay al menos un tenantjerarquiacounter con corporativo para este SA.
- * `false`: sin relación SA↔corporativo en counters (menú admin sin acotar por herencias).
- * `null`: no es SA o no se pudo resolver.
+ * `true`: este SA es raíz de jerarquía (`codigoPadre = null` en su fila de tenantjerarquiacounters)
+ * y puede saltarse la herencia de vistas, tenga o no corporativo propio asociado.
+ * `false`: SA con padre en la jerarquía (rama) → debe respetar la herencia de vistas parametrizada.
+ * `null`: no es SA o no se pudo resolver (fail-open: no se aplica el filtro).
  */
-const fetchSaJerarquiaTieneCorporativoEnCounters = async (): Promise<boolean | null> => {
+const fetchSaPuedeBypassHerencia = async (): Promise<boolean | null> => {
     try {
         const token = localStorage.getItem('token');
         if (!token) return null;
@@ -578,10 +580,10 @@ const fetchSaJerarquiaTieneCorporativoEnCounters = async (): Promise<boolean | n
 
         const now = Date.now();
         if (
-            _saJerarquiaCorpSelectsCache &&
-            now - _saJerarquiaCorpSelectsCache.at < SA_JERARQUIA_CORP_CACHE_TTL_MS
+            _saPuedeBypassHerenciaCache &&
+            now - _saPuedeBypassHerenciaCache.at < SA_JERARQUIA_CORP_CACHE_TTL_MS
         ) {
-            return _saJerarquiaCorpSelectsCache.value;
+            return _saPuedeBypassHerenciaCache.value;
         }
 
         const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api';
@@ -589,11 +591,11 @@ const fetchSaJerarquiaTieneCorporativoEnCounters = async (): Promise<boolean | n
             method: 'GET',
             useAuth: true,
             logoutOn401: true,
-        })) as { data?: { actor?: { saJerarquiaTieneCorporativoEnCounters?: boolean } } } | null;
+        })) as { data?: { actor?: { saPuedeBypassHerencia?: boolean } } } | null;
 
-        const raw = res?.data?.actor?.saJerarquiaTieneCorporativoEnCounters;
+        const raw = res?.data?.actor?.saPuedeBypassHerencia;
         const value: boolean | null = typeof raw === 'boolean' ? raw : null;
-        _saJerarquiaCorpSelectsCache = { at: now, value };
+        _saPuedeBypassHerenciaCache = { at: now, value };
         return value;
     } catch {
         return null;
@@ -601,12 +603,12 @@ const fetchSaJerarquiaTieneCorporativoEnCounters = async (): Promise<boolean | n
 };
 
 /**
- * SuperAdmin con rama corporativa en `tenantjerarquiacounters`: siempre acotar el menú admin
- * por las vistas heredadas (`getHerenciaAdminPermitida`). Si aún no hay herencias parametrizadas,
- * el conjunto queda vacío → sin ítems (no se usa el catálogo completo).
+ * SuperAdmin con padre en su jerarquía (`saPuedeBypassHerencia === false`): siempre acotar el
+ * menú admin por las vistas heredadas (`getHerenciaAdminPermitida`). Si aún no hay herencias
+ * parametrizadas, el conjunto queda vacío → sin ítems (no se usa el catálogo completo).
  *
- * SuperAdmin sin filas SA↔corporativo en counters (`saJerarquiaTieneCorporativoEnCounters !== true`):
- * no aplicar este filtro (navegación según catálogo admin).
+ * SuperAdmin raíz (`saPuedeBypassHerencia !== false`, incluye null sin resolver): no aplicar
+ * este filtro (navegación según catálogo admin). Tener corporativo propio no le quita la raíz.
  *
  * GLOBAL/CORPORATIVO: se exige que la API devuelva al menos una herencia para activar el filtro.
  */
@@ -615,8 +617,8 @@ const debeAplicarFiltroHerenciaSuperAdmin = async (
     tieneHerenciasEnApi: boolean
 ): Promise<boolean> => {
     if (actorTipo === 'SUPERADMIN') {
-        const jerarquiaCorp = await fetchSaJerarquiaTieneCorporativoEnCounters();
-        return jerarquiaCorp === true;
+        const puedeBypass = await fetchSaPuedeBypassHerencia();
+        return puedeBypass === false;
     }
     if (actorTipo === 'CLIENTE') return tieneHerenciasEnApi;
     if (!tieneHerenciasEnApi) return false;
@@ -706,8 +708,8 @@ const securityRouteRowAllowedByLookup = (
 /** Alineado al sidebar admin: SA solo si counters corporativos; Global/Corporativo siempre evalúan herencia. */
 const mustEnforceHerenciaForSidebarActor = async (actorTipo: AdminActorTipo): Promise<boolean> => {
     if (actorTipo === 'SUPERADMIN') {
-        const jerarquiaCorp = await fetchSaJerarquiaTieneCorporativoEnCounters();
-        return jerarquiaCorp === true;
+        const puedeBypass = await fetchSaPuedeBypassHerencia();
+        return puedeBypass === false;
     }
     if (actorTipo === 'GLOBAL' || actorTipo === 'CORPORATIVO' || actorTipo === 'CLIENTE') return true;
     return false;
@@ -1496,7 +1498,7 @@ export const clearSessionCaches = (): void => {
     clearHybridSpaPath();
     _sidebarCache = null;
     _securityRoutesCacheByAuth.clear();
-    _saJerarquiaCorpSelectsCache = null;
+    _saPuedeBypassHerenciaCache = null;
     invalidateSplashLogoCache();
 };
 
@@ -1529,8 +1531,8 @@ const _fetchSidebarTreeWithContext = async (): Promise<AdminSidebarTreeContext> 
 
             if (actorTipo === 'SUPERADMIN') {
                 filteredTree = filterTreeByAllowedRoutes(filteredTree, securityLookup.ids, securityLookup.paths);
-                const jerarquiaCorpSa = await fetchSaJerarquiaTieneCorporativoEnCounters();
-                if (jerarquiaCorpSa === true) {
+                const puedeBypassSa = await fetchSaPuedeBypassHerencia();
+                if (puedeBypassSa === false) {
                     const herenciaSa = await getHerenciaAdminPermitida();
                     filteredTree = filterTreeByHerenciaConRescate(
                         filteredTree,

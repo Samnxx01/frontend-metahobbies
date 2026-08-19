@@ -1888,6 +1888,10 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
       } else {
         toast.warning('Ningún producto fue importado. Revisa el archivo.');
       }
+      if (result.secuencia && result.secuencia.incrementados > 0) {
+        const { codigo, contadorAnterior, contadorNuevo } = result.secuencia;
+        toast.info(`Contador ${codigo}: ${contadorAnterior} → ${contadorNuevo} productos.`);
+      }
       return result;
     } catch (error: any) {
       const mensaje = error?.message || 'No se pudo importar el archivo.';

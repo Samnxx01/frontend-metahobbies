@@ -9,6 +9,7 @@ import type { GobernanzaModuloMenuAccion } from './gobernanzaModuloApiTypes';
 export {
   GOBERNANZA_TIPO_SECTION_PERMISOS_SA,
   GOBERNANZA_TIPO_SECTION_REGLAS_SA,
+  GOBERNANZA_TIPO_SECTION_REGLAS_TG,
   GOBERNANZA_TIPO_SECTION_TENANT_SUPER_ADMIN,
   GOBERNANZA_TIPO_SECTION_TENANT_GLOBAL,
 } from './gobernanzaTipoSectionConstants';

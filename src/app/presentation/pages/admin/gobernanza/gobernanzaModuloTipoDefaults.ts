@@ -1,5 +1,10 @@
 import { GOBERNANZA_MODULOS_CATALOGO } from './gobernanzaModulosCatalog';
-import { GOBERNANZA_TIPO_SECTION_TENANT_SUPER_ADMIN, GOBERNANZA_TIPO_SECTION_TENANT_GLOBAL, GOBERNANZA_TIPO_SECTION_EMPRESAS } from './gobernanzaTipoSectionConstants';
+import {
+  GOBERNANZA_TIPO_SECTION_TENANT_SUPER_ADMIN,
+  GOBERNANZA_TIPO_SECTION_TENANT_GLOBAL,
+  GOBERNANZA_TIPO_SECTION_EMPRESAS,
+  GOBERNANZA_TIPO_SECTION_REGLAS_TG,
+} from './gobernanzaTipoSectionConstants';
 import { GOBERNANZA_PERMISOS_FORM_COMPONENTS } from './permisos-forms/gobernanzaPermisosFormRegistry';
 import { GOBERNANZA_REGLAS_FORM_COMPONENTS } from './reglas-forms/gobernanzaReglasFormRegistry';
 import type { EndpointSection } from './parametrosGobernanzaTypes';
@@ -32,6 +37,7 @@ export function canonicalGobernanzaTipoSection(section?: string | null): string 
 export const HUB_COMPONENT_SECTION: Record<string, EndpointSection | 'gobernanza'> = {
   PermisosGlobal: 'permisos',
   ReglasTenant: 'reglas',
+  ReglasTenantGlobal: GOBERNANZA_TIPO_SECTION_REGLAS_TG,
   ParametrosGobernanza: GOBERNANZA_TIPO_SECTION_TENANT_SUPER_ADMIN,
   TenantSuperAdmin: GOBERNANZA_TIPO_SECTION_TENANT_SUPER_ADMIN,
   TenantGlobal: GOBERNANZA_TIPO_SECTION_TENANT_GLOBAL,
@@ -41,6 +47,7 @@ export const HUB_COMPONENT_SECTION: Record<string, EndpointSection | 'gobernanza
 /** Código sugerido al crear tipo desde un hub conocido. */
 export const HUB_COMPONENT_TIPO_CODIGO: Record<string, string> = {
   ReglasTenant: 'reglas-tenant-sa',
+  ReglasTenantGlobal: 'reglas-tenant-tg',
   PermisosGlobal: 'permisos-global-sa',
   TenantGlobal: 'tenant-global',
 };
@@ -48,6 +55,7 @@ export const HUB_COMPONENT_TIPO_CODIGO: Record<string, string> = {
 /** Componente React sugerido para el tipo según hub. */
 export const HUB_COMPONENT_FORMULARIO: Record<string, string> = {
   ReglasTenant: 'GobernanzaReglasFormByEndpoint',
+  ReglasTenantGlobal: 'GobernanzaReglasFormByEndpoint',
   PermisosGlobal: 'GobernanzaPermisosFormByEndpoint',
   TenantGlobal: 'GobernanzaTenantFormByEndpoint',
 };
@@ -75,7 +83,7 @@ export function defaultsTipoDesdeComponente(component?: string | null): {
 export function componentesPorSection(section: string): readonly string[] {
   const s = String(section || '').trim().toLowerCase();
   if (s === 'permisos') return GOBERNANZA_PERMISOS_FORM_COMPONENTS;
-  if (s === 'reglas') return GOBERNANZA_REGLAS_FORM_COMPONENTS;
+  if (s === 'reglas' || s === GOBERNANZA_TIPO_SECTION_REGLAS_TG) return GOBERNANZA_REGLAS_FORM_COMPONENTS;
   return [];
 }
 

@@ -267,6 +267,15 @@ export const collectAllNodes = (nodes: any[] = []): any[] => {
 
 export const getEntityId = (value: any): string => gobernanzaEntityId(value);
 
+/**
+ * Etiqueta de acción desde `etiquetas` (a veces llega poblado como objeto en vez de string).
+ * Evita `[object Object]`: solo usa `etiquetas` si es un string real, si no cae al fallback.
+ */
+export const safeAccionEtiqueta = (etiquetas: unknown, fallback: string): string => {
+  const raw = typeof etiquetas === 'string' ? etiquetas.trim() : '';
+  return raw && raw !== '[object Object]' ? raw : fallback;
+};
+
 /** ID de vista/acción desde ref API (ObjectId, iud UUID u objeto poblado). Evita `[object Object]`. */
 export const normalizePermisoRefId = (value: unknown): string => {
   const id = gobernanzaEntityId(value);

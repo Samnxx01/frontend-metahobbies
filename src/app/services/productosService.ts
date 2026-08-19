@@ -530,14 +530,24 @@ const productosService = {
     URL.revokeObjectURL(url);
   },
 
-  async importarProductosExcel(file: File): Promise<{ total: number; insertados: number; errores: { fila: number; error: string }[] }> {
+  async importarProductosExcel(file: File): Promise<{
+    total: number;
+    insertados: number;
+    errores: { fila: number; error: string }[];
+    secuencia: { codigo: string; contadorAnterior: number; contadorNuevo: number; incrementados: number } | null;
+  }> {
     const formData = new FormData();
     formData.append('archivo', file);
     const resp = await apiFetch('/api/productos/admin/importar/excel', {
       method: 'POST',
       body: formData,
     });
-    return resp as { total: number; insertados: number; errores: { fila: number; error: string }[] };
+    return resp as {
+      total: number;
+      insertados: number;
+      errores: { fila: number; error: string }[];
+      secuencia: { codigo: string; contadorAnterior: number; contadorNuevo: number; incrementados: number } | null;
+    };
   },
 
   async listarCodigosBarrasRegistrados(): Promise<Set<string>> {
