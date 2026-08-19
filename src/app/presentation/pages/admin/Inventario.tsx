@@ -497,32 +497,23 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
 
     try {
       setConfirmandoComprobanteId(id);
-      const data = await inventarioService.registrarKardexRecepcionOrdenCompra(id, {
-        estado: true,
-        aplicarKardex: true,
-        confirmar: true,
-      });
+      // Solo confirma el comprobante (comprobante contable). El kardex físico es un
+      // subproceso aparte: se registra con el botón "Registrar en kardex" del formulario
+      // de movimiento (endpoint /kardex, no este /confirmar).
+      const data = await inventarioService.confirmarRecepcionOrdenCompra(id);
       setComprobanteEntradaData(data);
       const soporte = data?.recepcion?.documentoSoporte;
       setComprobanteEntradaDoc(soporte ? { tipo: soporte.tipo, numero: soporte.numero } : null);
       setComprobanteEntradaOpen(true);
-      setReporteKardexRecepcionId(id);
-      setReporteKardexOpen(true);
 
-      const [stock, kardexActualizado, comprobantesActualizados] = await Promise.all([
-        inventarioService.stockActual(),
-        inventarioService.listarKardex({ limit: 100 }),
-        inventarioService.listarComprobantesEntradaMovimientos(200),
-      ]);
-      setStockActual(stock);
-      setKardex(kardexActualizado);
+      const comprobantesActualizados = await inventarioService.listarComprobantesEntradaMovimientos(200);
       setComprobantesEntradaMov(comprobantesActualizados);
 
       const contable = data?.comprobanteContable;
       toast.success(
         contable?.numero
-          ? `Comprobante confirmado. Contable ${contable.tipo || 'COMPROBANTE_ENTRADA'} - ${contable.numero}. Kardex e inventario actualizados.`
-          : (data?.msg || 'Comprobante confirmado. Kardex y contabilidad actualizados.'),
+          ? `Comprobante confirmado. Contable ${contable.tipo || 'COMPROBANTE_ENTRADA'} - ${contable.numero}. Registra la entrada física en kardex desde Movimientos.`
+          : (data?.msg || 'Comprobante confirmado. Registra la entrada física en kardex desde Movimientos.'),
         { autoClose: 9000 },
       );
     } catch (error) {
@@ -725,6 +716,32 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
     setOrdenesCompra(ordenes);
     setStockActual(stock);
     setKardex(kardexActualizado);
+  };
+
+  /**
+   * Anular o regenerar un comprobante de entrada cambia cantidadRecibida en la orden y
+   * el estado/items de la recepción. Sin esto, el formulario "Registrar movimiento" (y su
+   * combo Comprobante/Línea) queda con datos cacheados que ya no existen en el backend y
+   * el submit termina en "La linea seleccionada no corresponde al SKU ...".
+   */
+  const sincronizarTrasCambioComprobante = async (recepcionId: string): Promise<void> => {
+    try {
+      const [ordenes, comprobantes, stock, kardexActualizado] = await Promise.all([
+        inventarioService.listarOrdenesCompra({ limit: 50 }),
+        inventarioService.listarComprobantesEntradaMovimientos(200),
+        inventarioService.stockActual(),
+        inventarioService.listarKardex({ limit: 50 }),
+      ]);
+      setOrdenesCompra(ordenes);
+      setComprobantesEntradaMov(comprobantes);
+      setStockActual(stock);
+      setKardex(kardexActualizado);
+      setMovimientoForm((prev) => (prev.recepcionCompraId === recepcionId
+        ? { ...prev, recepcionCompraId: '', recepcionLineaKey: '', sku: '', bodega: '', cantidad: '', costoUnitario: '' }
+        : prev));
+    } catch (error) {
+      console.error('Error sincronizando datos tras anular/regenerar comprobante:', error);
+    }
   };
 
   const refreshStockYKardex = async (): Promise<void> => {
@@ -2624,6 +2641,7 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
         recepcionId={comprobanteVistaId}
         onConfirmarComprobante={confirmarComprobanteMovimiento}
         confirmandoComprobanteId={confirmandoComprobanteId}
+        onCambio={sincronizarTrasCambioComprobante}
         onOpenChange={(open) => {
           setComprobanteVistaOpen(open);
           if (!open) setComprobanteVistaId(null);

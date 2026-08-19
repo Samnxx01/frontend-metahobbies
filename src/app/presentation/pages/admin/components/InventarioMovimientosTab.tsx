@@ -474,7 +474,8 @@ export default function InventarioMovimientosTab({
                 </p>
               ) : !form.recepcionCompraId ? (
                 <p className="text-xs text-muted-foreground">
-                  Seleccione un comprobante de entrada. Al confirmar se asigna el comprobante contable y se registra el kardex físico.
+                  Seleccione un comprobante de entrada. «Confirmar comprobante» (en Ver comprobante) solo asigna el comprobante contable;
+                  «Registrar en kardex» abajo es el paso aparte que aplica la entrada física.
                 </p>
               ) : form.recepcionCompraId && comprobanteConKardex ? (
                 <p className="text-xs text-muted-foreground">

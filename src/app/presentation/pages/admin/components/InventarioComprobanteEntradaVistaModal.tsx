@@ -1,5 +1,5 @@
 import React from 'react';
-import { CheckCircle2, FileText, Loader2, Pencil, Save, X } from 'lucide-react';
+import { Ban, CheckCircle2, FileText, Loader2, Pencil, RotateCcw, Save, X } from 'lucide-react';
 import { toast } from 'react-toastify';
 import inventarioService, { type ComprobanteEntradaDetalle } from '@/app/services/inventarioService';
 import {
@@ -36,6 +36,9 @@ export type InventarioComprobanteEntradaVistaModalProps = {
   onOpenChange: (open: boolean) => void;
   onConfirmarComprobante?: (recepcionId: string) => Promise<void>;
   confirmandoComprobanteId?: string;
+  /** Se dispara tras anular o regenerar: la orden de compra, el stock y el listado de
+   * comprobantes usados por el formulario de "Registrar movimiento" quedan desactualizados. */
+  onCambio?: (recepcionId: string) => Promise<void>;
 };
 
 export default function InventarioComprobanteEntradaVistaModal({
@@ -44,12 +47,17 @@ export default function InventarioComprobanteEntradaVistaModal({
   onOpenChange,
   onConfirmarComprobante,
   confirmandoComprobanteId,
+  onCambio,
 }: InventarioComprobanteEntradaVistaModalProps): React.ReactElement {
   const [loading, setLoading] = React.useState(false);
   const [detalle, setDetalle] = React.useState<ComprobanteEntradaDetalle | null>(null);
   const [editando, setEditando] = React.useState(false);
   const [guardando, setGuardando] = React.useState(false);
   const [cantidades, setCantidades] = React.useState<Record<string, string>>({});
+  const [anulando, setAnulando] = React.useState(false);
+  const [anulacionOpen, setAnulacionOpen] = React.useState(false);
+  const [justificacionAnulacion, setJustificacionAnulacion] = React.useState('');
+  const [regenerando, setRegenerando] = React.useState(false);
 
   const cargarDetalle = React.useCallback(async (): Promise<void> => {
     if (!recepcionId) return;
@@ -119,8 +127,11 @@ export default function InventarioComprobanteEntradaVistaModal({
     total: acc.total + item.total,
   }), { subtotalBruto: 0, descuento: 0, baseGravable: 0, iva: 0, total: 0 }), [desgloseEditado]);
   const total = resumen.total;
-  const pendienteConfirmacion = String(detalle?.estado || '').trim().toUpperCase() === 'PENDIENTE_APROBACION';
+  const estadoNorm = String(detalle?.estado || '').trim().toUpperCase();
+  const pendienteConfirmacion = estadoNorm === 'PENDIENTE_APROBACION';
+  const anuladaParaRegenerar = estadoNorm === 'ANULADA';
   const confirmando = Boolean(recepcionId && confirmandoComprobanteId === recepcionId);
+  const mostrarAnular = Boolean(recepcionId) && !anuladaParaRegenerar;
 
   const guardarEdicion = async (): Promise<void> => {
     if (!recepcionId || !detalle) return;
@@ -147,6 +158,42 @@ export default function InventarioComprobanteEntradaVistaModal({
       toast.error(error instanceof Error ? error.message : 'No se pudo actualizar el comprobante.');
     } finally {
       setGuardando(false);
+    }
+  };
+
+  const anularComprobante = async (): Promise<void> => {
+    if (!recepcionId || justificacionAnulacion.trim().length < 5) {
+      toast.error('Indique una justificacion de al menos 5 caracteres.');
+      return;
+    }
+    try {
+      setAnulando(true);
+      await inventarioService.anularRecepcionOrdenCompra(recepcionId, justificacionAnulacion.trim());
+      await cargarDetalle();
+      await onCambio?.(recepcionId);
+      setAnulacionOpen(false);
+      setJustificacionAnulacion('');
+      toast.success('Comprobante anulado. Kardex, contable y orden de compra fueron revertidos; ya puede regenerarlo.');
+    } catch (error) {
+      console.error('Error anulando comprobante:', error);
+      toast.error(error instanceof Error ? error.message : 'No se pudo anular el comprobante.');
+    } finally {
+      setAnulando(false);
+    }
+  };
+
+  const regenerarComprobante = async (): Promise<void> => {
+    if (!recepcionId) return;
+    try {
+      setRegenerando(true);
+      // Reusa el mismo endpoint de confirmación: al estar ANULADA, el backend reconoce
+      // el comprobante y lo reconstruye sobre la misma secuencia/numeroRecepcion, con
+      // los mismos items de la orden de compra que tenía antes de anularse.
+      await onConfirmarComprobante?.(recepcionId);
+      await cargarDetalle();
+      await onCambio?.(recepcionId);
+    } finally {
+      setRegenerando(false);
     }
   };
 
@@ -199,6 +246,20 @@ export default function InventarioComprobanteEntradaVistaModal({
                   </Button>
                 </>
               )}
+            </div>
+          ) : null}
+          {anuladaParaRegenerar && recepcionId ? (
+            <div className="flex flex-col gap-2 pr-8 sm:flex-row sm:flex-wrap">
+              <Button
+                type="button"
+                className="w-full sm:w-auto"
+                size="sm"
+                onClick={() => void regenerarComprobante()}
+                disabled={regenerando || confirmando}
+              >
+                {regenerando || confirmando ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RotateCcw className="mr-2 h-4 w-4" />}
+                {regenerando || confirmando ? 'Regenerando...' : 'Regenerar comprobante'}
+              </Button>
             </div>
           ) : null}
           <DialogDescription className="sr-only">
@@ -373,10 +434,55 @@ export default function InventarioComprobanteEntradaVistaModal({
         )}
 
         <DialogFooter className="gap-2 sm:gap-0">
+          {mostrarAnular ? (
+            <Button
+              type="button"
+              className="w-full sm:w-auto"
+              variant="destructive"
+              onClick={() => setAnulacionOpen(true)}
+              disabled={confirmando || anulando || regenerando}
+            >
+              <Ban className="mr-2 h-4 w-4" /> Anular comprobante
+            </Button>
+          ) : null}
           <Button type="button" className="w-full sm:w-auto" variant="outline" onClick={() => onOpenChange(false)}>
             Cerrar
           </Button>
         </DialogFooter>
+
+        <Dialog open={anulacionOpen} onOpenChange={setAnulacionOpen}>
+          <DialogContent className="w-[calc(100vw-2rem)] max-w-md border-border bg-background text-foreground">
+            <DialogHeader>
+              <DialogTitle>Anular comprobante de entrada</DialogTitle>
+              <DialogDescription>
+                Se revierte el kardex, el comprobante contable y la cantidad recibida en la orden de compra. Luego
+                podrá regenerarlo reutilizando la misma secuencia y los mismos items.
+              </DialogDescription>
+            </DialogHeader>
+            <textarea
+              value={justificacionAnulacion}
+              onChange={(event) => setJustificacionAnulacion(event.target.value)}
+              rows={4}
+              maxLength={500}
+              placeholder="Motivo de la anulación"
+              className="w-full resize-y rounded-md border border-border bg-background p-3 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring"
+            />
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setAnulacionOpen(false)} disabled={anulando}>
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={() => void anularComprobante()}
+                disabled={anulando || justificacionAnulacion.trim().length < 5}
+              >
+                {anulando ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Ban className="mr-2 h-4 w-4" />}
+                Confirmar anulación
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </DialogContent>
     </Dialog>
   );
