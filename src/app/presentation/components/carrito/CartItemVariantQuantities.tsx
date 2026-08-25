@@ -2,6 +2,8 @@ import type { CartItem, ProductColor } from '@/types/common';
 import CartQuantityInput from '@/app/presentation/components/carrito/CartQuantityInput';
 import { resolveCartItemColores } from '@/app/presentation/components/carrito/CartItemColores';
 import { resolveLegacyColorQtyMap } from '@/app/presentation/components/carrito/cartColorQtyCache';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Check, ChevronDown } from 'lucide-react';
 
 export type CartVariantLine = {
   color: ProductColor;
@@ -47,6 +49,10 @@ type Props = {
   compact?: boolean;
   max?: number | null;
   onQuantityChange: (color: ProductColor, newQuantity: number) => void;
+  /** Tonos disponibles del producto (catálogo); si hay más de uno se puede elegir otro para agregarlo como línea nueva. */
+  availableColors?: ProductColor[];
+  /** Se dispara al elegir un tono distinto al actual desde el selector. */
+  onAddColor?: (color: ProductColor) => void;
 };
 
 export default function CartItemVariantQuantities({
@@ -54,6 +60,8 @@ export default function CartItemVariantQuantities({
   compact = false,
   max = null,
   onQuantityChange,
+  availableColors = [],
+  onAddColor,
 }: Props): React.ReactElement {
   const lines = resolveCartVariantLines(item).filter(
     (line) => line.quantity > 0 || !resolveLegacyColorQtyMap(item),
@@ -77,18 +85,62 @@ export default function CartItemVariantQuantities({
                   : ''
             }
           >
-            {showColor ? (
-              <span
-                className={`inline-flex items-center gap-1.5 shrink-0 ${compact ? 'text-xs' : 'text-sm'} text-muted-foreground`}
-              >
+            {showColor ? (() => {
+              const otrosColores = availableColors.filter(
+                (c) => c.pantone.toUpperCase() !== line.color.pantone.toUpperCase(),
+              );
+              const swatchClass = `inline-flex items-center gap-1.5 shrink-0 ${compact ? 'text-xs' : 'text-sm'} text-muted-foreground`;
+              const dot = (
                 <span
                   className={`${compact ? 'h-3 w-3' : 'h-3.5 w-3.5'} rounded-full border border-border shrink-0`}
                   style={{ backgroundColor: line.color.hex || undefined }}
                   title={line.color.name}
                 />
-                {line.color.name}
-              </span>
-            ) : null}
+              );
+
+              if (!onAddColor || otrosColores.length === 0) {
+                return (
+                  <span className={swatchClass}>
+                    {dot}
+                    {line.color.name}
+                  </span>
+                );
+              }
+
+              return (
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button type="button" className={`${swatchClass} rounded-md hover:bg-muted/60 px-1 -mx-1`}>
+                      {dot}
+                      {line.color.name}
+                      <ChevronDown className="h-3 w-3 opacity-60" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent align="start" className="w-56 p-2">
+                    <p className="mb-1.5 px-1 text-xs font-medium text-muted-foreground">Agregar otro color</p>
+                    <div className="space-y-0.5">
+                      {otrosColores.map((color) => (
+                        <button
+                          key={color.pantone}
+                          type="button"
+                          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
+                          onClick={() => onAddColor(color)}
+                        >
+                          <span
+                            className="h-3.5 w-3.5 rounded-full border border-border shrink-0"
+                            style={{ backgroundColor: color.hex || undefined }}
+                          />
+                          {color.name}
+                          {lines.some((l) => l.color.pantone.toUpperCase() === color.pantone.toUpperCase()) && (
+                            <Check className="ml-auto h-3.5 w-3.5 text-primary" />
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              );
+            })() : null}
             <CartQuantityInput
               value={line.quantity}
               min={0}

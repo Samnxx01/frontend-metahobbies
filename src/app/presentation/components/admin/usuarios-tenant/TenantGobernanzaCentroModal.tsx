@@ -28,6 +28,7 @@ type Props = {
   onAbrirUsuariosJerarquia: () => void;
   onAbrirUsuariosCorporativos: () => void;
   onAbrirRolesGlobales: () => void;
+  onAbrirRolesTg: () => void;
   onAbrirRolesCorporativos: () => void;
 };
 
@@ -42,6 +43,7 @@ export function TenantGobernanzaCentroModal({
   onAbrirUsuariosJerarquia,
   onAbrirUsuariosCorporativos,
   onAbrirRolesGlobales,
+  onAbrirRolesTg,
   onAbrirRolesCorporativos,
 }: Props): React.ReactElement {
   const [tab, setTab] = useState('usuarios');
@@ -242,8 +244,12 @@ export function TenantGobernanzaCentroModal({
                 <CardContent><GovernedButton actionId={TENANT_GOVERNANCE_ACTION_IDS.VIEW_CORPORATE_USERS} className={actionClass} variant="outline" onClick={onAbrirUsuariosCorporativos}><Building2 className="mr-2 h-4 w-4 shrink-0" />Consultar usuarios por relación corporativa</GovernedButton></CardContent>
               </Card>
               <Card>
-                <CardHeader><CardTitle className="text-base">Roles globales</CardTitle><CardDescription>Catálogo de roles disponibles para usuarios Tenant Global.</CardDescription></CardHeader>
+                <CardHeader><CardTitle className="text-base">Roles globales</CardTitle><CardDescription>Creación y administración de roles globales existentes.</CardDescription></CardHeader>
                 <CardContent><GovernedButton actionId={TENANT_GOVERNANCE_ACTION_IDS.MANAGE_GLOBAL_ROLES} className={actionClass} variant="outline" onClick={onAbrirRolesGlobales}><Globe className="mr-2 h-4 w-4 shrink-0" />Administrar roles globales</GovernedButton></CardContent>
+              </Card>
+              <Card>
+                <CardHeader><CardTitle className="text-base">Roles TG</CardTitle><CardDescription>Catálogo jerárquico asignable a Tenant Global.</CardDescription></CardHeader>
+                <CardContent><GovernedButton actionId={TENANT_GOVERNANCE_ACTION_IDS.MANAGE_GLOBAL_ROLES} className={actionClass} variant="outline" onClick={onAbrirRolesTg}><Globe className="mr-2 h-4 w-4 shrink-0" />Administrar roles TG</GovernedButton></CardContent>
               </Card>
               <Card>
                 <CardHeader><CardTitle className="text-base">Roles corporativos</CardTitle><CardDescription>Catálogo de roles disponibles para usuarios corporativos.</CardDescription></CardHeader>

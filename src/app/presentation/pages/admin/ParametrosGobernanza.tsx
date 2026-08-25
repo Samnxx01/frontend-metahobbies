@@ -1860,9 +1860,8 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
     return !soloApi;
   };
 
-  /** JWT tenantSuperAdmin puro con alcance validado en counters — habilita regla DIOS en actualizar globales. */
-  const permiteReglaDiosEnActualizarReglasGlobales = (): boolean =>
-    esJwtSoloTenantSuperAdmin && scopeJwtSaAlcanceJerarquiaValidado;
+  /** La regla DIOS solo puede aparecer cuando está relacionada con el tenant elegido. */
+  const permiteReglaDiosEnActualizarReglasGlobales = (): boolean => true;
 
   const actualizarReglasGlobalesSoloLectura = (): boolean => false;
 
@@ -1990,12 +1989,14 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
     ) {
       tenantFiltro = resolveTenantGlobalParaReglasEndpoint(endpointId);
       if (endpointId === 'tenant-actualizar-global-reglas' && !tenantFiltro) {
-        if (actualizarReglasGlobalesSoloLectura()) return [];
         const saSel = String(
           saFilterByEndpoint[endpointId] || tenantGlobalActor?.tenantSuperAdminId || '',
         ).trim();
-        const porSa = saSel ? findReglaJerarquiaPorSa(saSel) : undefined;
-        return porSa ? [porSa] : [];
+        if (!saSel) return [];
+        return base.filter((r) => {
+          const rule = ruleCatalog[r.id];
+          return Boolean(rule && saCoincideReglaAlcance(rule, saSel));
+        });
       }
     }
 
@@ -2112,18 +2113,9 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
   const reglaSinTenantGlobalMaterializado = (rule: any): boolean =>
     !resolveTenantGlobalIdFromRule(rule);
 
-  /**
-   * Reglas editables en actualizar globales: tenant view o DIOS sin TG materializado (solo JWT SA sin corporativo).
-   */
-  const reglaEsActualizableEnReglasGlobalesEndpoint = (rule: any, endpointId: string): boolean => {
+  /** En actualizar, el tipo de regla no decide el alcance: lo decide la relación con el tenant elegido. */
+  const reglaEsActualizableEnReglasGlobalesEndpoint = (rule: any, _endpointId: string): boolean => {
     if (!reglaCumpleContextoViewReglasGlobales(rule)) return false;
-    if (rule?.securityPlatform === true) {
-      return (
-        endpointId === 'tenant-actualizar-global-reglas' &&
-        permiteReglaDiosEnActualizarReglasGlobales() &&
-        reglaSinTenantGlobalMaterializado(rule)
-      );
-    }
     return true;
   };
 
@@ -2219,7 +2211,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
     const match = findReglaJerarquiaPorSa(saId, catalogOverride);
     if (!match?.id) return;
     setFieldValue(endpointId, 'x-regla-id', match.id);
-    applyRuleToForm(endpointId, match.id);
+    applyRuleToForm(endpointId, match.id, catalogOverride);
   };
 
   const findReglaViewPorTenantGlobal = (
@@ -2233,7 +2225,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
     const catalog = catalogOverride ?? ruleCatalog;
 
     const toOption = (rule: any): ReglaOption | undefined => {
-      if (!rule || !reglaEsGlobalesTenantContextoView(rule)) return undefined;
+      if (!rule || !reglaCumpleContextoViewReglasGlobales(rule)) return undefined;
       const tid = resolveTenantGlobalIdFromRule(rule);
       if (!tid || normTenantIdReglas(tid) !== filtroN) return undefined;
       if (sa && !saCoincideReglaAlcance(rule, sa)) return undefined;

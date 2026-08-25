@@ -38,6 +38,8 @@ export type DocumentoSoporteTipoConfig = {
   facturacionSoporteDocumentoId?: string;
   billingSecuencialId?: string | null;
   activo: boolean;
+  /** Solo aplica a PRODUCTOS_CONTADOR: si el contador se autocorrige contra productos en cada alta. */
+  sincronizacionAutomatica?: boolean;
   totalRecepciones?: number;
   puedeReiniciarSecuencia?: boolean;
 };

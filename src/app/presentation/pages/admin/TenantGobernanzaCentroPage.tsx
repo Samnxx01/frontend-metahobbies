@@ -5,10 +5,11 @@ import { useTenantUsuarios } from '@/app/hooks/useTenantUsuarios';
 import { TenantGobernanzaCentroModal } from '@/app/presentation/components/admin/usuarios-tenant/TenantGobernanzaCentroModal';
 import { UsuariosTenantJerarquiaListadoModal } from '@/app/presentation/components/admin/usuarios-tenant/UsuariosTenantJerarquiaListadoModal';
 import { UsuariosRolCorporativoListadoModal } from '@/app/presentation/components/admin/usuarios-tenant/UsuariosRolCorporativoListadoModal';
+import { RolesTgModal } from '@/app/presentation/components/admin/usuarios-tenant/RolesTgModal';
 import { RolesGlobalesModal } from '@/app/presentation/components/admin/usuarios-tenant/RolesGlobalesModal';
 import { RolesCorporativosModal } from '@/app/presentation/components/admin/usuarios-tenant/RolesCorporativosModal';
 
-type Vista = 'centro' | 'usuarios' | 'corporativos' | 'roles-globales' | 'roles-corporativos';
+type Vista = 'centro' | 'usuarios' | 'corporativos' | 'roles-globales' | 'roles-tg' | 'roles-corporativos';
 
 export default function TenantGobernanzaCentroPage(): React.ReactElement {
   const navigate = useNavigate();
@@ -34,11 +35,13 @@ export default function TenantGobernanzaCentroPage(): React.ReactElement {
         onAbrirUsuariosJerarquia={() => setVista('usuarios')}
         onAbrirUsuariosCorporativos={() => setVista('corporativos')}
         onAbrirRolesGlobales={() => setVista('roles-globales')}
+        onAbrirRolesTg={() => setVista('roles-tg')}
         onAbrirRolesCorporativos={() => setVista('roles-corporativos')}
       />
       <UsuariosTenantJerarquiaListadoModal open={vista === 'usuarios'} onClose={volver} />
       <UsuariosRolCorporativoListadoModal open={vista === 'corporativos'} onClose={volver} />
       <RolesGlobalesModal open={vista === 'roles-globales'} onClose={volver} scope={jerarquia.scope} />
+      <RolesTgModal open={vista === 'roles-tg'} onClose={volver} />
       <RolesCorporativosModal open={vista === 'roles-corporativos'} onClose={volver} />
     </>
   );

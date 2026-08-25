@@ -24,18 +24,24 @@ void (async (): Promise<void> => {
       reportarErrorFrontend(error, {
         reactErrorType: 'uncaught',
         reactComponentStack: errorInfo.componentStack || 'no-disponible',
+        browserPathname: window.location.pathname,
+        browserUrl: window.location.href,
       });
     },
     onCaughtError: (error, errorInfo) => {
       reportarErrorFrontend(error, {
         reactErrorType: 'caught',
         reactComponentStack: errorInfo.componentStack || 'no-disponible',
+        browserPathname: window.location.pathname,
+        browserUrl: window.location.href,
       });
     },
     onRecoverableError: (error, errorInfo) => {
       reportarErrorFrontend(error, {
         reactErrorType: 'recoverable',
         reactComponentStack: errorInfo.componentStack || 'no-disponible',
+        browserPathname: window.location.pathname,
+        browserUrl: window.location.href,
       });
     },
   });

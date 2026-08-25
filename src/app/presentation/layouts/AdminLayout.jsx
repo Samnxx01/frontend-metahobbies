@@ -10,7 +10,7 @@ import { GovernanceButtonScopeProvider } from '@/app/presentation/actions'
 import ContenidoRuta from '@/app/presentation/components/contenido/ContenidoRuta'
 
 export default function AdminLayout() {
-    const { user } = useAuth()
+    const { user, loading: authLoading, isAuthenticated } = useAuth()
     const location = useLocation()
     const [mobileOpen, setMobileOpen] = useState(false)
     const [sinPermisoPorHerencia, setSinPermisoPorHerencia] = useState(null)
@@ -36,8 +36,26 @@ export default function AdminLayout() {
     }, [location.pathname])
 
     if (!user) {
-        return null
+        console.warn('[MABS][ADMIN-LAYOUT] Render detenido por usuario ausente', {
+            pathname: location.pathname,
+            authLoading,
+            isAuthenticated,
+            hasStoredToken: Boolean(localStorage.getItem('token')),
+            hasStoredUser: Boolean(localStorage.getItem('user')),
+        })
+        return (
+            <div className="flex min-h-screen items-center justify-center bg-background text-foreground">
+                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                Restaurando usuario de la sesión…
+            </div>
+        )
     }
+
+    console.info('[MABS][ADMIN-LAYOUT] Render autorizado', {
+        pathname: location.pathname,
+        userId: user?._id || user?.iud || null,
+        sinPermisoPorHerencia,
+    })
 
     return (
         <div className="flex">

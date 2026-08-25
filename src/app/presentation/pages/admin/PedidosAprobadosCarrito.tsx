@@ -13,10 +13,11 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { ChevronDown, ChevronRight, CircleHelp, ClipboardList, Download, Eye, Loader2, MapPin, Package, Plus, ReceiptText, RefreshCw, Search, User, Warehouse } from 'lucide-react';
+import { ChevronDown, ChevronRight, CircleHelp, ClipboardList, Download, Eye, Loader2, MapPin, Package, Plus, ReceiptText, RefreshCw, Search, User, UserRoundCog, Warehouse } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Popover, PopoverContent, PopoverDescription, PopoverHeader, PopoverTitle, PopoverTrigger } from '@/components/ui/popover';
 import VentaManualModal from './components/VentaManualModal';
+import TercerosCrudModal from './components/TercerosCrudModal';
 
 interface PedidosHelpButtonProps {
   id: string;
@@ -86,6 +87,7 @@ export default function PedidosAprobadosCarrito(): React.ReactElement {
   const [ventasLoading, setVentasLoading] = useState(false);
   const [ventasFiltros, setVentasFiltros] = useState({ q: '', estado: '' });
   const [ventaManualOpen, setVentaManualOpen] = useState(false);
+  const [tercerosOpen, setTercerosOpen] = useState(false);
 
   const cargarVentasReferencias = async (
     filtros: { q: string; estado: string } = ventasFiltros,
@@ -263,7 +265,7 @@ export default function PedidosAprobadosCarrito(): React.ReactElement {
         </div>
       </div>
 
-      <div className="mb-6 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(18rem,1fr)_auto_auto_auto_auto_auto] xl:items-center">
+      <div className="mb-6 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(18rem,1fr)_auto_auto_auto_auto_auto_auto] xl:items-center">
         <div className="relative min-w-0 xl:max-w-md">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -282,6 +284,9 @@ export default function PedidosAprobadosCarrito(): React.ReactElement {
         </Button>
         <Button className="w-full sm:w-auto" type="button" variant="outline" onClick={() => { setVentasOpen(true); void cargarVentasReferencias(); }}>
           <ReceiptText className="mr-2 h-4 w-4" /> Ventas referenciadas
+        </Button>
+        <Button className="w-full sm:w-auto" type="button" variant="outline" onClick={() => setTercerosOpen(true)}>
+          <UserRoundCog className="mr-2 h-4 w-4" /> Terceros
         </Button>
         <Button className="w-full sm:w-auto" onClick={onBuscar} disabled={loading}>
           Buscar
@@ -582,6 +587,7 @@ export default function PedidosAprobadosCarrito(): React.ReactElement {
         onOpenChange={setVentaManualOpen}
         onCreated={() => cargar()}
       />
+      <TercerosCrudModal open={tercerosOpen} onOpenChange={setTercerosOpen} />
       <Dialog open={ventasOpen} onOpenChange={setVentasOpen}>
         <DialogContent className="flex max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-none flex-col overflow-hidden bg-card p-3 text-card-foreground sm:max-h-[calc(100dvh-2rem)] sm:w-[calc(100vw-2rem)] sm:p-5 lg:w-[min(1180px,calc(100vw-3rem))]">
           <DialogHeader className="shrink-0 pr-8 text-left">

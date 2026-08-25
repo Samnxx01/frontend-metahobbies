@@ -25,7 +25,7 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 // Lucide icons
-import { Loader2, AlertTriangle } from 'lucide-react';
+import { Loader2, AlertTriangle, Eye, EyeOff } from 'lucide-react';
 import { apiFetch } from '@/app/services/api';
 import { fetchSplashLogo, resolveSplashLogoUrl } from '@/app/services/splashLogoService';
 import { obtenerBrandingPublico } from '@/app/services/brandingWidget';
@@ -82,6 +82,7 @@ export default function Login(): React.ReactElement {
     const [logoUrl, setLogoUrl] = useState<string | null>(null);
     const [backgroundUrl, setBackgroundUrl] = useState<string | null>(null);
     const [rememberCredentials, setRememberCredentials] = useState<boolean>(false);
+    const [showPassword, setShowPassword] = useState<boolean>(false);
 
     // 1. Inicializar useForm
     const form = useForm<LoginFormData>({
@@ -321,13 +322,24 @@ export default function Login(): React.ReactElement {
                                     <FormItem>
                                         <FormLabel className="text-foreground">Contraseña</FormLabel>
                                         <FormControl>
-                                            <Input
-                                                type="password"
-                                                autoComplete="current-password"
-                                                placeholder="Tu contraseña secreta"
-                                                className="bg-background border-input focus:border-primary focus:ring-primary"
-                                                {...field}
-                                            />
+                                            <div className="relative">
+                                                <Input
+                                                    type={showPassword ? 'text' : 'password'}
+                                                    autoComplete="current-password"
+                                                    placeholder="Tu contraseña secreta"
+                                                    className="bg-background border-input pr-10 focus:border-primary focus:ring-primary"
+                                                    {...field}
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setShowPassword((prev) => !prev)}
+                                                    className="absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground hover:text-foreground"
+                                                    aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                                                    tabIndex={-1}
+                                                >
+                                                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                                </button>
+                                            </div>
                                         </FormControl>
                                         <FormMessage />
                                     </FormItem>

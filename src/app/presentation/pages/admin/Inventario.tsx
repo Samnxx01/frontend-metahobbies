@@ -192,6 +192,7 @@ const movimientoInicial: MovimientoForm = {
   ordenCompraItemIndex: '',
   recepcionCompraId: '',
   recepcionLineaKey: '',
+  sku: '',
   bodega: '',
   bodegaDestino: '',
   cantidad: '',
@@ -281,6 +282,10 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
   const { menuTabs: inventarioMenuTabs, loading: loadingInventarioTabs } = useInventarioTarjetasDinamicas(user);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  // Set de claves (recepcionCompraId/ordenCompraId) en registro de kardex — no un solo
+  // "saving" global: permite registrar el kardex de un comprobante y, sin esperar, seguir
+  // con otro (mismo patrón que confirmar orden de compra / comprobante de entrada).
+  const [registrandoMovimientoIds, setRegistrandoMovimientoIds] = useState<Set<string>>(new Set());
   const [config, setConfig] = useState<InventarioConfig | null>(null);
   const [bodegas, setBodegas] = useState<BodegaInventario[]>([]);
   const [stockActual, setStockActual] = useState<StockActualItem[]>([]);
@@ -343,7 +348,11 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
   const [comprobanteEntradaOpen, setComprobanteEntradaOpen] = useState(false);
   const [comprobanteEntradaData, setComprobanteEntradaData] = useState<RecepcionOrdenCompraResponse | null>(null);
   const [comprobanteEntradaDoc, setComprobanteEntradaDoc] = useState<DocumentoSoporte | null>(null);
-  const [confirmandoComprobanteId, setConfirmandoComprobanteId] = useState('');
+  // Set de ids en confirmación (no un solo string): permite cerrar este comprobante y
+  // confirmar otro mientras el anterior sigue corriendo en segundo plano — un solo id
+  // dejaba el botón del comprobante nuevo bloqueado por el viejo (igual que en órdenes
+  // de compra, ver InventarioOrdenCompraDetallesModal).
+  const [confirmandoComprobanteIds, setConfirmandoComprobanteIds] = useState<Set<string>>(new Set());
 
   const handleOrdenCompraModalChange = (nextOpen: boolean): void => {
     setOrdenCompraModalOpen(nextOpen);
@@ -494,36 +503,57 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
       toast.error('Selecciona un comprobante de entrada.');
       return;
     }
+    if (confirmandoComprobanteIds.has(id)) {
+      toast.info('Este comprobante ya se está confirmando.');
+      return;
+    }
 
+    // Número legible (REC-000010) para los toasts — el id es un ObjectId interno, no algo
+    // que el usuario reconozca. Se toma del listado ya cargado; si no está ahí (o cambia al
+    // confirmar), se reemplaza por el que devuelva el propio backend.
+    const numeroLegible = comprobantesEntradaMov.find((c) => c.recepcionId === id)?.numeroRecepcion || id;
+
+    // Confirmar asigna el comprobante contable (secuencia propia compartida entre TODOS los
+    // comprobantes) — si hay otra confirmación en curso puede tardar un momento en tomar su
+    // turno. Cerramos el modal ya y avisamos por toast al terminar, en vez de dejar al
+    // usuario bloqueado esperando: así puede abrir y confirmar otro comprobante mientras
+    // este sigue en segundo plano (mismo patrón que confirmar orden de compra).
+    setComprobanteVistaOpen(false);
+    setConfirmandoComprobanteIds((prev) => new Set(prev).add(id));
+    const toastId = toast.loading(`Confirmando comprobante ${numeroLegible}...`);
     try {
-      setConfirmandoComprobanteId(id);
       // Solo confirma el comprobante (comprobante contable). El kardex físico es un
       // subproceso aparte: se registra con el botón "Registrar en kardex" del formulario
       // de movimiento (endpoint /kardex, no este /confirmar).
       const data = await inventarioService.confirmarRecepcionOrdenCompra(id);
-      setComprobanteEntradaData(data);
-      const soporte = data?.recepcion?.documentoSoporte;
-      setComprobanteEntradaDoc(soporte ? { tipo: soporte.tipo, numero: soporte.numero } : null);
-      setComprobanteEntradaOpen(true);
 
       const comprobantesActualizados = await inventarioService.listarComprobantesEntradaMovimientos(200);
       setComprobantesEntradaMov(comprobantesActualizados);
 
+      const numeroConfirmado = data?.recepcion?.numeroRecepcion || numeroLegible;
       const contable = data?.comprobanteContable;
-      toast.success(
-        contable?.numero
-          ? `Comprobante confirmado. Contable ${contable.tipo || 'COMPROBANTE_ENTRADA'} - ${contable.numero}. Registra la entrada física en kardex desde Movimientos.`
-          : (data?.msg || 'Comprobante confirmado. Registra la entrada física en kardex desde Movimientos.'),
-        { autoClose: 9000 },
-      );
+      toast.update(toastId, {
+        render: contable?.numero
+          ? `Comprobante ${numeroConfirmado} confirmado. Contable ${contable.tipo || 'COMPROBANTE_ENTRADA'} - ${contable.numero}. Registra la entrada física en kardex desde Movimientos.`
+          : (data?.msg || `Comprobante ${numeroConfirmado} confirmado. Registra la entrada física en kardex desde Movimientos.`),
+        type: 'success',
+        isLoading: false,
+        autoClose: 9000,
+      });
     } catch (error) {
       console.error('Error confirmando comprobante desde movimientos:', error);
-      toast.error(
-        mensajeErrorComprasInventario(error, 'No se pudo confirmar el comprobante de entrada.'),
-        { autoClose: 10000 },
-      );
+      toast.update(toastId, {
+        render: mensajeErrorComprasInventario(error, `No se pudo confirmar el comprobante ${numeroLegible}.`),
+        type: 'error',
+        isLoading: false,
+        autoClose: 10000,
+      });
     } finally {
-      setConfirmandoComprobanteId('');
+      setConfirmandoComprobanteIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
     }
   };
 
@@ -642,22 +672,52 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
   };
 
   const loadData = async (): Promise<void> => {
+    const cargarDato = async <T,>(nombre: string, request: Promise<T>, fallback: T): Promise<T> => {
+      const inicio = performance.now();
+      console.info('[MABS][INVENTARIO][LOAD] Iniciando', { nombre });
+      let timeoutId: ReturnType<typeof setTimeout> | undefined;
+      try {
+        const timeout = new Promise<T>((_resolve, reject) => {
+          timeoutId = setTimeout(
+            () => reject(new Error(`Timeout cargando ${nombre} despues de 15000 ms`)),
+            15_000,
+          );
+        });
+        const resultado = await Promise.race([request, timeout]);
+        console.info('[MABS][INVENTARIO][LOAD] Completado', {
+          nombre,
+          duracionMs: Math.round(performance.now() - inicio),
+          registros: Array.isArray(resultado) ? resultado.length : undefined,
+        });
+        return resultado;
+      } catch (error) {
+        console.error('[MABS][INVENTARIO][LOAD] Fallo; usando valor seguro', {
+          nombre,
+          duracionMs: Math.round(performance.now() - inicio),
+          error,
+        });
+        return fallback;
+      } finally {
+        if (timeoutId) clearTimeout(timeoutId);
+      }
+    };
+
     try {
       setLoading(true);
       const [configResp, bodegasResp, stockResp, ajustesResp, productosResp, tiposResp, unidadesResp, tiposUnidadResp, proveedoresResp, ordenesResp, causalesResp, comprobantesEntradaResp, tiposProductoResp] = await Promise.all([
-        inventarioService.obtenerConfig(),
-        inventarioService.listarBodegas(),
-        inventarioService.stockActual(),
-        inventarioService.listarAjustes({ estado: ajusteFiltro }),
-        productosService.listarProductosAdmin({ estadoCatalogo: 'ACTIVO', resumenInventario: true }),
-        inventarioService.listarTiposMovimientoAdmin(),
-        inventarioService.listarUnidadesMedidaAdmin(),
-        inventarioService.listarTiposUnidadMedida(),
+        cargarDato('config', inventarioService.obtenerConfig(), null),
+        cargarDato('bodegas', inventarioService.listarBodegas(), []),
+        cargarDato('stock', inventarioService.stockActual(), []),
+        cargarDato('ajustes', inventarioService.listarAjustes({ estado: ajusteFiltro }), []),
+        cargarDato('productos', productosService.listarProductosAdmin({ estadoCatalogo: 'ACTIVO', resumenInventario: true }), []),
+        cargarDato('tipos-movimiento', inventarioService.listarTiposMovimientoAdmin(), []),
+        cargarDato('unidades-medida', inventarioService.listarUnidadesMedidaAdmin(), []),
+        cargarDato('tipos-unidad-medida', inventarioService.listarTiposUnidadMedida(), []),
         Promise.resolve([]),
         Promise.resolve([]),
-        inventarioService.listarCausalesAjuste(),
+        cargarDato('causales-ajuste', inventarioService.listarCausalesAjuste(), []),
         Promise.resolve([]),
-        productosService.listarTiposProducto(),
+        cargarDato('tipos-producto', productosService.listarTiposProducto(), []),
       ]);
       setConfig(configResp);
       setBodegas(bodegasResp);
@@ -703,6 +763,7 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
       console.error('Error cargando inventario:', error);
       toast.error('No se pudo cargar el módulo de inventario.');
     } finally {
+      console.info('[MABS][INVENTARIO][LOAD] Finalizando carga; liberando pantalla');
       setLoading(false);
     }
   };
@@ -1185,8 +1246,28 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
       }
     }
 
+    const claveMovimiento = movimientoForm.recepcionCompraId
+      || movimientoForm.ordenCompraId
+      || `${movimientoForm.sku.trim().toUpperCase()}::${movimientoForm.bodega.trim()}`;
+    if (registrandoMovimientoIds.has(claveMovimiento)) {
+      toast.info('Este movimiento ya se está registrando.');
+      return;
+    }
+
+    // Se registra en segundo plano: reiniciamos el formulario YA (no esperamos la respuesta)
+    // para que el usuario pueda seleccionar y registrar otro comprobante/movimiento de
+    // inmediato, en vez de quedar bloqueado hasta que este termine (mismo patrón que
+    // confirmar orden de compra / comprobante de entrada).
+    setMovimientoForm((prev) => ({
+      ...movimientoInicial,
+      tipo: tipoSeleccionado.naturaleza,
+      tipoMovimientoConfigId: prev.tipoMovimientoConfigId,
+      bodega: prev.bodega,
+    }));
+    setRegistrandoMovimientoIds((prev) => new Set(prev).add(claveMovimiento));
+    const toastId = toast.loading('Registrando movimiento en kardex...');
+
     try {
-      setSaving(true);
       if (esEntradaCompraPorTipo && movimientoForm.recepcionCompraId) {
         // Subproceso manual: el comprobante (recepción) ya existe en borrador; aquí se confirma para aplicar kardex+contable.
         const data = await inventarioService.registrarKardexRecepcionOrdenCompra(movimientoForm.recepcionCompraId, {
@@ -1202,12 +1283,6 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
         setComprobanteEntradaOpen(true);
         setReporteKardexRecepcionId(movimientoForm.recepcionCompraId);
         setReporteKardexOpen(true);
-        setMovimientoForm((prev) => ({
-          ...movimientoInicial,
-          tipo: tipoSeleccionado.naturaleza,
-          tipoMovimientoConfigId: prev.tipoMovimientoConfigId,
-          bodega: prev.bodega,
-        }));
         const [stock, kardexActualizado, comprobantesActualizados] = await Promise.all([
           inventarioService.stockActual(),
           inventarioService.listarKardex({ limit: 100 }),
@@ -1217,12 +1292,14 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
         setKardex(kardexActualizado);
         setComprobantesEntradaMov(comprobantesActualizados);
         const contable = data?.comprobanteContable;
-        toast.success(
-          contable?.numero
+        toast.update(toastId, {
+          render: contable?.numero
             ? `Comprobante confirmado. Contable ${contable.tipo || 'COMPROBANTE_ENTRADA'} · ${contable.numero}. Kardex e inventario actualizados.`
             : (data?.msg || 'Comprobante confirmado. Kardex y contabilidad actualizados.'),
-          { autoClose: 9000 },
-        );
+          type: 'success',
+          isLoading: false,
+          autoClose: 9000,
+        });
         return;
       }
 
@@ -1251,26 +1328,22 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
         setOrdenesCompra((prev) =>
           prev.map((oc) => (getOrdenCompraId(oc) === getOrdenCompraId(data.orden) ? data.orden : oc)),
         );
-        setMovimientoForm((prev) => ({
-          ...movimientoInicial,
-          tipo: tipoSeleccionado.naturaleza,
-          tipoMovimientoConfigId: prev.tipoMovimientoConfigId,
-          bodega: prev.bodega,
-        }));
         const [stock, kardexActualizado] = await Promise.all([
           inventarioService.stockActual(),
           inventarioService.listarKardex({ limit: 100 }),
         ]);
         setStockActual(stock);
         setKardex(kardexActualizado);
-        toast.success(
-          FLUJO_COMPRAS_PASOS.comprobanteOk(
+        toast.update(toastId, {
+          render: FLUJO_COMPRAS_PASOS.comprobanteOk(
             data.orden?.numeroOrden || 'OC',
             String(data.orden?.estado || 'actualizada'),
             true,
           ),
-          { autoClose: 9000 },
-        );
+          type: 'success',
+          isLoading: false,
+          autoClose: 9000,
+        });
         return;
       }
       if (esTraslado) {
@@ -1287,7 +1360,12 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
           },
         });
         setKardex((prev) => [traslado.entrada, traslado.salida, ...prev].slice(0, 100));
-        toast.success('Traslado registrado: salida en origen y entrada en destino (kardex + contable).');
+        toast.update(toastId, {
+          render: 'Traslado registrado: salida en origen y entrada en destino (kardex + contable).',
+          type: 'success',
+          isLoading: false,
+          autoClose: 6000,
+        });
       } else {
         const payload = {
           sku: movimientoForm.sku.trim(),
@@ -1309,14 +1387,13 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
           : await inventarioService.registrarSalida(payload);
 
         setKardex((prev) => [movimiento, ...prev].slice(0, 100));
-        toast.success('Movimiento registrado en kardex y comprobante contable.');
+        toast.update(toastId, {
+          render: 'Movimiento registrado en kardex y comprobante contable.',
+          type: 'success',
+          isLoading: false,
+          autoClose: 6000,
+        });
       }
-      setMovimientoForm((prev) => ({
-        ...movimientoInicial,
-        tipo: tipoSeleccionado.naturaleza,
-        tipoMovimientoConfigId: prev.tipoMovimientoConfigId,
-        bodega: prev.bodega,
-      }));
       const [stock, comprobantesActualizados] = await Promise.all([
         inventarioService.stockActual(),
         inventarioService.listarComprobantesEntradaMovimientos(200),
@@ -1325,12 +1402,18 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
       setComprobantesEntradaMov(comprobantesActualizados);
     } catch (error) {
       console.error('Error registrando movimiento:', error);
-      toast.error(
-        mensajeErrorComprasInventario(error, 'No se pudo registrar el movimiento.'),
-        { autoClose: 10000 },
-      );
+      toast.update(toastId, {
+        render: mensajeErrorComprasInventario(error, 'No se pudo registrar el movimiento.'),
+        type: 'error',
+        isLoading: false,
+        autoClose: 10000,
+      });
     } finally {
-      setSaving(false);
+      setRegistrandoMovimientoIds((prev) => {
+        const next = new Set(prev);
+        next.delete(claveMovimiento);
+        return next;
+      });
     }
   };
 
@@ -1888,6 +1971,9 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
   };
 
   const importarCatalogoExcel = async (file: File): Promise<{ total: number; insertados: number; errores: { fila: number; error: string }[] }> => {
+    const esJson = /\.json$/i.test(file.name) || file.type === 'application/json';
+    const formatoLabel = esJson ? 'JSON' : 'Excel';
+    const toastId = toast.info(`Importando archivo ${formatoLabel} (${file.name})...`, { autoClose: false });
     try {
       const result = await productosService.importarProductosExcel(file);
       if (result.insertados > 0) {
@@ -1898,10 +1984,11 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
         setProductosSku(nuevos.filter((p) => Boolean(p.sku)));
         setCodigosRegistrados(registrados);
       }
+      toast.dismiss(toastId);
       if (result.errores.length > 0) {
-        toast.warning(`${result.insertados} de ${result.total} productos importados. ${result.errores.length} fila(s) con errores.`);
+        toast.warning(`${result.insertados} de ${result.total} productos importados desde ${formatoLabel}. ${result.errores.length} fila(s) con errores.`);
       } else if (result.insertados > 0) {
-        toast.success(`${result.insertados} producto(s) importados correctamente.`);
+        toast.success(`${result.insertados} producto(s) importados correctamente desde ${formatoLabel}.`);
       } else {
         toast.warning('Ningún producto fue importado. Revisa el archivo.');
       }
@@ -1911,6 +1998,7 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
       }
       return result;
     } catch (error: any) {
+      toast.dismiss(toastId);
       const mensaje = error?.message || 'No se pudo importar el archivo.';
       toast.error(mensaje);
       throw error instanceof Error ? error : new Error(mensaje);
@@ -2251,6 +2339,12 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
   }, []);
 
   if (loading) {
+    console.info('[MABS][INVENTARIO][RENDER] Esperando carga de datos', {
+      initialActiveTab: initialActiveTab ?? null,
+      activeTab,
+      tarjetasLoading: loadingInventarioTabs,
+      tarjetas: inventarioMenuTabs.length,
+    });
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <div className="text-center">
@@ -2260,6 +2354,21 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
       </div>
     );
   }
+
+  const claveMovimientoActual = movimientoForm.recepcionCompraId
+    || movimientoForm.ordenCompraId
+    || `${String(movimientoForm.sku || '').trim().toUpperCase()}::${String(movimientoForm.bodega || '').trim()}`;
+  const registrandoMovimientoActual = registrandoMovimientoIds.has(claveMovimientoActual);
+
+  console.info('[MABS][INVENTARIO][RENDER] Renderizando contenido', {
+    initialActiveTab: initialActiveTab ?? null,
+    activeTab,
+    tarjetasLoading: loadingInventarioTabs,
+    tabs: inventarioMenuTabs.map((tab) => tab.value),
+    bodegas: bodegas.length,
+    stock: stockActual.length,
+    ajustes: ajustes.length,
+  });
 
   return (
     <div className="space-y-6 p-4 md:p-6">
@@ -2387,7 +2496,7 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
             onRecargarComprobantes={recargarComprobantesEntrada}
             tiposMovimientoActivos={tiposMovimientoEntradaActivos}
             motivos={motivosMovimiento}
-            saving={saving}
+            saving={registrandoMovimientoActual}
             renderSkuSelect={renderSkuSelect}
             renderBodegaSelect={renderBodegaSelect}
             abrirModalTiposMovimiento={abrirModalTiposMovimiento}
@@ -2640,7 +2749,7 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
         open={comprobanteVistaOpen}
         recepcionId={comprobanteVistaId}
         onConfirmarComprobante={confirmarComprobanteMovimiento}
-        confirmandoComprobanteId={confirmandoComprobanteId}
+        confirmandoIds={confirmandoComprobanteIds}
         onCambio={sincronizarTrasCambioComprobante}
         onOpenChange={(open) => {
           setComprobanteVistaOpen(open);

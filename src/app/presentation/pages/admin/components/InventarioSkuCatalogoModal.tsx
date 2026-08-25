@@ -433,7 +433,7 @@ export default function InventarioSkuCatalogoModal({
                       <input
                         ref={importInputRef}
                         type="file"
-                        accept=".xlsx"
+                        accept=".xlsx,.json,application/json"
                         className="hidden"
                         onChange={(e) => void handleImportarArchivo(e)}
                       />
@@ -444,7 +444,7 @@ export default function InventarioSkuCatalogoModal({
                         size="sm"
                         disabled={importando}
                         onClick={() => importInputRef.current?.click()}
-                        title="Importar productos desde Excel"
+                        title="Importar productos desde Excel o JSON"
                       >
                         <Upload className="mr-2 h-4 w-4" />
                         {importando ? 'Importando…' : 'Importar'}

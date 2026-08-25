@@ -24,13 +24,15 @@ import { hydrateGeneradorEnlaceVentasAttribution } from '@/app/services/generado
 
 import CartItemVariantQuantities from '@/app/presentation/components/carrito/CartItemVariantQuantities';
 import { groupCartItemsByProduct } from '@/app/presentation/components/carrito/cartColorQtyCache';
-import { Trash2, ArrowLeft, Info, Tag, X, AlertTriangle } from 'lucide-react';
+import { Loader2, Trash2, ArrowLeft, Info, Tag, X, AlertTriangle } from 'lucide-react';
 import type { CartItem } from '../../../../types/common';
 
 interface CartProductGroupProps {
   lines: CartItem[];
   name: string;
   image: string;
+  removing: boolean;
+  onRemove: () => void;
 }
 
 export default function Carrito(): React.ReactElement {
@@ -38,6 +40,8 @@ export default function Carrito(): React.ReactElement {
     cartItems,
     removeFromCart,
     updateVariantQuantity,
+    addColorVariant,
+    getAvailableColors,
     cartSummary,
     descuentoAplicado,
     totalDescuentoCodigo,
@@ -57,6 +61,8 @@ export default function Carrito(): React.ReactElement {
   const [codigoInput, setCodigoInput] = useState('');
   const [applyingCode, setApplyingCode] = useState(false);
   const [billingGuestOpen, setBillingGuestOpen] = useState(false);
+  const [removingProductId, setRemovingProductId] = useState<string | null>(null);
+  const [pendingVariant, setPendingVariant] = useState<{ itemId: string; pantone: string } | null>(null);
 
   // Usar total del backend cuando está disponible, si no calcular local
   const subtotal = cartSummary.subtotal;
@@ -70,6 +76,11 @@ export default function Carrito(): React.ReactElement {
     color: NonNullable<CartItem['color']>,
     newQuantity: number,
   ): Promise<void> => {
+    const key = { itemId: line.backendItemId || String(line.id), pantone: color.pantone };
+    if (pendingVariant && pendingVariant.itemId === key.itemId && pendingVariant.pantone === key.pantone) {
+      return; // ya hay una petición en curso para esta línea: ignora el clic extra
+    }
+    setPendingVariant(key);
     try {
       await updateVariantQuantity(line, color, newQuantity);
       if (newQuantity < 1) {
@@ -79,10 +90,30 @@ export default function Carrito(): React.ReactElement {
       }
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Error actualizando cantidad');
+    } finally {
+      setPendingVariant(null);
     }
   };
 
-  const handleRemoveGroup = async (lines: CartItem[]): Promise<void> => {
+  const handleAddColorVariant = async (
+    line: CartItem,
+    color: NonNullable<CartItem['color']>,
+  ): Promise<void> => {
+    const key = { itemId: line.backendItemId || String(line.id), pantone: color.pantone };
+    if (pendingVariant && pendingVariant.itemId === key.itemId && pendingVariant.pantone === key.pantone) return;
+    setPendingVariant(key);
+    try {
+      await addColorVariant(line, color, 1);
+      toast.success(`Se agregó ${color.name} al carrito`, { autoClose: 1500 });
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Error agregando el color');
+    } finally {
+      setPendingVariant(null);
+    }
+  };
+
+  const handleRemoveGroup = async (productId: string, lines: CartItem[]): Promise<void> => {
+    if (removingProductId) return; // ya hay una eliminación en curso: evita disparos duplicados
     const result = await Swal({
       title: '¿Estás seguro?',
       text: `¿Deseas eliminar ${lines[0]?.name || 'este producto'} del carrito?`,
@@ -95,6 +126,7 @@ export default function Carrito(): React.ReactElement {
     });
 
     if (result.isConfirmed) {
+      setRemovingProductId(productId);
       try {
         for (const line of lines) {
           await removeFromCart(line.id, line.color?.pantone, line.backendItemId);
@@ -102,6 +134,8 @@ export default function Carrito(): React.ReactElement {
         toast.success('Producto eliminado del carrito');
       } catch {
         toast.error('Error eliminando producto');
+      } finally {
+        setRemovingProductId(null);
       }
     }
   };
@@ -159,7 +193,7 @@ export default function Carrito(): React.ReactElement {
 
   // ── Item component ────────────────────────────────────────────────────────
 
-  const CartProductGroupRow = ({ lines, name, image }: CartProductGroupProps): React.ReactElement => {
+  const CartProductGroupRow = ({ lines, name, image, removing, onRemove }: CartProductGroupProps): React.ReactElement => {
     const groupTotal = lines.reduce((sum, line) => sum + line.price * line.quantity, 0);
     const stockAlert = lines.some((line) => !line.available);
     const alerta = alertas.find((a) => lines.some((line) => a.sku === (line as { sku?: string }).sku));
@@ -182,9 +216,11 @@ export default function Carrito(): React.ReactElement {
             {stockAlert && (
               <Badge variant="destructive" className="text-xs mt-1">Stock insuficiente</Badge>
             )}
-            {lines[0]?.stock != null && (
+            {lines[0]?.purchaseLimit != null ? (
+              <p className="text-xs text-muted-foreground">Cantidad máxima por compra: {lines[0].purchaseLimit}</p>
+            ) : lines[0]?.stock != null ? (
               <p className="text-xs text-muted-foreground">Disponible para venta: {lines[0].stock}</p>
-            )}
+            ) : null}
             {alerta && (
               <p className="text-xs text-primary mt-1 flex items-center gap-1">
                 <AlertTriangle className="w-3 h-3" /> {alerta.mensaje}
@@ -195,10 +231,16 @@ export default function Carrito(): React.ReactElement {
                 <CartItemVariantQuantities
                   key={line.backendItemId || `${line.id}-${line.color?.pantone || 'default'}`}
                   item={line}
-                  max={line.stock ?? null}
+                  max={
+                    line.stock != null && line.purchaseLimit != null
+                      ? Math.min(line.stock, line.purchaseLimit)
+                      : line.purchaseLimit ?? line.stock ?? null
+                  }
                   onQuantityChange={(color, newQuantity) => {
                     void handleVariantQuantityChange(line, color, newQuantity);
                   }}
+                  availableColors={getAvailableColors(line.id)}
+                  onAddColor={(color) => { void handleAddColorVariant(line, color); }}
                 />
               ))}
             </div>
@@ -212,9 +254,10 @@ export default function Carrito(): React.ReactElement {
               <Button
                 variant="ghost" size="icon"
                 className="text-destructive hover:bg-destructive/10 h-8 w-8"
-                onClick={() => { void handleRemoveGroup(lines); }}
+                disabled={removing}
+                onClick={onRemove}
               >
-                <Trash2 className="h-4 w-4" />
+                {removing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
               </Button>
             </div>
           </div>
@@ -279,6 +322,8 @@ export default function Carrito(): React.ReactElement {
                     lines={group.lines}
                     name={group.name}
                     image={group.image}
+                    removing={removingProductId === group.productId}
+                    onRemove={() => { void handleRemoveGroup(group.productId, group.lines); }}
                   />
                 ))}
               </CardContent>
@@ -345,11 +390,11 @@ export default function Carrito(): React.ReactElement {
 
                   {detalleImpuestos.length > 0 ? (
                     <div className="space-y-1 rounded-lg border border-primary/20 bg-primary/5 p-2">
-                      <p className="text-xs font-semibold text-muted-foreground">Detalle IVA / reglas contables</p>
+                      <p className="text-xs font-semibold text-muted-foreground">Detalle IVA</p>
                       {detalleImpuestos.map((regla) => (
                         <div key={regla.codigo} className="flex justify-between gap-3 text-xs">
                           <span className="truncate">
-                            {regla.nombre} ({Number(regla.tarifa || 0).toFixed(2)}%)
+                            {regla.nombre.split('_')[0]} ({Number(regla.tarifa || 0).toFixed(2)}%)
                           </span>
                           <span className="font-medium">{formatCOP(regla.valor)}</span>
                         </div>

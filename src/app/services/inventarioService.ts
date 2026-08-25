@@ -781,6 +781,14 @@ export interface ComprobanteEntradaDetalle {
   numeroRecepcion: string;
   estado: string;
   documentoSoporte: { tipo: string; numero: string };
+  comprobanteContable?: {
+    tipo?: string;
+    numero?: string;
+    documentoSoporteId?: string | null;
+    confirmadoEn?: string | null;
+    confirmadoPor?: string | null;
+    usuario?: { correo?: string; nombre?: string } | null;
+  } | null;
   reporteKardex?: ReporteKardexEntradaLinea[];
   orden: {
     _id: string;

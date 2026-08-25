@@ -54,6 +54,7 @@ export type MembresiaPrecioApiRow = EntityRef & {
   tipoPagos?: string;
   tipoProducto?: string;
   metodoPagoCodigo?: string | null;
+  metodosPagoCodigos?: string[] | null;
   estadoPrecio?: boolean;
   esPrecioDefault?: boolean;
   creacionDate?: string;
@@ -68,6 +69,7 @@ export type MembresiaPrecioRow = {
   tipoPagos: string;
   tipoProducto: string;
   metodoPagoCodigo: string;
+  metodosPagoCodigos: string[];
   estadoPrecio: boolean;
   esPrecioDefault: boolean;
   creacionDate: string;
@@ -106,6 +108,9 @@ export function normalizeMembresiaPrecioFromApi(raw: MembresiaPrecioApiRow): Mem
     tipoPagos: String(raw.tipoPagos ?? '').trim(),
     tipoProducto: String(raw.tipoProducto ?? '').trim(),
     metodoPagoCodigo: String(raw.metodoPagoCodigo ?? '').trim(),
+    metodosPagoCodigos: Array.isArray(raw.metodosPagoCodigos)
+      ? raw.metodosPagoCodigos.map((codigo) => String(codigo || '').trim()).filter(Boolean)
+      : String(raw.metodoPagoCodigo ?? '').trim() ? [String(raw.metodoPagoCodigo).trim()] : [],
     estadoPrecio: raw.estadoPrecio !== false,
     esPrecioDefault: raw.esPrecioDefault === true,
     creacionDate: String(raw.creacionDate ?? ''),

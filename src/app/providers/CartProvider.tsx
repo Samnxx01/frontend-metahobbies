@@ -134,6 +134,7 @@ function mapBackendItem(item: BackendCartItem): CartItem {
     colors: coloresItem.length ? coloresItem : undefined,
     stock: item.stockDisponible,
     available: item.stockSuficiente,
+    purchaseLimit: item.cantidadMaxima ?? null,
     createdAt: '',
     updatedAt: '',
     quantity: item.cantidad,
@@ -175,6 +176,10 @@ interface CartContextType {
     backendItemId?: string,
   ) => Promise<void>;
   updateVariantQuantity: (item: CartItem, color: ProductColor, newQuantity: number) => Promise<void>;
+  /** Agrega al carrito el mismo producto en OTRO tono (nueva línea; el backend suma cantidad si el tono ya existe). */
+  addColorVariant: (item: CartItem, color: ProductColor, quantity?: number) => Promise<void>;
+  /** Tonos disponibles cacheados para el producto (ver saveProductColorsCache en addToCart). */
+  getAvailableColors: (productId: ProductId) => ProductColor[];
   clearCart: () => Promise<void>;
   aplicarDescuento: (codigo: string) => Promise<void>;
   removerDescuento: () => Promise<void>;
@@ -280,6 +285,26 @@ export default function CartProvider({ children }: CartProviderProps) {
     const updated = await carritoService.eliminarItem(backendCartId, item.backendItemId);
     applyBackendCart(updated);
   }, [backendCartId, cartItems, applyBackendCart]);
+
+  const addColorVariant = useCallback(async (
+    item: CartItem,
+    color: ProductColor,
+    quantity = 1,
+  ): Promise<void> => {
+    // El backend (agregarItem) ya distingue por productoId+colorPantone: si el
+    // tono ya está en el carrito suma cantidad, si es otro tono crea una línea nueva.
+    const updated = await carritoService.agregarItem(
+      backendCartId || '',
+      String(item.id),
+      quantity,
+      { color },
+    );
+    applyBackendCart(updated);
+  }, [backendCartId, applyBackendCart]);
+
+  const getAvailableColors = useCallback((productId: ProductId): ProductColor[] => {
+    return getColorCache()[String(productId)] || [];
+  }, []);
 
   const splitLegacyMultiColorItem = useCallback(async (
     item: CartItem,
@@ -493,6 +518,8 @@ export default function CartProvider({ children }: CartProviderProps) {
     removeFromCart,
     updateQuantity,
     updateVariantQuantity,
+    addColorVariant,
+    getAvailableColors,
     clearCart,
     aplicarDescuento,
     removerDescuento,

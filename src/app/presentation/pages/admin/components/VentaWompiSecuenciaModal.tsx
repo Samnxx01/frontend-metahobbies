@@ -5,6 +5,7 @@ import billingSecuencialService, {
   type TipoLimiteRegistros,
   type TipoSecuenciaEmision,
 } from '@/app/services/billingSecuencialService';
+import { GovernedButton, PRODUCT_ACTION_IDS } from '@/app/presentation/actions';
 import facturacionSoporteDocumentoService, {
   type FacturacionSoporteDocumentoCatalogo,
 } from '@/app/services/facturacionSoporteDocumentoService';
@@ -149,6 +150,7 @@ const defaultConfig = (row?: Partial<DocumentoSoporteTipoConfig>): DocumentoSopo
       ? Math.floor(maxGuardado)
       : 1000,
     activo: true,
+    sincronizacionAutomatica: row?.sincronizacionAutomatica !== false,
   };
 };
 
@@ -321,6 +323,8 @@ export default function VentaWompiSecuenciaModal({
   const sinTipoSeleccionado = !codigoSeleccionadoFormulario;
   const tipoLimite = normalizarTipoLimite(config.tipoLimiteRegistros);
   const conLimite = tipoLimite === 'CON_LIMITE';
+  const esProductosContador = codigoSeleccionadoFormulario === 'SECUENCIA_PRODUCTOS'
+    || String(config.tipoSecuencia || '').trim().toUpperCase() === 'PRODUCTOS_CONTADOR';
   const tipoCatalogoSeleccionado = useMemo(
     () => catalogoDocumentos.find((t) => t.codigo === codigoSeleccionadoFormulario) || null,
     [catalogoDocumentos, codigoSeleccionadoFormulario],
@@ -854,6 +858,7 @@ export default function VentaWompiSecuenciaModal({
         tipoLimiteRegistros: limiteTipo,
         maxRegistrosSecuencia,
         activo: true,
+        sincronizacionAutomatica: config.sincronizacionAutomatica !== false,
       });
       validarCodigoRespuestaApi(guardado, codigo, 'El guardado');
       setCodigoSecuencia(codigo);
@@ -1427,6 +1432,30 @@ export default function VentaWompiSecuenciaModal({
                   }))}
                   disabled={loading || saving || sinTiposConfigurados || sinTipoSeleccionado}
                 />
+              </div>
+            ) : null}
+
+            {esProductosContador ? (
+              <div className="space-y-2 md:col-span-2">
+                <Label>Sincronización automática</Label>
+                <GovernedButton
+                  actionId={PRODUCT_ACTION_IDS.MANAGE_SALES_SEQUENCE}
+                  type="button"
+                  variant={config.sincronizacionAutomatica !== false ? 'secondary' : 'outline'}
+                  className="w-full justify-center"
+                  onClick={() => setConfig((p) => ({
+                    ...p,
+                    sincronizacionAutomatica: p.sincronizacionAutomatica === false,
+                  }))}
+                  disabled={loading || saving || sinTiposConfigurados || sinTipoSeleccionado}
+                >
+                  {config.sincronizacionAutomatica !== false ? 'Activa' : 'Inactiva'}
+                </GovernedButton>
+                <p className="text-xs text-muted-foreground">
+                  Activa: en cada alta el contador se autocorrige contra el total real de la colección
+                  productos (nunca lo baja si luego se eliminan productos). Inactiva: el alta usa el
+                  consecutivo guardado en billingSecuencial tal cual, sin recalcular.
+                </p>
               </div>
             ) : null}
 

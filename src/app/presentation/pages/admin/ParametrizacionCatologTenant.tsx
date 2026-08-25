@@ -459,6 +459,57 @@ const EP_NVL_CORP: EndpointSpec[] = [
 // ─────────────────────────────────────────────────────────────────
 const EP_ROLES: EndpointSpec[] = [
   {
+    id: 'roles-globales-listar', section: 'roles', method: 'GET',
+    path: '/api/seguridad/roles-globales',
+    title: 'Listar catálogo de roles globales',
+    description: 'Lista la jerarquía de roles globales ordenada por nivel y rol padre.',
+    fields: [],
+  },
+  {
+    id: 'roles-globales-crear', section: 'roles', method: 'POST',
+    path: '/api/seguridad/roles-globales',
+    title: 'Crear rol global jerárquico',
+    description: 'Crea una definición de rol global con nivel, alcance y relación padre.',
+    fields: [
+      { name: 'codigo', label: 'Código', type: 'text', required: true, placeholder: 'Ej: ADMIN_TG' },
+      { name: 'nombre', label: 'Nombre', type: 'text', required: true, placeholder: 'Ej: ADMIN' },
+      { name: 'descripcion', label: 'Descripción', type: 'textarea', placeholder: 'Responsabilidad del rol' },
+      { name: 'tipoAlcance', label: 'Tipo de alcance', type: 'text', required: true, placeholder: 'TENANT_GLOBAL', hint: 'SISTEMA, TENANT_SUPER_ADMIN, TENANT_GLOBAL, TENANT_CORPORATIVO o USUARIO.' },
+      { name: 'nivel', label: 'Nivel jerárquico', type: 'number', required: true, placeholder: '2' },
+      { name: 'rolPadre', label: 'ID del rol padre', type: 'id', placeholder: 'ObjectId; vacío únicamente para SISTEMA' },
+      { name: 'esSistema', label: 'Es rol de sistema', type: 'boolean' },
+      { name: 'asignable', label: 'Es asignable', type: 'boolean' },
+      { name: 'estado', label: 'Estado activo', type: 'boolean' },
+    ],
+  },
+  {
+    id: 'roles-globales-actualizar', section: 'roles', method: 'PUT',
+    path: '/api/seguridad/roles-globales/:id',
+    title: 'Modificar rol global jerárquico',
+    description: 'Actualiza la definición y valida que no se produzcan ciclos o niveles inválidos.',
+    fields: [
+      { name: 'id', label: 'ID del rol global', type: 'id', required: true, pathParam: true },
+      { name: 'codigo', label: 'Código', type: 'text', required: true },
+      { name: 'nombre', label: 'Nombre', type: 'text', required: true },
+      { name: 'descripcion', label: 'Descripción', type: 'textarea' },
+      { name: 'tipoAlcance', label: 'Tipo de alcance', type: 'text', required: true },
+      { name: 'nivel', label: 'Nivel jerárquico', type: 'number', required: true },
+      { name: 'rolPadre', label: 'ID del rol padre', type: 'id' },
+      { name: 'esSistema', label: 'Es rol de sistema', type: 'boolean' },
+      { name: 'asignable', label: 'Es asignable', type: 'boolean' },
+      { name: 'estado', label: 'Estado activo', type: 'boolean' },
+    ],
+  },
+  {
+    id: 'roles-globales-eliminar', section: 'roles', method: 'DELETE',
+    path: '/api/seguridad/roles-globales/:id',
+    title: 'Eliminar rol global jerárquico',
+    description: 'Elimina un rol sin hijos. Los roles de sistema están protegidos.',
+    fields: [
+      { name: 'id', label: 'ID del rol global', type: 'id', required: true, pathParam: true },
+    ],
+  },
+  {
     id: 'roles-listar', section: 'roles', method: 'GET',
     path: '/api/seguridad/roles/admin',
     title: 'Listar roles admin',

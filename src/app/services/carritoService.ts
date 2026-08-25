@@ -59,6 +59,8 @@ export interface BackendCartItem {
   subtotalNeto: number;
   stockDisponible: number;
   stockSuficiente: boolean;
+  /** Límite de unidades por compra parametrizado en las reglas de venta del producto (LIMITE_CANTIDAD). null = sin límite. */
+  cantidadMaxima?: number | null;
 }
 
 export interface DescuentoCodigo {

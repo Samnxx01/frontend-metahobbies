@@ -4,6 +4,7 @@ import { toast } from 'react-toastify';
 import { useReferralLink } from '@/app/hooks/useReferralLink';
 import { apiFetch } from '@/app/services/api';
 import { normalizePublicIdForApi } from '@/app/utils/entityPublicId';
+import { useAuth } from '@/app/providers/AuthProvider';
 
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -15,7 +16,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 // Lucide icons
 import {
     Copy, Share2, DollarSign, Users, TrendingUp, Loader2,
-    Calendar, Hash, FileText, CheckCircle2, XCircle, Clock, X,
+    Calendar, Hash, FileText, CheckCircle2, XCircle, Clock, X, AlertTriangle, Mail,
 } from 'lucide-react';
 import KPIUsuarioMembresia from '../admin/ParametrizacionMembresia/comisiones/KPIUsuarioMembresia';
 
@@ -55,6 +56,14 @@ interface ReferidoRelacion {
     nivelNombre?: string | null;
     porcentaje?: number | null;
     vouchers?: Voucher[];
+    membresiaVigencia?: {
+        estadoMembresia: boolean;
+        fechaActivacion: string | null;
+        fechaVencimiento: string | null;
+        duracionVigenciaHoras: number | null;
+        tipoPagoCodigo: string | null;
+        vencida: boolean;
+    } | null;
 }
 
 interface ReferidosResponse {
@@ -254,9 +263,25 @@ const resolverTotalesUsuario = (usuario: UsuarioReferido) => {
 };
 
 export default function MembershipDashboard(): React.ReactElement {
+    const { user, isAuthenticated } = useAuth();
     const { referralData, loading, refetch } = useReferralLink();
     const [referidosData, setReferidosData] = useState<ReferidosResponse | null>(null);
     const [loadingReferidos, setLoadingReferidos] = useState<boolean>(true);
+    const [enviandoRenovacionId, setEnviandoRenovacionId] = useState<string | null>(null);
+    const tenantScope = user?.auth?.tenantScope;
+    const tieneTenant = Boolean(
+        isAuthenticated && (
+            tenantScope?.tenantSuperAdminId ||
+            tenantScope?.tenantGlobalId ||
+            tenantScope?.tenantCorporativoId ||
+            user?.tenantSuperAdminId ||
+            user?.tenantGlobalId ||
+            user?.tenantCorporativoId ||
+            user?.perfil?.tenantSuperAdminId ||
+            user?.perfil?.tenantGlobalId ||
+            user?.perfil?.tenantCorporativoId
+        )
+    );
 
     useEffect(() => {
         fetchReferidos();
@@ -279,6 +304,24 @@ export default function MembershipDashboard(): React.ReactElement {
             toast.error('Error al cargar datos de referidos');
         } finally {
             setLoadingReferidos(false);
+        }
+    };
+
+    const handleEnviarRenovacion = async (referido: ReferidoRelacion): Promise<void> => {
+        if (!referido.relacionId || enviandoRenovacionId) return;
+        try {
+            setEnviandoRenovacionId(referido.relacionId);
+            const response = await apiFetch(
+                `/api/referido/membresias/${encodeURIComponent(referido.relacionId)}/enviar-renovacion`,
+                { method: 'POST' },
+            );
+            toast.success(response?.msg || 'Correo de renovación enviado.');
+            await fetchReferidos();
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'No fue posible enviar el correo de renovación.';
+            toast.error(message);
+        } finally {
+            setEnviandoRenovacionId(null);
         }
     };
 
@@ -315,6 +358,19 @@ export default function MembershipDashboard(): React.ReactElement {
             return new Date(a.fechaRelacion).getTime() - new Date(b.fechaRelacion).getTime();
         });
         return list;
+    }, [visibleReferidos]);
+
+    const alertasVigencia = useMemo(() => {
+        const ahora = Date.now();
+        const limite = ahora + 7 * 24 * 60 * 60 * 1000;
+        const conVencimiento = visibleReferidos.filter(ref => ref.membresiaVigencia?.fechaVencimiento);
+        return {
+            vencidos: conVencimiento.filter(ref => new Date(ref.membresiaVigencia!.fechaVencimiento!).getTime() <= ahora),
+            porVencer: conVencimiento.filter(ref => {
+                const fecha = new Date(ref.membresiaVigencia!.fechaVencimiento!).getTime();
+                return fecha > ahora && fecha <= limite;
+            }).sort((a, b) => new Date(a.membresiaVigencia!.fechaVencimiento!).getTime() - new Date(b.membresiaVigencia!.fechaVencimiento!).getTime()),
+        };
     }, [visibleReferidos]);
 
     const idsReferidosConUsuario = useMemo(
@@ -544,6 +600,67 @@ export default function MembershipDashboard(): React.ReactElement {
                         </CardContent>
                     </Card>
                 </div>
+
+                {tieneTenant && <Card className="shadow-sm border-0 bg-card overflow-hidden">
+                    <CardHeader className="border-b border-border/40 bg-muted/10 pb-4">
+                        <CardTitle className="text-lg font-semibold flex items-center gap-2">
+                            <AlertTriangle className="w-5 h-5 text-amber-600" />
+                            Vigencia de membresías de referidos
+                        </CardTitle>
+                        <p className="text-sm text-muted-foreground">Vencidas y próximas a vencer durante los siguientes 7 días.</p>
+                        <div className="flex flex-wrap gap-3 pt-2">
+                            <Badge variant="destructive">Vencidos: {alertasVigencia.vencidos.length}</Badge>
+                            <Badge variant="outline">Por vencer: {alertasVigencia.porVencer.length}</Badge>
+                        </div>
+                    </CardHeader>
+                    <CardContent className="pt-5">
+                        {loadingReferidos ? (
+                            <div className="flex justify-center py-6"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
+                        ) : alertasVigencia.vencidos.length === 0 && alertasVigencia.porVencer.length === 0 ? (
+                            <div className="rounded-xl border border-dashed border-border/60 bg-muted/10 px-4 py-7 text-center text-sm text-muted-foreground">
+                                No hay membresías vencidas ni próximas a vencer.
+                            </div>
+                        ) : (
+                            <div className="grid gap-4 lg:grid-cols-2">
+                                {([
+                                    { titulo: 'Vencidos', items: alertasVigencia.vencidos, clase: 'border-destructive/30 bg-destructive/5' },
+                                    { titulo: 'Por vencer', items: alertasVigencia.porVencer, clase: 'border-amber-500/30 bg-amber-500/5' },
+                                ] as const).map(grupo => (
+                                    <div key={grupo.titulo} className={`rounded-xl border p-4 ${grupo.clase}`}>
+                                        <p className="mb-3 text-sm font-semibold">{grupo.titulo} ({grupo.items.length})</p>
+                                        {grupo.items.length === 0 ? <p className="text-sm text-muted-foreground">Sin registros.</p> : (
+                                            <div className="space-y-2">
+                                                {grupo.items.map(referido => (
+                                                    <div key={`${grupo.titulo}-${referido.relacionId}`} className="rounded-lg border border-border/50 bg-background/70 p-3">
+                                                        <div className="flex flex-wrap items-start justify-between gap-2">
+                                                            <div><p className="text-sm font-medium">{referido.nombre || referido.correo}</p><p className="text-xs text-muted-foreground">{referido.correo}</p></div>
+                                                            <Badge variant="outline">{referido.membresiaVigencia?.tipoPagoCodigo || 'MEMBRESÍA'}</Badge>
+                                                        </div>
+                                                        <p className="mt-2 text-xs">Vencimiento: <span className="font-semibold">{formatDate(referido.membresiaVigencia!.fechaVencimiento!)}</span></p>
+                                                        <Button
+                                                            type="button"
+                                                            size="sm"
+                                                            variant="outline"
+                                                            className="mt-3 gap-2"
+                                                            disabled={Boolean(enviandoRenovacionId)}
+                                                            onClick={() => void handleEnviarRenovacion(referido)}
+                                                        >
+                                                            {enviandoRenovacionId === referido.relacionId ? (
+                                                                <><Loader2 className="h-4 w-4 animate-spin" /> Enviando...</>
+                                                            ) : (
+                                                                <><Mail className="h-4 w-4" /> Enviar renovación</>
+                                                            )}
+                                                        </Button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>}
 
                 {/* Vouchers de comisiones: un bloque; al desplegar cada referido → jerarquía + vouchers de ese referido */}
                 <Card className="shadow-sm border-0 bg-card overflow-hidden">

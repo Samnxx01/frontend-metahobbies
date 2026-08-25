@@ -16,6 +16,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import InventarioReporteKardexEntrada from './InventarioReporteKardexEntrada';
 import { subtotalLineaComprobanteEntrada } from '@/app/presentation/pages/admin/utils/ordenCompraLineaCalculo';
+import { textoUsuarioAuditoria } from '@/app/presentation/pages/admin/utils/ordenCompraIdUtils';
 
 const moneyCo = (n: number): string =>
   new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(n);
@@ -35,7 +36,10 @@ export type InventarioComprobanteEntradaVistaModalProps = {
   recepcionId: string | null;
   onOpenChange: (open: boolean) => void;
   onConfirmarComprobante?: (recepcionId: string) => Promise<void>;
-  confirmandoComprobanteId?: string;
+  /** Ids de comprobantes confirmándose en segundo plano (no solo el de este modal): permite
+   * cerrar esta ventana y abrir/confirmar otro comprobante mientras el anterior sigue en
+   * curso, en vez de bloquear hasta que termine — igual que en órdenes de compra. */
+  confirmandoIds?: Set<string>;
   /** Se dispara tras anular o regenerar: la orden de compra, el stock y el listado de
    * comprobantes usados por el formulario de "Registrar movimiento" quedan desactualizados. */
   onCambio?: (recepcionId: string) => Promise<void>;
@@ -46,7 +50,7 @@ export default function InventarioComprobanteEntradaVistaModal({
   recepcionId,
   onOpenChange,
   onConfirmarComprobante,
-  confirmandoComprobanteId,
+  confirmandoIds,
   onCambio,
 }: InventarioComprobanteEntradaVistaModalProps): React.ReactElement {
   const [loading, setLoading] = React.useState(false);
@@ -130,7 +134,7 @@ export default function InventarioComprobanteEntradaVistaModal({
   const estadoNorm = String(detalle?.estado || '').trim().toUpperCase();
   const pendienteConfirmacion = estadoNorm === 'PENDIENTE_APROBACION';
   const anuladaParaRegenerar = estadoNorm === 'ANULADA';
-  const confirmando = Boolean(recepcionId && confirmandoComprobanteId === recepcionId);
+  const confirmando = Boolean(recepcionId && confirmandoIds?.has(recepcionId));
   const mostrarAnular = Boolean(recepcionId) && !anuladaParaRegenerar;
 
   const guardarEdicion = async (): Promise<void> => {
@@ -311,6 +315,16 @@ export default function InventarioComprobanteEntradaVistaModal({
                   {detalle.documentoSoporte.tipo} · {detalle.documentoSoporte.numero}
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">Creado: {formatDateTimeCo(detalle.createdAt)}</p>
+                {detalle.comprobanteContable?.confirmadoEn ? (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Confirmado: {formatDateTimeCo(detalle.comprobanteContable.confirmadoEn)}
+                  </p>
+                ) : null}
+                {detalle.comprobanteContable?.usuario ? (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Confirmado por: {textoUsuarioAuditoria({ usuario: detalle.comprobanteContable.usuario })}
+                  </p>
+                ) : null}
               </div>
               {detalle.orden?.proveedor?.nombre ? (
                 <div className="sm:col-span-2">

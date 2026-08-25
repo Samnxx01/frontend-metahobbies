@@ -6,6 +6,7 @@ import productosService, { type BackendTipoProducto } from '@/app/services/produ
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
@@ -22,7 +23,7 @@ import {
 import { Separator } from '@/components/ui/separator';
 import {
     Loader2, Plus, RefreshCw, Tag, AlertCircle, Pencil,
-    CheckCircle2, XCircle, DollarSign, ListFilter, CircleHelp, Trash2,
+    Check, CheckCircle2, ChevronsUpDown, XCircle, DollarSign, ListFilter, CircleHelp, Trash2,
 } from 'lucide-react';
 import {
     MEMBRESIA_PRECIO_CREATE_URL,
@@ -41,13 +42,29 @@ import {
 
 interface CrearForm {
     emailInvitado: string;
+    pagoEfectivoRecibido: boolean;
     nombreMembresia: string;
     descripcion: string;
     precioMembresia: string;
     tipoPagos: string;
     tipoProducto: string;
     monedasId: string;
-    metodoPagoCodigo: string;
+    metodosPagoCodigos: string[];
+}
+
+interface ReferidorAprobacionOption {
+    id: string;
+    codigoReferido: string;
+    correo: string;
+    nombre: string;
+}
+
+interface PoliticaAprobacionOption {
+    id: string;
+    codigo: string;
+    dominio: string;
+    efecto: string;
+    decision: string;
 }
 
 interface EditarForm {
@@ -57,18 +74,19 @@ interface EditarForm {
     tipoPagos: string;
     tipoProducto: string;
     monedasId: string;
-    metodoPagoCodigo: string;
+    metodosPagoCodigos: string[];
 }
 
 const INITIAL_CREAR: CrearForm = {
     emailInvitado: '',
+    pagoEfectivoRecibido: false,
     nombreMembresia: '',
     descripcion: '',
     precioMembresia: '',
     tipoPagos: '',
     tipoProducto: '',
     monedasId: '',
-    metodoPagoCodigo: '',
+    metodosPagoCodigos: [],
 };
 
 const INITIAL_EDITAR: EditarForm = {
@@ -78,7 +96,7 @@ const INITIAL_EDITAR: EditarForm = {
     tipoPagos: '',
     tipoProducto: '',
     monedasId: '',
-    metodoPagoCodigo: '',
+    metodosPagoCodigos: [],
 };
 
 interface MetodoPagoOption {
@@ -156,6 +174,9 @@ export default function ConfiguracionMembresia() {
     const [tiposPago, setTiposPago] = useState<TipoPagoOption[]>([]);
     const [tiposProducto, setTiposProducto] = useState<BackendTipoProducto[]>([]);
     const [metodosPago, setMetodosPago] = useState<MetodoPagoOption[]>([]);
+    const [referidoresAprobacion, setReferidoresAprobacion] = useState<ReferidorAprobacionOption[]>([]);
+    const [politicasAprobacion, setPoliticasAprobacion] = useState<PoliticaAprobacionOption[]>([]);
+    const [loadingAprobacion, setLoadingAprobacion] = useState(false);
     const [loadingOpcionesPago, setLoadingOpcionesPago] = useState(false);
     const [modalTipoPago, setModalTipoPago] = useState(false);
     const [tipoPagoDraft, setTipoPagoDraft] = useState<TipoPagoOption>({ codigo: '', nombre: '', descripcion: '', estado: true, duracionHoras: null });
@@ -234,6 +255,24 @@ export default function ConfiguracionMembresia() {
         }
     }, []);
 
+    const cargarOpcionesAprobacion = useCallback(async () => {
+        setLoadingAprobacion(true);
+        try {
+            const res = await apiFetch('/api/membresia/seguridad/aprobacion-efectivo/opciones', { method: 'GET' });
+            const data = res?.data ?? {};
+            const referidores = Array.isArray(data.referidores) ? data.referidores : [];
+            const politicas = Array.isArray(data.politicas) ? data.politicas : [];
+            setReferidoresAprobacion(referidores);
+            setPoliticasAprobacion(politicas);
+        } catch (error: any) {
+            setReferidoresAprobacion([]);
+            setPoliticasAprobacion([]);
+            mostrarError(error.message || 'No se pudieron validar el referidor y sus políticas.');
+        } finally {
+            setLoadingAprobacion(false);
+        }
+    }, []);
+
     const guardarTipoPago = async () => {
         if (!tipoPagoDraft.nombre.trim()) {
             mostrarError('El nombre del tipo de pago es obligatorio.');
@@ -305,6 +344,10 @@ export default function ConfiguracionMembresia() {
         cargarTiposProducto();
     }, [cargarMonedas, cargarMembresias, cargarOpcionesPago, cargarTiposProducto]);
 
+    useEffect(() => {
+        cargarOpcionesAprobacion();
+    }, [cargarOpcionesAprobacion]);
+
     const abrirEditar = (m: MembresiaPrecioRow) => {
         setEditandoId(m.id);
         setFormEditar({
@@ -314,7 +357,7 @@ export default function ConfiguracionMembresia() {
             tipoPagos: m.tipoPagos ?? '',
             tipoProducto: m.tipoProducto ?? '',
             monedasId: m.monedaId ?? '',
-            metodoPagoCodigo: m.metodoPagoCodigo,
+            metodosPagoCodigos: m.metodosPagoCodigos,
         });
         setModalAbierto(true);
     };
@@ -322,6 +365,10 @@ export default function ConfiguracionMembresia() {
     const handleCrear = async () => {
         if (!formCrear.emailInvitado.trim()) {
             mostrarError('El email del invitado es obligatorio.');
+            return;
+        }
+        if (loadingAprobacion || referidoresAprobacion.length !== 1 || politicasAprobacion.length !== 1) {
+            mostrarError('USER_REFERIDOS_PADRE no tiene una política activa válida para Pipeline A / REFERIDOS.');
             return;
         }
         const token = localStorage.getItem('token');
@@ -333,9 +380,16 @@ export default function ConfiguracionMembresia() {
         try {
             await apiFetch(`/api/membresia/seguridad/crear/crearmembresia/${token}`, {
                 method: 'POST',
-                body: { emailInvitado: formCrear.emailInvitado.trim() },
+                body: {
+                    emailInvitado: formCrear.emailInvitado.trim(),
+                    pagoEfectivoRecibido: formCrear.pagoEfectivoRecibido,
+                },
             });
-            toast.success('¡Membresía creada correctamente!');
+            toast.success(
+                formCrear.pagoEfectivoRecibido
+                    ? '¡Pago en efectivo aprobado y membresía activada!'
+                    : '¡Membresía creada correctamente!'
+            );
             setFormCrear(INITIAL_CREAR);
         } catch (err: any) {
             mostrarError(err.message || 'Error al crear la membresía.');
@@ -365,7 +419,7 @@ export default function ConfiguracionMembresia() {
                 precioMembresia: Number(formCrear.precioMembresia),
                 tipoPagos: formCrear.tipoPagos || null,
                 tipoProducto: formCrear.tipoProducto || null,
-                metodoPagoCodigo: formCrear.metodoPagoCodigo || null,
+                metodosPagoCodigos: formCrear.metodosPagoCodigos,
             };
             if (formCrear.monedasId && formCrear.monedasId !== '__none__') {
                 body.monedasId = resolveMonedaIdForApiBody(formCrear.monedasId);
@@ -406,7 +460,7 @@ export default function ConfiguracionMembresia() {
                 precioMembresia: Number(formEditar.precioMembresia),
                 tipoPagos: formEditar.tipoPagos || null,
                 tipoProducto: formEditar.tipoProducto || null,
-                metodoPagoCodigo: formEditar.metodoPagoCodigo || null,
+                metodosPagoCodigos: formEditar.metodosPagoCodigos,
             };
             if (formEditar.monedasId && formEditar.monedasId !== '__none__') {
                 body.monedasId = resolveMonedaIdForApiBody(formEditar.monedasId);
@@ -425,8 +479,8 @@ export default function ConfiguracionMembresia() {
         }
     };
 
-    const updateCrear = (f: keyof CrearForm, v: string) => setFormCrear(p => ({ ...p, [f]: v }));
-    const updateEditar = (f: keyof EditarForm, v: string) => setFormEditar(p => ({ ...p, [f]: v }));
+    const updateCrear = <K extends keyof CrearForm,>(f: K, v: CrearForm[K]) => setFormCrear(p => ({ ...p, [f]: v }));
+    const updateEditar = <K extends keyof EditarForm,>(f: K, v: EditarForm[K]) => setFormEditar(p => ({ ...p, [f]: v }));
 
     return (
         <>
@@ -485,17 +539,46 @@ export default function ConfiguracionMembresia() {
                                 className="h-9 text-sm"
                             />
                         </FieldWrapper>
+                        <div className="flex items-start gap-2 rounded-md border border-border/70 bg-muted/20 p-3">
+                            <Checkbox
+                                id="pago-efectivo-recibido"
+                                checked={formCrear.pagoEfectivoRecibido}
+                                onCheckedChange={checked => updateCrear('pagoEfectivoRecibido', checked === true)}
+                                disabled={!!loadingAccion}
+                            />
+                            <div className="space-y-0.5">
+                                <Label htmlFor="pago-efectivo-recibido" className="cursor-pointer text-xs font-semibold">
+                                    Pago en efectivo recibido
+                                </Label>
+                                <p className="text-xs text-muted-foreground">
+                                    Registra el pago como APPROVED, activa la membresía y genera su factura.
+                                </p>
+                            </div>
+                        </div>
+                        <div className="rounded-md border border-border/70 bg-muted/20 p-3 text-xs">
+                                {loadingAprobacion ? (
+                                    <span className="flex items-center gap-2 text-muted-foreground"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Validando USER_REFERIDOS_PADRE y su política activa...</span>
+                                ) : referidoresAprobacion.length === 1 && politicasAprobacion.length === 1 ? (
+                                    <div className="space-y-1">
+                                        <p className="font-semibold text-foreground">Referidor predeterminado: {referidoresAprobacion[0].nombre}</p>
+                                        <p className="text-muted-foreground">Política activa: {politicasAprobacion[0].codigo} · {politicasAprobacion[0].efecto} ({politicasAprobacion[0].decision})</p>
+                                        <p className="text-muted-foreground">Estos valores se resuelven en el backend y no se envían en el payload.</p>
+                                    </div>
+                                ) : (
+                                    <p className="text-destructive">USER_REFERIDOS_PADRE no tiene una política activa válida para Pipeline A / REFERIDOS.</p>
+                                )}
+                        </div>
                         <Button
                             size="sm" variant="outline"
                             onClick={handleCrear}
-                            disabled={!!loadingAccion}
+                            disabled={!!loadingAccion || loadingAprobacion || referidoresAprobacion.length !== 1 || politicasAprobacion.length !== 1}
                             className="gap-2"
                         >
                             {loadingAccion === 'crear'
                                 ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
                                 : <Plus className="w-3.5 h-3.5" />
                             }
-                            Comprar membresía
+                            {formCrear.pagoEfectivoRecibido ? 'Aprobar membresía' : 'Comprar membresía'}
                         </Button>
                     </div>
 
@@ -579,8 +662,8 @@ export default function ConfiguracionMembresia() {
                             </FieldWrapper>
                             <FieldWrapper label="Método de pago">
                                 <SelectMetodoPago
-                                    value={formCrear.metodoPagoCodigo}
-                                    onChange={v => updateCrear('metodoPagoCodigo', v)}
+                                    value={formCrear.metodosPagoCodigos}
+                                    onChange={v => updateCrear('metodosPagoCodigos', v)}
                                     options={metodosPago}
                                     loading={loadingOpcionesPago}
                                 />
@@ -840,8 +923,8 @@ export default function ConfiguracionMembresia() {
                             </FieldWrapper>
                             <FieldWrapper label="Método de pago">
                                 <SelectMetodoPago
-                                    value={formEditar.metodoPagoCodigo}
-                                    onChange={v => updateEditar('metodoPagoCodigo', v)}
+                                    value={formEditar.metodosPagoCodigos}
+                                    onChange={v => updateEditar('metodosPagoCodigos', v)}
                                     options={metodosPago}
                                     loading={loadingOpcionesPago}
                                 />
@@ -1140,28 +1223,43 @@ function SelectMetodoPago({
     options,
     loading,
 }: {
-    value: string;
-    onChange: (v: string) => void;
+    value: string[];
+    onChange: (v: string[]) => void;
     options: MetodoPagoOption[];
     loading: boolean;
 }) {
+    const seleccionados = new Set(value);
+    const etiqueta = value.length === 0
+        ? 'Sin método de pago'
+        : value.length === 1
+            ? options.find((metodo) => metodo.codigo === value[0])?.nombre || value[0]
+            : `${value.length} métodos seleccionados`;
+    const alternar = (codigo: string) => onChange(
+        seleccionados.has(codigo)
+            ? value.filter((actual) => actual !== codigo)
+            : [...value, codigo]
+    );
+
     return (
-        <Select
-            value={value || '__none__'}
-            onValueChange={v => onChange(v === '__none__' ? '' : v)}
-            disabled={loading}
-        >
-            <SelectTrigger className="h-9 text-sm">
-                <SelectValue placeholder={loading ? 'Cargando...' : 'Seleccionar método'} />
-            </SelectTrigger>
-            <SelectContent>
-                <SelectItem value="__none__">Sin método de pago</SelectItem>
-                {options.map(metodo => (
-                    <SelectItem key={metodo.codigo} value={metodo.codigo}>
-                        {metodo.nombre}
-                    </SelectItem>
+        <Popover>
+            <PopoverTrigger asChild>
+                <Button type="button" variant="outline" role="combobox" disabled={loading} className="h-9 w-full justify-between px-3 text-sm font-normal">
+                    <span className="truncate">{loading ? 'Cargando...' : etiqueta}</span>
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-[var(--radix-popover-trigger-width)] p-1">
+                <Button type="button" variant="ghost" size="sm" className="w-full justify-start" onClick={() => onChange([])}>
+                    <Check className={`mr-2 h-4 w-4 ${value.length === 0 ? 'opacity-100' : 'opacity-0'}`} />
+                    Sin método de pago
+                </Button>
+                {options.map((metodo) => (
+                    <Button key={metodo.codigo} type="button" variant="ghost" size="sm" className="w-full justify-start" onClick={() => alternar(metodo.codigo)}>
+                        <Check className={`mr-2 h-4 w-4 ${seleccionados.has(metodo.codigo) ? 'opacity-100' : 'opacity-0'}`} />
+                        <span className="truncate">{metodo.nombre}</span>
+                    </Button>
                 ))}
-            </SelectContent>
-        </Select>
+            </PopoverContent>
+        </Popover>
     );
 }

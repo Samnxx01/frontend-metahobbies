@@ -629,10 +629,11 @@ function GestionReferidos(): React.ReactElement {
 
                 {/* Lista de Usuarios */}
                 <div className="space-y-3">
-                    {data?.usuarios.map((usuario) => {
+                    {data?.usuarios.map((usuario, usuarioIndex) => {
                         const totales = resolverTotalesUsuario(usuario);
+                        const usuarioKey = String(usuario.usuarioId || usuario.correo || `usuario-${usuarioIndex}`);
                         return (
-                        <Card key={usuario.usuarioId} className="border-0 shadow-sm hover:shadow-md transition-all">
+                        <Card key={`${usuarioKey}-${usuarioIndex}`} className="border-0 shadow-sm hover:shadow-md transition-all">
                             <CardContent className="p-4 md:p-6">
                                 <div className="flex items-start justify-between mb-4">
                                     <div className="flex items-center gap-3 flex-1">
@@ -689,9 +690,9 @@ function GestionReferidos(): React.ReactElement {
                                             </AccordionTrigger>
                                             <AccordionContent className="pt-3">
                                                 <div className="space-y-2">
-                                                    {usuario.vouchers.map((voucher) => (
+                                                    {usuario.vouchers.map((voucher, voucherIndex) => (
                                                         <div
-                                                            key={voucher._id}
+                                                            key={`${usuarioKey}-${String(voucher._id || voucher.referidoId || 'voucher')}-${voucherIndex}`}
                                                             onClick={() => handleVoucherClick(voucher, usuario.usuarioId, usuario.correo)}
                                                             className="group p-4 rounded-lg border border-border hover:border-primary/50 hover:bg-muted/30 transition-all cursor-pointer"
                                                         >

@@ -71,6 +71,8 @@ export interface CartItem extends Product {
   colors?: ProductColor[];
   /** _id del subdocumento en el carrito del backend (necesario para update/delete) */
   backendItemId?: string;
+  /** Límite de unidades por compra parametrizado en las reglas de venta del producto. null/undefined = sin límite. */
+  purchaseLimit?: number | null;
 }
 
 // Cart summary interface
@@ -124,6 +126,8 @@ export interface User {
       tenantSuperAdminId?: string | null;
       tenantGlobalId?: string | null;
       tenantCorporativoId?: string | null;
+      corporativoAsociadoId?: string | null;
+      corporativoRazonSocial?: string | null;
       rol?: {
         id?: string | null;
         nombre?: string | null;

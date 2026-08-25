@@ -824,6 +824,24 @@ export const normalizeAdminRouteComponent = (component: string, path = ''): stri
     const comp = stripRouteComponentExtension(component);
     const pathNorm = String(path || '').toLowerCase();
 
+    // Los formularios de gobernanza publicados en gobernanzaModuloConfigs son piezas internas:
+    // requieren endpoint, menuState y callbacks que una ruta dinamica no puede suministrar.
+    // La ruta monta un wrapper sin props y este resuelve tabs/formulario desde la API parametrizada.
+    if (/^Tenant[A-Za-z0-9]+Form$/.test(comp) || comp === 'GobernanzaTenantFormByEndpoint') {
+        return 'GobernanzaTenantRoutePage';
+    }
+    if (/^Perm[A-Za-z0-9]+Form$/.test(comp) || comp === 'GobernanzaPermisosFormByEndpoint') {
+        return 'GobernanzaPermisosRoutePage';
+    }
+    if (/^Reglas[A-Za-z0-9]+(?:Form|Panel)$/.test(comp) || comp === 'GobernanzaReglasFormByEndpoint') {
+        return 'GobernanzaReglasRoutePage';
+    }
+    if (comp === 'GobernanzaFormularioPorRuta') {
+        if (pathNorm.includes('permiso')) return 'GobernanzaPermisosRoutePage';
+        if (pathNorm.includes('regla')) return 'GobernanzaReglasRoutePage';
+        return 'GobernanzaTenantRoutePage';
+    }
+
     if (
         pathNorm.includes('perfil-cliente') ||
         pathNorm.includes('mi-perfil') ||

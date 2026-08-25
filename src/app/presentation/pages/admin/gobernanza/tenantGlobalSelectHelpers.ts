@@ -68,7 +68,8 @@ export async function buildTenantGlobalSelectsEnriched(
 ): Promise<Record<string, GenericSelectOption[]>> {
   const base = buildTenantGlobalSelectsFromApi(data);
   const fromSelects = resolveDominiosOptionsFromSelectsApi(data);
-  const fromList = await fetchDominiosActivosFromApi();
+  const restringidoPorCorporativoJwt = data.dominiosRestringidosPorCorporativoJwt === true;
+  const fromList = restringidoPorCorporativoJwt ? [] : await fetchDominiosActivosFromApi();
   const byId = new Map<string, GenericSelectOption>();
   [...fromSelects, ...fromList, ...(base.apisDominios ?? [])].forEach((o) => {
     byId.set(o.id, o);

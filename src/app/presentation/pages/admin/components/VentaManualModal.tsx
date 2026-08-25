@@ -5,6 +5,7 @@ import carritoService from '@/app/services/carritoService';
 import productosService, { type BackendProducto } from '@/app/services/productosService';
 import inventarioService, { type StockActualItem } from '@/app/services/inventarioService';
 import metodoPagoService, { type MetodoPagoPadre } from '@/app/services/metodoPagoService';
+import billingSecuencialService, { type BillingSecuencialTipoConfig } from '@/app/services/billingSecuencialService';
 import { apiFetchPublic } from '@/app/services/api';
 import terceroService from '@/app/services/terceroService';
 import { Button } from '@/components/ui/button';
@@ -48,6 +49,8 @@ export default function VentaManualModal({ open, onOpenChange, onCreated }: Prop
   const [stock, setStock] = useState<StockActualItem[]>([]);
   const [metodosPago, setMetodosPago] = useState<MetodoPagoPadre[]>([]);
   const [metodoPagoCodigo, setMetodoPagoCodigo] = useState('');
+  const [secuenciasFactura, setSecuenciasFactura] = useState<BillingSecuencialTipoConfig[]>([]);
+  const [facturaCodigoConfig, setFacturaCodigoConfig] = useState('');
   const [departamentos, setDepartamentos] = useState<DepartamentoCatalogo[]>([]);
   const [tiposDocumento, setTiposDocumento] = useState<TipoDocumentoCatalogo[]>([]);
   const [buscandoTercero, setBuscandoTercero] = useState(false);
@@ -79,12 +82,23 @@ export default function VentaManualModal({ open, onOpenChange, onCreated }: Prop
       productosService.listarProductosVentasAdmin(),
       inventarioService.stockActual(),
       metodoPagoService.listarPadres(),
+      billingSecuencialService.listarTiposConfig(),
       apiFetchPublic('/api/carrito/catalogos/facturacion', { method: 'GET' }),
-    ]).then(([p, s, metodos, catalogos]) => {
+    ]).then(([p, s, metodos, secuencias, catalogos]) => {
       const metodosActivos = metodos.filter((metodo) => metodo.estado !== false);
       setProductos(p);
       setStock(s);
       setMetodosPago(metodosActivos);
+      const facturas = secuencias.filter((row) => {
+        const clasificacion = String(row.tipoSecuencia || '').trim().toUpperCase();
+        return row.activo !== false && ['FACTURA_POS', 'FACTURA_VENTAS_B', 'FACTURAS_POS', 'FAC'].includes(clasificacion);
+      });
+      setSecuenciasFactura(facturas);
+      setFacturaCodigoConfig((actual) => {
+        if (actual && facturas.some((row) => String(row.codigo || '').toUpperCase() === actual)) return actual;
+        const preferida = facturas.find((row) => String(row.codigo || '').toUpperCase() === 'FACTURA_POS');
+        return String(preferida?.codigo || facturas[0]?.codigo || '').toUpperCase();
+      });
       setDepartamentos(Array.isArray(catalogos?.data?.departamentos) ? catalogos.data.departamentos : []);
       const documentos = Array.isArray(catalogos?.data?.tiposDocumento) ? catalogos.data.tiposDocumento : [];
       setTiposDocumento(documentos);
@@ -244,10 +258,11 @@ export default function VentaManualModal({ open, onOpenChange, onCreated }: Prop
     if (!cliente.numeroDocumento || !cliente.email || !cliente.telefono || !cliente.direccion || !cliente.ciudad || !cliente.departamento || !cliente.ciudadId || !cliente.departamentoId) return toast.error('Completa los datos obligatorios y códigos geográficos del cliente.');
     if (pipelineB && !sponsorUserId.trim()) return toast.error('Indica el ID del usuario referidor para Pipeline B.');
     if (!metodoPagoCodigo) return toast.error('Selecciona el método de pago de la factura manual.');
+    if (!facturaCodigoConfig) return toast.error('Selecciona la secuencia de la factura manual.');
     setSaving(true);
     try {
       const resp = await carritoService.crearVentaManual({
-        items: lineas, metodoPagoCodigo, datosFacturacion: {
+        items: lineas, metodoPagoCodigo, facturaCodigoConfig, datosFacturacion: {
           ...cliente,
           ciudadId: cliente.ciudadId || cliente.ciudad,
           departamentoId: cliente.departamentoId || cliente.departamento,
@@ -293,6 +308,10 @@ export default function VentaManualModal({ open, onOpenChange, onCreated }: Prop
           <div><Label>Ciudad *</Label><Select value={cliente.ciudadId} disabled={!cliente.departamentoId} onValueChange={(value) => { const ciudad = ciudades.find((item) => item.ciudadId === value); setCliente({ ...cliente, ciudadId: value, ciudad: ciudad?.nombre || '' }); }}><SelectTrigger><SelectValue placeholder={cliente.departamentoId ? 'Selecciona ciudad' : 'Primero el departamento'} /></SelectTrigger><SelectContent>{ciudades.map((item) => <SelectItem key={item.ciudadId} value={item.ciudadId}>{item.nombre}</SelectItem>)}</SelectContent></Select></div>
         </section>
         <section className="space-y-2 rounded-lg border bg-card p-4">
+          <div><h3 className="font-semibold">Secuencia de factura</h3><p className="text-xs text-muted-foreground">La factura manual consumira exclusivamente el consecutivo seleccionado.</p></div>
+          <div className="max-w-md"><Label>Secuencia *</Label><Select value={facturaCodigoConfig} onValueChange={setFacturaCodigoConfig}><SelectTrigger><SelectValue placeholder="Selecciona una secuencia" /></SelectTrigger><SelectContent>{secuenciasFactura.map((secuencia) => <SelectItem key={String(secuencia.codigo)} value={String(secuencia.codigo || '').toUpperCase()}>{secuencia.nombre || secuencia.codigo} · {secuencia.codigo}</SelectItem>)}</SelectContent></Select>{secuenciasFactura.length === 0 && <p className="mt-1 text-xs text-destructive">No hay secuencias activas clasificadas para facturas.</p>}</div>
+        </section>
+        <section className="space-y-2 rounded-lg border bg-card p-4">
           <div><h3 className="font-semibold">Metodo de pago</h3><p className="text-xs text-muted-foreground">Se muestran los metodos activos configurados en metodopagos. El catalogo asociado determina el medio DIAN.</p></div>
           <div className="max-w-md"><Label>Metodo de pago *</Label><Select value={metodoPagoCodigo} onValueChange={setMetodoPagoCodigo}><SelectTrigger><SelectValue placeholder="Selecciona un metodo de pago" /></SelectTrigger><SelectContent>{metodosPago.map((metodo) => <SelectItem key={metodo.iud || metodo._id || metodo.codigo} value={metodo.codigo} title={metodo.nombreMetodoPago}>{nombreCortoMetodoPago(metodo)}{metodo.catalogoMetodoCodigo ? ` · ${metodo.catalogoMetodoCodigo}` : ''}</SelectItem>)}</SelectContent></Select>{metodosPago.length === 0 && <p className="mt-1 text-xs text-muted-foreground">No hay metodos de pago activos configurados.</p>}</div>
         </section>
@@ -313,7 +332,7 @@ export default function VentaManualModal({ open, onOpenChange, onCreated }: Prop
         </section>
         <section className="space-y-3 rounded-lg border bg-card p-4"><div className="flex items-center gap-2"><Checkbox id="pipeline-b" checked={pipelineB} onCheckedChange={(v) => { const enabled = v === true; setPipelineB(enabled); if (!enabled) setSponsorUserId(''); }} /><Label htmlFor="pipeline-b">Esta venta aplica comisión del flujo Pipeline B</Label></div>{pipelineB && <div className="max-w-xl"><Label>Referidor con política BYPASS activa *</Label><Select value={sponsorUserId} onValueChange={setSponsorUserId} disabled={cargandoReferidores}><SelectTrigger><SelectValue placeholder={cargandoReferidores ? 'Cargando referidores...' : 'Selecciona un referidor elegible'} /></SelectTrigger><SelectContent>{referidoresBypass.map((referidor) => <SelectItem key={referidor.id} value={referidor.id}><span className="font-medium">{referidor.nombre}</span><span className="ml-2 text-muted-foreground">{referidor.correo} · {referidor.politica.codigo} ({referidor.politica.decision})</span></SelectItem>)}</SelectContent></Select>{!cargandoReferidores && referidoresBypass.length === 0 ? <p className="mt-1 text-xs text-muted-foreground">No hay usuarios con políticas BYPASS activas para VENTAS en Pipeline B.</p> : <p className="mt-1 text-xs text-muted-foreground">Solo se muestran usuarios autorizados por una política activa de VENTAS en Pipeline B.</p>}</div>}</section>
       </div>}
-      <DialogFooter><Button variant="outline" disabled={saving} onClick={() => onOpenChange(false)}>{enlacePago ? 'Cerrar' : 'Cancelar'}</Button>{!enlacePago && <Button disabled={loading || saving || calculandoImpuestos || !preview || !metodoPagoCodigo || total <= 0 || detalle.some((x) => x.excede || x.faltaColor)} onClick={() => void guardar()}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{pagoYaRecibido ? 'Confirmar pago y generar factura' : 'Generar enlace de pago'}</Button>}</DialogFooter>
+      <DialogFooter><Button variant="outline" disabled={saving} onClick={() => onOpenChange(false)}>{enlacePago ? 'Cerrar' : 'Cancelar'}</Button>{!enlacePago && <Button disabled={loading || saving || calculandoImpuestos || !preview || !metodoPagoCodigo || !facturaCodigoConfig || total <= 0 || detalle.some((x) => x.excede || x.faltaColor)} onClick={() => void guardar()}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{pagoYaRecibido ? 'Confirmar pago y generar factura' : 'Generar enlace de pago'}</Button>}</DialogFooter>
     </DialogContent>
   </Dialog>;
 }

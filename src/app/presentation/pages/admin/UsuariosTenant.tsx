@@ -25,6 +25,7 @@ import { TenantUserActionButtons } from '@/app/presentation/components/admin/usu
 import { RolGlobalEditModal } from '@/app/presentation/components/admin/usuarios-tenant/RolGlobalEditModal';
 import { deactivateUser } from '@/app/services/adminService';
 import { RolCorporativoEditModal } from '@/app/presentation/components/admin/usuarios-tenant/RolCorporativoEditModal';
+import { RolesTgModal } from '@/app/presentation/components/admin/usuarios-tenant/RolesTgModal';
 import { RolesGlobalesModal } from '@/app/presentation/components/admin/usuarios-tenant/RolesGlobalesModal';
 import { RolesCorporativosModal } from '@/app/presentation/components/admin/usuarios-tenant/RolesCorporativosModal';
 import { ParametrizacionMarcoAfiliadoModal } from '@/app/presentation/components/admin/usuarios-tenant/ParametrizacionMarcoAfiliadoModal';
@@ -185,6 +186,7 @@ export default function UsuariosTenant(): React.ReactElement {
 
     // Modales de gestión de roles
     const [modalRolesGlobales, setModalRolesGlobales] = useState(false);
+    const [modalRolesTg, setModalRolesTg] = useState(false);
     const [modalRolesCorporativos, setModalRolesCorporativos] = useState(false);
     const [modalParametrizacionMarco, setModalParametrizacionMarco] = useState(false);
     const [modalListadoUsuariosRolCorp, setModalListadoUsuariosRolCorp] = useState(false);
@@ -1217,6 +1219,10 @@ export default function UsuariosTenant(): React.ReactElement {
                 onClose={() => cerrarSubmodalGobernanza(() => setModalRolesGlobales(false))}
                 scope={scope as 'SUPER_ADMIN' | 'TENANT_GLOBAL' | 'CORPORATIVO'}
             />
+            <RolesTgModal
+                open={modalRolesTg}
+                onClose={() => cerrarSubmodalGobernanza(() => setModalRolesTg(false))}
+            />
             <RolesCorporativosModal
                 open={modalRolesCorporativos}
                 onClose={() => cerrarSubmodalGobernanza(() => setModalRolesCorporativos(false))}
@@ -1242,6 +1248,9 @@ export default function UsuariosTenant(): React.ReactElement {
                 }}
                 onAbrirRolesGlobales={() => {
                     abrirDesdeGobernanza(setModalRolesGlobales);
+                }}
+                onAbrirRolesTg={() => {
+                    abrirDesdeGobernanza(setModalRolesTg);
                 }}
                 onAbrirRolesCorporativos={() => {
                     abrirDesdeGobernanza(setModalRolesCorporativos);

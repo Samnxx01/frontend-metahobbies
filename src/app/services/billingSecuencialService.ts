@@ -63,6 +63,7 @@ const billingSecuencialService = {
       | 'maxRegistrosSecuencia'
       | 'dominioSecuencia'
       | 'activo'
+      | 'sincronizacionAutomatica'
     >>,
   ): Promise<BillingSecuencialTipoConfig> {
     const resp = await apiFetch(`/api/billing/facturacion-soporte-documento/${encodeURIComponent(codigo)}`, {

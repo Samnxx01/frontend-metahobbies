@@ -34,6 +34,23 @@ interface AuthProviderProps {
 // 1. Crear el Contexto
 const AuthContext = createContext<AuthContextType | null>(null);
 
+const imprimirTenantScope = (user: User, origen: 'login' | 'sesion-restaurada'): void => {
+    const tenantScope = user.auth?.tenantScope ?? {};
+
+    console.groupCollapsed(`[MABS][Auth] Tenant scope (${origen})`);
+    console.table({
+        tenantSuperAdminId: tenantScope.tenantSuperAdminId ?? null,
+        tenantGlobalId: tenantScope.tenantGlobalId ?? null,
+        tenantCorporativoId: tenantScope.tenantCorporativoId ?? null,
+        corporativoAsociadoId: tenantScope.corporativoAsociadoId ?? null,
+        corporativoRazonSocial: tenantScope.corporativoRazonSocial ?? null,
+        rolId: tenantScope.rol?.id ?? null,
+        rolNombre: tenantScope.rol?.nombre ?? user.rol ?? user.role ?? null,
+        rolFuente: tenantScope.rol?.fuente ?? null,
+    });
+    console.groupEnd();
+};
+
 // 2. Crear el Proveedor (Provider)
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const [user, setUser] = useState<User | null>(null);
@@ -56,6 +73,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         if (userJson) {
             try {
                 const parsedUser = JSON.parse(userJson) as User;
+                imprimirTenantScope(parsedUser, 'sesion-restaurada');
                 setUser(parsedUser);
             } catch (error) {
                 console.error('Error parsing user from localStorage:', error);
@@ -86,6 +104,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                 // 4. Guardamos todo en localStorage y en el estado
                 localStorage.setItem('token', response.token);
                 localStorage.setItem('user', JSON.stringify(userToSave));
+                imprimirTenantScope(userToSave, 'login');
                 setToken(response.token);
                 setUser(userToSave);
                 if (typeof window !== 'undefined') {

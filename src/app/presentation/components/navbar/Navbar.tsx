@@ -172,6 +172,16 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
     };
 
     const handleLogout = async (): Promise<void> => {
+        // El disparador vive dentro de un DropdownMenu de Radix. Esperar a que ese
+        // menú cierre evita que SweetAlert aplique aria-hidden mientras el foco
+        // todavía permanece en un descendiente del contenedor principal.
+        if (document.activeElement instanceof HTMLElement) {
+            document.activeElement.blur();
+        }
+        await new Promise<void>((resolve) => {
+            window.requestAnimationFrame(() => resolve());
+        });
+
         const result = await Swal({
             title: 'Cerrar sesión',
             text: '¿Estás seguro de que quieres cerrar sesión?',
@@ -180,7 +190,8 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
             confirmButtonColor: '#d33',
             cancelButtonColor: '#3085d6',
             confirmButtonText: 'Sí, cerrar sesión',
-            cancelButtonText: 'Cancelar'
+            cancelButtonText: 'Cancelar',
+            returnFocus: false,
         });
         if (result.isConfirmed) {
             logout();
@@ -341,6 +352,7 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
                 className="w-[min(calc(100vw-1.5rem),22rem)] overflow-hidden rounded-lg border border-primary/20 bg-popover p-0 text-popover-foreground shadow-xl"
                 align="end"
                 sideOffset={10}
+                onCloseAutoFocus={(event) => event.preventDefault()}
             >
                 <div className="border-b border-primary/15 bg-[linear-gradient(135deg,hsl(var(--primary)/0.14),hsl(var(--accent)/0.38),hsl(var(--secondary)/0.28))] px-3.5 py-3">
                     <div className="flex items-center gap-3">

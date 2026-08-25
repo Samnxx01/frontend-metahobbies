@@ -33,10 +33,25 @@ export function useInventarioTarjetasDinamicas(
 
   const refreshTarjetas = useCallback(async () => {
     setLoading(true);
+    console.info('[MABS][INVENTARIO][TARJETAS] Solicitando configuracion dinamica', {
+      tenantSuperAdminId: tenantSuperAdminId ?? null,
+      pathname: window.location.pathname,
+    });
     try {
       const data = await inventarioService.listarTarjetasConfig(tenantSuperAdminId);
+      console.info('[MABS][INVENTARIO][TARJETAS] Respuesta recibida', {
+        total: data.length,
+        tarjetas: data.map((tarjeta) => ({
+          id: tarjeta.id,
+          rutaId: tarjeta.rutaId,
+          path: tarjeta.path,
+          tab: tarjeta.tab,
+          component: tarjeta.contenido?.component ?? null,
+        })),
+      });
       setTarjetas(data);
-    } catch {
+    } catch (error) {
+      console.error('[MABS][INVENTARIO][TARJETAS] Error cargando configuracion dinamica', error);
       setTarjetas([]);
     } finally {
       setLoading(false);
@@ -47,10 +62,26 @@ export function useInventarioTarjetasDinamicas(
     void refreshTarjetas();
   }, [refreshTarjetas]);
 
+  useEffect(() => {
+    const handleRoutesUpdated = (): void => {
+      console.info('[MABS][INVENTARIO][TARJETAS] Ruta de seguridad actualizada; refrescando tarjetas');
+      void refreshTarjetas();
+    };
+    window.addEventListener('admin-routes-updated', handleRoutesUpdated);
+    return () => window.removeEventListener('admin-routes-updated', handleRoutesUpdated);
+  }, [refreshTarjetas]);
+
   const menuTabs = useMemo(
     () => inventarioTabsDesdeTarjetasDinamicas(tarjetas, user),
     [tarjetas, user],
   );
+
+  useEffect(() => {
+    console.info('[MABS][INVENTARIO][TARJETAS] Pestañas resueltas', {
+      menuTabs,
+      fuente: menuTabs.length > 0 ? 'API_CONFIG_TARJETAS' : 'SIN_TARJETAS',
+    });
+  }, [menuTabs]);
 
   return {
     tarjetas,

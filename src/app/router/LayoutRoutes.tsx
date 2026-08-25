@@ -1,5 +1,5 @@
 import { Routes, Route, useLocation, Navigate, Outlet } from 'react-router-dom';
-import { useState, useEffect, ReactElement, lazy, Suspense } from 'react';
+import { Component, useState, useEffect, ReactElement, lazy, Suspense, type ErrorInfo, type ReactNode } from 'react';
 import { useAuth } from '@/app/providers/AuthProvider';
 import {
     getAuthorizedRoutes,
@@ -32,6 +32,7 @@ import Checkout from '@/app/presentation/pages/checkout/Checkout';
 import DetalleProducto from '@/app/presentation/pages/producto/DetalleProducto';
 import DynamicRouteFallback from '@/app/presentation/pages/admin/DynamicRouteFallback';
 import EstadoSistema from '@/app/presentation/pages/admin/EstadoSistema';
+import { reportarErrorFrontend } from '@/app/observability/newRelicBrowser';
 
 // —— Dynamic component map via Vite glob —————————————————————
 // Escanea TODOS los .tsx de pages/ y components/admin/ automáticamente.
@@ -129,6 +130,9 @@ const buildComponentMap = (): ComponentMapType => {
         DashboardReferidos:            'GestionReferidos',
         ReferidosPanel:                'GestionReferidos',
         ArbolReferidos:                'GestionReferidos',
+        // Terceros: la BD puede referenciar el nombre corto del módulo
+        Terceros:                      'TercerosCrudModalPage',
+        GestionTerceros:               'TercerosCrudModalPage',
     };
 
     for (const [alias, target] of Object.entries(aliases)) {
@@ -147,8 +151,25 @@ const buildComponentMap = (): ComponentMapType => {
     const modalRouteOverrides: Record<string, string> = {
         UsuarioSuperAdminModal: 'UsuarioSuperAdminModalPage',
         UsuarioGlobalModal: 'UsuarioGlobalModalPage',
+        TercerosCrudModal: 'TercerosCrudModalPage',
     };
     for (const [routeName, pageName] of Object.entries(modalRouteOverrides)) {
+        if (map[pageName]) {
+            map[routeName] = map[pageName];
+        }
+    }
+
+    // Los componentes *Tab de Inventario requieren props del contenedor Inventario.
+    // Las rutas dinamicas no suministran props, por lo que deben montar paginas wrapper.
+    const inventoryRouteOverrides: Record<string, string> = {
+        InventarioAjustesTab: 'InventarioAjustesPage',
+        InventarioBodegasTab: 'InventarioBodegasPage',
+        InventarioTrmConfiguracionTab: 'InventarioTrmPage',
+        InventarioMovimientosTab: 'InventarioMovimientosPage',
+        InventarioOrdenComprasTab: 'InventarioOrdenComprasPage',
+        InventarioConciliacionTab: 'InventarioConciliacionPage',
+    };
+    for (const [routeName, pageName] of Object.entries(inventoryRouteOverrides)) {
         if (map[pageName]) {
             map[routeName] = map[pageName];
         }
@@ -158,6 +179,47 @@ const buildComponentMap = (): ComponentMapType => {
 };
 
 const componentMap = buildComponentMap();
+
+class DynamicPageErrorBoundary extends Component<
+    { children: ReactNode; routePath: string; componentName: string },
+    { error: Error | null }
+> {
+    state: { error: Error | null } = { error: null };
+
+    static getDerivedStateFromError(error: Error): { error: Error } {
+        return { error };
+    }
+
+    componentDidCatch(error: Error, info: ErrorInfo): void {
+        reportarErrorFrontend(error, {
+            errorBoundary: 'DynamicPageErrorBoundary',
+            reactErrorType: 'dynamic-route-render',
+            routePath: this.props.routePath,
+            componentName: this.props.componentName || 'sin-componente',
+            browserPathname: window.location.pathname,
+            browserUrl: window.location.href,
+            reactComponentStack: info.componentStack || 'no-disponible',
+        });
+        console.error('[MABS][ROUTER][ERROR-RENDER] Pagina dinamica fallo', {
+            routePath: this.props.routePath,
+            componentName: this.props.componentName,
+            message: error.message,
+            stack: error.stack,
+            componentStack: info.componentStack,
+        });
+    }
+
+    render(): ReactNode {
+        if (!this.state.error) return this.props.children;
+        return (
+            <div className="m-6 rounded-lg border border-destructive bg-destructive/10 p-6 text-destructive">
+                <h2 className="text-lg font-semibold">Error renderizando la pagina</h2>
+                <p className="mt-2 text-sm">{this.state.error.message}</p>
+                <p className="mt-2 text-xs">Componente: {this.props.componentName || 'sin componente'}</p>
+            </div>
+        );
+    }
+}
 
 // —— Types ———————————————————————————————————————————————————————————————————————
 
@@ -434,8 +496,26 @@ export default function LayoutRoutes(): ReactElement {
                 : normalizedRoutePath;
 
             const leafElement = LazyComponent
-                ? <Suspense fallback={<div>Cargando...</div>}><LazyComponent /></Suspense>
+                ? (
+                    <DynamicPageErrorBoundary routePath={routeFullPath} componentName={resolvedComponent || route.component}>
+                        <Suspense fallback={<div>Cargando...</div>}><LazyComponent /></Suspense>
+                    </DynamicPageErrorBoundary>
+                )
                 : renderFallbackElement(route);
+
+            if (routeFullPath.includes('inventory/inventario-fisico')) {
+                console.info('[MABS][ROUTER][INVENTARIO] Ruta resuelta', {
+                    pathname: location.pathname,
+                    parentPath,
+                    routePath: route.path,
+                    routeFullPath,
+                    relativePath,
+                    componentBD: route.component,
+                    componentResuelto: resolvedComponent,
+                    tieneComponente: Boolean(LazyComponent),
+                    hasChildren,
+                });
+            }
 
             if (!hasChildren) {
                 return (
