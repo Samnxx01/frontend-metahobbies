@@ -46,7 +46,10 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+
+const TIPO_TODOS = 'TODOS';
 
 const MONEY = new Intl.NumberFormat('es-CO', {
   style: 'currency',
@@ -97,6 +100,7 @@ export default function InventarioSkuCatalogoModal({
   onEliminarCodigoBarras,
 }: InventarioSkuCatalogoModalProps): React.ReactElement {
   const [filtro, setFiltro] = useState('');
+  const [tipoFiltro, setTipoFiltro] = useState(TIPO_TODOS);
   const [scannerActivo, setScannerActivo] = useState(false);
   const ultimoCambioRef = useRef<number>(0);
   const isScanRef = useRef(false);
@@ -127,6 +131,7 @@ export default function InventarioSkuCatalogoModal({
   useEffect(() => {
     if (open) {
       setFiltro(initialFiltro ?? '');
+      setTipoFiltro(TIPO_TODOS);
       setBarcodePreview(null);
       setSeleccionados(new Set());
       setConfirmEliminar(null);
@@ -195,11 +200,21 @@ export default function InventarioSkuCatalogoModal({
     }
   };
 
+  const tiposDisponibles = useMemo(() => {
+    const tipos = new Set<string>();
+    productos.forEach((producto) => {
+      const tipo = String(producto.tipo || '').trim();
+      if (tipo) tipos.add(tipo);
+    });
+    return Array.from(tipos).sort((a, b) => a.localeCompare(b));
+  }, [productos]);
+
   const productosFiltrados = useMemo(() => {
     const query = filtro.trim().toLowerCase();
-    if (!query) return productos;
     const queryDigits = query.replace(/\D/g, '');
     return productos.filter((producto) => {
+      if (tipoFiltro !== TIPO_TODOS && String(producto.tipo || '') !== tipoFiltro) return false;
+      if (!query) return true;
       const sku = String(producto.sku || '').toLowerCase();
       const nombre = String(producto.nombre || '').toLowerCase();
       const codigoBarras = String(producto.codigoBarras || '').toLowerCase();
@@ -208,7 +223,7 @@ export default function InventarioSkuCatalogoModal({
         || codigoBarras.includes(query)
         || (!!queryDigits && codigoBarras.includes(queryDigits));
     });
-  }, [filtro, productos]);
+  }, [filtro, tipoFiltro, productos]);
 
   const toggleSeleccion = (id: string): void => {
     setSeleccionados((prev) => {
@@ -390,6 +405,17 @@ export default function InventarioSkuCatalogoModal({
                   </span>
                 )}
               </div>
+              <Select value={tipoFiltro} onValueChange={setTipoFiltro}>
+                <SelectTrigger className="h-9 w-full md:w-44">
+                  <SelectValue placeholder="Tipo de producto" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={TIPO_TODOS}>Todos los tipos</SelectItem>
+                  {tiposDisponibles.map((tipo) => (
+                    <SelectItem key={tipo} value={tipo}>{tipo}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <Badge variant="secondary" className="h-9 justify-center rounded-md px-3">
                 {productosFiltrados.length} de {productos.length}
               </Badge>
@@ -521,6 +547,7 @@ export default function InventarioSkuCatalogoModal({
                     <TableHead>SKU</TableHead>
                     <TableHead>Codigo de barras</TableHead>
                     <TableHead>Producto</TableHead>
+                    <TableHead>Tipo</TableHead>
                     <TableHead>Unidad</TableHead>
                     <TableHead>Precio</TableHead>
                     <TableHead className="text-right">Accion</TableHead>
@@ -582,6 +609,7 @@ export default function InventarioSkuCatalogoModal({
                             <p className="line-clamp-1 text-xs text-muted-foreground">{producto.descripcion || producto.descripcionCorta || 'Sin descripcion'}</p>
                           </div>
                         </TableCell>
+                        <TableCell><Badge variant="outline">{producto.tipo || '-'}</Badge></TableCell>
                         <TableCell><Badge variant="outline">{producto.unidadMedida || 'UNIDAD'}</Badge></TableCell>
                         <TableCell>{MONEY.format(Number(producto.precio || 0))}</TableCell>
                         <TableCell className="text-right">
@@ -642,7 +670,7 @@ export default function InventarioSkuCatalogoModal({
                   })}
                   {productosFiltrados.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
+                      <TableCell colSpan={8} className="py-8 text-center text-sm text-muted-foreground">
                         No se encontraron SKU con ese filtro.
                       </TableCell>
                     </TableRow>
