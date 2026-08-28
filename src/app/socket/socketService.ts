@@ -6,19 +6,28 @@ export const SOCKET_INSTANCE_CREATED_EVENT = "mabs:socket-instance-created";
 // Global socket instance
 let socket: Socket | null = null;
 
+const resolverSocketUrl = (): string => {
+    const explicitSocketUrl = String(import.meta.env.VITE_SOCKET_URL || '').trim();
+    if (explicitSocketUrl) return explicitSocketUrl.replace(/\/$/, '');
+
+    const apiBaseUrl = String(import.meta.env.VITE_API_BASE_URL || '').trim();
+    if (!apiBaseUrl) return window.location.origin;
+    return apiBaseUrl.replace(/\/api\/?$/, '').replace(/\/$/, '');
+};
 
 // Conectar socket
 export const conectarSocket = (): Socket | null => {
     const token = localStorage.getItem("token");
-    const API_URL = import.meta.env.VITE_API_BASE_URL ?? import.meta.env.VITE_SOCKET_URL ?? '';
+    const SOCKET_URL = resolverSocketUrl();
 
     if (!token) {
         return null;
     }
 
-    const s: Socket = io(API_URL, {
+    const s: Socket = io(SOCKET_URL, {
         auth: { token },
-        transports: ["websocket"],
+        transports: ["websocket", "polling"],
+        path: "/socket.io",
     });
 
     observarDatosRealtime(s);
