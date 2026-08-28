@@ -508,8 +508,11 @@ const productosService = {
     await apiFetch(`/api/productos/admin/eliminar/${id}`, { method: 'DELETE' });
   },
 
-  async exportarProductosExcel(): Promise<void> {
-    const response = await apiFetch('/api/productos/admin/exportar/excel', {
+  async exportarProductosExcel(filtros: { tipo?: string } = {}): Promise<void> {
+    const params = new URLSearchParams();
+    if (filtros.tipo) params.set('tipo', filtros.tipo);
+    const query = params.toString();
+    const response = await apiFetch(`/api/productos/admin/exportar/excel${query ? `?${query}` : ''}`, {
       method: 'GET',
       responseType: 'raw',
     }) as Response;
@@ -525,7 +528,7 @@ const productosService = {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = 'productos.xlsx';
+    link.download = filtros.tipo ? `productos-${filtros.tipo}.xlsx` : 'productos.xlsx';
     link.click();
     URL.revokeObjectURL(url);
   },

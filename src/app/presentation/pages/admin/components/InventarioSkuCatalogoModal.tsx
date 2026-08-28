@@ -73,7 +73,7 @@ export type InventarioSkuCatalogoModalProps = {
   onEliminarSkusMasivo?: (productos: BackendProducto[]) => Promise<void>;
   onGenerarCodigoBarras: (producto: BackendProducto) => Promise<void>;
   onRefresh?: () => Promise<void>;
-  onExportarExcel?: () => Promise<void>;
+  onExportarExcel?: (tipo?: string) => Promise<void>;
   onImportarExcel?: (file: File) => Promise<{ total: number; insertados: number; errores: { fila: number; error: string }[] }>;
   onGenerarCodigosMasivo?: (asignaciones: Array<{ producto: BackendProducto; codigoBarras: string }>) => Promise<void>;
   onEliminarCodigoBarras?: (productos: BackendProducto[]) => Promise<void>;
@@ -176,7 +176,8 @@ export default function InventarioSkuCatalogoModal({
   const handleExportar = async (): Promise<void> => {
     if (!onExportarExcel || exportando) return;
     setExportando(true);
-    try { await onExportarExcel(); } finally { setExportando(false); refocarInputFiltro(); }
+    const tipo = tipoFiltro !== TIPO_TODOS ? tipoFiltro : undefined;
+    try { await onExportarExcel(tipo); } finally { setExportando(false); refocarInputFiltro(); }
   };
 
   const handleImportarArchivo = async (e: React.ChangeEvent<HTMLInputElement>): Promise<void> => {
@@ -448,10 +449,14 @@ export default function InventarioSkuCatalogoModal({
                       size="sm"
                       disabled={exportando}
                       onClick={() => void handleExportar()}
-                      title="Exportar catalogo a Excel"
+                      title={tipoFiltro !== TIPO_TODOS ? `Exportar solo tipo ${tipoFiltro} a Excel` : 'Exportar catalogo a Excel'}
                     >
                       <Download className="mr-2 h-4 w-4" />
-                      {exportando ? 'Exportando…' : 'Exportar'}
+                      {exportando
+                        ? 'Exportando…'
+                        : tipoFiltro !== TIPO_TODOS
+                          ? `Exportar (${tipoFiltro})`
+                          : 'Exportar'}
                     </GovernedButton>
                   )}
                   {onImportarExcel && (

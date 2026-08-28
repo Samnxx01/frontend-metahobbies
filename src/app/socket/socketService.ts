@@ -1,4 +1,7 @@
 import { io, Socket } from "socket.io-client";
+import { observarDatosRealtime } from "@/app/realtime/dataRealtime";
+
+export const SOCKET_INSTANCE_CREATED_EVENT = "mabs:socket-instance-created";
 
 // Global socket instance
 let socket: Socket | null = null;
@@ -18,7 +21,10 @@ export const conectarSocket = (): Socket | null => {
         transports: ["websocket"],
     });
 
+    observarDatosRealtime(s);
+
     socket = s;
+    window.dispatchEvent(new CustomEvent<Socket>(SOCKET_INSTANCE_CREATED_EVENT, { detail: s }));
 
     return s;
 };
@@ -32,6 +38,12 @@ export const desconectadoUsu = (): void => {
 
 // Obtener socket
 export const getSocket = (): Socket | null => socket;
+
+export const reconectarSocket = (): Socket | null => {
+    const currentSocket = socket ?? conectarSocket();
+    if (currentSocket && !currentSocket.connected) currentSocket.connect();
+    return currentSocket;
+};
 
 // Emitir evento
 export const emitSocketEvent = (event: string, data?: any): void => {

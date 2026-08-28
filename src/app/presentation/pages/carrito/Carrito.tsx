@@ -17,6 +17,7 @@ import {
   CHECKOUT_PAYMENT_PATH,
   getCheckoutPaymentPath,
 } from '@/app/services/checkoutNavigation';
+import { beginCheckoutLoginFlow } from '@/app/services/checkoutLoginFlowService';
 import { formatCOP } from '@/lib/utils';
 import DatosFacturacionInvitadoModal from '@/app/presentation/components/carrito/DatosFacturacionInvitadoModal';
 import carritoService from '@/app/services/carritoService';
@@ -184,7 +185,10 @@ export default function Carrito(): React.ReactElement {
         confirmButtonText: 'Ir a Login',
         cancelButtonText: 'Seguir sin registrarse',
       });
-      if (result.isConfirmed) navigate(getGovernedLoginPath(), { state: { returnUrl: '/checkout' } });
+      if (result.isConfirmed) {
+        const flow = beginCheckoutLoginFlow('carrito', '/checkout');
+        navigate(getGovernedLoginPath(), { state: { checkoutFlowId: flow?.flowId } });
+      }
       if (result.isDismissed && result.dismiss === 'cancel') setBillingGuestOpen(true);
       return;
     }

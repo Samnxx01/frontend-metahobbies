@@ -6,6 +6,7 @@ import {
   Pencil,
   Plus,
   RefreshCcw,
+  Radio,
   RotateCcw,
   Save,
   ShoppingCart,
@@ -39,6 +40,9 @@ import { getOrdenCompraId } from '@/app/presentation/pages/admin/utils/ordenComp
 import productosService, { type BackendProducto, type BackendTipoProducto, type TipoProductoPayload } from '@/app/services/productosService';
 import { apiFetch } from '@/app/services/api';
 import { useAuth } from '@/app/providers/AuthProvider';
+import { useInventarioRealtime } from './inventario/useInventarioRealtime';
+import { useRealtimeConnectionStatus } from '@/app/realtime/useRealtimeConnectionStatus';
+import { reconectarSocket } from '@/app/socket/socketService';
 import InventarioMenuTabs, { type InventarioTabValue } from './components/InventarioMenuTabs';
 import { useInventarioTarjetasDinamicas } from './inventario/useInventarioTarjetasDinamicas';
 import {
@@ -279,6 +283,7 @@ export type InventarioPageProps = {
 export default function Inventario(props: InventarioPageProps = {}): React.ReactElement {
   const { initialActiveTab } = props;
   const { user } = useAuth();
+  const realtimeConnected = useRealtimeConnectionStatus();
   const { menuTabs: inventarioMenuTabs, loading: loadingInventarioTabs } = useInventarioTarjetasDinamicas(user);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -960,6 +965,22 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
       toast.error('No se pudo consultar el stock.');
     }
   };
+
+  useInventarioRealtime(async (evento) => {
+    const scopes = new Set(evento.scopes || []);
+    if (scopes.has('configuracion') || scopes.has('catalogos') || scopes.has('devoluciones')) {
+      await loadData();
+      return;
+    }
+    const tareas: Promise<unknown>[] = [];
+    const refrescaCompras = scopes.has('compras');
+    if (refrescaCompras) tareas.push(refreshOrdenesCompra());
+    else if (scopes.has('stock') || scopes.has('movimientos')) tareas.push(aplicarFiltroStock({ sku: stockFiltro.sku }));
+    if (scopes.has('ajustes')) tareas.push(refreshAjustes());
+    if (scopes.has('bodegas')) tareas.push(inventarioService.listarBodegas().then(setBodegas));
+    if (scopes.has('comprobantes')) tareas.push(inventarioService.listarComprobantesEntradaMovimientos(200).then(setComprobantesEntradaMov));
+    await Promise.all(tareas);
+  });
 
   const consultarStock = async (): Promise<void> => {
     await aplicarFiltroStock({ sku: stockFiltro.sku.trim() });
@@ -1961,10 +1982,10 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
     }
   };
 
-  const exportarCatalogoExcel = async (): Promise<void> => {
+  const exportarCatalogoExcel = async (tipo?: string): Promise<void> => {
     try {
-      await productosService.exportarProductosExcel();
-      toast.success('Catalogo exportado correctamente.');
+      await productosService.exportarProductosExcel(tipo ? { tipo } : {});
+      toast.success(tipo ? `Catalogo (tipo ${tipo}) exportado correctamente.` : 'Catalogo exportado correctamente.');
     } catch (error: any) {
       toast.error(error?.message || 'No se pudo exportar el catalogo.');
     }
@@ -2384,6 +2405,21 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
           </p>
         </div>
         <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-end">
+          <Button
+            type="button"
+            variant="outline"
+            className={realtimeConnected
+              ? 'shrink-0 border-emerald-500/60 bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/15 dark:text-emerald-300'
+              : 'shrink-0 border-amber-500/60 bg-amber-500/10 text-amber-700 hover:bg-amber-500/15 dark:text-amber-300'}
+            onClick={() => {
+              if (!realtimeConnected) reconectarSocket();
+              toast.info(realtimeConnected ? 'Visualización en tiempo real activa.' : 'Conexión en tiempo real inactiva. Intentando reconectar...');
+            }}
+            title={realtimeConnected ? 'Datos sincronizados en tiempo real' : 'Reconectar visualización en tiempo real'}
+          >
+            <Radio className={`mr-2 h-4 w-4 ${realtimeConnected ? 'animate-pulse' : ''}`} />
+            Visualización en tiempo real
+          </Button>
           <div className="min-w-[200px] space-y-1">
             <p className="text-xs font-medium text-muted-foreground">Vista por bodega</p>
             {renderBodegaVistaStockSelect()}

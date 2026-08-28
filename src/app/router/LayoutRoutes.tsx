@@ -503,20 +503,6 @@ export default function LayoutRoutes(): ReactElement {
                 )
                 : renderFallbackElement(route);
 
-            if (routeFullPath.includes('inventory/inventario-fisico')) {
-                console.info('[MABS][ROUTER][INVENTARIO] Ruta resuelta', {
-                    pathname: location.pathname,
-                    parentPath,
-                    routePath: route.path,
-                    routeFullPath,
-                    relativePath,
-                    componentBD: route.component,
-                    componentResuelto: resolvedComponent,
-                    tieneComponente: Boolean(LazyComponent),
-                    hasChildren,
-                });
-            }
-
             if (!hasChildren) {
                 return (
                     <Route key={route.path} path={relativePath} element={leafElement} />

@@ -45,7 +45,10 @@ import AlcanceReglasProductosModal from '@/app/presentation/pages/admin/componen
 import ReglasContablesModal from '@/app/presentation/pages/admin/components/ReglasContablesModal';
 import pipelineBComisionService from '@/app/services/pipelineBComisionService';
 import { GobernanzaModuloSearchableSelect } from '@/app/presentation/pages/admin/gobernanza/GobernanzaModuloSearchableSelect';
-import { CircleHelp, DollarSign, Eye, FolderTree, Hash, Pencil, Plus, RefreshCw, Search, Settings2, Star, Trash2, X } from 'lucide-react';
+import { useInventarioRealtime } from './inventario/useInventarioRealtime';
+import { useRealtimeConnectionStatus } from '@/app/realtime/useRealtimeConnectionStatus';
+import { reconectarSocket } from '@/app/socket/socketService';
+import { CircleHelp, DollarSign, Eye, FolderTree, Hash, Pencil, Plus, Radio, RefreshCw, Search, Settings2, Star, Trash2, X } from 'lucide-react';
 
 type DialogType = 'add' | 'edit' | 'view' | 'delete';
 
@@ -282,6 +285,7 @@ const stockKardexPorSku = (stockActual: StockActualItem[]): Record<string, numbe
 }, {} as Record<string, number>);
 
 export default function GestionProductos(): React.ReactElement {
+  const realtimeConnected = useRealtimeConnectionStatus();
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -426,18 +430,29 @@ export default function GestionProductos(): React.ReactElement {
         setReglasVentas(reglasVentasResult.data);
       } else {
         setReglasVentas([]);
-        console.warn('No se pudieron cargar reglas de venta:', reglasVentasResult.error);
       }
       setStockKardex(stockKardexPorSku(stockActualResp));
       return true;
     } catch (error) {
-      console.error('Error cargando productos:', error);
       toast.error(errorMessage(error, 'No se pudieron cargar los productos.'));
       return false;
     } finally {
       setLoading(false);
     }
   };
+
+  useInventarioRealtime(async (evento) => {
+    const scopes = new Set(evento.scopes || []);
+    if (
+      scopes.has('catalogos')
+      || scopes.has('configuracion')
+      || scopes.has('stock')
+      || scopes.has('compras')
+      || scopes.has('movimientos')
+    ) {
+      await loadData();
+    }
+  });
 
   useEffect(() => {
     void loadData();
@@ -968,7 +983,6 @@ export default function GestionProductos(): React.ReactElement {
       setDialogType('view');
       setOpenDialog(true);
     } catch (error) {
-      console.error('Error cargando detalle del producto:', error);
       toast.error(errorMessage(error, 'No se pudo cargar el detalle del producto.'));
     }
   };
@@ -987,7 +1001,6 @@ export default function GestionProductos(): React.ReactElement {
       setProductos((prev) => prev.map((item) => item.id === producto.id ? mapProduct(updated) : item));
       toast.success(`Producto ${producto.publicado ? 'despublicado' : 'publicado'} exitosamente`);
     } catch (error) {
-      console.error('Error actualizando publicación:', error);
       toast.error(errorMessage(error, 'No se pudo actualizar el estado del producto.'));
     }
   };
@@ -1000,7 +1013,6 @@ export default function GestionProductos(): React.ReactElement {
       setProductos((prev) => prev.map((item) => item.id === producto.id ? mapProduct(updated) : item));
       toast.success(`Producto ${producto.destacado ? 'retirado de destacados' : 'marcado como destacado'}`);
     } catch (error) {
-      console.error('Error actualizando destacado:', error);
       toast.error(errorMessage(error, 'No se pudo actualizar el destacado del producto.'));
     }
   };
@@ -1077,7 +1089,6 @@ export default function GestionProductos(): React.ReactElement {
       await loadData();
       closeDialog();
     } catch (error) {
-      console.error('Error guardando producto:', error);
       toast.error(errorMessage(error, 'No se pudo guardar el producto.'));
     } finally {
       setSaving(false);
@@ -1105,7 +1116,6 @@ export default function GestionProductos(): React.ReactElement {
         toast.success('Producto desactivado correctamente');
         closeDialog();
       } catch (error) {
-        console.error('Error desactivando producto:', error);
         toast.error(errorMessage(error, 'No se pudo desactivar el producto.'));
       }
     });
@@ -1133,7 +1143,6 @@ export default function GestionProductos(): React.ReactElement {
         toast.success('Producto eliminado correctamente');
         closeDialog();
       } catch (error) {
-        console.error('Error eliminando producto:', error);
         toast.error(errorMessage(error, 'No se pudo eliminar el producto.'));
       }
     });
@@ -1244,7 +1253,6 @@ export default function GestionProductos(): React.ReactElement {
       );
       closeCategoryDialog();
     } catch (error) {
-      console.error('Error creando categoría:', error);
       toast.error(errorMessage(error, 'No se pudo crear la categoría.'));
     } finally {
       setCategorySaving(false);
@@ -1278,7 +1286,6 @@ export default function GestionProductos(): React.ReactElement {
       setTypeForm({ nombre: '', codigo: '', descripcion: '' });
       setTipoEditandoId(null);
     } catch (error) {
-      console.error('Error creando tipo de producto:', error);
       toast.error(errorMessage(error, 'No se pudo crear el tipo de producto.'));
     } finally {
       setTypeSaving(false);
@@ -1346,7 +1353,24 @@ export default function GestionProductos(): React.ReactElement {
       <div className="mb-5 flex flex-col gap-4 border-b pb-4 sm:mb-6">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h1 className="text-2xl font-bold text-foreground md:text-3xl">Gestión de Productos</h1>
-          <ModuleHelpButton id="btn-ayuda-modulo-productos" title="Ayuda de Gestión de Productos" description="Administra catálogo, inventario, publicación, reglas contables, reglas de venta, categorías y secuencias." details={["Las reglas contables determinan impuestos y su desglose.", "Las reglas de venta determinan comisiones.", "Sincronizar actualiza relaciones del catálogo.", "Reencolar recupera comisiones pendientes del Pipeline B."]} />
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className={realtimeConnected
+                ? 'border-emerald-500/60 bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/15 dark:text-emerald-300'
+                : 'border-amber-500/60 bg-amber-500/10 text-amber-700 hover:bg-amber-500/15 dark:text-amber-300'}
+              onClick={() => {
+                if (!realtimeConnected) reconectarSocket();
+                toast.info(realtimeConnected ? 'Visualización en tiempo real activa.' : 'Conexión en tiempo real inactiva. Intentando reconectar...');
+              }}
+              title={realtimeConnected ? 'Productos sincronizados en tiempo real' : 'Reconectar visualización en tiempo real'}
+            >
+              <Radio className={`mr-2 h-4 w-4 ${realtimeConnected ? 'animate-pulse' : ''}`} />
+              Visualización en tiempo real
+            </Button>
+            <ModuleHelpButton id="btn-ayuda-modulo-productos" title="Ayuda de Gestión de Productos" description="Administra catálogo, inventario, publicación, reglas contables, reglas de venta, categorías y secuencias." details={["Las reglas contables determinan impuestos y su desglose.", "Las reglas de venta determinan comisiones.", "Sincronizar actualiza relaciones del catálogo.", "Reencolar recupera comisiones pendientes del Pipeline B."]} />
+          </div>
         </div>
         <div className="grid w-full grid-cols-1 gap-2 min-[420px]:grid-cols-2 md:grid-cols-3 xl:flex xl:flex-wrap xl:items-center [&>*]:h-auto [&>*]:min-h-10 [&>*]:w-full [&>*]:whitespace-normal xl:[&>*]:w-auto">
           <GovernedButton actionId={PRODUCT_ACTION_IDS.MANAGE_RULE_SCOPE}

@@ -529,44 +529,30 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
     [tenantGlobalSelects]
   );
   const tenantUpdateTargets = useMemo(() => {
-    const actorTenantGlobalId = String(tenantGlobalActor?.tenantGlobalId || '').trim();
     const actorTenantSuperAdminId = String(tenantGlobalActor?.tenantSuperAdminId || '').trim();
-    const esSuperAdmin = !!actorTenantSuperAdminId;
-    const esTenantGlobal = !!actorTenantGlobalId && !esSuperAdmin;
+    if (!actorTenantSuperAdminId) return [];
+    const actorCounter = jerarquiaSaCounters.find(
+      (row) => String(row?.tenantSuperAdminId || '').trim() === actorTenantSuperAdminId,
+    );
+    const diosRaizSinCodigoPadre =
+      String(tenantGlobalActor?.rol || '').trim().toUpperCase() === 'DIOS' &&
+      !String(actorCounter?.codigoPadre || '').trim();
 
-    const classifyScope = (tenant: TenantGlobal): 'tenantSuperAdmin' | 'tenantGlobal' | 'tenantCorporativo' => {
-      const parentTenantGlobalId = String(tenant?.tenantGlobalAdmin || '').trim();
-      const superAdminRef = String(tenant?.tenantSuperAdmin || '').trim();
-
-      if (actorTenantGlobalId && tenant.id === actorTenantGlobalId) return 'tenantGlobal';
-      if (parentTenantGlobalId) return 'tenantCorporativo';
-      if (superAdminRef) return 'tenantSuperAdmin';
-      return 'tenantGlobal';
-    };
-
-    return tenantGlobales
+    return tenantSuperAdminsJerarquiaCounters
       .filter((tenant) => {
-        if (esSuperAdmin) return true;
-        if (!esTenantGlobal) return false;
-        const parentTenantGlobalId = String(tenant?.tenantGlobalAdmin || '').trim();
-        return tenant.id === actorTenantGlobalId || parentTenantGlobalId === actorTenantGlobalId;
+        const id = String(tenant?.id || '').trim();
+        return Boolean(id && (diosRaizSinCodigoPadre || id !== actorTenantSuperAdminId));
       })
-      .map((tenant) => {
-        const scope = classifyScope(tenant);
-        const scopeLabel =
-          scope === 'tenantSuperAdmin'
-            ? 'tenantSuperAdmin'
-            : scope === 'tenantCorporativo'
-            ? 'tenantCorporativo'
-            : 'tenantGlobal';
-        const corporativo = String(tenant?.corporativo || '').trim();
-        return {
-          id: tenant.id,
-          label: `${scopeLabel} | ${tenant.label}${corporativo ? ` | ${corporativo}` : ''}`,
-          meta: { scope },
-        };
-      });
-  }, [tenantGlobalActor, tenantGlobales]);
+      .map((tenant) => ({
+        id: String(tenant.id),
+        label:
+          String(tenant.label || '').trim() ||
+          `${tenant.codigoJerarquia || 'SA'}${tenant.rolNombre ? ` · ${tenant.rolNombre}` : ''}${
+            tenant.coporativoNombre ? ` · ${tenant.coporativoNombre}` : ''
+          }`,
+        meta: { scope: 'tenantSuperAdmin' as const },
+      }));
+  }, [jerarquiaSaCounters, tenantGlobalActor, tenantSuperAdminsJerarquiaCounters]);
 
   const endpointDisponibleParaScope = (endpoint: EndpointSpec) => {
     if (endpoint.actor === 'ambos') return true;
@@ -1798,7 +1784,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
       setTenantActualizarPrefillLoading(true);
       try {
         const res: { data?: TenantGlobalFormularioDetalle } = await apiFetch(
-          `/api/config/global/creacion/usu/tenant/global/${selectedId}/formulario`,
+          `/api/config/global/creacion/usu/tenant/superadmin/${selectedId}/formulario`,
           { method: 'GET' },
         );
         const detalle = (res?.data ?? res) as TenantGlobalFormularioDetalle;

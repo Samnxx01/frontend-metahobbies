@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Download, Hash, Layers, Plus, RefreshCw, RotateCcw, Save, Settings2 } from 'lucide-react';
+import { Download, Hash, Layers, Plus, Radio, RefreshCw, RotateCcw, Save, Settings2 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import billingSecuencialService, {
   type TipoLimiteRegistros,
@@ -10,6 +10,9 @@ import facturacionSoporteDocumentoService, {
   type FacturacionSoporteDocumentoCatalogo,
 } from '@/app/services/facturacionSoporteDocumentoService';
 import { Button } from '@/components/ui/button';
+import { useInventarioRealtime } from '@/app/presentation/pages/admin/inventario/useInventarioRealtime';
+import { useRealtimeConnectionStatus } from '@/app/realtime/useRealtimeConnectionStatus';
+import { reconectarSocket } from '@/app/socket/socketService';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -287,6 +290,7 @@ export default function VentaWompiSecuenciaModal({
   onSaved,
   tipoInicial,
 }: Props): React.ReactElement {
+  const realtimeConnected = useRealtimeConnectionStatus();
   const [codigoSecuencia, setCodigoSecuencia] = useState<CodigoReferenciaVenta>('');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -485,6 +489,14 @@ export default function VentaWompiSecuenciaModal({
       setLoading(false);
     }
   }, [refrescarCatalogoDocumentos, refrescarTiposEnriquecidos, tipoInicial]);
+
+  useInventarioRealtime(async (evento) => {
+    if (!open) return;
+    const scopes = new Set(evento.scopes || []);
+    if (scopes.has('configuracion') || scopes.has('catalogos')) {
+      await loadConfig(codigoSecuencia || tipoInicial);
+    }
+  });
 
   const cargarClasificaciones = useCallback(async (): Promise<void> => {
     setCargandoClasificaciones(true);
@@ -1123,6 +1135,22 @@ export default function VentaWompiSecuenciaModal({
           <DialogTitle className="flex min-w-0 flex-wrap items-center gap-2 break-words text-foreground">
             <Hash className="h-5 w-5 shrink-0 text-foreground" />
             Secuencias de venta · billingSecuencial
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className={realtimeConnected
+                ? 'ml-auto border-emerald-500/60 bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/15 dark:text-emerald-300'
+                : 'ml-auto border-amber-500/60 bg-amber-500/10 text-amber-700 hover:bg-amber-500/15 dark:text-amber-300'}
+              onClick={() => {
+                if (!realtimeConnected) reconectarSocket();
+                toast.info(realtimeConnected ? 'Visualización en tiempo real activa.' : 'Conexión en tiempo real inactiva. Intentando reconectar...');
+              }}
+              title={realtimeConnected ? 'Secuencias sincronizadas en tiempo real' : 'Reconectar visualización en tiempo real'}
+            >
+              <Radio className={`mr-1.5 h-3.5 w-3.5 ${realtimeConnected ? 'animate-pulse' : ''}`} />
+              Visualización en tiempo real
+            </Button>
           </DialogTitle>
           <DialogDescription className="text-muted-foreground">
             Administra todos los contadores TIPO_CONFIG. El consecutivo avanza al emitir;

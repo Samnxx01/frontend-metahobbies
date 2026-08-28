@@ -21,8 +21,8 @@ export function TenantActualizarGlobalForm(props: GobernanzaTenantFormProps): Re
   return (
     <TenantFormShell
       {...props}
-      eyebrow="Edicion tenantGlobal"
-      hint="Formulario operativo de actualizacion por ID publico normalizado antes de enviarlo al API."
+      eyebrow="Edición tenant SA"
+      hint="Actualiza únicamente TenantSuperAdmin descendientes de la rama autorizada por el JWT."
     />
   );
 }

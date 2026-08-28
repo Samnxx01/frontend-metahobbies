@@ -380,6 +380,17 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
     [politicas, codigo, politicaEditId]
   );
 
+  const politicaOriginalEdicion = useMemo(
+    () => politicas.find((p) => politicaId(p) === politicaEditId) ?? null,
+    [politicas, politicaEditId]
+  );
+
+  const creandoPorCambioCodigo = Boolean(
+    politicaEditId
+    && politicaOriginalEdicion?.codigo
+    && String(politicaOriginalEdicion.codigo).trim().toUpperCase() !== codigo.trim().toUpperCase()
+  );
+
   const codigosOptions = useMemo(
     () => [...new Set(politicas.map((p) => p.codigo).filter(Boolean))].sort(),
     [politicas]
@@ -1098,7 +1109,10 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
           apisDominios: apisDominiosNorm[0] || undefined,
         },
       };
-      const esCreacion = creandoNueva || !politicaEditId;
+      const codigoOriginal = String(politicaOriginalEdicion?.codigo || '').trim().toUpperCase();
+      const esCreacion = creandoNueva
+        || !politicaEditId
+        || (Boolean(codigoOriginal) && codigoOriginal !== codigoNormalizado);
       if (esCreacion && politicas.some((p) => String(p.codigo || '').toUpperCase() === codigoNormalizado)) {
         throw new Error('Ya existe una política con ese código. Usa Editar o elige otro código.');
       }
@@ -2425,7 +2439,7 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
       >
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
           <DialogHeader>
-            <DialogTitle>{creandoNueva || !politicaEditId ? 'Nueva política runtime' : 'Editar política runtime'}</DialogTitle>
+            <DialogTitle>{creandoNueva || !politicaEditId || creandoPorCambioCodigo ? 'Nueva política runtime' : 'Editar política runtime'}</DialogTitle>
             <DialogDescription>
               Guarda políticas acotadas al scope tenant (SA / TG / TC) del JWT y evalúa sin modificar datos.
             </DialogDescription>
@@ -2829,7 +2843,7 @@ export function PoliticasRuntimePanel({ className }: PoliticasRuntimePanelProps)
           <div className="flex gap-2 md:col-span-2 md:items-end">
             <Button type="button" disabled={guardando} onClick={() => void guardar()}>
               {guardando ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              {creandoNueva || !politicaEditId ? 'Crear en scope JWT' : 'Actualizar política'}
+              {creandoNueva || !politicaEditId || creandoPorCambioCodigo ? 'Crear nueva política' : 'Actualizar política'}
             </Button>
             <Button type="button" variant="outline" disabled={simulando} onClick={() => void simular()}>
               {simulando ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}

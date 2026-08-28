@@ -37,6 +37,9 @@ import {
     persistSavedLoginCredentials,
     readSavedLoginCredentials,
 } from '@/app/services/savedLoginCredentialsService';
+import {
+    consumeCheckoutLoginFlow,
+} from '@/app/services/checkoutLoginFlowService';
 
 // --- Interfaces ---
 interface LoginFormData {
@@ -171,6 +174,20 @@ export default function Login(): React.ReactElement {
                     setTimeout(() => {
                         navigate('/cambiar-contrasena-provisional');
                     }, 1000);
+                    return;
+                }
+
+                // Rama exclusiva del flujo de compra. El login normal no entra aquí.
+                const checkoutFlow = consumeCheckoutLoginFlow();
+                if (checkoutFlow) {
+                    toast.success('¡Acceso exitoso! Retomando tu compra...');
+                    navigate(checkoutFlow.returnUrl, {
+                        replace: true,
+                        state: {
+                            ...checkoutFlow.returnState,
+                            checkoutFlowId: checkoutFlow.flowId,
+                        },
+                    });
                     return;
                 }
 

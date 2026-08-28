@@ -99,16 +99,22 @@ export default function MembershipStepContent({
     const presentationByCode = {
       nequi: {
         id: 'nequi' as const,
+        label: 'Nequi',
+        defaultDescription: 'Paga desde tu cuenta Nequi',
         icon: Smartphone,
         color: 'from-primary/15 to-accent/10',
       },
       card: {
         id: 'card' as const,
+        label: 'Tarjetas',
+        defaultDescription: 'Crédito o débito por Wompi',
         icon: CreditCard,
         color: 'from-accent/15 to-secondary/10',
       },
       pse: {
         id: 'pse' as const,
+        label: 'PSE',
+        defaultDescription: 'Transferencia desde tu banco',
         icon: Building2,
         color: 'from-secondary/15 to-primary/10',
       },
@@ -129,14 +135,17 @@ export default function MembershipStepContent({
     });
 
     const ordenVisualizacion: Array<keyof typeof presentationByCode> = ['nequi', 'card', 'pse'];
-    return ordenVisualizacion.flatMap((tipo) => {
+    return ordenVisualizacion.map((tipo) => {
       const method = porTipo.get(tipo);
-      if (!method) return [];
-      return [{
+      const presentation = presentationByCode[tipo];
+      return {
         ...presentationByCode[tipo],
-        name: method.nombreMetodoPago,
-        description: method.descripcion || '',
-      }];
+        // Wompi define la etiqueta comercial; la parametrización solo enriquece
+        // la descripción y nunca reemplaza el label por una razón social extensa.
+        name: presentation.label,
+        description: method?.descripcion || presentation.defaultDescription,
+        configured: Boolean(method),
+      };
     });
   }, [metodosPago]);
 
@@ -323,11 +332,7 @@ export default function MembershipStepContent({
               <Loader2 className="w-4 h-4 animate-spin" />
               Cargando métodos de pago...
             </div>
-          ) : paymentMethods.length === 0 && (
-            <p className="text-sm text-center text-muted-foreground">
-              No hay métodos de pago disponibles. Contacta al administrador para activar al menos uno.
-            </p>
-          )}
+          ) : null}
 
           {/* Formularios dinámicos por método */}
           {formData.paymentInfo.paymentMethod && (

@@ -1376,7 +1376,7 @@ export const GobernanzaFormFieldsInner: React.FC<{
                 }}
               >
                 <option value="">
-                  {loadingData ? 'Cargando opciones...' : 'Selecciona tenant a actualizar'}
+                  {loadingData ? 'Cargando opciones...' : 'Selecciona Tenant SA descendiente'}
                 </option>
                 {tenantUpdateTargets.map((opt) => (
                   <option key={opt.id} value={opt.id}>{opt.label}</option>
@@ -1384,14 +1384,14 @@ export const GobernanzaFormFieldsInner: React.FC<{
               </select>
               <p className="mt-1 text-xs text-muted-foreground">
                 {actorEsTenantSuperAdminScope
-                  ? 'Scope tenantSuperAdmin: puedes seleccionar nodos tenantSuperAdmin, tenantGlobal y tenantCorporativo visibles.'
+                  ? 'Scope tenantSuperAdmin: solo aparecen SA descendientes y subdescendientes. DIOS raíz sin codigoPadre ve todos los SA activos.'
                   : actorEsTenantGlobal
                   ? 'Scope tenantGlobal: solo puedes seleccionar tu tenantGlobal y sus nodos corporativos descendientes.'
                   : 'El listado se resuelve desde tu scope actual.'}
               </p>
               {!loadingData && !tenantUpdateTargets.length ? (
                 <p className="mt-1 text-xs text-warning">
-                  No hay tenants disponibles para actualizar con tu scope actual.
+                  No hay Tenant SA descendientes disponibles para actualizar con tu scope actual.
                 </p>
               ) : null}
               {tenantActualizarPrefillLoading ? (

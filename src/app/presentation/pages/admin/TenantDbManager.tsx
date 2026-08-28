@@ -21,6 +21,7 @@ import {
   Activity,
   Pencil,
   Timer,
+  Search,
 } from 'lucide-react';
 
 import {
@@ -40,6 +41,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
 import {
@@ -268,6 +270,7 @@ export default function TenantDbManager() {
   const [syncSaving, setSyncSaving] = useState(false);
   const [syncCollections, setSyncCollections] = useState<string[]>([]);
   const [syncCollectionsLoading, setSyncCollectionsLoading] = useState(false);
+  const [syncCollectionBusqueda, setSyncCollectionBusqueda] = useState('');
 
   // ── Sync manual ──
   const [syncManualLoading, setSyncManualLoading] = useState<string | null>(null); // "tenantId:coleccion"
@@ -302,6 +305,8 @@ export default function TenantDbManager() {
   const [dlgSyncMasivo, setDlgSyncMasivo] = useState(false);
   const [syncMasivoTarget, setSyncMasivoTarget] = useState<TenantDbConfig | null>(null);
   const [syncMasivoItems, setSyncMasivoItems] = useState<SyncMasivoItem[]>([]);
+  const [syncMasivoBusqueda, setSyncMasivoBusqueda] = useState('');
+  const [syncMasivoSeleccionadas, setSyncMasivoSeleccionadas] = useState<Set<string>>(new Set());
   const [syncMasivoRunning, setSyncMasivoRunning] = useState(false);
   const syncMasivoCancelRef = useRef(false);
 
@@ -854,6 +859,13 @@ export default function TenantDbManager() {
       .map((c) => c.coleccion)
   );
   const coleccionesNuevasDetectadas = syncCollections.filter((c) => !coleccionesYaSincronizadas.has(c));
+  const syncCollectionsFiltradas = syncCollectionBusqueda.trim()
+    ? syncCollections.filter((c) => c.toLowerCase().includes(syncCollectionBusqueda.trim().toLowerCase()))
+    : syncCollections;
+
+  const syncMasivoItemsFiltrados = syncMasivoBusqueda.trim()
+    ? syncMasivoItems.filter((item) => item.coleccion.toLowerCase().includes(syncMasivoBusqueda.trim().toLowerCase()))
+    : syncMasivoItems;
 
   useEffect(() => {
     if (!form.contenedorId) {
@@ -963,6 +975,7 @@ export default function TenantDbManager() {
     const sourceInicial = sourceCandidateIds.has(sourcePreferido) ? sourcePreferido : '';
     setTenantSeleccionado(config);
     setSyncCollections([]);
+    setSyncCollectionBusqueda('');
     setSyncPreview(null);
     setSyncForm({
       sourceConfigId: String(sourceInicial || ''),
@@ -1092,6 +1105,10 @@ export default function TenantDbManager() {
       return;
     }
     setSyncMasivoTarget(config);
+    setSyncMasivoBusqueda('');
+    // Arranca sin nada marcado: el usuario elige explícitamente (check individual
+    // o el check del encabezado para "todas") qué colecciones entran en la corrida.
+    setSyncMasivoSeleccionadas(new Set());
     setSyncMasivoItems(colsActivas.map((col) => ({
       coleccion: col.coleccion,
       sourceConfigId: resolveSourceConfigIdFromCol(col),
@@ -1111,8 +1128,25 @@ export default function TenantDbManager() {
   // el progreso se ve igual via el toast con contador en vivo.
   const iniciarSyncMasivo = async () => {
     if (!syncMasivoTarget || syncMasivoRunning) return;
+    if (syncMasivoSeleccionadas.size === 0) {
+      toast.warning('Selecciona al menos una colección para sincronizar');
+      return;
+    }
+    // Si hay un filtro activo, evita sorpresas: avisa cuando la corrida incluye
+    // colecciones seleccionadas que quedaron fuera de lo que se ve ahora mismo.
+    if (syncMasivoBusqueda.trim()) {
+      const ocultasSeleccionadas = syncMasivoSeleccionadas.size
+        - syncMasivoItemsFiltrados.filter((it) => syncMasivoSeleccionadas.has(it.coleccion)).length;
+      if (ocultasSeleccionadas > 0) {
+        const continuar = window.confirm(
+          `Tienes ${syncMasivoSeleccionadas.size} colección(es) seleccionadas en total, pero ${ocultasSeleccionadas} `
+          + `no se ven con el filtro "${syncMasivoBusqueda.trim()}". Se sincronizarán todas las seleccionadas, incluidas las ocultas. ¿Continuar?`
+        );
+        if (!continuar) return;
+      }
+    }
     const id = resolverConfigId(syncMasivoTarget);
-    const total = syncMasivoItems.length;
+    const total = syncMasivoSeleccionadas.size;
     syncMasivoCancelRef.current = false;
     setSyncMasivoRunning(true);
 
@@ -1123,6 +1157,7 @@ export default function TenantDbManager() {
     for (let i = 0; i < syncMasivoItems.length; i += 1) {
       if (syncMasivoCancelRef.current) break;
       const item = syncMasivoItems[i];
+      if (!syncMasivoSeleccionadas.has(item.coleccion)) continue;
       if (!item.sourceConfigId) {
         setSyncMasivoItems(prev => prev.map((it, idx) => idx === i
           ? { ...it, estado: 'error', error: 'Sin conexión padre/origen resuelta' }
@@ -2368,10 +2403,21 @@ export default function TenantDbManager() {
                   <p className="text-xs text-muted-foreground">
                     Selecciona una o varias colecciones especificas para esta sincronizacion.
                   </p>
+                  {syncCollections.length > 0 && (
+                    <div className="relative">
+                      <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        value={syncCollectionBusqueda}
+                        onChange={(e) => setSyncCollectionBusqueda(e.target.value)}
+                        placeholder="Buscar coleccion por nombre..."
+                        className="h-8 pl-8 text-sm"
+                      />
+                    </div>
+                  )}
                   <div className="max-h-48 overflow-auto">
-                    {syncCollections.length > 0 ? (
+                    {syncCollectionsFiltradas.length > 0 ? (
                       <div className="flex flex-wrap gap-2">
-                        {syncCollections.map((coleccion) => {
+                        {syncCollectionsFiltradas.map((coleccion) => {
                           const checked = syncForm.colecciones.includes(coleccion);
                           return (
                             <label
@@ -2409,7 +2455,11 @@ export default function TenantDbManager() {
                       </div>
                     ) : (
                       <p className="text-sm text-muted-foreground">
-                        {syncCollectionsLoading ? 'Cargando colecciones del padre...' : 'No hay colecciones disponibles'}
+                        {syncCollectionsLoading
+                          ? 'Cargando colecciones del padre...'
+                          : syncCollections.length > 0
+                            ? 'Ninguna coleccion coincide con la busqueda.'
+                            : 'No hay colecciones disponibles'}
                       </p>
                     )}
                   </div>
@@ -2475,7 +2525,7 @@ export default function TenantDbManager() {
       </Dialog>
 
       <Dialog open={dlgSyncDatos} onOpenChange={setDlgSyncDatos}>
-        <DialogContent className="max-w-6xl max-h-[90vh] overflow-hidden p-0">
+        <DialogContent className="max-w-6xl max-h-[90vh] overflow-hidden p-0 sm:p-0">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 px-6 pt-6">
               <Play className="w-5 h-5" />
@@ -2484,8 +2534,8 @@ export default function TenantDbManager() {
           </DialogHeader>
 
           {syncDataTarget && (
-            <div className="flex max-h-[calc(90vh-80px)] flex-col">
-              <div className="overflow-y-auto px-6 py-2">
+            <div className="flex min-h-0 max-h-[calc(90vh-80px)] flex-col">
+              <div className="min-h-0 flex-1 overflow-y-auto px-6 py-2">
             <div className="grid gap-4 lg:grid-cols-2 pb-4">
               <div className="rounded-md bg-muted px-3 py-2 text-sm space-y-1 lg:col-span-2">
                 <p className="font-medium">
@@ -2562,7 +2612,7 @@ export default function TenantDbManager() {
                     type="button"
                     variant="outline"
                     size="sm"
-                    onClick={handlePreviewSyncDatos}
+                    onClick={() => void handlePreviewSyncDatos()}
                     disabled={syncPreviewLoading}
                   >
                     {syncPreviewLoading ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Eye className="w-4 h-4 mr-1" />}
@@ -2781,7 +2831,7 @@ export default function TenantDbManager() {
               </div>
               </div>
               </div>
-              <DialogFooter className="border-t bg-background px-6 py-4">
+              <DialogFooter className="shrink-0 border-t bg-background px-6 py-4">
                 <Button variant="outline" onClick={() => setDlgSyncDatos(false)}>
                   Cancelar
                 </Button>
@@ -2991,13 +3041,42 @@ export default function TenantDbManager() {
           <div className="space-y-3 py-2">
             <p className="text-xs text-muted-foreground">
               Ejecuta el sync manual de cada colección guardada, una por una, con su propia conexión origen, modo y filtro.
-              {' '}Un fallo en una colección no detiene a las demás.
+              {' '}Un fallo en una colección no detiene a las demás. Marca las colecciones que quieras incluir en esta corrida (o el check del encabezado para todas).
             </p>
+
+            {syncMasivoItems.length > 0 && (
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={syncMasivoBusqueda}
+                  onChange={(e) => setSyncMasivoBusqueda(e.target.value)}
+                  placeholder="Buscar coleccion por nombre..."
+                  className="h-8 pl-8 text-sm"
+                />
+              </div>
+            )}
 
             <div className="max-h-[50vh] overflow-y-auto rounded-md border">
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-10">
+                      <Checkbox
+                        checked={syncMasivoItemsFiltrados.length > 0
+                          && syncMasivoItemsFiltrados.every((item) => syncMasivoSeleccionadas.has(item.coleccion))}
+                        onCheckedChange={(checked) => {
+                          setSyncMasivoSeleccionadas((prev) => {
+                            const next = new Set(prev);
+                            syncMasivoItemsFiltrados.forEach((item) => {
+                              if (checked) next.add(item.coleccion);
+                              else next.delete(item.coleccion);
+                            });
+                            return next;
+                          });
+                        }}
+                        aria-label="Seleccionar todas las colecciones visibles"
+                      />
+                    </TableHead>
                     <TableHead>Colección</TableHead>
                     <TableHead>Modo</TableHead>
                     <TableHead>Estado</TableHead>
@@ -3005,8 +3084,22 @@ export default function TenantDbManager() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {syncMasivoItems.map((item, idx) => (
+                  {syncMasivoItemsFiltrados.map((item, idx) => (
                     <TableRow key={`${item.coleccion || 'sin-nombre'}-${idx}`}>
+                      <TableCell>
+                        <Checkbox
+                          checked={syncMasivoSeleccionadas.has(item.coleccion)}
+                          onCheckedChange={(checked) => {
+                            setSyncMasivoSeleccionadas((prev) => {
+                              const next = new Set(prev);
+                              if (checked) next.add(item.coleccion);
+                              else next.delete(item.coleccion);
+                              return next;
+                            });
+                          }}
+                          aria-label={`Seleccionar ${item.coleccion}`}
+                        />
+                      </TableCell>
                       <TableCell className="font-mono text-sm">{item.coleccion}</TableCell>
                       <TableCell>
                         <Badge variant="secondary" className="text-xs">{item.modo}</Badge>
@@ -3047,6 +3140,7 @@ export default function TenantDbManager() {
               {syncMasivoItems.filter(i => i.estado === 'ok').length} listas,{' '}
               {syncMasivoItems.filter(i => i.estado === 'error').length} con error,{' '}
               {syncMasivoItems.filter(i => i.estado === 'pendiente').length} pendientes de {syncMasivoItems.length} colecciones
+              {' · '}{syncMasivoSeleccionadas.size} seleccionadas para esta corrida
             </p>
           </div>
 
@@ -3060,14 +3154,14 @@ export default function TenantDbManager() {
               </Button>
             )}
             <Button
-              disabled={syncMasivoRunning || syncMasivoItems.every(i => i.estado === 'ok')}
+              disabled={syncMasivoRunning || syncMasivoSeleccionadas.size === 0}
               onClick={() => void iniciarSyncMasivo()}
             >
               {syncMasivoRunning
                 ? <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                 : <Play className="w-4 h-4 mr-2" />
               }
-              Iniciar sincronización
+              Iniciar sincronización ({syncMasivoSeleccionadas.size})
             </Button>
           </DialogFooter>
         </DialogContent>

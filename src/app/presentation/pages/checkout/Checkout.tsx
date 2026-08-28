@@ -20,6 +20,7 @@ import {
   CHECKOUT_PAYMENT_PATH,
   type CheckoutNavigationState,
 } from '@/app/services/checkoutNavigation';
+import { beginCheckoutLoginFlow } from '@/app/services/checkoutLoginFlowService';
 import MembershipStepContent from '@/components/membership/MembershipStepContent';
 import { useCartCheckoutPayment } from '@/app/hooks/useCartCheckoutPayment';
 import type { ResultadoPago } from '@/app/presentation/pages/membresia/MembershipPayment';
@@ -489,7 +490,8 @@ export default function Checkout(): React.ReactElement {
         cancelButtonText: 'Completar datos',
       });
       if (result.isConfirmed) {
-        navigate(getGovernedLoginPath(), { state: { returnUrl: CHECKOUT_PAYMENT_PATH } });
+        const flow = beginCheckoutLoginFlow('checkout', CHECKOUT_PAYMENT_PATH);
+        navigate(getGovernedLoginPath(), { state: { checkoutFlowId: flow?.flowId } });
         return;
       }
       if (!(result.isDismissed && result.dismiss === 'cancel')) return;

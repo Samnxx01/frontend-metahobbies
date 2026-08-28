@@ -7,6 +7,7 @@ export const CHECKOUT_PAYMENT_PATH = '/public/render/finalizar-compra';
 export type CheckoutNavigationState = {
   openPayment?: boolean;
   datosFacturacion?: DatosFacturacionInvitado;
+  checkoutFlowId?: string;
 };
 
 export function getCheckoutPaymentPath(): string {
