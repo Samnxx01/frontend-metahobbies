@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { toast } from 'react-toastify';
-import carritoService, { type AuditoriaProductoCheck, type PedidoAprobado, type VentaReferenciaAdmin } from '@/app/services/carritoService';
+import carritoService, { type AuditoriaProductoCheck, type PedidoAprobado, type ProcesoCarrito, type VentaReferenciaAdmin } from '@/app/services/carritoService';
 import { formatearFechaHoraColombia } from '@/app/utils/fechaColombia';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -13,11 +13,14 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { ChevronDown, ChevronRight, CircleHelp, ClipboardList, Download, Eye, Loader2, MapPin, Package, Plus, ReceiptText, RefreshCw, Search, User, UserRoundCog, Warehouse } from 'lucide-react';
+import { ChevronDown, ChevronRight, CircleHelp, ClipboardList, Download, Eye, Loader2, MapPin, Package, Plus, Radio, ReceiptText, RefreshCw, Search, User, UserRoundCog, Warehouse } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Popover, PopoverContent, PopoverDescription, PopoverHeader, PopoverTitle, PopoverTrigger } from '@/components/ui/popover';
 import VentaManualModal from './components/VentaManualModal';
 import TercerosCrudModal from './components/TercerosCrudModal';
+import { usePedidosAprobadosRealtime } from '@/app/realtime/usePedidosAprobadosRealtime';
+import { useRealtimeConnectionStatus } from '@/app/realtime/useRealtimeConnectionStatus';
+import { reconectarSocket } from '@/app/socket/socketService';
 
 interface PedidosHelpButtonProps {
   id: string;
@@ -88,6 +91,24 @@ export default function PedidosAprobadosCarrito(): React.ReactElement {
   const [ventasFiltros, setVentasFiltros] = useState({ q: '', estado: '' });
   const [ventaManualOpen, setVentaManualOpen] = useState(false);
   const [tercerosOpen, setTercerosOpen] = useState(false);
+  const [procesos, setProcesos] = useState<ProcesoCarrito[]>([]);
+  const [procesosResumen, setProcesosResumen] = useState({ publicos: 0, autenticados: 0, enPago: 0, abandonados: 0 });
+  const [procesosLoading, setProcesosLoading] = useState(true);
+  const realtimeConnected = useRealtimeConnectionStatus();
+
+  const cargarProcesos = useCallback(async ({ silencioso = false }: { silencioso?: boolean } = {}): Promise<void> => {
+    if (!silencioso) setProcesosLoading(true);
+    try {
+      const resp = await carritoService.listarProcesosEnCurso({ minutos: 30, limit: 100 });
+      setProcesos(resp.data);
+      setProcesosResumen(resp.resumen);
+    } catch (error) {
+      if (!silencioso) toast.error(error instanceof Error ? error.message : 'No se pudieron cargar los carritos en curso.');
+      setProcesos([]);
+    } finally {
+      if (!silencioso) setProcesosLoading(false);
+    }
+  }, []);
 
   const cargarVentasReferencias = async (
     filtros: { q: string; estado: string } = ventasFiltros,
@@ -183,8 +204,11 @@ export default function PedidosAprobadosCarrito(): React.ReactElement {
     }
   };
 
-  const cargar = useCallback(async (q = qAplicada): Promise<void> => {
-    setLoading(true);
+  const cargar = useCallback(async (
+    q = qAplicada,
+    { silencioso = false }: { silencioso?: boolean } = {},
+  ): Promise<void> => {
+    if (!silencioso) setLoading(true);
     try {
       const resp = await carritoService.listarPedidosAprobados({ limit: 100, q: q || undefined });
       setPedidos(resp.data);
@@ -194,13 +218,24 @@ export default function PedidosAprobadosCarrito(): React.ReactElement {
       setPedidos([]);
       setTotal(0);
     } finally {
-      setLoading(false);
+      if (!silencioso) setLoading(false);
     }
   }, [qAplicada]);
 
   useEffect(() => {
     void cargar();
-  }, [cargar]);
+    void cargarProcesos();
+  }, [cargar, cargarProcesos]);
+
+  usePedidosAprobadosRealtime(async (evento) => {
+    const scopes = new Set(evento?.scopes || []);
+    const tasks: Promise<void>[] = [];
+    if (scopes.has('procesos-carrito')) tasks.push(cargarProcesos({ silencioso: true }));
+    if (scopes.has('pedidos')) tasks.push(cargar(qAplicada, { silencioso: true }));
+    if (auditoriaOpen && scopes.has('auditorias-pago')) tasks.push(cargarAuditorias({ silencioso: true }));
+    if (ventasOpen && scopes.has('ventas-referenciadas')) tasks.push(cargarVentasReferencias(ventasFiltros));
+    await Promise.all(tasks);
+  });
 
   const toggleExpand = (id: string): void => {
     setExpandidos((prev) => {
@@ -253,6 +288,20 @@ export default function PedidosAprobadosCarrito(): React.ReactElement {
           </p>
         </div>
         <div className="flex w-full items-center justify-between gap-2 sm:w-auto sm:justify-end">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              if (!realtimeConnected) reconectarSocket();
+              toast.info(realtimeConnected ? 'Visualización de pedidos en tiempo real activa.' : 'Conexión en tiempo real inactiva. Intentando reconectar...');
+            }}
+            className={realtimeConnected ? 'h-9 border-emerald-500 text-emerald-700' : 'h-9 border-amber-500 text-amber-700'}
+            title={realtimeConnected ? 'Pedidos sincronizados en tiempo real' : 'Reconectar visualización en tiempo real'}
+          >
+            <Radio className={`mr-2 h-4 w-4 ${realtimeConnected ? 'animate-pulse' : ''}`} />
+            <span className="hidden lg:inline">Visualización en tiempo real</span>
+          </Button>
           <PedidosHelpButton
             id="ayuda-pedidos-aprobados"
             title="Pedidos aprobados"
@@ -264,6 +313,75 @@ export default function PedidosAprobadosCarrito(): React.ReactElement {
           </Badge>
         </div>
       </div>
+
+      <section className="mb-6 rounded-lg border border-border bg-card p-4 text-card-foreground shadow-sm">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="font-semibold">Procesos de compra en curso</h2>
+            <p className="text-xs text-muted-foreground">Actividad de los últimos 30 minutos, actualizada mediante Socket.IO.</p>
+          </div>
+          <Badge variant="outline">{procesos.length} en seguimiento</Badge>
+        </div>
+        <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {[
+            ['Públicos', procesosResumen.publicos],
+            ['Autenticados', procesosResumen.autenticados],
+            ['En pago', procesosResumen.enPago],
+            ['Abandonados', procesosResumen.abandonados],
+          ].map(([label, value]) => (
+            <div key={String(label)} className="rounded-md border border-border bg-muted/30 px-3 py-2">
+              <div className="text-xs text-muted-foreground">{label}</div>
+              <div className="text-lg font-semibold">{value}</div>
+            </div>
+          ))}
+        </div>
+        {procesosLoading ? (
+          <div className="py-6 text-center text-sm text-muted-foreground"><Loader2 className="mr-2 inline h-4 w-4 animate-spin" />Cargando procesos…</div>
+        ) : procesos.length === 0 ? (
+          <div className="rounded-md border border-dashed border-border py-6 text-center text-sm text-muted-foreground">No hay carritos activos recientemente.</div>
+        ) : (
+          <div className="max-h-80 space-y-2 overflow-auto pr-1">
+            {procesos.map((proceso) => {
+              const pasos = [
+                ['Carrito', proceso.pasos.carrito],
+                ['Datos', proceso.pasos.datosCliente],
+                ['Pago', proceso.pasos.pago],
+                ['Aprobado', proceso.pasos.aprobado],
+              ] as const;
+              return (
+                <article key={proceso.id} className="rounded-md border border-border p-3">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant={proceso.tipoUsuario === 'AUTENTICADO' ? 'default' : 'secondary'}>
+                          {proceso.tipoUsuario === 'AUTENTICADO' ? 'Autenticado' : 'Público'}
+                        </Badge>
+                        <span className="font-medium">{proceso.usuario}</span>
+                        <span className="font-mono text-[10px] text-muted-foreground">{proceso.referencia}</span>
+                      </div>
+                      <div className="mt-2 flex flex-wrap items-center gap-1 text-xs">
+                        {pasos.map(([nombre, completado], index) => (
+                          <React.Fragment key={nombre}>
+                            <span className={completado ? 'rounded-full bg-emerald-100 px-2 py-1 text-emerald-800' : 'rounded-full bg-muted px-2 py-1 text-muted-foreground'}>
+                              {nombre} {completado ? '✓' : '○'}
+                            </span>
+                            {index < pasos.length - 1 ? <span className="text-muted-foreground">→</span> : null}
+                          </React.Fragment>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="text-right text-xs">
+                      <div className="font-semibold">{formatCOP(proceso.total)}</div>
+                      <div>{proceso.cantidadUnidades} unidad(es)</div>
+                      <div className="text-muted-foreground">Actividad: {formatFecha(proceso.ultimaActividad)}</div>
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </section>
 
       <div className="mb-6 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(18rem,1fr)_auto_auto_auto_auto_auto_auto] xl:items-center">
         <div className="relative min-w-0 xl:max-w-md">

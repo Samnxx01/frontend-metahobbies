@@ -105,6 +105,9 @@ import { ParametrosGobernanzaModalFormLayout } from './gobernanza/ParametrosGobe
 import { governanceEndpointActionId, governanceEndpointConfigureActionId, GovernedButton, TENANT_GOVERNANCE_ACTION_IDS } from '@/app/presentation/actions';
 import { PoliticaBypassPanel } from './PoliticaBypassPanel';
 import { PoliticasRuntimePanel } from './PoliticasRuntimePanel';
+import { useGobernanzaRealtime } from '@/app/realtime/useGobernanzaRealtime';
+import { useRealtimeConnectionStatus } from '@/app/realtime/useRealtimeConnectionStatus';
+import { reconectarSocket } from '@/app/socket/socketService';
 import {
   expandTenantGlobalDescendants,
   filtrarTenantGlobalesAlcanceJwtReglasGlobales,
@@ -329,6 +332,8 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
   const [vistaSearchByEndpoint, setVistaSearchByEndpoint] = useState<Record<string, string>>({});
   const [reglasTenantFilter, setReglasTenantFilter] = useState('');
   const [loadingData, setLoadingData] = useState(false);
+  const [realtimeSyncing, setRealtimeSyncing] = useState(false);
+  const realtimeConnected = useRealtimeConnectionStatus();
   const [running, setRunning] = useState<Record<string, boolean>>({});
   const [result, setResult] = useState<Record<string, string>>({});
   const [resultData, setResultData] = useState<Record<string, any>>({});
@@ -421,7 +426,20 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
   const [syncRunningByEndpoint, setSyncRunningByEndpoint] = useState<Record<string, boolean>>({});
   const [herenciaDetalle, setHerenciaDetalle] = useState<any | null>(null);
   /** Modal resumen tras «Actualizar catálogo de reglas y herencia» en modal admin/global. */
-  const [reglasHerenciaSyncReport, setReglasHerenciaSyncReport] = useState<{ lineas: string[] } | null>(null);
+  const [reglasHerenciaSyncReport, setReglasHerenciaSyncReport] = useState<{
+    lineas: string[];
+    cambios: any[];
+    reglaSeleccionada?: {
+      id: string;
+      nombre: string;
+      fuente: string;
+      vistasAntes: number;
+      accionesAntes: number;
+      vistasDespues: number;
+      accionesDespues: number;
+    };
+    nuevasParametrizables?: any[];
+  } | null>(null);
   const [reglasHerenciaSyncBusy, setReglasHerenciaSyncBusy] = useState(false);
   /** POST sincronizar counters global + refresh catálogo (solo modal Crear reglas globales, SA+corporativo en counters). */
   const [crearReglasJerarquiaSyncing, setCrearReglasJerarquiaSyncing] = useState(false);
@@ -450,6 +468,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
   });
   const hydrateBundlesLoadedRef = useRef<Set<HydrateBundle>>(new Set());
   const hydrateDeferredRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reglasDiosAutoSyncRef = useRef<Set<string>>(new Set());
   const [catalogSeedRunning, setCatalogSeedRunning] = useState(false);
   const [catalogItems, setCatalogItems] = useState<{ iud: string; tipo_comprador: string; sigla: string; esDefault: boolean }[]>([]);
   const [catalogItemsLoaded, setCatalogItemsLoaded] = useState(false);
@@ -1596,6 +1615,26 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
 
   useEffect(() => { hydrateData(); }, []);
 
+  useGobernanzaRealtime(async (evento) => {
+    const scopes = new Set(evento?.scopes || []);
+    const bundles = new Set<HydrateBundle>();
+    if (scopes.has('reglas')) {
+      invalidarReglasCache();
+      bundles.add('reglas');
+    }
+    if (scopes.has('herencias')) bundles.add('herencias');
+    if (!bundles.size) return;
+
+    setRealtimeSyncing(true);
+    try {
+      // Solo refresca catálogos. Los campos y checks que el usuario está editando
+      // permanecen en formData/permisoData hasta que decida guardar o recargar.
+      await hydrateData({ force: true, bundles });
+    } finally {
+      setRealtimeSyncing(false);
+    }
+  });
+
   useEffect(() => {
     const endpointId = String(inlineModuloMenu.activeEndpoint?.id || '').trim();
     if (!endpointId) return;
@@ -1846,8 +1885,70 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
     return !soloApi;
   };
 
-  /** La regla DIOS solo puede aparecer cuando está relacionada con el tenant elegido. */
-  const permiteReglaDiosEnActualizarReglasGlobales = (): boolean => true;
+  const normalizarRolReglasGlobales = (value: unknown): string =>
+    String(value || '')
+      .trim()
+      .toUpperCase()
+      .replace(/[\s-]+/g, '_');
+
+  const resolveRolSaReglasGlobales = (saId?: string): string => {
+    const selectedSa = String(
+      saId ||
+        saFilterByEndpoint['tenant-actualizar-global-reglas'] ||
+        tenantGlobalActor?.tenantSuperAdminId ||
+        '',
+    ).trim();
+    if (!selectedSa) return '';
+
+    // Priorizar siempre el SA elegido. Las equivalencias pueden incluir ancestros de
+    // la rama y no deben convertir un SUPER ADMIN hijo en el rol DIOS de la raíz.
+    const metaDirecta = tenantSuperAdminsJerarquiaCounters.find((item) =>
+      idsPermisoRefsCoinciden(String(item?.id || '').trim(), selectedSa),
+    );
+    const rolDirecto = normalizarRolReglasGlobales(metaDirecta?.rolNombre);
+    if (rolDirecto) return rolDirecto;
+
+    const equivalentes = resolveSaIdsEquivalentes(selectedSa);
+    const meta = tenantSuperAdminsJerarquiaCounters.find((item) =>
+      equivalentes.has(String(item?.id || '').trim()),
+    );
+    return normalizarRolReglasGlobales(meta?.rolNombre);
+  };
+
+  /** securityPlatform exige actor DIOS y su emisión SA raíz (codigoPadre vacío). */
+  const permiteReglaDiosEnActualizarReglasGlobales = (_saId?: string): boolean => {
+    const rolJwt = String(tenantGlobalActor?.rol || '').trim().toUpperCase();
+    const jwtSa = String(tenantGlobalActor?.tenantSuperAdminId || '').trim();
+    const actorCounter = jerarquiaSaCounters.find((row) =>
+      idsPermisoRefsCoinciden(String(row?.tenantSuperAdminId || ''), jwtSa),
+    );
+    const actorMeta = tenantSuperAdminsJerarquiaCounters.find((row) =>
+      idsPermisoRefsCoinciden(String(row?.id || ''), jwtSa),
+    );
+    const codigoPadre = actorCounter?.codigoPadre ?? actorMeta?.codigoPadre ?? undefined;
+    return rolJwt === 'DIOS' && Boolean(jwtSa) && codigoPadre !== undefined && !String(codigoPadre || '').trim();
+  };
+
+  useEffect(() => {
+    const jwtSa = String(tenantGlobalActor?.tenantSuperAdminId || '').trim();
+    const actorCounter = jerarquiaSaCounters.find((row) =>
+      idsPermisoRefsCoinciden(String(row?.tenantSuperAdminId || ''), jwtSa),
+    );
+    const actorMeta = tenantSuperAdminsJerarquiaCounters.find((row) =>
+      idsPermisoRefsCoinciden(String(row?.id || ''), jwtSa),
+    );
+    const codigoPadre = actorCounter?.codigoPadre ?? actorMeta?.codigoPadre ?? undefined;
+    console.info('[MABS][AUTH][REGLAS_SECURITY_PLATFORM]', {
+      rolJwt: String(tenantGlobalActor?.rol || '').trim().toUpperCase() || null,
+      tenantSuperAdminJwt: jwtSa || null,
+      tenantGlobalJwt: tenantGlobalActor?.tenantGlobalId || null,
+      tenantCorporativoJwt: tenantGlobalActor?.tenantCorporativoId || null,
+      counterEncontrado: Boolean(actorCounter || actorMeta),
+      codigoJerarquia: actorCounter?.codigoJerarquia ?? actorMeta?.codigoJerarquia ?? null,
+      codigoPadre: codigoPadre ?? null,
+      autorizadoSecurityPlatform: permiteReglaDiosEnActualizarReglasGlobales(),
+    });
+  }, [tenantGlobalActor, jerarquiaSaCounters, tenantSuperAdminsJerarquiaCounters]);
 
   const actualizarReglasGlobalesSoloLectura = (): boolean => false;
 
@@ -2004,6 +2105,8 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
     const seed = String(saId || '').trim();
     if (!seed) return out;
     out.add(seed);
+    const mongoId = String(toMongoIdQueryParam(seed) || '').trim();
+    if (mongoId) out.add(mongoId);
 
     const meta = tenantSuperAdminsJerarquiaCounters.find((m) => String(m.id) === seed);
     const counter = jerarquiaSaCounters.find((c) => String(c.tenantSuperAdminId) === seed);
@@ -2099,7 +2202,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
   const reglaSinTenantGlobalMaterializado = (rule: any): boolean =>
     !resolveTenantGlobalIdFromRule(rule);
 
-  /** En actualizar, el tipo de regla no decide el alcance: lo decide la relación con el tenant elegido. */
+  /** En actualizar, el rol real del SA y la relación de alcance prevalecen sobre flags históricos. */
   const reglaEsActualizableEnReglasGlobalesEndpoint = (rule: any, _endpointId: string): boolean => {
     if (!reglaCumpleContextoViewReglasGlobales(rule)) return false;
     return true;
@@ -2115,6 +2218,11 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
     const toOption = (rule: any, publicId: string): ReglaOption | undefined => {
       if (!rule || !reglaEsActualizableEnReglasGlobalesEndpoint(rule, endpointId)) return undefined;
       if (!saCoincideReglaAlcance(rule, sa)) return undefined;
+      // Al administrar otra rama nunca se usa la regla de plataforma DIOS como
+      // sustituto de la regla propia del tenant seleccionado.
+      if (rule?.securityPlatform === true && !permiteReglaDiosEnActualizarReglasGlobales(sa)) {
+        return undefined;
+      }
       const rid = resolveReglaPublicId(rule) || publicId;
       const ridRaw = resolveReglaLegacyId(rule);
       const base =
@@ -2122,7 +2230,10 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
         rule?.name ||
         rule?.titulo ||
         `Regla ${ridRaw.slice(0, 8) || rid.slice(0, 8)}`;
-      const platformFlag = rule?.securityPlatform === true ? 'DIOS' : 'TENANT';
+      const rolSa = resolveRolSaReglasGlobales(sa).replace(/_/g, ' ');
+      // Algunas reglas SA históricas quedaron con securityPlatform=true. En este flujo la
+      // fuente de verdad es roles.rol del tenantSuperTenant seleccionado, no ese flag legado.
+      const platformFlag = rolSa || (rule?.securityPlatform === true ? 'DIOS' : 'TENANT');
       return { id: rid, label: `[${platformFlag}] ${base}` };
     };
     for (const r of reglas) {
@@ -2134,9 +2245,37 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
       const hit = toOption(rule, id);
       if (hit) return hit;
     }
+    // Los IDs públicos UUID del selector no siempre pueden compararse localmente con el
+    // ObjectId poblado en generacionTenatGlobales. El GET ya viene acotado al alcance SA;
+    // si existe una única regla del tipo correspondiente al rol real, usarla como fallback.
+    const rolSa = resolveRolSaReglasGlobales(sa);
+    const requierePlataforma = rolSa === 'DIOS';
+    const candidatosPorRol = Array.from(
+      new Map(
+        Object.values(catalog)
+          .filter((rule: any) =>
+            Boolean(rule) &&
+            rule?.securityPlatform === requierePlataforma &&
+            reglaEsActualizableEnReglasGlobalesEndpoint(rule, endpointId)
+          )
+          .map((rule: any) => [resolveReglaLegacyId(rule), rule]),
+      ).values(),
+    ).filter(Boolean);
+    if (candidatosPorRol.length === 1) {
+      const fallback = candidatosPorRol[0] as any;
+      const rid = resolveReglaPublicId(fallback) || resolveReglaLegacyId(fallback);
+      const base = fallback?.nombre || fallback?.name || fallback?.titulo || `Regla ${resolveReglaLegacyId(fallback).slice(0, 8)}`;
+      console.info('[MABS][REGLAS][FALLBACK_ROL_SA]', {
+        saSeleccionado: sa,
+        rolSa,
+        securityPlatform: requierePlataforma,
+        reglaId: resolveReglaLegacyId(fallback),
+      });
+      return { id: rid, label: `[${rolSa.replace(/_/g, ' ') || 'TENANT'}] ${base}` };
+    }
     if (
       endpointId === 'tenant-actualizar-global-reglas' &&
-      permiteReglaDiosEnActualizarReglasGlobales()
+      permiteReglaDiosEnActualizarReglasGlobales(sa)
     ) {
       const plataforma = Object.values(catalog).find(
         (r) => r?.securityPlatform === true && saCoincideReglaAlcance(r, sa),
@@ -2161,30 +2300,15 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
     return findReglaJerarquiaPorSaEnCatalogo(saId, catalog, endpointId);
   };
 
-  /** SA padre inmediato según tenantjerarquiacounters (codigoPadre). */
-  const resolverSaPadreJerarquia = (saId: string): string => {
-    const sa = String(saId || '').trim();
-    if (!sa || !jerarquiaSaCounters.length) return '';
-    const row = jerarquiaSaCounters.find((c) => String(c.tenantSuperAdminId) === sa);
-    const codigoPadre = String(row?.codigoPadre || '').trim();
-    if (!codigoPadre) return '';
-    const padre = jerarquiaSaCounters.find(
-      (c) => String(c.codigoJerarquia || '').trim() === codigoPadre,
-    );
-    return String(padre?.tenantSuperAdminId || '').trim();
-  };
-
-  /** Regla techo para parametrizar: regla del SA padre o plataforma del propio SA si es raíz. */
+  /**
+   * En actualización se conserva como techo la propia regla ya parametrizada del SA.
+   * La regla DIOS/padre no reemplaza ni recorta el contenido del tenant seleccionado.
+   */
   const findReglaTechoJerarquiaSa = (saId: string): any | undefined => {
     const sa = String(saId || '').trim();
     if (!sa) return undefined;
-    const saPadre = resolverSaPadreJerarquia(sa);
-    if (saPadre) {
-      const optPadre = findReglaJerarquiaPorSa(saPadre);
-      if (optPadre?.id && ruleCatalog[optPadre.id]) return ruleCatalog[optPadre.id];
-      return findReglaPlataformaPorSuperAdmin(ruleCatalog, saPadre);
-    }
-    return findReglaPlataformaPorSuperAdmin(ruleCatalog, sa);
+    const propia = findReglaJerarquiaPorSa(sa);
+    return propia?.id ? ruleCatalog[propia.id] : undefined;
   };
 
   const seleccionarReglaJerarquiaPorSaActualizar = (
@@ -3493,7 +3617,10 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
         tenantGlobalActor?.saJerarquiaTieneCorporativoEnCounters === true
       );
       /** Permisos heredados / actualizar / desactivar / eliminar: una opción por SA del jerarquía counter (misma herencia que GET). */
-      if (ENDPOINT_IDS_SELECT_MULTI_SA_JERARQUIA.has(endpointId)) {
+      if (
+        ENDPOINT_IDS_SELECT_MULTI_SA_JERARQUIA.has(endpointId) ||
+        endpointId === 'perm-listar-herencias'
+      ) {
         const saMetasVisibles = resolveSaJerarquiaMetasVisibles(endpointId);
         if (saMetasVisibles.length > 0) {
           const saScopeOptions: TenantGlobal[] = saMetasVisibles
@@ -4123,15 +4250,31 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
     };
     try {
       const rows = await fetchRows();
+      console.info('[MABS][REGLAS][CATALOGO_SA]', {
+        saSeleccionado: String(saId || '').trim(),
+        saCanonico: saCanon,
+        variantesConsulta: saQueries,
+        totalReglas: rows.length,
+        reglas: rows.map((rule: any) => ({
+          id: resolveReglaLegacyId(rule) || null,
+          securityPlatform: rule?.securityPlatform === true,
+          tenantSuperAdmins: (Array.isArray(rule?.generacionTenatGlobales)
+            ? rule.generacionTenatGlobales
+            : []
+          ).flatMap((ref: any) => [...collectGobernanzaRefIds(ref)]),
+          coincideSa: saCoincideReglaAlcance(rule, saCanon),
+        })),
+      });
       if (!rows.length) return empty;
       const rulesMap: Record<string, any> = {};
       const nuevasOpciones: ReglaOption[] = [];
+      const rolSaSeleccionado = resolveRolSaReglasGlobales(saId).replace(/_/g, ' ');
       rows.forEach((r: any) => {
         const rid = resolveReglaPublicId(r);
         const ridRaw = resolveReglaLegacyId(r);
         if (rid) {
           rulesMap[rid] = r;
-          const platformFlag = r?.securityPlatform === true ? 'DIOS' : 'TENANT';
+          const platformFlag = rolSaSeleccionado || (r?.securityPlatform === true ? 'DIOS' : 'TENANT');
           const base = r?.nombre || r?.name || r?.titulo || `Regla ${ridRaw.slice(0, 8) || rid.slice(0, 8)}`;
           nuevasOpciones.push({ id: rid, label: `[${platformFlag}] ${base}` });
         }
@@ -4203,6 +4346,20 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
       toast.warning('Selecciona el tenant global (o alcance SuperAdmin) antes de sincronizar.');
       return;
     }
+    const herenciaSeleccionadaId = String(getFieldValue(endpointId, 'herenciaAsociada') || '').trim();
+    const herenciaSeleccionadaAntes = herenciaAsociadaDataByEndpoint[endpointId]?.[herenciaSeleccionadaId];
+    const herenciaSeleccionadaOption = (herenciaAsociadaOptionsByEndpoint[endpointId] || [])
+      .find((option) => String(option?.id || '').trim() === herenciaSeleccionadaId);
+    if (!herenciaSeleccionadaId || !herenciaSeleccionadaAntes) {
+      toast.warning('Selecciona primero la herencia o regla asociada al tenant que vas a sincronizar.');
+      return;
+    }
+    const vistasAntes = Array.isArray(herenciaSeleccionadaAntes?.vistas)
+      ? herenciaSeleccionadaAntes.vistas.length
+      : 0;
+    const accionesAntes = Array.isArray(herenciaSeleccionadaAntes?.acciones)
+      ? herenciaSeleccionadaAntes.acciones.length
+      : 0;
     const countAntes = Object.keys(ruleCatalog || {}).length;
     const digestAntes = ruleCatalogPermisosDigest;
     setReglasHerenciaSyncBusy(true);
@@ -4224,12 +4381,97 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
         { method: 'GET' }
       );
       const syncResumen = syncPayload?.sincronizacionResumen || {};
+      const cambiosSincronizacion = (Array.isArray(syncPayload?.sincronizacion) ? syncPayload.sincronizacion : [])
+        .flatMap((contexto: any) =>
+          (Array.isArray(contexto?.cambios) ? contexto.cambios : []).map((cambio: any) => ({
+            ...cambio,
+            fuenteHerencia: contexto?.fuenteHerencia || '-',
+            tenantSuperTenant: contexto?.tenantSuperTenant || null,
+          }))
+        );
       const contextosSincronizados = Number(syncResumen?.contextosSincronizados || 0);
       const rutasSincronizadas = Number(syncResumen?.rutasSincronizadasAproximadas || 0);
       toastTransaccionDesdePayload(syncPayload?.transaccionResumen);
 
       invalidarReglasCache();
       const rulesMap = await loadRuleCatalogParaAlcance(endpointId);
+      const saSeleccionado = isTenantSuperAdminScopeOption(tgSel)
+        ? tgSel.slice(TENANT_SUPERADMIN_SCOPE_PREFIX.length).trim()
+        : resolveTenantSuperAdminIdForHerenciaSelect(
+            tgSel,
+            tenantGlobales,
+            String(tenantGlobalActor?.tenantSuperAdminId || '').trim(),
+          );
+      const rolSaSeleccionado = resolveRolSaReglasGlobales(saSeleccionado).replace(/_/g, ' ').trim();
+      const reglasUnicasAlcance = Array.from(new Map(
+        Object.values(rulesMap).map((rule: any) => [resolveReglaLegacyId(rule) || resolveReglaPublicId(rule), rule])
+      ).values()) as any[];
+      const reglasDelSa = saSeleccionado
+        ? findReglasPorTenantSuperAdmin(rulesMap, saSeleccionado)
+        : reglasUnicasAlcance;
+      const reglaTenantSeleccionada = (reglasDelSa.length ? reglasDelSa : reglasUnicasAlcance).find((rule: any) =>
+        rolSaSeleccionado === 'DIOS' ? rule?.securityPlatform === true : rule?.securityPlatform !== true
+      ) || (reglasDelSa.length ? reglasDelSa[0] : reglasUnicasAlcance[0]);
+
+      const buildPermisoKey = (item: any): string => {
+        const id = normalizePermisoRefId(item);
+        const path = String(item?.path || '').trim().toLowerCase();
+        return id || path;
+      };
+      const vistasRegla = Array.isArray(reglaTenantSeleccionada?.recurso)
+        ? reglaTenantSeleccionada.recurso
+        : [];
+      const accionesRegla = Array.isArray(reglaTenantSeleccionada?.accionesUsu)
+        ? reglaTenantSeleccionada.accionesUsu
+        : [];
+      const vistasHerencia = Array.isArray(herenciaSeleccionadaAntes?.vistas)
+        ? herenciaSeleccionadaAntes.vistas
+        : [];
+      const accionesHerencia = Array.isArray(herenciaSeleccionadaAntes?.acciones)
+        ? herenciaSeleccionadaAntes.acciones
+        : [];
+      const vistasReglaKeys = new Set(vistasRegla.map(buildPermisoKey).filter(Boolean));
+      const vistasHerenciaKeys = new Set(vistasHerencia.map(buildPermisoKey).filter(Boolean));
+      const accionesReglaKeys = new Set(accionesRegla.map(buildPermisoKey).filter(Boolean));
+      const accionesHerenciaKeys = new Set(accionesHerencia.map(buildPermisoKey).filter(Boolean));
+      const diffReglaHerencia = [
+        ...vistasRegla.filter((item: any) => !vistasHerenciaKeys.has(buildPermisoKey(item))).map((item: any) => ({
+          rutaId: buildPermisoKey(item),
+          nombre: String(item?.name || item?.label || item?.path || buildPermisoKey(item)),
+          path: String(item?.path || ''),
+          tipo: String(item?.tipo || item?.type || 'VISTA'),
+          antes: { asociada: false },
+          despues: { asociada: false },
+          resultado: 'DISPONIBLE_PARA_PARAMETRIZAR',
+        })),
+        ...vistasHerencia.filter((item: any) => !vistasReglaKeys.has(buildPermisoKey(item))).map((item: any) => ({
+          rutaId: buildPermisoKey(item),
+          nombre: String(item?.name || item?.label || item?.path || buildPermisoKey(item)),
+          path: String(item?.path || ''),
+          tipo: String(item?.tipo || item?.type || 'VISTA'),
+          antes: { asociada: true },
+          despues: { asociada: true },
+          resultado: 'HERENCIA_NO_INCLUIDA_EN_REGLA',
+        })),
+        ...accionesRegla.filter((item: any) => !accionesHerenciaKeys.has(buildPermisoKey(item))).map((item: any) => ({
+          rutaId: buildPermisoKey(item),
+          nombre: String(item?.etiquetas || item?.method || buildPermisoKey(item)),
+          path: '',
+          tipo: 'ACCIÓN',
+          antes: { asociada: false },
+          despues: { asociada: false },
+          resultado: 'DISPONIBLE_PARA_PARAMETRIZAR',
+        })),
+        ...accionesHerencia.filter((item: any) => !accionesReglaKeys.has(buildPermisoKey(item))).map((item: any) => ({
+          rutaId: buildPermisoKey(item),
+          nombre: String(item?.etiquetas || item?.method || buildPermisoKey(item)),
+          path: '',
+          tipo: 'ACCIÓN',
+          antes: { asociada: true },
+          despues: { asociada: true },
+          resultado: 'HERENCIA_NO_INCLUIDA_EN_REGLA',
+        })),
+      ];
       const digestDespues = computeRuleCatalogPermisosDigest(rulesMap);
       const countDespues = Object.keys(rulesMap).length;
       const catalogoCambio = digestAntes !== digestDespues;
@@ -4248,12 +4490,35 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
         { notify: true }
       );
 
+      const reglaCatalogoSeleccionada = herenciaSeleccionadaId.startsWith(REGLA_SA_SYNTH_PREFIX)
+        ? Object.values(rulesMap).find((rule: any) => {
+            const rid = resolveReglaLegacyId(rule) || resolveReglaPublicId(rule);
+            return `${REGLA_SA_SYNTH_PREFIX}${rid}` === herenciaSeleccionadaId;
+          }) as any
+        : reglaTenantSeleccionada || null;
+      const vistasDespues = reglaCatalogoSeleccionada
+        ? (Array.isArray(reglaCatalogoSeleccionada?.recurso) ? reglaCatalogoSeleccionada.recurso.length : 0)
+        : vistasAntes + cambiosSincronizacion.filter((cambio: any) =>
+            cambio?.antes?.asociada !== true && cambio?.despues?.asociada === true
+          ).length;
+      const accionesDespues = reglaCatalogoSeleccionada
+        ? (Array.isArray(reglaCatalogoSeleccionada?.accionesUsu) ? reglaCatalogoSeleccionada.accionesUsu.length : 0)
+        : accionesAntes;
+      const cambiosComparacion = reglaTenantSeleccionada ? diffReglaHerencia : cambiosSincronizacion;
+      const nuevasParametrizables = cambiosComparacion.filter((cambio: any) =>
+        cambio?.resultado === 'DISPONIBLE_PARA_PARAMETRIZAR' ||
+        (cambio?.antes?.asociada !== true && cambio?.resultado !== 'HERENCIA_NO_INCLUIDA_EN_REGLA')
+      );
+
       const lineas: string[] = [
         `Documentos en catálogo de reglas: ${countAntes} → ${countDespues}.`,
+        reglaTenantSeleccionada
+          ? `Comparación directa: regla del tenant seleccionado (${vistasRegla.length} vistas / ${accionesRegla.length} acciones) contra su herencia existente (${vistasHerencia.length} vistas / ${accionesHerencia.length} acciones).`
+          : 'No se encontró una regla propia del tenant seleccionado para comparar con su herencia.',
         countDespues === 0
           ? 'No se encontraron reglas para el SuperAdmin/tenant elegido. Verifica generacionTenatGlobales en Mongo y el dominio activo.'
           : '',
-        `SincronizaciÃ³n servidor: ${contextosSincronizados} contexto(s), ${rutasSincronizadas} vista(s) agregada(s) a herencia.`,
+        `Sincronización del servidor: ${contextosSincronizados} contexto(s), ${rutasSincronizadas} vista(s) agregada(s) a la herencia.`,
         catalogoCambio
           ? 'Hay cambios en el catálogo (reglas nuevas o permisos/recursos actualizados).'
           : 'La firma del catálogo coincide con la anterior (mismo contenido efectivo de permisos).',
@@ -4262,7 +4527,24 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
           : 'No quedó herencia seleccionada (sin opciones o sin datos).',
         'Las listas Vistas / Acciones reflejan la herencia devuelta por el servidor.',
       ].filter(Boolean);
-      setReglasHerenciaSyncReport({ lineas });
+      setReglasHerenciaSyncReport({
+        lineas,
+        cambios: cambiosComparacion,
+        reglaSeleccionada: {
+          id: herenciaSeleccionadaId,
+          nombre: reglaTenantSeleccionada
+            ? `Regla ${resolveReglaLegacyId(reglaTenantSeleccionada) || resolveReglaPublicId(reglaTenantSeleccionada)} ↔ ${String(herenciaSeleccionadaOption?.label || herenciaSeleccionadaId)}`
+            : String(herenciaSeleccionadaOption?.label || herenciaSeleccionadaId),
+          fuente: reglaTenantSeleccionada
+            ? `regla propia de ${rolSaSeleccionado || 'tenant'} contra ${String(herenciaSeleccionadaAntes?.fuenteHerencia || 'herencia parametrizada')}`
+            : String(herenciaSeleccionadaAntes?.fuenteHerencia || 'herencia parametrizada'),
+          vistasAntes,
+          accionesAntes,
+          vistasDespues,
+          accionesDespues,
+        },
+        nuevasParametrizables,
+      });
       if (herenciaAplicada) {
         toast.success('Vistas y acciones del formulario actualizadas desde herencia/regla.');
       }
@@ -4744,12 +5026,54 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
     if (!saSel) return;
 
     let cancelled = false;
-    void refreshReglasCatalogoPorSaActualizar(ep, saSel).then(({ rulesMap }) => {
+    const cargarReglaSeleccionada = async () => {
+      const jwtSa = String(tenantGlobalActor?.tenantSuperAdminId || '').trim();
+      const actorCounter = jerarquiaSaCounters.find((row) =>
+        idsPermisoRefsCoinciden(String(row?.tenantSuperAdminId || ''), jwtSa)
+      );
+      const debeSincronizarDiosRaiz =
+        String(tenantGlobalActor?.rol || '').trim().toUpperCase() === 'DIOS' &&
+        Boolean(actorCounter) &&
+        !String(actorCounter?.codigoPadre || '').trim() &&
+        idsPermisoRefsCoinciden(saSel, jwtSa);
+      const syncKey = `${ep}:${saSel}`;
+
+      if (debeSincronizarDiosRaiz && !reglasDiosAutoSyncRef.current.has(syncKey)) {
+        reglasDiosAutoSyncRef.current.add(syncKey);
+        try {
+          const syncPayload: any = await apiFetch(
+            '/api/config/tenant/tipo/actualizar/dios/reglas/jerarquia/roles',
+            {
+              method: 'PUT',
+              body: {
+                tenantSuperAdmin: toMongoIdQueryParam(saSel),
+                _diosAlcanceUnico: true,
+                _sincronizarDesdeSeleccion: true,
+              },
+            },
+          );
+          const detalle = syncPayload?.data?.sincronizacion || syncPayload?.data?.regla?.sincronizacion || {};
+          const nuevas = Number(detalle?.vistasFaltantesTotal || 0);
+          toast.success(
+            nuevas > 0
+              ? `Regla DIOS sincronizada: ${nuevas} ruta(s) nueva(s) asociada(s) desde rutasSeguridad.`
+              : 'Regla DIOS validada: ya coincide con todas las rutas activas de rutasSeguridad.',
+          );
+          invalidarReglasCache();
+        } catch (error: any) {
+          reglasDiosAutoSyncRef.current.delete(syncKey);
+          toast.error(String(error?.message || 'No se pudo sincronizar la regla DIOS con rutasSeguridad.'));
+        }
+      }
+
+      const { rulesMap } = await refreshReglasCatalogoPorSaActualizar(ep, saSel);
       if (cancelled) return;
       // Usar ref para evitar que ruleCatalog en deps cause el loop delta.
       const catalogMerged = { ...ruleCatalogRef.current, ...rulesMap };
       if (!actualizarReglasGlobalesSoloLectura()) {
-        seleccionarReglaJerarquiaPorSaActualizar(ep, saSel, catalogMerged);
+        // La respuesta acaba de ser consultada para este SA: evita que reglas de otras
+        // ramas ya presentes en el catálogo vuelvan ambigua la selección.
+        seleccionarReglaJerarquiaPorSaActualizar(ep, saSel, rulesMap);
       }
 
       const tenantActual = String(tenantFilterByEndpoint[ep] || '').trim();
@@ -4772,7 +5096,8 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
           void cargarUsuariosParaEndpoint(ep, autoTg);
         }
       }
-    });
+    };
+    void cargarReglaSeleccionada();
 
     return () => {
       cancelled = true;
@@ -4791,6 +5116,8 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
     loadingData,
     reglas.length,
     contextos.length,
+    tenantGlobalActor?.rol,
+    tenantGlobalActor?.tenantSuperAdminId,
     // ruleCatalog excluido: loadDeltaForRule lo actualiza y generaría loop infinito.
   ]);
 
@@ -6048,7 +6375,16 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
           menuLoading={esModuloPoliticaEspecial ? false : inlineModuloMenu.menuLoading}
           onRefreshMenu={() => inlineModuloMenu.refreshMenu()}
           onReloadData={() => void hydrateData({ force: true })}
-          reloadingData={loadingData}
+          reloadingData={loadingData || realtimeSyncing}
+          realtimeConnected={realtimeConnected}
+          onRealtimeClick={() => {
+            if (!realtimeConnected) reconectarSocket();
+            toast.info(
+              realtimeConnected
+                ? 'Visualización de reglas y herencias en tiempo real activa.'
+                : 'Conexión en tiempo real inactiva. Intentando reconectar...',
+            );
+          }}
         >
           {esModuloPoliticasRuntime ? (
             <PoliticasRuntimePanel />
@@ -6363,16 +6699,80 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
       </Dialog>
 
       <Dialog open={!!reglasHerenciaSyncReport} onOpenChange={(open) => !open && setReglasHerenciaSyncReport(null)}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="max-h-[92vh] overflow-hidden sm:max-w-4xl">
           <DialogHeader>
             <DialogTitle className="text-base">Sincronización reglas y herencia</DialogTitle>
           </DialogHeader>
           {reglasHerenciaSyncReport ? (
-            <ul className="list-inside list-disc space-y-2 text-xs text-muted-foreground">
-              {reglasHerenciaSyncReport.lineas.map((line, i) => (
-                <li key={i}>{line}</li>
-              ))}
-            </ul>
+            <div className="max-h-[76vh] space-y-3 overflow-auto pr-1">
+              {reglasHerenciaSyncReport.reglaSeleccionada ? (
+                <div className="space-y-2 rounded-md border border-border bg-muted/40 p-3 text-xs">
+                  <p className="font-semibold text-foreground">Regla/herencia validada del tenant seleccionado</p>
+                  <p className="break-words text-muted-foreground">{reglasHerenciaSyncReport.reglaSeleccionada.nombre}</p>
+                  <div className="grid gap-2 sm:grid-cols-3">
+                    <div><span className="font-medium">Fuente:</span> {reglasHerenciaSyncReport.reglaSeleccionada.fuente}</div>
+                    <div><span className="font-medium">Vistas:</span> {reglasHerenciaSyncReport.reglaSeleccionada.vistasAntes} → {reglasHerenciaSyncReport.reglaSeleccionada.vistasDespues}</div>
+                    <div><span className="font-medium">Acciones:</span> {reglasHerenciaSyncReport.reglaSeleccionada.accionesAntes} → {reglasHerenciaSyncReport.reglaSeleccionada.accionesDespues}</div>
+                  </div>
+                </div>
+              ) : null}
+              <ul className="list-inside list-disc space-y-2 text-xs text-muted-foreground">
+                {reglasHerenciaSyncReport.lineas.map((line, i) => (
+                  <li key={i}>{line}</li>
+                ))}
+              </ul>
+              {reglasHerenciaSyncReport.cambios.length ? (
+                <div className="max-h-[52vh] overflow-auto rounded-md border border-border">
+                  <table className="w-full text-left text-xs">
+                    <thead className="sticky top-0 bg-background">
+                      <tr>
+                        <th className="px-2 py-2">Nombre / ruta</th>
+                        <th className="px-2 py-2">Tipo</th>
+                        <th className="px-2 py-2">Antes</th>
+                        <th className="px-2 py-2">Después</th>
+                        <th className="px-2 py-2">Resultado</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {reglasHerenciaSyncReport.cambios.map((cambio: any, index: number) => (
+                        <tr key={`${cambio?.rutaId || index}`} className="border-t border-border align-top">
+                          <td className="px-2 py-2">
+                            <div className="font-medium text-foreground">{String(cambio?.nombre || '-')}</div>
+                            <div className="font-mono text-[10px] text-muted-foreground">{String(cambio?.path || '-')}</div>
+                          </td>
+                          <td className="px-2 py-2">{String(cambio?.tipo || 'RUTA')}</td>
+                          <td className="px-2 py-2">{cambio?.antes?.asociada ? 'Asociada' : 'No asociada'}</td>
+                          <td className="px-2 py-2">{cambio?.despues?.asociada ? 'Asociada' : 'Sin cambio'}</td>
+                          <td className="px-2 py-2">{String(cambio?.resultado || '-')}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="rounded-md border border-border p-3 text-xs text-muted-foreground">
+                  No se detectaron rutas nuevas para asociar.
+                </p>
+              )}
+              <div className="rounded-md border border-border p-3 text-xs">
+                <p className="mb-2 font-semibold text-foreground">
+                  Nuevas rutas/herencias disponibles para parametrizar ({reglasHerenciaSyncReport.nuevasParametrizables?.length || 0})
+                </p>
+                {reglasHerenciaSyncReport.nuevasParametrizables?.length ? (
+                  <ul className="max-h-44 space-y-2 overflow-auto">
+                    {reglasHerenciaSyncReport.nuevasParametrizables.map((item: any, index: number) => (
+                      <li key={`${item?.rutaId || item?.path || index}`} className="rounded border border-border bg-muted/30 p-2">
+                        <div className="font-medium text-foreground">{String(item?.nombre || item?.path || 'Ruta sin nombre')}</div>
+                        <div className="font-mono text-[10px] text-muted-foreground">{String(item?.path || '-')}</div>
+                        <div className="mt-1 text-muted-foreground">Tipo: {String(item?.tipo || 'RUTA')} · Resultado: {String(item?.resultado || 'Pendiente de parametrizar')}</div>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-muted-foreground">La regla seleccionada ya está alineada; no hay nuevas rutas para parametrizar.</p>
+                )}
+              </div>
+            </div>
           ) : null}
           <div className="flex justify-end pt-2">
             <Button type="button" size="sm" variant="outline" onClick={() => setReglasHerenciaSyncReport(null)}>

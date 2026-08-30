@@ -19,7 +19,7 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { Loader2, RefreshCw, Users, Search, Zap, Trash2 } from 'lucide-react';
+import { Circle, Loader2, RefreshCw, Users, Search, Zap, Trash2 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { apiFetch } from '@/app/services/api';
 import { deactivateUser } from '@/app/services/adminService';
@@ -30,6 +30,7 @@ import type {
     UsuarioRolCorporativoItem,
 } from '@/app/presentation/components/admin/usuarios-tenant/usuariosRolCorporativoTypes';
 import { normalizePublicIdForApi, resolveEntityPublicId } from '@/app/utils/entityPublicId';
+import { useUserPresence } from '@/app/realtime/useUserPresence';
 
 interface UsuariosRolCorporativoListadoModalProps {
     open: boolean;
@@ -42,6 +43,7 @@ export const UsuariosRolCorporativoListadoModal = ({
     onClose,
     onEditUsuario,
 }: UsuariosRolCorporativoListadoModalProps): React.ReactElement => {
+    const onlineUserKeys = useUserPresence(open);
     const [loading, setLoading] = useState(false);
     const [syncingLote, setSyncingLote] = useState(false);
     const [data, setData] = useState<ListadoUsuariosRolCorporativoResponse | null>(null);
@@ -91,6 +93,15 @@ export const UsuariosRolCorporativoListadoModal = ({
     const pendientesCount = useMemo(
         () => (data?.usuarios ?? []).filter((u) => u.permisosClientePendiente).length,
         [data?.usuarios]
+    );
+
+    const onlineCount = useMemo(
+        () => (data?.usuarios ?? []).reduce((total, usuario) => {
+            const id = resolveEntityPublicId(usuario).trim().toLowerCase();
+            const correo = String(usuario.correo || '').trim().toLowerCase();
+            return total + (onlineUserKeys.has(id) || onlineUserKeys.has(correo) ? 1 : 0);
+        }, 0),
+        [data?.usuarios, onlineUserKeys]
     );
 
     const usuarioSeleccionado = useMemo(
@@ -185,6 +196,12 @@ export const UsuariosRolCorporativoListadoModal = ({
                             corporativo).
                         </p>
                     )}
+                    <div className="pt-1 text-left">
+                        <Badge variant="outline" className="gap-1 border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
+                            <Circle className="h-2 w-2 fill-current" />
+                            En línea · {onlineCount}
+                        </Badge>
+                    </div>
                 </DialogHeader>
 
                 <div className="shrink-0 border-b border-border px-6 py-3 flex flex-wrap gap-2">
@@ -244,6 +261,8 @@ export const UsuariosRolCorporativoListadoModal = ({
                                 const syncing = syncingUsuarioId === uid;
                                 const expandido = usuarioDetalleId === uid;
                                 const seleccionado = usuarioSeleccionadoId === uid;
+                                const online = onlineUserKeys.has(uid.trim().toLowerCase())
+                                    || onlineUserKeys.has(String(u.correo || '').trim().toLowerCase());
                                 return (
                                     <div
                                         key={uid}
@@ -266,6 +285,12 @@ export const UsuariosRolCorporativoListadoModal = ({
                                             <div className="min-w-0 flex-1">
                                                 <p className="truncate font-medium">{u.correo}</p>
                                                 <div className="mt-1 flex flex-wrap gap-1.5">
+                                                    {online ? (
+                                                        <Badge variant="outline" className="gap-1 border-emerald-500/40 bg-emerald-500/10 text-[10px] text-emerald-700 dark:text-emerald-300">
+                                                            <Circle className="h-2 w-2 fill-current" />
+                                                            En línea
+                                                        </Badge>
+                                                    ) : null}
                                                     <Badge variant="secondary" className="text-[10px]">
                                                         {u.rol ?? '—'}
                                                     </Badge>

@@ -932,7 +932,7 @@ export default function PaletaRutasPage() {
                                             <Input
                                                 value={paletaColores[key]}
                                                 onChange={(e) => handleColorChange(key, e.target.value)}
-                                                className="h-7 text-xs font-mono mt-1"
+                                                className="mt-1 h-7 font-mono text-xs text-foreground placeholder:text-muted-foreground"
                                                 placeholder="#000000"
                                                 maxLength={7}
                                             />

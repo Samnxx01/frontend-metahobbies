@@ -9,6 +9,7 @@ type Props = {
   onChangeSeleccion: (ids: string[]) => void;
   disabled?: boolean;
   loading?: boolean;
+  search?: string;
 };
 
 function RecursoLabel({ name, path, tipo }: { name: string; path?: string; tipo?: string }) {
@@ -31,20 +32,49 @@ export function DiosReglaRecursosJerarquiaPanel({
   onChangeSeleccion,
   disabled = false,
   loading = false,
+  search = '',
 }: Props): React.ReactElement {
   const [modulosAbiertos, setModulosAbiertos] = useState<Set<string>>(() => new Set());
 
+  const searchTerm = search.trim().toLocaleLowerCase('es');
+  const matches = (...values: unknown[]) =>
+    !searchTerm || values.some((value) => String(value || '').toLocaleLowerCase('es').includes(searchTerm));
+  const filteredTree = useMemo(() => {
+    if (!searchTerm) return tree;
+    return tree
+      .map((suite) => {
+        if (matches(suite.name, gobernanzaEntityId(suite))) return suite;
+        const modulos = suite.modulos
+          .map((mod) => {
+            if (matches(mod.name, gobernanzaEntityId(mod))) return mod;
+            const formularios = mod.formularios.filter((formulario) =>
+              matches(formulario.name, formulario.path, formulario.tipo, gobernanzaEntityId(formulario))
+            );
+            return { ...mod, formularios };
+          })
+          .filter((mod) => mod.formularios.length > 0);
+        return { ...suite, modulos };
+      })
+      .filter((suite) => suite.modulos.length > 0);
+  }, [tree, searchTerm]);
+  const filteredFlatFallback = useMemo(
+    () => flatFallback.filter((recurso) =>
+      matches(recurso.name, recurso.path, gobernanzaEntityId(recurso))
+    ),
+    [flatFallback, searchTerm],
+  );
+
   useEffect(() => {
-    if (!tree.length) return;
-    const keys = tree.flatMap((suite) =>
+    if (!filteredTree.length) return;
+    const keys = filteredTree.flatMap((suite) =>
       suite.modulos.map((mod) => `${gobernanzaEntityId(suite)}::${gobernanzaEntityId(mod)}`)
     );
     setModulosAbiertos(new Set(keys));
-  }, [tree]);
+  }, [filteredTree]);
 
   const recursosFlat = useMemo(
-    () => (tree.length ? tree.flatMap((s) => s.modulos.flatMap((m) => m.formularios)) : flatFallback),
-    [tree, flatFallback],
+    () => (tree.length ? filteredTree.flatMap((s) => s.modulos.flatMap((m) => m.formularios)) : filteredFlatFallback),
+    [tree.length, filteredTree, filteredFlatFallback],
   );
 
   const selSet = useMemo(() => new Set(seleccionados.map((id) => String(id).trim())), [seleccionados]);
@@ -90,7 +120,7 @@ export function DiosReglaRecursosJerarquiaPanel({
   if (!tree.length) {
     return (
       <div className="space-y-1">
-        {flatFallback.map((r) => (
+        {filteredFlatFallback.map((r) => (
           <label key={gobernanzaEntityId(r)} className="flex cursor-pointer items-start gap-2 text-xs text-foreground">
             <input
               type="checkbox"
@@ -110,7 +140,7 @@ export function DiosReglaRecursosJerarquiaPanel({
 
   return (
     <div className="space-y-2">
-      {tree.map((suite) => (
+      {filteredTree.map((suite) => (
         <div key={gobernanzaEntityId(suite)} className="rounded-md border border-border/80 bg-muted/20">
           <div className="border-b border-border/60 bg-muted/40 px-2.5 py-1.5 text-[11px] font-bold uppercase tracking-wide text-foreground">
             {suite.name}

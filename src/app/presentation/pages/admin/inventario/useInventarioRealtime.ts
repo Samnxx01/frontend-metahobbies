@@ -15,9 +15,7 @@ export const useInventarioRealtime = (onInvalidado: (evento: InventarioInvalidad
       timeoutId = setTimeout(() => {
         const eventToHandle = pending;
         pending = null;
-        if (eventToHandle) Promise.resolve(handlerRef.current(eventToHandle)).catch((error) => {
-          console.error('[MABS][INVENTARIO][REALTIME] No se pudo refrescar:', error);
-        });
+        if (eventToHandle) void Promise.resolve(handlerRef.current(eventToHandle)).catch(() => undefined);
       }, 250);
     };
     window.addEventListener(INVENTARIO_BROWSER_EVENT, listener);

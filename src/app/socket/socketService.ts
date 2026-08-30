@@ -42,6 +42,7 @@ export const conectarSocket = (): Socket | null => {
 export const desconectadoUsu = (): void => {
     if (socket) {
         socket.disconnect();
+        socket = null;
     }
 };
 

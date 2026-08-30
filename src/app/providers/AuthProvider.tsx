@@ -89,6 +89,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                 localStorage.setItem('user', JSON.stringify(userToSave));
                 setToken(response.token);
                 setUser(userToSave);
+                // El token ya está persistido: registra inmediatamente esta sesión
+                // en Socket.IO para que presencia la reporte como "En línea".
+                desconectadoUsu();
+                conectarSocket();
                 if (typeof window !== 'undefined') {
                     window.dispatchEvent(new Event('mabs-auth-changed'));
                 }

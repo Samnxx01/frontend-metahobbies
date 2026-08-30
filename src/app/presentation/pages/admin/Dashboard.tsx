@@ -20,7 +20,7 @@ import { useAuth } from '@/app/providers/AuthProvider';
 import { getJerarquiaUsuarios, TenantGlobalInfo, TenantGlobalNode } from '@/app/services/tenantUsuariosService';
 import ParametrizacionGenyProcent from './ParametrizacionGenyProcent/ParametrizacionGenyProcent';
 import ParametrizacionRedirects from './ParametrizacionRedirects';
-import { Edit, HelpCircle, Loader2, Network, Palette, RefreshCw, Route, Users } from 'lucide-react';
+import { Circle, Edit, HelpCircle, Loader2, Network, Palette, RefreshCw, Route, Users } from 'lucide-react';
 import { socketListeners, socketCleanup } from '@/app/socket/socketEvents';
 import { aplicarPaletaEnApp } from '@/app/utils/ColorUtils';
 import type { ColoresPaleta } from '@/app/utils/ColorUtils';
@@ -31,6 +31,7 @@ import {
 } from '@/app/services/coloresAppService';
 import type { ColoresApp } from '@/app/services/coloresAppService';
 import { adminEntityId, adminEntityIdForPath, matchesAdminEntityRef, sameAdminEntityId } from '@/app/utils/adminEntityId';
+import { useUserPresence } from '@/app/realtime/useUserPresence';
 
 type PaletaColores = ColoresApp;
 
@@ -160,6 +161,7 @@ type DashboardUser = {
         cc?: string | null;
     } | null;
     estado?: boolean;
+    tiempoSesion?: string | null;
 };
 
 type DashboardTextConfig = {
@@ -204,6 +206,7 @@ const loadDashboardTextConfig = (): DashboardTextConfig => {
 
 export default function Dashboard(): React.ReactElement {
     const { user } = useAuth();
+    const onlineUserKeys = useUserPresence(true);
 
     // ── Usuarios ──────────────────────────────────────────────────────────────
     const [usuarios, setUsuarios] = useState<DashboardUser[]>([]);
@@ -274,6 +277,18 @@ export default function Dashboard(): React.ReactElement {
         };
         const tipo = String(perfil.tipo || '').toUpperCase();
         return [labels[tipo] || 'Perfil', perfil.cargo || perfil.cc].filter(Boolean).join(' | ');
+    };
+
+    const getUltimaConexion = (u: DashboardUser): string => {
+        const raw = String(u?.tiempoSesion || '').trim();
+        if (!raw) return 'Sin registro';
+        const fecha = new Date(raw);
+        if (Number.isNaN(fecha.getTime())) return 'Sin registro';
+        return new Intl.DateTimeFormat('es-CO', {
+            dateStyle: 'short',
+            timeStyle: 'short',
+            timeZone: 'America/Bogota',
+        }).format(fecha);
     };
 
     // ── Efectos: socket de paleta ─────────────────────────────────────────────
@@ -355,6 +370,15 @@ export default function Dashboard(): React.ReactElement {
             || getUsuarioPerfil(u).toLowerCase().includes(q)
         ));
     }, [usuarioSearch, usuarios]);
+
+    const usuariosOnlineCount = useMemo(
+        () => usuarios.reduce((total, usuario) => {
+            const id = adminEntityId(usuario).trim().toLowerCase();
+            const correo = String(usuario?.correo || usuario?.email || '').trim().toLowerCase();
+            return total + (onlineUserKeys.has(id) || onlineUserKeys.has(correo) ? 1 : 0);
+        }, 0),
+        [usuarios, onlineUserKeys],
+    );
 
     const openEditUser = (u: DashboardUser): void => {
         setEditingUser(u);
@@ -506,6 +530,10 @@ export default function Dashboard(): React.ReactElement {
                     <div className="flex items-center gap-2">
                         <Users className="h-5 w-5 text-primary" />
                         <CardTitle>Gestion de Usuarios</CardTitle>
+                        <Badge variant="outline" className="gap-1 border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
+                            <Circle className="h-2 w-2 fill-current" />
+                            En línea · {usuariosOnlineCount}
+                        </Badge>
                     </div>
                     <p className="text-sm text-muted-foreground">Busca y edita cualquier usuario del sistema.</p>
                 </CardHeader>
@@ -529,12 +557,15 @@ export default function Dashboard(): React.ReactElement {
                                     <TableHead>Correo</TableHead>
                                     <TableHead>Rol</TableHead>
                                     <TableHead>Estado</TableHead>
+                                    <TableHead>Última conexión</TableHead>
                                     <TableHead className="text-right">Editar</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {filteredUsuarios.map((u, i) => {
                                     const uid = adminEntityId(u) || `usuario-${i}`;
+                                    const online = onlineUserKeys.has(uid.trim().toLowerCase())
+                                        || onlineUserKeys.has(String(u?.correo || u?.email || '').trim().toLowerCase());
                                     return (
                                         <TableRow key={uid}>
                                             <TableCell>
@@ -550,6 +581,21 @@ export default function Dashboard(): React.ReactElement {
                                                     {u?.estado !== false ? 'Activo' : 'Inactivo'}
                                                 </Badge>
                                             </TableCell>
+                                            <TableCell>
+                                                {online ? (
+                                                    <Badge variant="outline" className="gap-1 border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
+                                                        <Circle className="h-2 w-2 fill-current" />
+                                                        En línea
+                                                    </Badge>
+                                                ) : (
+                                                    <span
+                                                        className="text-xs text-muted-foreground whitespace-nowrap"
+                                                        title="Fecha y hora de la última conexión"
+                                                    >
+                                                        {getUltimaConexion(u)}
+                                                    </span>
+                                                )}
+                                            </TableCell>
                                             <TableCell className="text-right">
                                                 <Button variant="ghost" size="icon" onClick={() => openEditUser(u)}>
                                                     <Edit className="h-4 w-4" />
@@ -560,7 +606,7 @@ export default function Dashboard(): React.ReactElement {
                                 })}
                                 {!usuariosLoading && filteredUsuarios.length === 0 && (
                                     <TableRow>
-                                        <TableCell colSpan={5} className="py-6 text-center text-muted-foreground">
+                                        <TableCell colSpan={6} className="py-6 text-center text-muted-foreground">
                                             Sin usuarios cargados
                                         </TableCell>
                                     </TableRow>
@@ -780,7 +826,7 @@ export default function Dashboard(): React.ReactElement {
                             {/* Color pickers con descripcion */}
                             <div className="space-y-4">
                                 {COLOR_META.map(({ key, label, afecta }) => (
-                                    <div key={key} className="flex items-start gap-4 p-3 rounded-lg border border-border bg-card">
+                                    <div key={key} className="flex items-start gap-4 rounded-lg border border-border bg-card p-3 text-card-foreground">
                                         {/* Swatch + picker */}
                                         <div className="flex flex-col items-center gap-2 shrink-0">
                                             <div
@@ -807,7 +853,7 @@ export default function Dashboard(): React.ReactElement {
                                             <Input
                                                 value={paletaColores[key]}
                                                 onChange={(e) => handleColorChange(key, e.target.value)}
-                                                className="h-7 text-xs font-mono mt-1"
+                                                className="mt-1 h-7 font-mono text-xs text-foreground placeholder:text-muted-foreground"
                                                 placeholder="#000000"
                                                 maxLength={7}
                                             />

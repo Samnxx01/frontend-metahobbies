@@ -1,7 +1,6 @@
 import React from 'react';
 import { toast } from 'react-toastify';
 import { Button } from '@/components/ui/button';
-import { GOVERNANCE_PERMISSIONS_ACTION_IDS, GovernedButton } from '@/app/presentation/actions';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -162,28 +161,7 @@ export const GobernanzaFormFieldsInner: React.FC<{
   return (    <>
       {(PERM_ADMIN_TENANT_GLOBAL_ACTUALIZAR_IDS.has(endpoint.id) || endpoint.id === 'perm-admin-tenant-global') ? (
         <div className="rounded-md border border-info/20 bg-info/10 p-3 text-xs text-info">
-          <div className="mb-2 flex flex-wrap items-center gap-2">
-            <GovernedButton
-              actionId={GOVERNANCE_PERMISSIONS_ACTION_IDS.VALIDATE_NEW_ROUTES}
-              type="button"
-              size="sm"
-              variant="outline"
-              disabled={!!syncRunningByEndpoint[endpoint.id]}
-              onClick={() => runHerenciaSyncCheck(endpoint.id, false)}
-            >
-              Validar rutas nuevas
-            </GovernedButton>
-            <GovernedButton
-              actionId={GOVERNANCE_PERMISSIONS_ACTION_IDS.SYNC_NOW}
-              type="button"
-              size="sm"
-              variant="outline"
-              disabled={!!syncRunningByEndpoint[endpoint.id]}
-              onClick={() => runHerenciaSyncCheck(endpoint.id, true)}
-            >
-              Sincronizar ahora
-            </GovernedButton>
-          </div>
+          <p className="mb-2 font-medium">Estado de sincronización del catálogo</p>
           {(() => {
             const sync = syncInfoByEndpoint[endpoint.id];
             if (!sync) return <p>Selecciona tenant y ejecuta validacion para ver rutas faltantes.</p>;
@@ -1210,29 +1188,9 @@ export const GobernanzaFormFieldsInner: React.FC<{
                   </span>
                 </p>
               ) : null}
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-8 text-xs"
-                  disabled={!tenantGlobalSelected || loadingData}
-                  onClick={() => {
-                    const tg = getFieldValue(endpoint.id, 'tenantGlobal').trim();
-                    if (!tg) {
-                      toast.warning('Selecciona un tenant SuperAdmin o global primero.');
-                      return;
-                    }
-                    void fetchHerenciasAsociadasByTenantGlobal(endpoint.id, tg, null, { notify: true });
-                  }}
-                >
-                  Validar con servidor
-                </Button>
-                <span className="text-[11px] text-muted-foreground">
-                  También se sincroniza al volver a esta pestaña, si cambia el catálogo de reglas, y cada ~45s con el
-                  modal abierto (vistas/acciones desde servidor, sin marcar checks a mano).
-                </span>
-              </div>
+              <p className="mt-2 text-[11px] text-muted-foreground">
+                La herencia se valida al abrir esta pestaña y al ejecutar la sincronización principal.
+              </p>
             </div>
           );
         }
@@ -1688,7 +1646,7 @@ export const GobernanzaFormFieldsInner: React.FC<{
           );
         }
         if (field.name === 'x-regla-id') {
-          const reglasFiltradas = getReglasFiltradasPorTenant(endpoint.id);
+          let reglasFiltradas = getReglasFiltradasPorTenant(endpoint.id);
           const actorTsaJwt = String(tenantGlobalActor?.tenantSuperAdminId || '').trim();
           const actorTgJwt = String(tenantGlobalActor?.tenantGlobalId || '').trim();
           const actorTcJwt = String(tenantGlobalActor?.tenantCorporativoId || '').trim();
@@ -1697,6 +1655,12 @@ export const GobernanzaFormFieldsInner: React.FC<{
             const saSel = String(
               saFilterByEndpoint[endpoint.id] || actorTsaJwt || '',
             ).trim();
+            if (!permiteReglaDiosEnActualizarReglasGlobales(saSel)) {
+              reglasFiltradas = reglasFiltradas.filter((regla) => {
+                const doc = ruleCatalog[regla.id];
+                return doc?.securityPlatform !== true;
+              });
+            }
             const tenantFiltro = tenantFilterByEndpoint[endpoint.id] || '';
             const soloLecturaActualizarGlobales = actualizarReglasGlobalesSoloLectura();
             const opcionesTenantGlobal = saSel
@@ -1706,6 +1670,11 @@ export const GobernanzaFormFieldsInner: React.FC<{
             const reglaPorSa = soloLecturaActualizarGlobales
               ? undefined
               : (saSel ? findReglaJerarquiaPorSa(saSel, undefined, endpoint.id) : undefined);
+            if (reglaPorSa?.id && !reglasFiltradas.some((regla) => regla.id === reglaPorSa.id)) {
+              // La recarga por SA actualiza ruleCatalog antes que el índice resumido `reglas`.
+              // Mantener la regla encontrada como opción evita mostrar un falso "no hay regla".
+              reglasFiltradas = [reglaPorSa, ...reglasFiltradas];
+            }
             const reglaCargadaDoc = reglaCargadaId ? ruleCatalog[reglaCargadaId] : null;
             const docReglaSa = reglaCargadaDoc
               || (reglaPorSa ? ruleCatalog[reglaPorSa.id] : null);
@@ -1745,7 +1714,7 @@ export const GobernanzaFormFieldsInner: React.FC<{
                           seleccionarReglaJerarquiaPorSaActualizar(
                             endpoint.id,
                             canonico || nextSa,
-                            catalogMerged,
+                            rulesMap,
                           );
                         }
                         if (actualizarReglasGlobalesSoloLectura()) {

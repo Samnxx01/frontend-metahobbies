@@ -1,5 +1,5 @@
 import React from 'react';
-import { Loader2, RefreshCcw, ShieldCheck } from 'lucide-react';
+import { Loader2, Radio, RefreshCcw, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { GOBERNANZA_INVENTARIO_PAGE } from './gobernanzaInventarioLayout';
 
@@ -12,6 +12,8 @@ export type GobernanzaModuloOperativoShellProps = {
   onReloadData?: () => void;
   reloadingData?: boolean;
   hideInfoBanner?: boolean;
+  realtimeConnected?: boolean;
+  onRealtimeClick?: () => void;
   children: React.ReactNode;
 };
 
@@ -27,6 +29,8 @@ export function GobernanzaModuloOperativoShell({
   onReloadData,
   reloadingData,
   hideInfoBanner = false,
+  realtimeConnected,
+  onRealtimeClick,
   children,
 }: GobernanzaModuloOperativoShellProps): React.ReactElement {
   return (
@@ -43,6 +47,18 @@ export function GobernanzaModuloOperativoShell({
           ) : null}
         </div>
         <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-end sm:justify-end">
+          {typeof realtimeConnected === 'boolean' ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onRealtimeClick}
+              className={realtimeConnected ? 'w-full shrink-0 justify-center border-emerald-500 text-emerald-700 sm:w-auto' : 'w-full shrink-0 justify-center border-amber-500 text-amber-700 sm:w-auto'}
+              title={realtimeConnected ? 'Datos de gobernanza sincronizados en tiempo real' : 'Reconectar visualización en tiempo real'}
+            >
+              <Radio className={`mr-2 h-4 w-4 ${realtimeConnected ? 'animate-pulse' : ''}`} />
+              Visualización en tiempo real
+            </Button>
+          ) : null}
           {onReloadData || onRefreshMenu ? (
             <Button
               type="button"

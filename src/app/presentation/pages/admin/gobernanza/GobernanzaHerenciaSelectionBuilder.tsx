@@ -134,11 +134,10 @@ export const GobernanzaHerenciaSelectionBuilder: React.FC<{ endpoint: EndpointSp
               ) : (
                 <RefreshCw className="mr-2 h-4 w-4" />
               )}
-              Actualizar catálogo de reglas y herencia
+              Sincronizar rutas y ver cambios
             </Button>
             <p className="max-w-xl text-[11px] leading-snug text-muted-foreground">
-              Detecta reglas nuevas o modificadas en servidor, alinea el catálogo con la herencia del tenant elegido y
-              refresca vistas y acciones en el formulario.
+              DIOS raíz incorpora las rutas activas. Los demás tenant muestran diferencias para parametrizarlas según su regla.
             </p>
           </div>
         ) : null}
@@ -512,6 +511,7 @@ export const GobernanzaHerenciaSelectionBuilder: React.FC<{ endpoint: EndpointSp
                             }
                             disabled={actorEsTenantCorporativoScope()}
                             loading={diosRecursosJerarquiaLoading && !diosRecursosJerarquiaTree.length}
+                            search={vistaSearchByEndpoint[endpoint.id] || ''}
                           />
                         </div>
                       ) : (

@@ -518,6 +518,23 @@ const carritoService = {
     };
   },
 
+  async listarProcesosEnCurso(params: { minutos?: number; limit?: number } = {}): Promise<ProcesosCarritoResponse> {
+    const qs = new URLSearchParams();
+    if (params.minutos != null) qs.set('minutos', String(params.minutos));
+    if (params.limit != null) qs.set('limit', String(params.limit));
+    const resp = await apiFetch(`/api/carrito/admin/procesos-en-curso?${qs.toString()}`, { method: 'GET' });
+    return {
+      total: Number(resp.total || 0),
+      resumen: {
+        publicos: Number(resp.resumen?.publicos || 0),
+        autenticados: Number(resp.resumen?.autenticados || 0),
+        enPago: Number(resp.resumen?.enPago || 0),
+        abandonados: Number(resp.resumen?.abandonados || 0),
+      },
+      data: (resp.data || []) as ProcesoCarrito[],
+    };
+  },
+
   async listarAuditoriasProducto(params: AuditoriaProductoFiltros = {}): Promise<{ total: number; data: AuditoriaProductoCheck[] }> {
     const qs = new URLSearchParams();
     Object.entries(params).forEach(([key, value]) => {
@@ -577,6 +594,28 @@ export interface AuditoriaProductoCheck {
   transactionId?: string | null; estado: string; emailCliente: string; clienteDocumento?: string | null;
   clienteNombre?: string | null; monto: number; montoCentavos: number; moneda: string; procesado: boolean; endpoint?: string;
   carritoId?: string | null; fechaCreacion: string; fechaActualizacion?: string | null;
+}
+
+export interface ProcesoCarrito {
+  id: string;
+  referencia: string;
+  tipoUsuario: 'PUBLICO' | 'AUTENTICADO';
+  usuario: string;
+  etapa: 'CARRITO' | 'DATOS_CLIENTE' | 'PAGO' | 'ABANDONADO';
+  estado: string;
+  cantidadProductos: number;
+  cantidadUnidades: number;
+  total: number;
+  moneda: string;
+  pasos: { carrito: boolean; datosCliente: boolean; pago: boolean; aprobado: boolean };
+  iniciadoEn: string | null;
+  ultimaActividad: string | null;
+}
+
+export interface ProcesosCarritoResponse {
+  total: number;
+  resumen: { publicos: number; autenticados: number; enPago: number; abandonados: number };
+  data: ProcesoCarrito[];
 }
 
 export interface PedidoAprobadoLinea {

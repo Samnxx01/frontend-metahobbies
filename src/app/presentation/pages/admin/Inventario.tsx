@@ -678,8 +678,6 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
 
   const loadData = async (): Promise<void> => {
     const cargarDato = async <T,>(nombre: string, request: Promise<T>, fallback: T): Promise<T> => {
-      const inicio = performance.now();
-      console.info('[MABS][INVENTARIO][LOAD] Iniciando', { nombre });
       let timeoutId: ReturnType<typeof setTimeout> | undefined;
       try {
         const timeout = new Promise<T>((_resolve, reject) => {
@@ -688,19 +686,8 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
             15_000,
           );
         });
-        const resultado = await Promise.race([request, timeout]);
-        console.info('[MABS][INVENTARIO][LOAD] Completado', {
-          nombre,
-          duracionMs: Math.round(performance.now() - inicio),
-          registros: Array.isArray(resultado) ? resultado.length : undefined,
-        });
-        return resultado;
-      } catch (error) {
-        console.error('[MABS][INVENTARIO][LOAD] Fallo; usando valor seguro', {
-          nombre,
-          duracionMs: Math.round(performance.now() - inicio),
-          error,
-        });
+        return await Promise.race([request, timeout]);
+      } catch {
         return fallback;
       } finally {
         if (timeoutId) clearTimeout(timeoutId);
@@ -768,7 +755,6 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
       console.error('Error cargando inventario:', error);
       toast.error('No se pudo cargar el módulo de inventario.');
     } finally {
-      console.info('[MABS][INVENTARIO][LOAD] Finalizando carga; liberando pantalla');
       setLoading(false);
     }
   };
@@ -2360,12 +2346,6 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
   }, []);
 
   if (loading) {
-    console.info('[MABS][INVENTARIO][RENDER] Esperando carga de datos', {
-      initialActiveTab: initialActiveTab ?? null,
-      activeTab,
-      tarjetasLoading: loadingInventarioTabs,
-      tarjetas: inventarioMenuTabs.length,
-    });
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <div className="text-center">
@@ -2380,16 +2360,6 @@ export default function Inventario(props: InventarioPageProps = {}): React.React
     || movimientoForm.ordenCompraId
     || `${String(movimientoForm.sku || '').trim().toUpperCase()}::${String(movimientoForm.bodega || '').trim()}`;
   const registrandoMovimientoActual = registrandoMovimientoIds.has(claveMovimientoActual);
-
-  console.info('[MABS][INVENTARIO][RENDER] Renderizando contenido', {
-    initialActiveTab: initialActiveTab ?? null,
-    activeTab,
-    tarjetasLoading: loadingInventarioTabs,
-    tabs: inventarioMenuTabs.map((tab) => tab.value),
-    bodegas: bodegas.length,
-    stock: stockActual.length,
-    ajustes: ajustes.length,
-  });
 
   return (
     <div className="space-y-6 p-4 md:p-6">

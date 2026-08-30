@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Building2, Globe, Loader2, RefreshCw, Search, Shield, Users } from 'lucide-react';
+import { Building2, Circle, Globe, Loader2, RefreshCw, Search, Shield, Users } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { getJerarquiaUsuarios, type JerarquiaEvaluacionUsuarios } from '@/app/services/tenantUsuariosService';
 import {
@@ -17,6 +17,7 @@ import {
   type NivelJerarquiaTenant,
   type UsuarioJerarquiaNivelRow,
 } from '@/app/presentation/utils/jerarquiaUsuariosFlatten';
+import { useUserPresence } from '@/app/realtime/useUserPresence';
 
 interface UsuariosTenantJerarquiaListadoModalProps {
   open: boolean;
@@ -32,19 +33,19 @@ const NIVEL_META: Record<
     label: 'Super Admin (SA)',
     short: 'SA',
     icon: <Shield className="h-4 w-4" />,
-    badgeClass: 'border-info/30 bg-info/10 text-info dark:text-info',
+    badgeClass: 'border-primary/40 bg-primary/10 text-foreground',
   },
   TG: {
     label: 'Tenant global (TG)',
     short: 'TG',
     icon: <Globe className="h-4 w-4" />,
-    badgeClass: 'border-info/30 bg-info/10 text-info dark:text-info',
+    badgeClass: 'border-accent/60 bg-accent/30 text-foreground',
   },
   TC: {
     label: 'Tenant corporativo (TC)',
     short: 'TC',
     icon: <Building2 className="h-4 w-4" />,
-    badgeClass: 'border-success/30 bg-success/10 text-success dark:text-success',
+    badgeClass: 'border-button/50 bg-button/20 text-foreground',
   },
 };
 
@@ -67,10 +68,12 @@ function filtrarUsuarios(
 function ListaUsuarios({
   rows,
   loading,
+  onlineUserIds,
   onEditUsuario,
 }: {
   rows: UsuarioJerarquiaNivelRow[];
   loading: boolean;
+  onlineUserIds: ReadonlySet<string>;
   onEditUsuario?: (u: UsuarioJerarquiaNivelRow) => void;
 }): React.ReactElement {
   if (loading) {
@@ -94,6 +97,8 @@ function ListaUsuarios({
     <div className="divide-y divide-border overflow-hidden rounded-lg border border-border">
       {rows.map((u) => {
         const activo = u.estado === true || u.estado === 'activo';
+        const online = onlineUserIds.has(String(u.iud).trim().toLowerCase())
+          || onlineUserIds.has(String(u.correo).trim().toLowerCase());
         const nivelMeta = NIVEL_META[u.nivel];
         return (
           <div
@@ -106,6 +111,12 @@ function ListaUsuarios({
                 <p className="truncate text-xs text-muted-foreground">{u.nombre}</p>
               ) : null}
               <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                {online ? (
+                  <Badge variant="outline" className="gap-1 border-emerald-500/40 bg-emerald-500/10 text-[10px] text-emerald-700 dark:text-emerald-300">
+                    <Circle className="h-2 w-2 fill-current" />
+                    En línea
+                  </Badge>
+                ) : null}
                 <Badge variant="secondary" className="text-[10px]">
                   {u.rol}
                 </Badge>
@@ -152,6 +163,7 @@ export function UsuariosTenantJerarquiaListadoModal({
   onClose,
   onEditUsuario,
 }: UsuariosTenantJerarquiaListadoModalProps): React.ReactElement {
+  const onlineUserIds = useUserPresence(open);
   const [loading, setLoading] = useState(false);
   const [busqueda, setBusqueda] = useState('');
   const [tab, setTab] = useState<'todos' | NivelJerarquiaTenant>('todos');
@@ -214,6 +226,15 @@ export function UsuariosTenantJerarquiaListadoModal({
   const badgeTg = resumenCounters?.tg ?? tg.length;
   const badgeTc = resumenCounters?.tc ?? tc.length;
   const badgeTotal = resumenCounters?.total ?? todos.length;
+  const onlineVisibleCount = useMemo(
+    () => todos.reduce((total, usuario) => total + (
+      onlineUserIds.has(String(usuario.iud).trim().toLowerCase())
+      || onlineUserIds.has(String(usuario.correo).trim().toLowerCase())
+        ? 1
+        : 0
+    ), 0),
+    [todos, onlineUserIds],
+  );
 
   const filtradosSa = useMemo(() => filtrarUsuarios(sa, busqueda), [sa, busqueda]);
   const filtradosTg = useMemo(() => filtrarUsuarios(tg, busqueda), [tg, busqueda]);
@@ -268,6 +289,10 @@ export function UsuariosTenantJerarquiaListadoModal({
               TC · {badgeTc}
             </Badge>
             <Badge variant="secondary">Total · {badgeTotal}</Badge>
+            <Badge variant="outline" className="gap-1 border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
+              <Circle className="h-2 w-2 fill-current" />
+              En línea · {onlineVisibleCount}
+            </Badge>
           </div>
         </DialogHeader>
 
@@ -317,6 +342,7 @@ export function UsuariosTenantJerarquiaListadoModal({
                 <ListaUsuarios
                   rows={listasPorTab[key]}
                   loading={loading && todos.length === 0}
+                  onlineUserIds={onlineUserIds}
                   onEditUsuario={onEditUsuario}
                 />
               </TabsContent>
