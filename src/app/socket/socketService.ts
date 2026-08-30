@@ -30,6 +30,16 @@ export const conectarSocket = (): Socket | null => {
         path: "/socket.io",
     });
 
+    s.on('jwt:sesion:contexto', (contexto) => {
+        console.groupCollapsed('[JWT SESIÓN] Contexto tenant, usuario, rol y jerarquía');
+        console.log('Tenant:', contexto?.tenant ?? null);
+        console.log('Usuario:', contexto?.usuario ?? null);
+        console.log('Rol:', contexto?.rol ?? null);
+        console.log('tenantJerarquiaCounters:', contexto?.jerarquia?.tenantJerarquiaCounters ?? []);
+        console.log('tenantJerarquiaCountersCliente:', contexto?.jerarquia?.tenantJerarquiaCountersCliente ?? null);
+        console.groupEnd();
+    });
+
     observarDatosRealtime(s);
 
     socket = s;

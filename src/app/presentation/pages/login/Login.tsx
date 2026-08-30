@@ -170,7 +170,7 @@ export default function Login(): React.ReactElement {
 
                 // Verificar si requiere actualización de contraseña
                 if (response.requiereActualizacion === true) {
-                    toast.info('Debes actualizar tu contraseña provisional');
+                    toast.info(response.msg || 'Debes actualizar tu contraseña');
                     setTimeout(() => {
                         navigate('/cambiar-contrasena-provisional');
                     }, 1000);

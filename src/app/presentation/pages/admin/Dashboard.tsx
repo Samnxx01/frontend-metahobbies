@@ -4,6 +4,11 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+    AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+    AlertDialogDescription, AlertDialogFooter, AlertDialogHeader,
+    AlertDialogMedia, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -20,7 +25,7 @@ import { useAuth } from '@/app/providers/AuthProvider';
 import { getJerarquiaUsuarios, TenantGlobalInfo, TenantGlobalNode } from '@/app/services/tenantUsuariosService';
 import ParametrizacionGenyProcent from './ParametrizacionGenyProcent/ParametrizacionGenyProcent';
 import ParametrizacionRedirects from './ParametrizacionRedirects';
-import { Circle, Edit, HelpCircle, Loader2, Network, Palette, RefreshCw, Route, Users } from 'lucide-react';
+import { CalendarClock, Circle, Edit, HelpCircle, History, Loader2, Mail, Network, Palette, RefreshCw, Route, ShieldAlert, Trash2, TriangleAlert, Users } from 'lucide-react';
 import { socketListeners, socketCleanup } from '@/app/socket/socketEvents';
 import { aplicarPaletaEnApp } from '@/app/utils/ColorUtils';
 import type { ColoresPaleta } from '@/app/utils/ColorUtils';
@@ -162,12 +167,25 @@ type DashboardUser = {
     } | null;
     estado?: boolean;
     tiempoSesion?: string | null;
+    passwordCambioProgramado?: boolean;
+    passwordCambioDias?: number | null;
+    passwordCambiarAntesDe?: string | null;
 };
 
 type DashboardTextConfig = {
     titulo: string;
     descripcion: string;
 };
+
+type TipoCaducidadPassword = {
+    _id?: string;
+    codigo: string;
+    nombre: string;
+    descripcion?: string;
+    duracionDias: number;
+};
+
+type HistorialCorreo = { _id?: string; correoAnterior: string; correoNuevo: string; modificadoPorCorreo?: string; rolEjecutor?: string; fechaCambio: string };
 
 const DASHBOARD_TEXT_CONFIG_KEY = 'dashboard-admin-text-config';
 
@@ -214,7 +232,23 @@ export default function Dashboard(): React.ReactElement {
     const [usuarioSearch, setUsuarioSearch] = useState('');
     const [editingUser, setEditingUser] = useState<DashboardUser | null>(null);
     const [userEditSaving, setUserEditSaving] = useState(false);
-    const [userEditForm, setUserEditForm] = useState({ correo: '', password: '', rol: '' });
+    const [passwordEmailSending, setPasswordEmailSending] = useState(false);
+    const [emailChangeConfirmOpen, setEmailChangeConfirmOpen] = useState(false);
+    const [historyUser, setHistoryUser] = useState<DashboardUser | null>(null);
+    const [emailHistory, setEmailHistory] = useState<HistorialCorreo[]>([]);
+    const [emailHistoryLoading, setEmailHistoryLoading] = useState(false);
+    const [caducidadOpen, setCaducidadOpen] = useState(false);
+    const [caducidadLoading, setCaducidadLoading] = useState(false);
+    const [caducidadSaving, setCaducidadSaving] = useState(false);
+    const [tiposCaducidad, setTiposCaducidad] = useState<TipoCaducidadPassword[]>([]);
+    const [tipoCaducidadCodigo, setTipoCaducidadCodigo] = useState('');
+    const [caducidadForm, setCaducidadForm] = useState({ nombre: '', codigo: '', duracionDias: '90', descripcion: '' });
+    const [caducidadUsuarios, setCaducidadUsuarios] = useState<string[]>([]);
+    const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
+    const [deleteCandidate, setDeleteCandidate] = useState<DashboardUser | null>(null);
+    const [userEditForm, setUserEditForm] = useState({
+        correo: '', password: '', rol: '', passwordCambioProgramado: false, passwordCambioDias: '30',
+    });
 
     // ── Tenants ───────────────────────────────────────────────────────────────
     const [tenantsGlobales, setTenantsGlobales] = useState<TenantGlobalInfo[]>([]);
@@ -382,28 +416,151 @@ export default function Dashboard(): React.ReactElement {
 
     const openEditUser = (u: DashboardUser): void => {
         setEditingUser(u);
-        setUserEditForm({ correo: String(u?.correo || u?.email || ''), password: '', rol: String(u?.rol || '') });
+        setUserEditForm({
+            correo: String(u?.correo || u?.email || ''),
+            password: '',
+            rol: String(u?.rol || ''),
+            passwordCambioProgramado: Boolean(u?.passwordCambioProgramado),
+            passwordCambioDias: String(u?.passwordCambioDias || 30),
+        });
     };
-    const closeEditUser = (): void => { setEditingUser(null); setUserEditForm({ correo: '', password: '', rol: '' }); };
+    const closeEditUser = (): void => {
+        setEditingUser(null);
+        setUserEditForm({ correo: '', password: '', rol: '', passwordCambioProgramado: false, passwordCambioDias: '30' });
+    };
 
-    const handleSaveUser = async (): Promise<void> => {
+    const handleSaveUser = async (correoConfirmado = false): Promise<void> => {
         if (!editingUser) return;
         const id = adminEntityId(editingUser);
         if (!id) { toast.error('Sin ID de usuario'); return; }
-        const body: Record<string, string> = {};
+        const correoOriginal = String(editingUser?.correo || editingUser?.email || '').trim().toLowerCase();
+        const correoNuevo = userEditForm.correo.trim().toLowerCase();
+        if (correoNuevo !== correoOriginal && !correoConfirmado) { setEmailChangeConfirmOpen(true); return; }
+        const body: Record<string, unknown> = {};
         if (userEditForm.correo) body.correo = userEditForm.correo;
         if (userEditForm.password) body.password = userEditForm.password;
         if (userEditForm.rol) body.rol = userEditForm.rol;
+        body.passwordCambioProgramado = userEditForm.passwordCambioProgramado;
+        if (userEditForm.passwordCambioProgramado) {
+            const dias = Number(userEditForm.passwordCambioDias);
+            if (!Number.isInteger(dias) || dias < 1 || dias > 3650) {
+                toast.error('El plazo debe estar entre 1 y 3650 días.');
+                return;
+            }
+            body.passwordCambioDias = dias;
+        }
         setUserEditSaving(true);
         try {
             await apiFetch(`/api/seguridad/pruebas/actualizar/registro/${adminEntityIdForPath(id)}`, { method: 'PUT', body: JSON.stringify(body) });
             setUsuarios((prev) => prev.map((u) => (
                 sameAdminEntityId(u, id) ? { ...u, ...body, iud: adminEntityId(u) || id } : u
             )));
-            toast.success('Usuario actualizado');
+            toast.warning(correoNuevo !== correoOriginal
+                ? 'Correo modificado. El cambio quedó registrado en auditoría y requiere verificación.'
+                : 'Usuario actualizado');
             closeEditUser();
         } catch (error: any) { toast.error(String(error?.message || 'Error al actualizar')); }
         finally { setUserEditSaving(false); }
+    };
+
+    const openEmailHistory = async (usuario: DashboardUser): Promise<void> => {
+        const id = adminEntityId(usuario);
+        if (!id) return;
+        setHistoryUser(usuario); setEmailHistory([]); setEmailHistoryLoading(true);
+        try {
+            const res = await apiFetch(`/api/registro/admin/usuarios/${adminEntityIdForPath(id)}/historial-correo`, { method: 'GET' });
+            setEmailHistory(Array.isArray(res?.historial) ? res.historial : []);
+        } catch (error: any) { toast.error(String(error?.message || 'No se pudo cargar el historial.')); }
+        finally { setEmailHistoryLoading(false); }
+    };
+
+    const handleSendPasswordEmail = async (): Promise<void> => {
+        if (!editingUser) return;
+        const id = adminEntityId(editingUser);
+        if (!id) { toast.error('Sin ID de usuario'); return; }
+        setPasswordEmailSending(true);
+        try {
+            const res = await apiFetch(
+                `/api/registro/admin/usuarios/${adminEntityIdForPath(id)}/enviar-cambio-password`,
+                { method: 'POST' }
+            );
+            toast.success(String(res?.msg || 'Correo de cambio de contraseña enviado.'));
+        } catch (error: any) {
+            toast.error(String(error?.message || 'No se pudo enviar el correo.'));
+        } finally {
+            setPasswordEmailSending(false);
+        }
+    };
+
+    const abrirCaducidadPassword = async (): Promise<void> => {
+        setCaducidadOpen(true);
+        setCaducidadLoading(true);
+        try {
+            const res = await apiFetch('/api/registro/admin/password-caducidad/tipos', { method: 'GET' });
+            setTiposCaducidad(Array.isArray(res?.data) ? res.data : []);
+        } catch (error: any) {
+            toast.error(error?.message || 'No se pudieron cargar los tipos de caducidad.');
+        } finally { setCaducidadLoading(false); }
+    };
+
+    const guardarTipoCaducidad = async (): Promise<void> => {
+        const codigo = String(caducidadForm.codigo || caducidadForm.nombre).trim().toUpperCase().replace(/\s+/g, '_');
+        const dias = Number(caducidadForm.duracionDias);
+        if (!caducidadForm.nombre.trim() || !codigo || !Number.isInteger(dias) || dias < 1) {
+            toast.error('Indica nombre, código y duración válida.'); return;
+        }
+        setCaducidadSaving(true);
+        try {
+            await apiFetch(`/api/registro/admin/password-caducidad/tipos/${encodeURIComponent(codigo)}`, {
+                method: 'PUT',
+                body: { ...caducidadForm, codigo, duracionDias: dias },
+            });
+            const res = await apiFetch('/api/registro/admin/password-caducidad/tipos', { method: 'GET' });
+            setTiposCaducidad(Array.isArray(res?.data) ? res.data : []);
+            setTipoCaducidadCodigo(codigo);
+            toast.success('Tipo de caducidad guardado.');
+        } catch (error: any) { toast.error(error?.message || 'No se pudo guardar el tipo.'); }
+        finally { setCaducidadSaving(false); }
+    };
+
+    const aplicarCaducidadUsuarios = async (): Promise<void> => {
+        if (!caducidadUsuarios.length) { toast.error('Selecciona al menos un usuario.'); return; }
+        setCaducidadSaving(true);
+        try {
+            const res = await apiFetch('/api/registro/admin/password-caducidad/asignar', {
+                method: 'POST', body: { usuarioIds: caducidadUsuarios, tipoCodigo: tipoCaducidadCodigo || null },
+            });
+            toast.success(res?.msg || 'Caducidad aplicada y auditada.');
+            setCaducidadOpen(false);
+            setCaducidadUsuarios([]);
+            await loadUsuarios();
+        } catch (error: any) { toast.error(error?.message || 'No se pudo aplicar la caducidad.'); }
+        finally { setCaducidadSaving(false); }
+    };
+
+    const handleDeleteUser = async (): Promise<void> => {
+        const usuario = deleteCandidate;
+        if (!usuario) return;
+        const id = adminEntityId(usuario);
+        if (!id) { toast.error('Sin ID de usuario'); return; }
+        if (sameAdminEntityId(user, id)) {
+            toast.error('No puedes eliminar tu propio usuario.');
+            return;
+        }
+        setDeletingUserId(id);
+        try {
+            const res = await apiFetch(
+                `/api/registro/admin/usuarios/${adminEntityIdForPath(id)}/definitivo`,
+                { method: 'DELETE' }
+            );
+            setUsuarios((prev) => prev.filter((item) => !sameAdminEntityId(item, id)));
+            toast.success(String(res?.msg || 'Usuario eliminado definitivamente.'));
+            setDeleteCandidate(null);
+        } catch (error: any) {
+            toast.error(String(error?.message || 'No se pudo eliminar el usuario.'));
+        } finally {
+            setDeletingUserId(null);
+        }
     };
 
     // ── Modo referir ──────────────────────────────────────────────────────────
@@ -527,13 +684,19 @@ export default function Dashboard(): React.ReactElement {
             {/* ── Usuarios ──────────────────────────────────────────────────── */}
             <Card className="shadow-lg border-border">
                 <CardHeader className="pb-4">
-                    <div className="flex items-center gap-2">
-                        <Users className="h-5 w-5 text-primary" />
-                        <CardTitle>Gestion de Usuarios</CardTitle>
-                        <Badge variant="outline" className="gap-1 border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
-                            <Circle className="h-2 w-2 fill-current" />
-                            En línea · {usuariosOnlineCount}
-                        </Badge>
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div className="flex items-center gap-2">
+                            <Users className="h-5 w-5 text-primary" />
+                            <CardTitle>Gestion de Usuarios</CardTitle>
+                            <Badge variant="outline" className="gap-1 border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
+                                <Circle className="h-2 w-2 fill-current" />
+                                En línea · {usuariosOnlineCount}
+                            </Badge>
+                        </div>
+                        <Button type="button" size="sm" variant="outline" className="gap-2" onClick={() => void abrirCaducidadPassword()}>
+                            <CalendarClock className="h-4 w-4" />
+                            Parametrizar caducidad
+                        </Button>
                     </div>
                     <p className="text-sm text-muted-foreground">Busca y edita cualquier usuario del sistema.</p>
                 </CardHeader>
@@ -558,7 +721,7 @@ export default function Dashboard(): React.ReactElement {
                                     <TableHead>Rol</TableHead>
                                     <TableHead>Estado</TableHead>
                                     <TableHead>Última conexión</TableHead>
-                                    <TableHead className="text-right">Editar</TableHead>
+                                    <TableHead className="text-right">Acciones</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -597,9 +760,26 @@ export default function Dashboard(): React.ReactElement {
                                                 )}
                                             </TableCell>
                                             <TableCell className="text-right">
-                                                <Button variant="ghost" size="icon" onClick={() => openEditUser(u)}>
-                                                    <Edit className="h-4 w-4" />
-                                                </Button>
+                                                <div className="inline-flex items-center justify-end gap-1">
+                                                    <Button variant="ghost" size="icon" onClick={() => openEditUser(u)} title="Editar usuario">
+                                                        <Edit className="h-4 w-4" />
+                                                    </Button>
+                                                    <Button variant="ghost" size="icon" onClick={() => void openEmailHistory(u)} title="Historial de cambios de correo">
+                                                        <History className="h-4 w-4" />
+                                                    </Button>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                                        onClick={() => setDeleteCandidate(u)}
+                                                        disabled={deletingUserId === uid || sameAdminEntityId(user, uid)}
+                                                        title={sameAdminEntityId(user, uid) ? 'No puedes eliminar tu propio usuario' : 'Eliminar usuario definitivamente'}
+                                                    >
+                                                        {deletingUserId === uid
+                                                            ? <Loader2 className="h-4 w-4 animate-spin" />
+                                                            : <Trash2 className="h-4 w-4" />}
+                                                    </Button>
+                                                </div>
                                             </TableCell>
                                         </TableRow>
                                     );
@@ -728,6 +908,147 @@ export default function Dashboard(): React.ReactElement {
             {/* ═══════════════════════════════════════════════════════════════
                 MODAL: Editar usuario
             ════════════════════════════════════════════════════════════════ */}
+            <Dialog open={caducidadOpen} onOpenChange={(open) => { if (!caducidadSaving) setCaducidadOpen(open); }}>
+                <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2"><CalendarClock className="h-5 w-5" /> Parametrizar caducidad de contraseñas</DialogTitle>
+                        <DialogDescription>Crea tipos reutilizables y aplícalos a los usuarios visibles dentro de tu alcance. Cada cambio queda auditado.</DialogDescription>
+                    </DialogHeader>
+
+                    {caducidadLoading ? <div className="flex justify-center py-10"><Loader2 className="h-6 w-6 animate-spin" /></div> : (
+                        <div className="space-y-5">
+                            <div className="space-y-3 rounded-lg border p-4">
+                                <p className="font-medium">Nuevo tipo de caducidad</p>
+                                <div className="grid gap-3 sm:grid-cols-3">
+                                    <Input placeholder="Nombre (Trimestral)" value={caducidadForm.nombre} onChange={(e) => setCaducidadForm((p) => ({ ...p, nombre: e.target.value }))} />
+                                    <Input placeholder="Código" value={caducidadForm.codigo} onChange={(e) => setCaducidadForm((p) => ({ ...p, codigo: e.target.value }))} />
+                                    <Input type="number" min={1} max={3650} placeholder="Días" value={caducidadForm.duracionDias} onChange={(e) => setCaducidadForm((p) => ({ ...p, duracionDias: e.target.value }))} />
+                                </div>
+                                <Input placeholder="Descripción opcional" value={caducidadForm.descripcion} onChange={(e) => setCaducidadForm((p) => ({ ...p, descripcion: e.target.value }))} />
+                                <Button type="button" variant="secondary" onClick={() => void guardarTipoCaducidad()} disabled={caducidadSaving}>Guardar tipo</Button>
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label>Tipo que se aplicará</Label>
+                                <Select value={tipoCaducidadCodigo || '__NONE__'} onValueChange={(value) => setTipoCaducidadCodigo(value === '__NONE__' ? '' : value)}>
+                                    <SelectTrigger><SelectValue placeholder="Selecciona un tipo" /></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="__NONE__">Sin caducidad (desactivar)</SelectItem>
+                                        {tiposCaducidad.map((tipo) => <SelectItem key={tipo.codigo} value={tipo.codigo}>{tipo.nombre} · {tipo.duracionDias} días</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
+                            <div className="space-y-2">
+                                <div className="flex items-center justify-between"><Label>Usuarios parametrizados</Label><Badge variant="secondary">{caducidadUsuarios.length} seleccionados</Badge></div>
+                                <div className="max-h-56 space-y-1 overflow-y-auto rounded-lg border p-2">
+                                    {usuarios.map((u) => {
+                                        const id = adminEntityId(u);
+                                        const checked = caducidadUsuarios.includes(id);
+                                        return <label key={id} className="flex cursor-pointer items-center gap-3 rounded-md p-2 hover:bg-muted/60">
+                                            <input type="checkbox" className="h-4 w-4 accent-primary" checked={checked} onChange={(e) => setCaducidadUsuarios((prev) => e.target.checked ? [...prev, id] : prev.filter((value) => value !== id))} />
+                                            <span className="flex-1"><span className="block text-sm font-medium">{getUsuarioNombre(u)}</span><span className="block text-xs text-muted-foreground">{u.correo}</span></span>
+                                            <Badge variant="outline">{getUsuarioRol(u)}</Badge>
+                                        </label>;
+                                    })}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setCaducidadOpen(false)} disabled={caducidadSaving}>Cancelar</Button>
+                        <Button onClick={() => void aplicarCaducidadUsuarios()} disabled={caducidadSaving || caducidadLoading}>
+                            {caducidadSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Aplicar y auditar
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            <AlertDialog open={emailChangeConfirmOpen} onOpenChange={setEmailChangeConfirmOpen}>
+                <AlertDialogContent className="max-w-md border-amber-500/50">
+                    <AlertDialogHeader>
+                        <AlertDialogMedia className="bg-amber-500/15 text-amber-700"><TriangleAlert className="h-5 w-5" /></AlertDialogMedia>
+                        <AlertDialogTitle>¿Cambiar el correo electrónico?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Cambiarás <strong>{String(editingUser?.correo || editingUser?.email || '')}</strong> por <strong>{userEditForm.correo}</strong>. El usuario deberá verificar la nueva dirección y el cambio quedará auditado.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => { setEmailChangeConfirmOpen(false); void handleSaveUser(true); }}>Confirmar cambio</AlertDialogAction></AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            <Dialog open={!!historyUser} onOpenChange={(open) => { if (!open) setHistoryUser(null); }}>
+                <DialogContent className="max-w-2xl">
+                    <DialogHeader><DialogTitle className="flex items-center gap-2"><History className="h-5 w-5" />Historial de correos</DialogTitle><DialogDescription>{historyUser ? getUsuarioNombre(historyUser) : ''}</DialogDescription></DialogHeader>
+                    <div className="max-h-[420px] overflow-auto rounded-lg border">
+                        {emailHistoryLoading ? <div className="flex justify-center p-8"><Loader2 className="h-5 w-5 animate-spin" /></div> : emailHistory.length === 0 ? <p className="p-8 text-center text-sm text-muted-foreground">Este usuario no tiene cambios de correo registrados.</p> : <Table><TableHeader><TableRow><TableHead>Fecha</TableHead><TableHead>Anterior</TableHead><TableHead>Nuevo</TableHead><TableHead>Administrador</TableHead></TableRow></TableHeader><TableBody>{emailHistory.map((item) => <TableRow key={item._id || `${item.fechaCambio}-${item.correoNuevo}`}><TableCell className="whitespace-nowrap text-xs">{new Intl.DateTimeFormat('es-CO', { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Bogota' }).format(new Date(item.fechaCambio))}</TableCell><TableCell className="text-xs">{item.correoAnterior}</TableCell><TableCell className="text-xs font-medium">{item.correoNuevo}</TableCell><TableCell className="text-xs">{item.modificadoPorCorreo || item.rolEjecutor || 'Administrador'}</TableCell></TableRow>)}</TableBody></Table>}
+                    </div>
+                    <DialogFooter><Button variant="outline" onClick={() => setHistoryUser(null)}>Cerrar</Button></DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            <AlertDialog
+                open={!!deleteCandidate}
+                onOpenChange={(open) => {
+                    if (!open && !deletingUserId) setDeleteCandidate(null);
+                }}
+            >
+                <AlertDialogContent className="sm:max-w-md overflow-hidden border-destructive/30 p-0 gap-0">
+                    <div className="p-5 pb-4">
+                        <AlertDialogHeader className="sm:grid-cols-[auto_1fr] sm:items-start sm:text-left">
+                            <AlertDialogMedia className="bg-destructive/10 text-destructive ring-1 ring-destructive/20">
+                                <ShieldAlert className="h-6 w-6" />
+                            </AlertDialogMedia>
+                            <div className="space-y-1.5">
+                                <AlertDialogTitle className="text-lg font-semibold">
+                                    Eliminar usuario definitivamente
+                                </AlertDialogTitle>
+                                <AlertDialogDescription>
+                                    Se eliminará únicamente su registro RegisUsu. Esta acción no se puede deshacer.
+                                </AlertDialogDescription>
+                            </div>
+                        </AlertDialogHeader>
+
+                        <div className="mt-4 rounded-lg border bg-muted/35 p-3">
+                            <p className="font-medium text-foreground">
+                                {deleteCandidate ? getUsuarioNombre(deleteCandidate) : ''}
+                            </p>
+                            <p className="mt-0.5 break-all text-sm text-muted-foreground">
+                                {String(deleteCandidate?.correo || deleteCandidate?.email || 'Sin correo')}
+                            </p>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                                <Badge variant="outline">{deleteCandidate ? getUsuarioRol(deleteCandidate) : ''}</Badge>
+                                <Badge variant="secondary">{deleteCandidate ? getUsuarioPerfil(deleteCandidate) : ''}</Badge>
+                            </div>
+                        </div>
+
+                        <div className="mt-4 rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-sm">
+                            <p className="font-medium text-destructive">Se eliminará:</p>
+                            <p className="mt-2 text-muted-foreground">• Solamente el documento de la colección RegisUsu</p>
+                            <p className="mt-2 text-xs text-muted-foreground">Las demás colecciones relacionadas no serán modificadas.</p>
+                        </div>
+                    </div>
+
+                    <AlertDialogFooter className="m-0 rounded-none px-5 py-4">
+                        <AlertDialogCancel disabled={!!deletingUserId}>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction
+                            variant="destructive"
+                            disabled={!!deletingUserId}
+                            onClick={(event) => {
+                                event.preventDefault();
+                                void handleDeleteUser();
+                            }}
+                            className="gap-2"
+                        >
+                            {deletingUserId
+                                ? <Loader2 className="h-4 w-4 animate-spin" />
+                                : <Trash2 className="h-4 w-4" />}
+                            {deletingUserId ? 'Eliminando...' : 'Sí, eliminar definitivamente'}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
             <Dialog open={!!editingUser} onOpenChange={(open) => { if (!open) closeEditUser(); }}>
                 <DialogContent className="max-w-xl">
                     <DialogHeader>
@@ -745,9 +1066,63 @@ export default function Dashboard(): React.ReactElement {
                             <Label>Rol</Label>
                             <Input value={userEditForm.rol} onChange={(e) => setUserEditForm((p) => ({ ...p, rol: e.target.value }))} placeholder="ADMIN_ROLE / USER_ROLE..." />
                         </div>
-                        <div className="md:col-span-2">
-                            <Label>Nueva contraseña</Label>
-                            <Input type="password" value={userEditForm.password} onChange={(e) => setUserEditForm((p) => ({ ...p, password: e.target.value }))} placeholder="••••••••" />
+                        <div className="md:col-span-2 space-y-3 rounded-lg border p-4">
+                            <div>
+                                <p className="font-medium">Cambio de contraseña</p>
+                                <p className="text-xs text-muted-foreground">Elige entre enviar un enlace seguro o establecerla directamente.</p>
+                            </div>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                className="w-full justify-center gap-2"
+                                onClick={() => void handleSendPasswordEmail()}
+                                disabled={passwordEmailSending}
+                            >
+                                {passwordEmailSending
+                                    ? <Loader2 className="h-4 w-4 animate-spin" />
+                                    : <Mail className="h-4 w-4" />}
+                                {passwordEmailSending ? 'Enviando enlace...' : 'Enviar enlace de cambio por correo'}
+                            </Button>
+                            <div className="relative py-1 text-center text-xs text-muted-foreground">
+                                <span className="relative z-10 bg-background px-2">o cambiar sin verificación</span>
+                                <span className="absolute inset-x-0 top-1/2 border-t" />
+                            </div>
+                            <div className="space-y-1.5">
+                                <Label>Nueva contraseña</Label>
+                                <Input type="password" value={userEditForm.password} onChange={(e) => setUserEditForm((p) => ({ ...p, password: e.target.value }))} placeholder="Déjala vacía para conservar la actual" />
+                                <p className="text-xs text-muted-foreground">El administrador puede guardarla directamente; no se enviará ni solicitará verificación.</p>
+                            </div>
+                        </div>
+
+                        <div className="md:col-span-2 space-y-3 rounded-lg border p-4">
+                            <div className="flex items-start gap-3">
+                                <CalendarClock className="mt-0.5 h-5 w-5 text-primary" />
+                                <div className="flex-1">
+                                    <Label htmlFor="password-cambio-programado">Vencimiento programado de contraseña</Label>
+                                    <p className="text-xs text-muted-foreground">Al cumplirse el plazo, el usuario deberá definir una nueva contraseña al iniciar sesión.</p>
+                                </div>
+                                <input
+                                    id="password-cambio-programado"
+                                    type="checkbox"
+                                    className="mt-1 h-4 w-4 accent-primary"
+                                    checked={userEditForm.passwordCambioProgramado}
+                                    onChange={(e) => setUserEditForm((p) => ({ ...p, passwordCambioProgramado: e.target.checked }))}
+                                />
+                            </div>
+                            {userEditForm.passwordCambioProgramado && (
+                                <div className="space-y-1.5">
+                                    <Label htmlFor="password-cambio-dias">Plazo para cambiarla (días)</Label>
+                                    <Input
+                                        id="password-cambio-dias"
+                                        type="number"
+                                        min={1}
+                                        max={3650}
+                                        value={userEditForm.passwordCambioDias}
+                                        onChange={(e) => setUserEditForm((p) => ({ ...p, passwordCambioDias: e.target.value }))}
+                                    />
+                                    <p className="text-xs text-muted-foreground">Ejemplos: 30 días, 90 días o 365 días.</p>
+                                </div>
+                            )}
                         </div>
                     </div>
                     <DialogFooter className="flex gap-2 pt-2">

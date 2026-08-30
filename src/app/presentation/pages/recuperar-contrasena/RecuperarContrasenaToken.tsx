@@ -9,7 +9,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Loader2, KeyRound, Eye, EyeOff, CheckCircle2, ArrowLeft, ShieldAlert } from 'lucide-react';
 import { getGovernedLoginPath } from '@/app/services/governedNavigation';
 import { axiosClient } from '@/app/services/api';
-const LOGO_URL = '/assets/logo.png';
+import { fetchSplashLogo, resolveSplashLogoUrl } from '@/app/services/splashLogoService';
 
 const schema = z.object({
     correo: z.string().email('Ingresa un correo electrónico válido'),
@@ -42,6 +42,8 @@ export default function RecuperarContrasenaToken() {
     const [errorApi, setErrorApi] = useState<string | null>(null);
     const [verPass, setVerPass] = useState(false);
     const [verConf, setVerConf] = useState(false);
+    const [logoUrl, setLogoUrl] = useState<string | null>(null);
+    const [correoRegistrado, setCorreoRegistrado] = useState('');
 
     const form = useForm<FormData>({
         resolver: zodResolver(schema),
@@ -68,7 +70,13 @@ export default function RecuperarContrasenaToken() {
                 if (res.status < 200 || res.status >= 300) {
                     throw new Error(data?.msg || 'El enlace expiró o no es válido.');
                 }
-                if (!cancelado) setTokenValido(true);
+                if (!cancelado) {
+                    const correoRegistrado = String(data?.correo || '').trim().toLowerCase();
+                    if (!correoRegistrado) throw new Error('El enlace no tiene un usuario asociado.');
+                    form.setValue('correo', correoRegistrado, { shouldValidate: true });
+                    setCorreoRegistrado(correoRegistrado);
+                    setTokenValido(true);
+                }
             } catch (err: unknown) {
                 if (!cancelado) {
                     setTokenValido(false);
@@ -84,6 +92,12 @@ export default function RecuperarContrasenaToken() {
             cancelado = true;
         };
     }, [tokenUrl]);
+
+    useEffect(() => {
+        void fetchSplashLogo(false, { forceRefresh: true })
+            .then((res) => setLogoUrl(resolveSplashLogoUrl(res?.logo)))
+            .catch(() => setLogoUrl(null));
+    }, []);
 
     // Token inválido o ausente — mostrar aviso
     if (!tokenUrl || (!validandoToken && !tokenValido)) {
@@ -145,7 +159,7 @@ export default function RecuperarContrasenaToken() {
         );
     }
 
-    const onSubmit = async ({ correo, password }: FormData) => {
+    const onSubmit = async ({ password }: FormData) => {
         setLoading(true);
         setErrorApi(null);
         try {
@@ -153,7 +167,7 @@ export default function RecuperarContrasenaToken() {
             // apiFetch no gestiona headers custom nativamente, así que se hace la petición manualmente aquí
             const res = await axiosClient.post(
                 '/api/recuperacion/seguridad/cambio/password/todos',
-                { correo, password },
+                { password },
                 {
                     headers: { 'fantasma': tokenUrl },
                     validateStatus: () => true,
@@ -179,11 +193,7 @@ export default function RecuperarContrasenaToken() {
                 <div className="text-center space-y-3">
                     <div className="flex justify-center">
                         <div className="mb-4 p-4 rounded-full bg-primary/10 dark:bg-primary/20">
-                            <img
-                                src={LOGO_URL}
-                                alt="Mabs Logo"
-                                className="h-12 w-auto filter dark:brightness-110"
-                            />
+                            {logoUrl ? <img src={logoUrl} alt="Logo corporativo" className="h-12 max-w-[180px] object-contain dark:brightness-110" /> : <KeyRound className="h-8 w-8 text-primary" />}
                         </div>
                     </div>
                     <div>
@@ -207,13 +217,16 @@ export default function RecuperarContrasenaToken() {
                                     <FormLabel className="text-xs font-medium">Correo electrónico</FormLabel>
                                     <FormControl>
                                         <Input
-                                            type="email"
-                                            placeholder="tu.correo@ejemplo.com"
-                                            className="h-10 text-sm"
                                             {...field}
+                                            type="email"
+                                            readOnly
+                                            aria-readonly="true"
+                                            value={correoRegistrado}
+                                            className="h-10 cursor-not-allowed bg-muted/60 text-sm"
                                         />
                                     </FormControl>
                                     <FormMessage className="text-xs" />
+                                    <p className="text-[11px] text-muted-foreground">Correo asociado al enlace. No puede modificarse desde este flujo.</p>
                                 </FormItem>
                             )}
                         />
@@ -302,7 +315,7 @@ export default function RecuperarContrasenaToken() {
                         <Button
                             type="submit"
                             className="w-full h-10 text-sm font-medium gap-2"
-                            disabled={loading}
+                            disabled={loading || !correoRegistrado}
                         >
                             {loading && <Loader2 className="w-4 h-4 animate-spin" />}
                             {loading ? 'Actualizando...' : 'Cambiar contraseña'}
