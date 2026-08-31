@@ -171,14 +171,19 @@ const findFirstAuthorizedAdminPath = (nodes: Array<{ path: string; component?: s
     return null;
 };
 
-const getHerenciaAdminPermitida = async (): Promise<{
+type HerenciaAdminPermitida = {
     idsPermitidos: Set<string>;
     pathsPermitidos: Set<string>;
-}> => {
+    tieneAsignacion: boolean;
+};
+
+let _herenciaAdminPermitidaPromise: Promise<HerenciaAdminPermitida> | null = null;
+
+const fetchHerenciaAdminPermitida = async (): Promise<HerenciaAdminPermitida> => {
     try {
         const token = localStorage.getItem("token");
         if (!token) {
-            return { idsPermitidos: new Set(), pathsPermitidos: new Set() };
+            return { idsPermitidos: new Set(), pathsPermitidos: new Set(), tieneAsignacion: false };
         }
 
         const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "/api";
@@ -236,11 +241,25 @@ const getHerenciaAdminPermitida = async (): Promise<{
             });
         });
 
-        return { idsPermitidos, pathsPermitidos };
+        return { idsPermitidos, pathsPermitidos, tieneAsignacion: herencias.filter(Boolean).length > 0 };
     } catch (error) {
         console.error("Error al resolver herencias de vistas admin:", error);
-        return { idsPermitidos: new Set(), pathsPermitidos: new Set() };
+        return { idsPermitidos: new Set(), pathsPermitidos: new Set(), tieneAsignacion: false };
     }
+};
+
+/**
+ * Una única consulta por versión de permisos. Las llamadas concurrentes comparten
+ * la misma promesa; el evento realtime invalida esta referencia antes de recargar.
+ */
+const getHerenciaAdminPermitida = (): Promise<HerenciaAdminPermitida> => {
+    if (_herenciaAdminPermitidaPromise) return _herenciaAdminPermitidaPromise;
+    const task = fetchHerenciaAdminPermitida().catch((error) => {
+        if (_herenciaAdminPermitidaPromise === task) _herenciaAdminPermitidaPromise = null;
+        throw error;
+    });
+    _herenciaAdminPermitidaPromise = task;
+    return task;
 };
 
 export interface RouteCatalogItem {
@@ -371,17 +390,17 @@ const filterTreeByAllowedRoutes = (
 /** No vaciar sidebar si la API no devolvió herencia o si ids/paths no alinean con el árbol. */
 const filterTreeByHerenciaConRescate = (
     nodes: AdminNavTreeItem[],
-    herencia: { idsPermitidos: Set<string>; pathsPermitidos: Set<string> },
+    herencia: { idsPermitidos: Set<string>; pathsPermitidos: Set<string>; tieneAsignacion?: boolean },
     logLabel: string
 ): AdminNavTreeItem[] => {
     const hasHerencia = herencia.idsPermitidos.size > 0 || herencia.pathsPermitidos.size > 0;
-    if (!hasHerencia) return nodes;
+    if (!hasHerencia && !herencia.tieneAsignacion) return nodes;
     const filtered = filterTreeByAllowedRoutes(nodes, herencia.idsPermitidos, herencia.pathsPermitidos);
     if (filtered.length === 0 && nodes.length > 0) {
         console.warn(
             `[MABS][${logLabel}] Filtro por herencia dejó 0 nodos; usando árbol previo (revisar herencia en API)`
         );
-        return nodes;
+        return filtered;
     }
     return filtered;
 };
@@ -390,13 +409,13 @@ type AdminRouteRow = RouteResponse['data'][number];
 
 const filterAdminRoutesByHerenciaConRescate = (
     adminSource: AdminRouteRow[],
-    herencia: { idsPermitidos: Set<string>; pathsPermitidos: Set<string> },
+    herencia: { idsPermitidos: Set<string>; pathsPermitidos: Set<string>; tieneAsignacion?: boolean },
     aplicarHerencia: boolean,
     logLabel: string
 ): AdminRouteRow[] => {
     if (!aplicarHerencia) return adminSource;
     const hasHerencia = herencia.idsPermitidos.size > 0 || herencia.pathsPermitidos.size > 0;
-    if (!hasHerencia) return adminSource;
+    if (!hasHerencia && !herencia.tieneAsignacion) return adminSource;
     const filtered = adminSource.filter((r) => {
         const routeId = String(r._id || r.iud || '');
         const rel = toRelativeRoutePath(String(r.path || '').replace(/^\/admin\/?/i, ''));
@@ -409,8 +428,8 @@ const filterAdminRoutesByHerenciaConRescate = (
         return pathCandidates.some((p) => herencia.pathsPermitidos.has(p));
     });
     if (filtered.length === 0 && adminSource.length > 0) {
-        console.warn(`[MABS][${logLabel}] Filtro por herencia dejó 0 rutas; usando catálogo admin completo`);
-        return adminSource;
+        console.warn(`[MABS][${logLabel}] La asignación heredada no autoriza rutas administrativas`);
+        return filtered;
     }
     return filtered;
 };
@@ -618,7 +637,7 @@ const debeAplicarFiltroHerenciaSuperAdmin = async (
 ): Promise<boolean> => {
     if (actorTipo === 'SUPERADMIN') {
         const puedeBypass = await fetchSaPuedeBypassHerencia();
-        return puedeBypass === false;
+        return tieneHerenciasEnApi || puedeBypass === false;
     }
     if (actorTipo === 'CLIENTE') return tieneHerenciasEnApi;
     if (!tieneHerenciasEnApi) return false;
@@ -706,10 +725,13 @@ const securityRouteRowAllowedByLookup = (
 };
 
 /** Alineado al sidebar admin: SA solo si counters corporativos; Global/Corporativo siempre evalúan herencia. */
-const mustEnforceHerenciaForSidebarActor = async (actorTipo: AdminActorTipo): Promise<boolean> => {
+const mustEnforceHerenciaForSidebarActor = async (
+    actorTipo: AdminActorTipo,
+    tieneAsignacion = false,
+): Promise<boolean> => {
     if (actorTipo === 'SUPERADMIN') {
         const puedeBypass = await fetchSaPuedeBypassHerencia();
-        return puedeBypass === false;
+        return tieneAsignacion || puedeBypass === false;
     }
     if (actorTipo === 'GLOBAL' || actorTipo === 'CORPORATIVO' || actorTipo === 'CLIENTE') return true;
     return false;
@@ -729,14 +751,14 @@ export const shouldShowAdminHerenciaSinPermisoAlert = async (pathname: string): 
         const currentNorm = normalizeRoutePath(pathname);
         if (!currentNorm.startsWith('/admin')) return false;
 
-        const actorTipo = resolveAdminActorTipoFromToken();
-        const enforce = await mustEnforceHerenciaForSidebarActor(actorTipo);
-        if (!enforce) return false;
-
         const [securityResult, herencia] = await Promise.all([
             fetchAllSecurityRoutes(true),
             getHerenciaAdminPermitida(),
         ]);
+
+        const actorTipo = resolveAdminActorTipoFromToken();
+        const enforce = await mustEnforceHerenciaForSidebarActor(actorTipo, herencia.tieneAsignacion);
+        if (!enforce) return false;
 
         if (!securityResult?.success || !Array.isArray(securityResult.data)) return false;
 
@@ -750,7 +772,7 @@ export const shouldShowAdminHerenciaSinPermisoAlert = async (pathname: string): 
          * Si la API no devolvió vistas heredadas, no bloquear la pantalla: `getAuthorizedRoutes`
          * ya aplica el mismo rescate de catálogo admin (evita 404 + overlay rojo por desalineación de ids).
          */
-        if (!hasHerenciaResuelta) return false;
+        if (!hasHerenciaResuelta && !herencia.tieneAsignacion) return false;
 
         const securityLookup = buildAllowedRouteLookup(securityResult.data);
 
@@ -823,6 +845,12 @@ export const stripRouteComponentExtension = (name: string): string =>
 export const normalizeAdminRouteComponent = (component: string, path = ''): string => {
     const comp = stripRouteComponentExtension(component);
     const pathNorm = String(path || '').toLowerCase();
+
+    // Página autónoma del Tenant Global autenticado. Debe conservar su componente
+    // de ruta y no caer en GobernanzaTenantRoutePage, cuyo flujo por defecto es SA.
+    if (comp === 'TenantGlobalActualizarPropioForm') {
+        return comp;
+    }
 
     // Los formularios de gobernanza publicados en gobernanzaModuloConfigs son piezas internas:
     // requieren endpoint, menuState y callbacks que una ruta dinamica no puede suministrar.
@@ -1115,8 +1143,8 @@ export const getAuthorizedRoutes = async (): Promise<AuthorizedRoutes> => {
 
             const adminSource = adminCatalogRows.filter((r) => r.estadoRuta && isAdminLayout(r.layout));
             const hasHerenciaAdmin = herencia.idsPermitidos.size > 0 || herencia.pathsPermitidos.size > 0;
-            const aplicarHerencia = await debeAplicarFiltroHerenciaSuperAdmin(actorTipo, hasHerenciaAdmin);
-            const filtrarPorHerencia = aplicarHerencia && hasHerenciaAdmin;
+            const aplicarHerencia = await debeAplicarFiltroHerenciaSuperAdmin(actorTipo, herencia.tieneAsignacion);
+            const filtrarPorHerencia = aplicarHerencia;
             let adminFiltrado = filtrarPorHerencia
                 ? adminSource.filter((r) => {
                     const routeId = String(r._id || r.iud || "");
@@ -1140,13 +1168,13 @@ export const getAuthorizedRoutes = async (): Promise<AuthorizedRoutes> => {
              */
             if (filtrarPorHerencia && adminFiltrado.length === 0 && adminSource.length > 0) {
                 console.warn(
-                    '[MABS][getAuthorizedRoutes] Filtro por herencia dejó 0 rutas; usando catálogo admin completo como respaldo',
+                    '[MABS][getAuthorizedRoutes] La asignación heredada no autoriza rutas administrativas',
                     { actorTipo, hasHerenciaAdmin, herenciaIds: herencia.idsPermitidos.size, herenciaPaths: herencia.pathsPermitidos.size }
                 );
-                adminFiltrado = adminSource;
+                adminFiltrado = [];
             }
 
-            if (tree.length === 0) {
+            if (tree.length === 0 || filtrarPorHerencia) {
                 adminRoutes = adminFiltrado.map((r) => ({
                     path: toRelativeRoutePath(String(r.path || '').replace(/^\/admin\/?/i, '')),
                     component: normalizeComponent(r.component, r.path),
@@ -1370,9 +1398,9 @@ export const getAdminSidebarRoutes = async (): Promise<AdminNavItem[]> => {
 
         const adminSource = result.data.filter((r) => r.estadoRuta && isAdminLayout(r.layout));
         const hasHerenciaAdmin = herencia.idsPermitidos.size > 0 || herencia.pathsPermitidos.size > 0;
-        const aplicarHerencia = await debeAplicarFiltroHerenciaSuperAdmin(actorTipo, hasHerenciaAdmin);
+        const aplicarHerencia = await debeAplicarFiltroHerenciaSuperAdmin(actorTipo, herencia.tieneAsignacion);
         const isSuperadmin = actorTipo === 'SUPERADMIN';
-        const filtrarPorHerencia = aplicarHerencia && hasHerenciaAdmin;
+        const filtrarPorHerencia = aplicarHerencia;
         const resultado = filtrarPorHerencia
             ? filterAdminRoutesByHerenciaConRescate(adminSource, herencia, true, 'getAdminSidebarRoutes')
             : isSuperadmin
@@ -1434,9 +1462,9 @@ export const getAdminSidebarFallbackTree = async (actorTipo: AdminActorTipo): Pr
         );
 
         const hasHerenciaAdmin = herencia.idsPermitidos.size > 0 || herencia.pathsPermitidos.size > 0;
-        const aplicarHerencia = await debeAplicarFiltroHerenciaSuperAdmin(effectiveActorTipo, hasHerenciaAdmin);
+        const aplicarHerencia = await debeAplicarFiltroHerenciaSuperAdmin(effectiveActorTipo, herencia.tieneAsignacion);
         const isSuperAdminEff = effectiveActorTipo === 'SUPERADMIN';
-        const filtrarPorHerencia = aplicarHerencia && hasHerenciaAdmin;
+        const filtrarPorHerencia = aplicarHerencia;
         const visibles = filtrarPorHerencia
             ? filterAdminRoutesByHerenciaConRescate(adminSource, herencia, true, 'getAdminSidebarFallbackTree')
             : isSuperAdminEff
@@ -1504,6 +1532,7 @@ let _sidebarCache: { promise: Promise<AdminSidebarTreeContext>; at: number } | n
 export const invalidateSidebarCache = (): void => {
     _sidebarCache = null;
     _securityRoutesCacheByAuth.clear();
+    _herenciaAdminPermitidaPromise = null;
 };
 
 // Limpia todos los caches de sesión al hacer logout.
@@ -1517,6 +1546,7 @@ export const clearSessionCaches = (): void => {
     _sidebarCache = null;
     _securityRoutesCacheByAuth.clear();
     _saPuedeBypassHerenciaCache = null;
+    _herenciaAdminPermitidaPromise = null;
     invalidateSplashLogoCache();
 };
 
@@ -1549,9 +1579,11 @@ const _fetchSidebarTreeWithContext = async (): Promise<AdminSidebarTreeContext> 
 
             if (actorTipo === 'SUPERADMIN') {
                 filteredTree = filterTreeByAllowedRoutes(filteredTree, securityLookup.ids, securityLookup.paths);
-                const puedeBypassSa = await fetchSaPuedeBypassHerencia();
-                if (puedeBypassSa === false) {
-                    const herenciaSa = await getHerenciaAdminPermitida();
+                const [puedeBypassSa, herenciaSa] = await Promise.all([
+                    fetchSaPuedeBypassHerencia(),
+                    getHerenciaAdminPermitida(),
+                ]);
+                if (puedeBypassSa === false || herenciaSa.tieneAsignacion) {
                     filteredTree = filterTreeByHerenciaConRescate(
                         filteredTree,
                         herenciaSa,

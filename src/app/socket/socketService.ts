@@ -24,10 +24,22 @@ export const conectarSocket = (): Socket | null => {
         return null;
     }
 
+    // Una sola instancia global durante toda la sesión autenticada.
+    // Evita sockets duplicados cuando varios módulos se montan al mismo tiempo.
+    if (socket) {
+        if (!socket.connected) socket.connect();
+        return socket;
+    }
+
     const s: Socket = io(SOCKET_URL, {
         auth: { token },
         transports: ["websocket", "polling"],
         path: "/socket.io",
+        reconnection: true,
+        reconnectionAttempts: Infinity,
+        reconnectionDelay: 1_000,
+        reconnectionDelayMax: 10_000,
+        timeout: 20_000,
     });
 
     s.on('jwt:sesion:contexto', (contexto) => {

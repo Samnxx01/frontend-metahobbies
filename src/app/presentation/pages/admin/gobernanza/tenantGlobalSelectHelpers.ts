@@ -136,6 +136,10 @@ export function buildTenantGlobalSelectsFromApi(data: Record<string, unknown>): 
         return { id, label, rol };
       })
       .filter(Boolean) as GenericSelectOption[],
+    rolesGlobales: mapRows(
+      Array.isArray(data.rolesGlobales) ? (data.rolesGlobales as unknown[]) : [],
+      'nombre',
+    ),
     coporativo: mapRows(
       Array.isArray(data.corporativosDisponibles) ? (data.corporativosDisponibles as unknown[]) : [],
       'razon_social',

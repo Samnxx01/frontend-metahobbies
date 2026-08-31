@@ -67,8 +67,8 @@ export function GobernanzaAltaTenantResultPanel({
     const codigoJerarquia = String(payload?.codigoJerarquia || '').trim();
     if (!payload || (!codigoJerarquia && !payload.iud && !payload._id)) return null;
 
-    const rolRaw = payload.rolesMabs ?? formFields.rolesMabs;
-    const rolLabel = resolveLabel(selects.rolesMabs, rolRaw);
+    const rolRaw = payload.rolGlobal ?? formFields.rolGlobal ?? payload.rolesMabs ?? formFields.rolesMabs;
+    const rolLabel = resolveLabel(selects.rolesGlobales ?? selects.rolesMabs, rolRaw);
     const accionIds = accionIdsDesdePayload(payload, formFields);
     const acciones = accionIds.map((id) => ({
       id,

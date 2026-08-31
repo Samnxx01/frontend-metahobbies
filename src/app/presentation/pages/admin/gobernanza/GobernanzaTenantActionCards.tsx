@@ -53,6 +53,7 @@ const ACTION_ACCENT: Record<string, string> = {
   'tenant-listar-libres-tenantglobal': 'border-l-4 border-l-sky-500',
   'tenant-listar-libres-superadmin': 'border-l-4 border-l-sky-500',
   'tenant-actualizar-global': 'border-l-4 border-l-amber-500',
+  'tenant-global-actualizar-propio': 'border-l-4 border-l-amber-500',
   'tenant-desactivar-global': 'border-l-4 border-l-red-500',
   'tenant-eliminar-global': 'border-l-4 border-l-red-700',
 };
@@ -63,6 +64,7 @@ const ACTION_LABEL: Record<string, string> = {
   'tenant-listar-libres-tenantglobal': 'Consulta',
   'tenant-listar-libres-superadmin': 'Consulta',
   'tenant-actualizar-global': 'Edicion',
+  'tenant-global-actualizar-propio': 'Edicion TG',
   'tenant-desactivar-global': 'Bloqueo',
   'tenant-eliminar-global': 'Eliminacion',
 };

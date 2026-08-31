@@ -27,7 +27,7 @@ export const observarDatosRealtime = (socket: Socket): void => {
         detail: { eventId: `reconnect-${Date.now()}`, occurredAt: new Date().toISOString(), scopes: ['configuracion'], method: 'RECONNECT', resource: 'socket', changedBy: null },
       }));
       window.dispatchEvent(new CustomEvent<GobernanzaInvalidadaEvent>(GOBERNANZA_BROWSER_EVENT, {
-        detail: { eventId: `reconnect-${Date.now()}`, occurredAt: new Date().toISOString(), scopes: ['reglas', 'herencias'], method: 'RECONNECT', resource: 'socket', changedBy: null },
+        detail: { eventId: `reconnect-${Date.now()}`, occurredAt: new Date().toISOString(), scopes: ['reglas', 'herencias', 'vistas', 'acciones', 'selects', 'jerarquiaRutas', 'jerarquiaUsuarios'], method: 'RECONNECT', resource: 'socket', changedBy: null },
       }));
       window.dispatchEvent(new CustomEvent<PedidosAprobadosInvalidadoEvent>(PEDIDOS_APROBADOS_BROWSER_EVENT, {
         detail: { eventId: `reconnect-${Date.now()}`, occurredAt: new Date().toISOString(), scopes: ['pedidos', 'auditorias-pago', 'ventas-referenciadas'], method: 'RECONNECT', resource: 'socket', changedBy: null },

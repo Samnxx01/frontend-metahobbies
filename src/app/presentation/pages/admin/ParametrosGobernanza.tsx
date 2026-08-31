@@ -42,13 +42,13 @@ import {
   endpointNeedsSelectsFull,
   fetchReglasTenantCached,
   invalidarReglasCache,
+  invalidarSelectsGobernanzaCache,
   type HydrateBundle,
   type HydrateBundleResults,
 } from './gobernanza/parametrosGobernanzaHydrate';
 import { useGobernanzaParametrizacionUi } from './gobernanza/useGobernanzaParametrizacionUi';
 import {
   JERARQUIA_USUARIOS_FETCH_MS,
-  POLL_HERENCIA_ADMIN_MS,
   REGLA_SA_SYNTH_PREFIX,
   TENANT_SUPERADMIN_SCOPE_PREFIX,
 } from './gobernanza/parametrosGobernanzaConstants';
@@ -1447,8 +1447,18 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
         }
       }
 
-      setVistas(vistasResolved);
-      setAcciones(accionesResolved);
+      // La recarga en tiempo real puede traer solo algunos bundles. Conservar los
+      // catálogos que no participaron en la actualización parcial.
+      if (rutasRes.status === 'fulfilled' || herenciasRes.status === 'fulfilled') {
+        setVistas(vistasResolved);
+      }
+      if (
+        accionesRes.status === 'fulfilled' ||
+        herenciasRes.status === 'fulfilled' ||
+        selectsRes.status === 'fulfilled'
+      ) {
+        setAcciones(accionesResolved);
+      }
 
       if (herenciasRes.status === 'fulfilled') {
         const herencias = pickArray(herenciasRes.value, ['herencias', 'data', 'items']);
@@ -1623,13 +1633,38 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
       bundles.add('reglas');
     }
     if (scopes.has('herencias')) bundles.add('herencias');
+    if (scopes.has('vistas')) bundles.add('vistas');
+    if (scopes.has('acciones')) bundles.add('acciones');
+    if (scopes.has('selects')) {
+      invalidarSelectsGobernanzaCache();
+      bundles.add('selects');
+    }
+    if (scopes.has('jerarquiaRutas')) bundles.add('jerarquiaRutas');
+    if (scopes.has('jerarquiaUsuarios')) bundles.add('jerarquiaUsuarios');
     if (!bundles.size) return;
 
     setRealtimeSyncing(true);
     try {
-      // Solo refresca catálogos. Los campos y checks que el usuario está editando
-      // permanecen en formData/permisoData hasta que decida guardar o recargar.
       await hydrateData({ force: true, bundles });
+      if (scopes.has('reglas')) {
+        const endpointId = resolveActiveReglasEndpointId();
+        if (endpointId === 'tenant-actualizar-global-reglas') {
+          const saSeleccionado = String(
+            saFilterByEndpoint[endpointId] || tenantGlobalActor?.tenantSuperAdminId || '',
+          ).trim();
+          if (saSeleccionado) {
+            const { rulesMap } = await refreshReglasCatalogoPorSaActualizar(
+              endpointId,
+              saSeleccionado,
+            );
+            seleccionarReglaJerarquiaPorSaActualizar(
+              endpointId,
+              saSeleccionado,
+              rulesMap,
+            );
+          }
+        }
+      }
     } finally {
       setRealtimeSyncing(false);
     }
@@ -1858,12 +1893,93 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
     };
   }, [endpointModal?.id, formData?.['tenant-actualizar-global']?.id]);
 
+  /** Precarga el Tenant Global propio usando exclusivamente el alcance del JWT. */
   useEffect(() => {
-    if (endpointModal?.id === 'tenant-actualizar-global') return;
+    const endpointId = 'tenant-global-actualizar-propio';
+    const activeEndpointId = String(
+      endpointModal?.id ??
+      (useModuloInlineFlow ? inlineModuloMenu.activeEndpoint?.id : '') ??
+      (singleFormInline ? availableEndpoints[0]?.id : ''),
+    ).trim();
+    if (activeEndpointId !== endpointId) return;
+
+    const actorTenantGlobalId = String(tenantGlobalActor?.tenantGlobalId || '').trim();
+    const selectedTenantGlobalId = String(formData?.[endpointId]?.id || '').trim();
+    const tenantGlobalId = selectedTenantGlobalId || actorTenantGlobalId;
+    if (!tenantGlobalId) {
+      tenantActualizarLoadedIdRef.current = '';
+      return;
+    }
+    const loadedKey = `${endpointId}:${tenantGlobalId}`;
+    if (tenantActualizarLoadedIdRef.current === loadedKey) return;
+
+    let cancelled = false;
+    (async () => {
+      setTenantActualizarPrefillLoading(true);
+      try {
+        const res: { data?: TenantGlobalFormularioDetalle } = await apiFetch(
+          `/api/config/global/creacion/usu/tenant/global/${encodeURIComponent(tenantGlobalId)}/formulario`,
+          { method: 'GET' },
+        );
+        const detalle = (res?.data ?? res) as TenantGlobalFormularioDetalle;
+        if (cancelled) return;
+        tenantActualizarLabelsRef.current = detalle?.labels ?? {};
+        tenantActualizarLoadedIdRef.current = loadedKey;
+        setFormData((prev) => ({
+          ...prev,
+          [endpointId]: {
+            ...(prev[endpointId] || {}),
+            id: tenantGlobalId,
+            ...tenantGlobalFormularioToFieldMap(detalle),
+          },
+        }));
+      } catch (error) {
+        if (!cancelled) {
+          tenantActualizarLoadedIdRef.current = '';
+          toast.error(
+            error instanceof Error
+              ? error.message.replace(/^\[\d+\]\s*/, '')
+              : 'No se pudieron cargar los datos de tu Tenant Global.',
+          );
+        }
+      } finally {
+        if (!cancelled) setTenantActualizarPrefillLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    endpointModal?.id,
+    useModuloInlineFlow,
+    inlineModuloMenu.activeEndpoint?.id,
+    singleFormInline,
+    availableEndpoints,
+    tenantGlobalActor?.tenantGlobalId,
+    formData?.['tenant-global-actualizar-propio']?.id,
+  ]);
+
+  useEffect(() => {
+    const activeEndpointId = String(
+      endpointModal?.id ??
+      (useModuloInlineFlow ? inlineModuloMenu.activeEndpoint?.id : '') ??
+      (singleFormInline ? availableEndpoints[0]?.id : ''),
+    ).trim();
+    if (
+      activeEndpointId === 'tenant-actualizar-global' ||
+      activeEndpointId === 'tenant-global-actualizar-propio'
+    ) return;
     tenantActualizarLoadedIdRef.current = '';
     tenantActualizarLabelsRef.current = {};
     setTenantActualizarPrefillLoading(false);
-  }, [endpointModal?.id]);
+  }, [
+    endpointModal?.id,
+    useModuloInlineFlow,
+    inlineModuloMenu.activeEndpoint?.id,
+    singleFormInline,
+    availableEndpoints,
+  ]);
 
   /**
    * Contexto view (tenant/interfaz). Excluye reglas cuyos contextos resueltos son solo `api`.
@@ -2203,9 +2319,13 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
     !resolveTenantGlobalIdFromRule(rule);
 
   /** En actualizar, el rol real del SA y la relación de alcance prevalecen sobre flags históricos. */
-  const reglaEsActualizableEnReglasGlobalesEndpoint = (rule: any, _endpointId: string): boolean => {
-    if (!reglaCumpleContextoViewReglasGlobales(rule)) return false;
-    return true;
+  const reglaEsActualizableEnReglasGlobalesEndpoint = (rule: any, endpointId: string): boolean => {
+    if (!rule) return false;
+    // La consulta de este endpoint ya viene acotada al SA exacto y validada contra
+    // el alcance JWT. No excluir una regla por su contexto actual: desde este mismo
+    // formulario el administrador puede corregir una referencia histórica/API a view.
+    if (endpointId === 'tenant-actualizar-global-reglas') return true;
+    return reglaCumpleContextoViewReglasGlobales(rule);
   };
 
   const findReglaJerarquiaPorSaEnCatalogo = (
@@ -2218,11 +2338,6 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
     const toOption = (rule: any, publicId: string): ReglaOption | undefined => {
       if (!rule || !reglaEsActualizableEnReglasGlobalesEndpoint(rule, endpointId)) return undefined;
       if (!saCoincideReglaAlcance(rule, sa)) return undefined;
-      // Al administrar otra rama nunca se usa la regla de plataforma DIOS como
-      // sustituto de la regla propia del tenant seleccionado.
-      if (rule?.securityPlatform === true && !permiteReglaDiosEnActualizarReglasGlobales(sa)) {
-        return undefined;
-      }
       const rid = resolveReglaPublicId(rule) || publicId;
       const ridRaw = resolveReglaLegacyId(rule);
       const base =
@@ -2249,13 +2364,11 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
     // ObjectId poblado en generacionTenatGlobales. El GET ya viene acotado al alcance SA;
     // si existe una única regla del tipo correspondiente al rol real, usarla como fallback.
     const rolSa = resolveRolSaReglasGlobales(sa);
-    const requierePlataforma = rolSa === 'DIOS';
     const candidatosPorRol = Array.from(
       new Map(
         Object.values(catalog)
           .filter((rule: any) =>
             Boolean(rule) &&
-            rule?.securityPlatform === requierePlataforma &&
             reglaEsActualizableEnReglasGlobalesEndpoint(rule, endpointId)
           )
           .map((rule: any) => [resolveReglaLegacyId(rule), rule]),
@@ -2268,7 +2381,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
       console.info('[MABS][REGLAS][FALLBACK_ROL_SA]', {
         saSeleccionado: sa,
         rolSa,
-        securityPlatform: requierePlataforma,
+        securityPlatform: fallback?.securityPlatform === true,
         reglaId: resolveReglaLegacyId(fallback),
       });
       return { id: rid, label: `[${rolSa.replace(/_/g, ' ') || 'TENANT'}] ${base}` };
@@ -5267,7 +5380,8 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
       ep === 'tenant-crear-global-usuario' ||
       ep === 'tenant-crear-global-admin' ||
       ep === 'tenant-superadmin-insert-documento' ||
-      ep === 'tenant-actualizar-global';
+      ep === 'tenant-actualizar-global' ||
+      ep === 'tenant-global-actualizar-propio';
     if (needsTenantGlobalSelects && !loadingData) {
       const needsBootstrap =
         !tenantGlobalSelectsLoaded ||
@@ -5312,6 +5426,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
       ep.id === 'tenant-crear-global-admin' ||
       ep.id === 'tenant-superadmin-insert-documento' ||
       ep.id === 'tenant-actualizar-global' ||
+      ep.id === 'tenant-global-actualizar-propio' ||
       isHerenciaAdminPrecargaEndpoint(ep.id);
     if (needsTenantGlobalSelects && !loadingData) {
       const needsBootstrap =
@@ -5450,21 +5565,6 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
     return () => document.removeEventListener('visibilitychange', onVisibility);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadingData, endpointModal?.id, useModuloInlineFlow, inlineModuloMenu.activeEndpoint?.id]);
-
-  /** Modo lectura / supervisión: mismo formulario abierto → polling ligero para reflejar cambios de regla o herencia en vistas. */
-  useEffect(() => {
-    const epModal = resolveActiveHerenciaEndpointId();
-    if (!epModal || !PERM_ADMIN_TENANT_GLOBAL_ACTUALIZAR_IDS.has(epModal)) return;
-    const tick = () => {
-      if (document.visibilityState !== 'visible' || loadingData) return;
-      const tgSel = String(formDataRef.current[epModal]?.tenantGlobal || '').trim();
-      if (!tgSel) return;
-      void fetchHerenciasAsociadasByTenantGlobal(epModal, tgSel);
-    };
-    const id = window.setInterval(tick, POLL_HERENCIA_ADMIN_MS);
-    return () => window.clearInterval(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [endpointModal?.id, useModuloInlineFlow, inlineModuloMenu.activeEndpoint?.id, loadingData]);
 
   // TG: cargar corporativos y auto-poblar campos al abrir el modal
   useEffect(() => {
@@ -5866,8 +5966,14 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
     const formLayout = (
       <ParametrosGobernanzaModalFormLayout
         path={endpointOperativo.path}
-        showApiPath={!useModuloInlineFlow}
-        executeLabel={useModuloInlineFlow ? inlineExecuteLabel(endpointOperativo) : 'Ejecutar'}
+        showApiPath={!useModuloInlineFlow && endpointOperativo.id !== 'tenant-global-actualizar-propio'}
+        executeLabel={
+          endpointOperativo.id === 'tenant-global-actualizar-propio'
+            ? 'Guardar cambios'
+            : useModuloInlineFlow
+              ? inlineExecuteLabel(endpointOperativo)
+              : 'Ejecutar'
+        }
         executeActionId={esEndpointCreacionSaDocumento(endpointOperativo.id) ? TENANT_GOVERNANCE_ACTION_IDS.CREATE_TENANT_USER : governanceEndpointActionId(endpointOperativo.id)}
         actorLabel={endpointOperativo.actor}
         running={
@@ -6060,7 +6166,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
             </>
           ) : undefined
         }
-        resultSlot={renderFormResultSlot(endpointOperativo)}
+        resultSlot={endpointOperativo.id === 'tenant-global-actualizar-propio' ? undefined : renderFormResultSlot(endpointOperativo)}
       >
         {renderFormFieldsInner(endpointOperativo, { omitGenericFields })}
       </ParametrosGobernanzaModalFormLayout>
@@ -6562,7 +6668,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
                 return <ListarTenantGlobalActionCard key={endpoint.id} {...actionProps} />;
               }
 
-              if (endpoint.id === 'tenant-actualizar-global') {
+              if (endpoint.id === 'tenant-actualizar-global' || endpoint.id === 'tenant-global-actualizar-propio') {
                 return <ActualizarTenantGlobalActionCard key={endpoint.id} {...actionProps} />;
               }
 

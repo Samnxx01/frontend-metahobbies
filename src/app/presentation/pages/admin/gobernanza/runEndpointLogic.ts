@@ -206,7 +206,8 @@ export async function runEndpointLogic(
           (
             endpoint.id === 'tenant-crear-global-usuario' ||
             esEndpointCreacionSaDocumento(endpoint.id) ||
-            endpoint.id === 'tenant-actualizar-global'
+            endpoint.id === 'tenant-actualizar-global' ||
+            endpoint.id === 'tenant-global-actualizar-propio'
           ) &&
           !!getFieldValue(endpoint.id, 'coporativo').trim();
         const isAccionUsuarioMulti =
@@ -214,7 +215,8 @@ export async function runEndpointLogic(
           (
             endpoint.id === 'tenant-crear-global-usuario' ||
             esEndpointCreacionSaDocumento(endpoint.id) ||
-            endpoint.id === 'tenant-actualizar-global'
+            endpoint.id === 'tenant-actualizar-global' ||
+            endpoint.id === 'tenant-global-actualizar-propio'
           );
         const selectedNvlForJwt = getFieldValue(endpoint.id, 'nvlGeneracionTenant').trim();
         const parametrosResueltosJwt = esNvl12ParametrosResueltosDesdeJwt(
@@ -547,28 +549,18 @@ export async function runEndpointLogic(
         appendPoliticasRuntimeIdsToBody(endpoint.id, body as Record<string, unknown>);
       }
       if (endpoint.id === 'tenant-actualizar-global-reglas') {
-        const tg = resolveTenantGlobalParaReglasEndpoint(endpoint.id);
         const ruleId = getFieldValue(endpoint.id, 'x-regla-id').trim();
         if (!ruleId) throw new Error('Selecciona la regla a actualizar (x-regla-id)');
-        if (!tg) {
-          const rule = ruleCatalog[ruleId];
-          if (!rule || !reglaSinTenantGlobalMaterializado(rule)) {
-            throw new Error('Selecciona tenant global dentro de tu alcance JWT');
-          }
-        } else {
-          const rule = ruleCatalog[ruleId];
-          if (rule) {
-            const ruleTg = resolveTenantGlobalIdFromRule(rule);
-            if (ruleTg && ruleTg !== tg) {
-              throw new Error('La regla seleccionada no pertenece al tenant global elegido');
-            }
-          }
-        }
+        const saSeleccionado = resolveSaParaReglasGlobalesEndpoint(endpoint.id);
+        if (!saSeleccionado) throw new Error('Selecciona el TenantSuperAdmin (SA) de la regla');
+        body.tenantSuperAdmin = toMongoIdQueryParam(saSeleccionado);
+        delete body.tenantGlobal;
       }
       if (
         endpoint.id === 'tenant-crear-global-usuario' ||
         esEndpointCreacionSaDocumento(endpoint.id) ||
-        endpoint.id === 'tenant-actualizar-global'
+        endpoint.id === 'tenant-actualizar-global' ||
+        endpoint.id === 'tenant-global-actualizar-propio'
       ) {
         const ownerTypeDisabled = !!String(body.coporativo || '').trim();
         if (ownerTypeDisabled) {
@@ -580,7 +572,7 @@ export async function runEndpointLogic(
           if (Array.isArray(body.accionesUsu)) {
             body.accionesUsu = body.accionesUsu.map((id: unknown) => gobernanzaEntityId(id)).filter(Boolean);
           }
-          for (const key of ['coporativo', 'tenantGlobalRef', 'apisDominios', 'rolesMabs'] as const) {
+          for (const key of ['coporativo', 'tenantGlobalRef', 'apisDominios', 'rolesMabs', 'rolGlobal'] as const) {
             if (body[key]) body[key] = gobernanzaEntityId(body[key]);
           }
           if (!esSuperAdminUsuario && 'tenantGlobalRef' in body) {
@@ -588,7 +580,11 @@ export async function runEndpointLogic(
             if (autoRef) body.tenantGlobalRef = gobernanzaEntityId(autoRef);
           }
         }
-        if (esEndpointCreacionSaDocumento(endpoint.id) || endpoint.id === 'tenant-actualizar-global') {
+        if (
+          esEndpointCreacionSaDocumento(endpoint.id) ||
+          endpoint.id === 'tenant-actualizar-global' ||
+          endpoint.id === 'tenant-global-actualizar-propio'
+        ) {
           if (Array.isArray(body.accionesUsu)) {
             body.accionesUsu = body.accionesUsu.map((id: unknown) => gobernanzaEntityId(id)).filter(Boolean);
           }
@@ -598,6 +594,7 @@ export async function runEndpointLogic(
             'coporativo',
             'apisDominios',
             'rolesMabs',
+            'rolGlobal',
             'ownerType',
             'tenantGlobalRef',
           ] as const) {

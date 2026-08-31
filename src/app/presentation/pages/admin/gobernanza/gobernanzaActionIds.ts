@@ -120,11 +120,6 @@ export function resolverGobernanzaEndpointId(input: ResolverGobernanzaEndpointId
     || endpointIdDesdeComponenteReglas(input.formularioComponent)
     || endpointIdDesdeComponenteTenant(input.formularioComponent);
 
-  /** formularioComponent publicado en BD es la fuente de verdad del formulario por pestaña. */
-  if (fromComponent && esGobernanzaEndpointIdCatalogo(fromComponent)) {
-    return fromComponent;
-  }
-
   const candidates = [
     input.endpointId,
     input.id,

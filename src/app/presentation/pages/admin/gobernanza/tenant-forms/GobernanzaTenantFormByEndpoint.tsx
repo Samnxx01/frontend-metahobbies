@@ -1,6 +1,7 @@
 import React from 'react';
 import type { GobernanzaTenantFormProps } from './types';
 import { TenantActualizarGlobalForm } from './TenantActualizarGlobalForm';
+import { TenantGlobalActualizarPropioForm } from './TenantGlobalActualizarPropioEmbeddedForm';
 import { TenantCrearGlobalAdminForm } from './TenantCrearGlobalAdminForm';
 import { TenantCrearGlobalUsuarioForm } from './TenantCrearGlobalUsuarioForm';
 import { TenantDesactivarGlobalForm } from './TenantDesactivarGlobalForm';
@@ -12,6 +13,7 @@ import { TENANT_SUPERADMIN_INSERT_ENDPOINT_ID_SET } from '../tenantSuperAdminIns
 
 const REGISTRY_BY_ENDPOINT: Record<string, React.ComponentType<GobernanzaTenantFormProps>> = {
   'tenant-actualizar-global': TenantActualizarGlobalForm,
+  'tenant-global-actualizar-propio': TenantGlobalActualizarPropioForm,
   'tenant-crear-global-admin': TenantCrearGlobalAdminForm,
   'tenant-crear-global-usuario': TenantCrearGlobalUsuarioForm,
   'tenant-desactivar-global': TenantDesactivarGlobalForm,
@@ -28,6 +30,7 @@ const REGISTRY_BY_ENDPOINT: Record<string, React.ComponentType<GobernanzaTenantF
 
 const REGISTRY_BY_COMPONENT: Record<string, React.ComponentType<GobernanzaTenantFormProps>> = {
   TenantActualizarGlobalForm,
+  TenantGlobalActualizarPropioForm,
   TenantCrearGlobalAdminForm,
   TenantCrearGlobalUsuarioForm,
   TenantSuperAdminInsertForm,
@@ -57,15 +60,15 @@ export function GobernanzaTenantFormByEndpoint({
   embeddedApiForm,
   ...props
 }: GobernanzaTenantFormByEndpointProps): React.ReactElement {
-  const FormByComponent = resolverTenantFormComponent(formularioComponent);
-  if (FormByComponent) {
-    return <FormByComponent endpoint={endpoint} embeddedApiForm={embeddedApiForm} {...props} />;
-  }
-
   const endpointId = endpoint?.id ?? '';
-  const Form =
+  /**
+   * El endpoint operativo es autoritativo. formularioComponent queda como fallback
+   * para configuraciones antiguas sin endpointId; así un componente SA desfasado no
+   * convierte la acción tenant-global-actualizar-propio en tenant-actualizar-global.
+   */
+  const FormByEndpoint =
     REGISTRY_BY_ENDPOINT[endpointId]
-    ?? (TENANT_SUPERADMIN_INSERT_ENDPOINT_ID_SET.has(endpointId) ? TenantSuperAdminInsertForm : null)
-    ?? TenantListarLibresForm;
+    ?? (TENANT_SUPERADMIN_INSERT_ENDPOINT_ID_SET.has(endpointId) ? TenantSuperAdminInsertForm : null);
+  const Form = FormByEndpoint ?? resolverTenantFormComponent(formularioComponent) ?? TenantListarLibresForm;
   return <Form endpoint={endpoint} embeddedApiForm={embeddedApiForm} {...props} />;
 }

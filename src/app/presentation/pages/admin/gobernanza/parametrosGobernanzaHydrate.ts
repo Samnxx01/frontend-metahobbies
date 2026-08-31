@@ -117,6 +117,10 @@ export const ALL_HYDRATE_BUNDLES = new Set<HydrateBundle>([
 const SELECTS_CACHE_TTL_MS = 60_000;
 const _selectsCache = new Map<string, { at: number; promise: Promise<unknown> }>();
 
+export function invalidarSelectsGobernanzaCache(): void {
+  _selectsCache.clear();
+}
+
 export function endpointNeedsSelectsLite(endpointId: string | null | undefined): boolean {
   return SELECTS_LITE_ENDPOINT_IDS.has(String(endpointId || '').trim());
 }

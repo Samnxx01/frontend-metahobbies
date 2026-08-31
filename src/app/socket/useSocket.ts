@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { conectarSocket, desconectadoUsu, getSocket } from './socketService';
+import { conectarSocket, getSocket } from './socketService';
 import { socketEmitters, socketListeners, socketCleanup } from './socketEvents';
 import type { SocketStatus } from './socketTypes';
 import type { Socket } from 'socket.io-client';
@@ -10,7 +10,6 @@ interface UseSocketReturn {
     status: SocketStatus;
     isConnected: boolean;
     connect: () => Socket | null;
-    disconnect: () => void;
     emit: typeof socketEmitters;
     on: typeof socketListeners;
     off: typeof socketCleanup;
@@ -62,14 +61,6 @@ export const useSocket = (): UseSocketReturn => {
         }
     }, [socket]);
 
-    const disconnect = useCallback((): void => {
-        if (socket) {
-            desconectadoUsu();
-            setSocket(null);
-            setStatus('disconnected');
-        }
-    }, [socket]);
-
     // Initialize socket on mount
     useEffect(() => {
         const currentSocket = getSocket();
@@ -79,21 +70,11 @@ export const useSocket = (): UseSocketReturn => {
         }
     }, []);
 
-    // Cleanup on unmount
-    useEffect(() => {
-        return () => {
-            if (socket) {
-                socketCleanup.removeAllListeners();
-            }
-        };
-    }, [socket]);
-
     return {
         socket,
         status,
         isConnected: status === 'connected',
         connect,
-        disconnect,
         emit: socketEmitters,
         on: socketListeners,
         off: socketCleanup,

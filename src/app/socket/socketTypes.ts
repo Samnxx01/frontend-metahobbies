@@ -41,7 +41,6 @@ export interface SocketContextType {
     socket: Socket | null;
     status: SocketStatus;
     connect: () => Socket | null;
-    disconnect: () => void;
     emit: (event: string, data?: any) => void;
     on: (event: string, callback: SocketEventCallback) => void;
     off: (event: string, callback?: SocketEventCallback) => void;

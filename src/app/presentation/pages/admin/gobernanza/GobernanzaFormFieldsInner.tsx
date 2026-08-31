@@ -1361,16 +1361,56 @@ export const GobernanzaFormFieldsInner: React.FC<{
             </div>
           );
         }
+        if (endpoint.id === 'tenant-global-actualizar-propio' && field.name === 'id') {
+          const actorTenantGlobalId = String(tenantGlobalActor?.tenantGlobalId || '').trim();
+          const actorEsTgPuro = Boolean(actorTenantGlobalId) && !actorEsTenantSuperAdmin();
+          const opciones = tenantGlobales.filter((item) => !isTenantSuperAdminScopeOption(item.id));
+          const opcionesConPropio = actorTenantGlobalId && !opciones.some((item) => item.id === actorTenantGlobalId)
+            ? [{ id: actorTenantGlobalId, label: 'Mi Tenant Global', corporativo: '' }, ...opciones]
+            : opciones;
+          return (
+            <div key={field.name} className="rounded-xl border border-border bg-card/60 p-4">
+              <Label>{actorEsTgPuro ? 'Tenant Global autenticado' : 'Tenant Global a actualizar'} *</Label>
+              <select
+                className="mt-2 h-11 w-full rounded-xl border border-input bg-card px-3 text-sm shadow-sm"
+                value={getFieldValue(endpoint.id, field.name) || (actorEsTgPuro ? actorTenantGlobalId : '')}
+                disabled={actorEsTgPuro || loadingData}
+                onChange={(e) => {
+                  tenantActualizarLoadedIdRef.current = '';
+                  setFieldValue(endpoint.id, field.name, e.target.value);
+                }}
+              >
+                <option value="">{loadingData ? 'Cargando Tenant Global...' : 'Selecciona un Tenant Global'}</option>
+                {opcionesConPropio.map((item) => (
+                  <option key={item.id} value={item.id}>{item.label}</option>
+                ))}
+              </select>
+              <p className="mt-2 text-xs text-muted-foreground">
+                {actorEsTgPuro
+                  ? 'El destino está bloqueado al Tenant Global contenido en tu JWT.'
+                  : 'Solo aparecen Tenant Global visibles dentro de tu jerarquía autorizada.'}
+              </p>
+              {tenantActualizarPrefillLoading ? (
+                <p className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
+                  <Loader2 className="h-3 w-3 animate-spin" /> Cargando configuración actual...
+                </p>
+              ) : null}
+            </div>
+          );
+        }
         const usesTenantGlobalSelects =
           (
             endpoint.id === 'tenant-crear-global-usuario' ||
             endpoint.id === 'tenant-crear-global-admin' ||
             esEndpointCreacionSaDocumento(endpoint.id) ||
-            endpoint.id === 'tenant-actualizar-global'
+            endpoint.id === 'tenant-actualizar-global' ||
+            endpoint.id === 'tenant-global-actualizar-propio'
           ) &&
-          ['tipo_tenant', 'ownerType', 'nvlGeneracionTenant', 'apisDominios', 'apis', 'accionesUsu', 'rolesMabs', 'coporativo', 'tenantGlobalRef'].includes(field.name);
+          ['tipo_tenant', 'ownerType', 'nvlGeneracionTenant', 'apisDominios', 'apis', 'accionesUsu', 'rolesMabs', 'rolGlobal', 'coporativo', 'tenantGlobalRef'].includes(field.name);
         if (usesTenantGlobalSelects) {
-          const options = tenantGlobalSelects[field.name] || [];
+          const options = field.name === 'rolGlobal'
+            ? (tenantGlobalSelects.rolesGlobales || [])
+            : (tenantGlobalSelects[field.name] || []);
           const actorEsTenantGlobal = actorEsTenantGlobalScope();
           const actorEsTenantCorporativo = actorEsTenantCorporativoScope();
           const selectedNvl = getFieldValue(endpoint.id, 'nvlGeneracionTenant').trim();
@@ -1435,7 +1475,7 @@ export const GobernanzaFormFieldsInner: React.FC<{
             ? opcionesRolesPorNivel.filter((opt) => !nvlBloqueaRolDios || String(opt.rol || '').toUpperCase() !== 'DIOS')
             : opcionesRolesPorNivel;
           const ownerTypeBloqueadoPorScope =
-            endpoint.id === 'tenant-actualizar-global' &&
+            (endpoint.id === 'tenant-actualizar-global' || endpoint.id === 'tenant-global-actualizar-propio') &&
             field.name === 'ownerType' &&
             !actorEsTenantSuperAdmin();
           const filtrarNivelesPorScope = (opts: GenericSelectOption[]): GenericSelectOption[] => {
@@ -1491,7 +1531,8 @@ export const GobernanzaFormFieldsInner: React.FC<{
             (
               endpoint.id === 'tenant-crear-global-usuario' ||
               esEndpointCreacionSaDocumento(endpoint.id) ||
-              endpoint.id === 'tenant-actualizar-global'
+              endpoint.id === 'tenant-actualizar-global' ||
+              endpoint.id === 'tenant-global-actualizar-propio'
             );
           const selectedMultiValues = isAccionUsuarioMulti
             ? getFieldValue(endpoint.id, field.name).split(',').map((v) => v.trim()).filter(Boolean)
@@ -1499,12 +1540,14 @@ export const GobernanzaFormFieldsInner: React.FC<{
           const currentFieldValue = getFieldValue(endpoint.id, field.name);
           const prefillLabels = tenantActualizarLabelsRef.current;
           const optionsRender =
-            endpoint.id === 'tenant-actualizar-global' &&
-            ['tipo_tenant', 'apisDominios', 'rolesMabs', 'nvlGeneracionTenant'].includes(field.name)
+            (endpoint.id === 'tenant-actualizar-global' || endpoint.id === 'tenant-global-actualizar-propio') &&
+            ['tipo_tenant', 'apisDominios', 'rolesMabs', 'rolGlobal', 'nvlGeneracionTenant'].includes(field.name)
               ? mergeSelectOptionForValue(optionsFiltradas, currentFieldValue, prefillLabels[field.name])
               : optionsFiltradas;
           const selectsLoading =
-            loadingData || (endpoint.id === 'tenant-actualizar-global' && tenantActualizarPrefillLoading);
+            loadingData ||
+            ((endpoint.id === 'tenant-actualizar-global' || endpoint.id === 'tenant-global-actualizar-propio') &&
+              tenantActualizarPrefillLoading);
 
           return (
             <div key={field.name}>
@@ -1747,7 +1790,8 @@ export const GobernanzaFormFieldsInner: React.FC<{
                     puedes guardar cambios desde este flujo.
                   </div>
                 ) : null}
-                <div>
+                {/* El flujo de actualización de reglas se resuelve exclusivamente por SA. */}
+                {false && <div>
                   <Label>Tenant global {modoSaSinTg ? '' : '*'}</Label>
                   <select
                     className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground"
@@ -1801,17 +1845,17 @@ export const GobernanzaFormFieldsInner: React.FC<{
                       Regla parametrizada por SuperAdmin (generacionTenatGlobales). No requiere tenant global en counters — edita vistas y permisos abajo.
                     </p>
                   ) : null}
+                </div>}
+                <div className="rounded-md border border-border bg-card/70 px-3 py-2 text-xs text-muted-foreground">
+                  <span className="font-semibold text-foreground">Alcance por SA: </span>
+                  la regla se consulta y actualiza por el TenantSuperAdmin seleccionado. Este flujo no requiere tenantGlobal.
                 </div>
                 <div>
                   <Label>{field.label} {field.required ? '*' : ''}</Label>
                   <select
                     className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground"
                     value={getFieldValue(endpoint.id, field.name)}
-                    disabled={
-                      soloLecturaActualizarGlobales
-                        ? !tenantFiltro && !reglaCargadaId
-                        : !tenantFiltro && !reglaCargadaId && !reglaPorSa
-                    }
+                    disabled={!saSel || (!reglaCargadaId && !reglaPorSa && reglasFiltradas.length === 0)}
                     onChange={(e) => {
                       const selected = e.target.value;
                       setFieldValue(endpoint.id, field.name, selected);

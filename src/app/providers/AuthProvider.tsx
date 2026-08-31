@@ -33,6 +33,16 @@ interface AuthProviderProps {
 
 // 1. Crear el Contexto
 const AuthContext = createContext<AuthContextType | null>(null);
+const AUTH_CHANNEL_NAME = 'mabs-auth-session';
+
+const notifyAuthChanged = (type: 'LOGIN' | 'LOGOUT'): void => {
+    window.dispatchEvent(new CustomEvent('mabs-auth-changed', { detail: { type } }));
+    if ('BroadcastChannel' in window) {
+        const channel = new BroadcastChannel(AUTH_CHANNEL_NAME);
+        channel.postMessage({ type, at: Date.now() });
+        channel.close();
+    }
+};
 
 // 2. Crear el Proveedor (Provider)
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
@@ -68,6 +78,48 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         setLoading(false);
     }, []);
 
+    // Sincroniza login/logout con pestañas y vistas públicas abiertas, sin recargar.
+    useEffect(() => {
+        const syncFromStorage = (): void => {
+            const nextToken = String(localStorage.getItem('token') || '').trim() || null;
+            const rawUser = localStorage.getItem('user');
+            let nextUser: User | null = null;
+
+            if (nextToken && rawUser) {
+                try {
+                    nextUser = JSON.parse(rawUser) as User;
+                } catch {
+                    localStorage.removeItem('user');
+                }
+            }
+
+            setToken(nextToken);
+            setUser(nextToken ? nextUser : null);
+            clearSessionCaches();
+            if (nextToken && nextUser) {
+                desconectadoUsu();
+                conectarSocket();
+            } else {
+                desconectadoUsu();
+            }
+        };
+
+        const onStorage = (event: StorageEvent): void => {
+            if (event.key === 'token' || event.key === 'user' || event.key === null) syncFromStorage();
+        };
+        const onLocalAuth = (): void => syncFromStorage();
+        const channel = 'BroadcastChannel' in window ? new BroadcastChannel(AUTH_CHANNEL_NAME) : null;
+        if (channel) channel.onmessage = syncFromStorage;
+
+        window.addEventListener('storage', onStorage);
+        window.addEventListener('mabs-auth-changed', onLocalAuth);
+        return () => {
+            window.removeEventListener('storage', onStorage);
+            window.removeEventListener('mabs-auth-changed', onLocalAuth);
+            channel?.close();
+        };
+    }, []);
+
     // --- NUEVA FUNCIÓN DE LOGIN UNIFICADA ---
     const login = async (credentials: LoginCredentials): Promise<LoginResponse> => {
         try {
@@ -85,16 +137,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                 };
 
                 // 4. Guardamos todo en localStorage y en el estado
-                localStorage.setItem('token', response.token);
                 localStorage.setItem('user', JSON.stringify(userToSave));
+                // El token se escribe al final: las otras pestañas nunca observan token sin usuario.
+                localStorage.setItem('token', response.token);
                 setToken(response.token);
                 setUser(userToSave);
                 // El token ya está persistido: registra inmediatamente esta sesión
                 // en Socket.IO para que presencia la reporte como "En línea".
-                desconectadoUsu();
-                conectarSocket();
                 if (typeof window !== 'undefined') {
-                    window.dispatchEvent(new Event('mabs-auth-changed'));
+                    notifyAuthChanged('LOGIN');
                 }
 
                 // 5. Devolvemos la respuesta completa al componente Login
@@ -113,11 +164,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             localStorage.removeItem("token");
             localStorage.removeItem("user");
             clearSessionCaches();
-            desconectadoUsu();
             setToken(null);
             setUser(null);
             if (typeof window !== 'undefined') {
-                window.dispatchEvent(new Event('mabs-auth-changed'));
+                notifyAuthChanged('LOGOUT');
             }
         } catch (error) {
             console.error("Error durante logout:", error);

@@ -1,4 +1,4 @@
-import { Routes, Route, useLocation, Navigate, Outlet } from 'react-router-dom';
+import { Routes, Route, useLocation, useNavigate, Navigate, Outlet } from 'react-router-dom';
 import { Component, useState, useEffect, ReactElement, lazy, Suspense, type ErrorInfo, type ReactNode } from 'react';
 import { useAuth } from '@/app/providers/AuthProvider';
 import {
@@ -6,7 +6,9 @@ import {
     getPrivateHomeRoute,
     normalizeAdminRouteComponent,
     readCachedPrivateHomeRoute,
+    clearSessionCaches,
 } from '@/app/services/routeService';
+import { GOBERNANZA_BROWSER_EVENT } from '@/app/realtime/dataRealtime';
 import { resolveCurrentRouteMenuTags } from '@/app/services/routesService';
 import { useLoading } from '@/app/providers/LoadingProvider';
 import { getGovernedPublicHomePath } from '@/app/services/governedNavigation';
@@ -354,6 +356,7 @@ export default function LayoutRoutes(): ReactElement {
     const { user, isAuthenticated } = useAuth();
     const { showLoading, hideLoading } = useLoading();
     const location = useLocation();
+    const navigate = useNavigate();
 
     useEffect(() => {
         showLoading();
@@ -365,7 +368,7 @@ export default function LayoutRoutes(): ReactElement {
         setRouteLoadError(null);
         setAuthorizedRoutes(null);
 
-        const loadRoutes = async (): Promise<void> => {
+        const loadRoutes = async (silent = false): Promise<void> => {
             try {
                 const [routes, tagsRes] = await Promise.all([
                     getAuthorizedRoutes(),
@@ -374,19 +377,35 @@ export default function LayoutRoutes(): ReactElement {
                 setAuthorizedRoutes(routes as AuthorizedRoutes);
 
                 // Extraer rutas únicas de los menu tags que tengan componente definido
+                const authorizedAdminPaths = new Set(
+                    flattenRouteConfigs((routes as AuthorizedRoutes).adminRoutes ?? [])
+                        .map((route) => route.path.replace(/\/+$/, '') || '/'),
+                );
                 const tagRoutes: RouteConfig[] = (tagsRes?.data ?? [])
                     .filter(tag => tag.ruta?.component && (tag.routePath || tag.ruta?.path))
                     .map(tag => ({
-                        path: (tag.routePath || tag.ruta?.path || '')
+                        path: `/admin/${(tag.routePath || tag.ruta?.path || '')
                             .replace(/^\/admin\//, '')
-                            .replace(/^\//, ''),
+                            .replace(/^\//, '')}`,
                         component: tag.ruta!.component!,
                     }))
-                    .filter(r => r.path);
+                    .filter((route) => authorizedAdminPaths.has(route.path.replace(/\/+$/, '') || '/'));
 
                 setMenuTagRoutes(tagRoutes);
+
+                if (silent) {
+                    const currentPath = window.location.pathname.replace(/\/+$/, '') || '/';
+                    const currentAdminAuthorized = currentPath === '/admin'
+                        || authorizedAdminPaths.has(currentPath);
+
+                    if (currentPath.startsWith('/admin/') && !currentAdminAuthorized) {
+                        const homePath = await getPrivateHomeRoute();
+                        navigate(homePath?.trim() || getGovernedPublicHomePath(), { replace: true });
+                    }
+                }
             } catch (error: any) {
                 console.error('Error cargando rutas:', error);
+                if (silent) return;
                 const status = error?.status ?? error?.response?.status ?? null;
                 setRouteLoadError({
                     status,
@@ -396,17 +415,26 @@ export default function LayoutRoutes(): ReactElement {
             }
         };
 
+        let refreshTimer: ReturnType<typeof setTimeout> | null = null;
         const handleRoutesUpdated = (): void => {
-            void loadRoutes();
+            clearSessionCaches();
+            if (refreshTimer) clearTimeout(refreshTimer);
+            refreshTimer = setTimeout(() => {
+                refreshTimer = null;
+                void loadRoutes(true);
+            }, 100);
         };
 
         void loadRoutes();
         window.addEventListener('admin-routes-updated', handleRoutesUpdated);
+        window.addEventListener(GOBERNANZA_BROWSER_EVENT, handleRoutesUpdated);
 
         return () => {
+            if (refreshTimer) clearTimeout(refreshTimer);
             window.removeEventListener('admin-routes-updated', handleRoutesUpdated);
+            window.removeEventListener(GOBERNANZA_BROWSER_EVENT, handleRoutesUpdated);
         };
-    }, [user]);
+    }, [navigate, user]);
 
     if (routeLoadError) {
         // Estado-sistema siempre debe ser accesible aunque el backend esté caído
