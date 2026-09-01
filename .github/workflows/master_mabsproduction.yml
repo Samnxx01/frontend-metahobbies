@@ -17,7 +17,6 @@ jobs:
 
     permissions:
       contents: read
-      id-token: write
 
     steps:
       - name: Checkout repository
@@ -62,16 +61,10 @@ jobs:
           zip -r ../mabs-frontend.zip .
           cd ..
 
-      - name: Login to Azure
-        uses: azure/login@v3
-        with:
-          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_964156B375CB4D0599FFEA86FE211054 }}
-          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_7B6A308B72134988857C43A8937BEF88 }}
-          subscription-id: 62bf12bc-d3c7-4cc8-a2db-4fdc75dab3a4
-
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         with:
           app-name: metahobbies
           slot-name: Production
           package: ./mabs-frontend.zip
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
