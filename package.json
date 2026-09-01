@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "start": "serve -s dist -l 8080"
+    "start": "node scripts/azure-static-server.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
