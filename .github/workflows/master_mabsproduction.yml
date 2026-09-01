@@ -57,9 +57,12 @@ jobs:
 
       - name: Create deployment ZIP
         run: |
-          cd dist
+          npm prune --omit=dev
+          mkdir deployment
+          cp package.json package-lock.json deployment/
+          cp -R dist node_modules deployment/
+          cd deployment
           zip -r ../mabs-frontend.zip .
-          cd ..
 
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
