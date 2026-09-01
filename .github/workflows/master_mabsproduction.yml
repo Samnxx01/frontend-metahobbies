@@ -3,7 +3,7 @@ name: Build and deploy React Vite app to Azure Web App - metahobbies
 on:
   push:
     branches:
-      - main
+      - master
   workflow_dispatch:
 
 concurrency:
