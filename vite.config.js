@@ -2,8 +2,26 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
 
+const buildId = process.env.WEBSITE_DEPLOYMENT_ID
+    || process.env.BUILD_BUILDID
+    || new Date().toISOString();
+
+const versionManifestPlugin = {
+    name: "mabs-version-manifest",
+    generateBundle() {
+        this.emitFile({
+            type: "asset",
+            fileName: "version.json",
+            source: JSON.stringify({ buildId }),
+        });
+    },
+};
+
 export default defineConfig({
-    plugins: [react()],
+    plugins: [react(), versionManifestPlugin],
+    define: {
+        __APP_BUILD_ID__: JSON.stringify(buildId),
+    },
     resolve: {
         alias: { "@": path.resolve(__dirname, "./src") },
     },

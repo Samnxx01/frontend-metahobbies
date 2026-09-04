@@ -8,11 +8,13 @@ import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { Toaster } from './components/ui/sonner';
 import CorporateFavicon from './app/presentation/components/common/CorporateFavicon';
+import DeploymentUpdateNotice from './app/presentation/components/common/DeploymentUpdateNotice';
 
 function App(): React.ReactElement {
   return (
     <AuthProvider>
       <CorporateFavicon />
+      <DeploymentUpdateNotice />
       <CartProvider>
         <MembershipProvider>
           <BrowserRouter>
