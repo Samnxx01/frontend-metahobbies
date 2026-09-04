@@ -682,6 +682,7 @@ export type PerfilCorporativoScopeOpcion = {
   label: string;
   razonSocial: string;
   estadoPerfilCorporativo?: string;
+  publicar?: boolean;
 };
 
 /** Valor del select para iniciar registro de perfil nuevo (solo formulario de alta). */

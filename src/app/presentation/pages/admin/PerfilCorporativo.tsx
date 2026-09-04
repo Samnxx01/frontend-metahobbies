@@ -80,7 +80,7 @@ const SelectorRazonSocialPerfil = ({
                 )}
                 {opciones.map((opcion) => (
                     <SelectItem key={opcion.id} value={opcion.id}>
-                        {opcion.label}
+                        {opcion.label}{typeof opcion.publicar === 'boolean' ? ` · ${opcion.publicar ? 'Público' : 'Privado'}` : ''}
                     </SelectItem>
                 ))}
             </SelectContent>
@@ -248,7 +248,12 @@ const FormularioEmpresa = ({
             </div>
 
             <div className="space-y-2">
-                <label className="text-sm font-semibold">Perfil Publico</label>
+                <label className="flex items-center justify-between gap-2 text-sm font-semibold">
+                    <span>Perfil Público</span>
+                    <span className="rounded-full border border-border bg-background px-2 py-0.5 text-xs text-foreground">
+                        {data.publicar === true ? 'Público' : 'Privado'}
+                    </span>
+                </label>
                 <div className="flex items-center justify-between rounded-lg border border-border bg-muted/40 px-4 py-3">
                     <div>
                         <p className="text-sm font-medium">Publicar perfil en vistas publicas</p>
@@ -348,6 +353,7 @@ function opcionDesdePerfil(perfil: Record<string, unknown>): PerfilCorporativoSc
         perfilCorporativoId: id,
         label: razonSocial || id,
         razonSocial,
+        publicar: perfil.publicar === true,
     };
 }
 
@@ -461,14 +467,20 @@ export default function PerfilCorporativo() {
 
             setScopeModo(modo);
             setSelectorPerfilEditable(selectorEditable);
-            setPerfilesScopeOpciones(opciones);
-
             const perfilesCompletos = await fetchPerfilesCorporativosCompletos();
             const idsScope = new Set(opciones.map((o) => o.id));
             const perfilesFiltrados =
                 modo === 'catalogo_completo'
                     ? perfilesCompletos
                     : perfilesCompletos.filter((p) => idsScope.has(resolvePerfilCorporativoApiId(p)));
+
+            const perfilesPorId = new Map(
+                perfilesFiltrados.map((p) => [resolvePerfilCorporativoApiId(p), p])
+            );
+            setPerfilesScopeOpciones(opciones.map((opcion) => ({
+                ...opcion,
+                publicar: perfilesPorId.get(opcion.id)?.publicar === true,
+            })));
 
             setPerfilesEnScopeCache(perfilesFiltrados);
 

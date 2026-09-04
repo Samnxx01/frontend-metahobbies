@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Loader2, UserPlus } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { apiFetch } from '@/app/services/api';
@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
+import { useGobernanzaRealtime } from '@/app/realtime/useGobernanzaRealtime';
 
 export type PerfilSuperAdminOption = { id: string; label: string; disponible?: boolean; usuarioVinculado?: string | null };
 type RolOption = { id: string; label: string };
@@ -30,25 +31,50 @@ export function RegisUsuDirectoModal({ open, onClose, perfiles, onCreated }: Pro
   const [options, setOptions] = useState<PerfilSuperAdminOption[]>(perfiles);
   const [roles, setRoles] = useState<RolOption[]>([]);
   const [loadingOptions, setLoadingOptions] = useState(false);
+  const [perfilSelectOpen, setPerfilSelectOpen] = useState(false);
+  const perfilSeleccionadoRef = useRef('');
+  perfilSeleccionadoRef.current = form.perfilSuperAdmin;
 
-  useEffect(() => {
-    if (!open) { setForm(initial); return; }
+  const cargarOpciones = useCallback(async () => {
     setLoadingOptions(true);
-    apiFetch('/api/registro/usuario/regisusu/opciones', { method: 'GET' })
-      .then((response: any) => {
-        const rows = Array.isArray(response?.data?.perfilesSuperAdmin) ? response.data.perfilesSuperAdmin : [];
-        setOptions(rows.map((row: any) => ({
+    try {
+      const response: any = await apiFetch('/api/registro/usuario/regisusu/opciones', { method: 'GET' });
+      const rows = Array.isArray(response?.data?.perfilesSuperAdmin) ? response.data.perfilesSuperAdmin : [];
+      const opcionesNuevas = rows.map((row: any) => ({
           id: String(row.id || ''),
           label: String(row.label || row.id || ''),
           disponible: row.disponible !== false,
           usuarioVinculado: row.usuarioVinculado || null,
-        })).filter((row: PerfilSuperAdminOption) => row.id));
-        const rolesRows = Array.isArray(response?.data?.roles) ? response.data.roles : [];
-        setRoles(rolesRows.map((row: any) => ({ id: String(row.id || ''), label: String(row.label || row.id || '') })).filter((row: RolOption) => row.id));
-      })
-      .catch(() => setOptions(perfiles))
-      .finally(() => setLoadingOptions(false));
-  }, [open, perfiles]);
+      })).filter((row: PerfilSuperAdminOption) => row.id);
+      setOptions((anteriores) => {
+        const seleccionado = perfilSeleccionadoRef.current;
+        if (!seleccionado || opcionesNuevas.some((row: PerfilSuperAdminOption) => row.id === seleccionado)) {
+          return opcionesNuevas;
+        }
+        const opcionSostenida = anteriores.find((row) => row.id === seleccionado);
+        return opcionSostenida ? [opcionSostenida, ...opcionesNuevas] : opcionesNuevas;
+      });
+      const rolesRows = Array.isArray(response?.data?.roles) ? response.data.roles : [];
+      setRoles(rolesRows.map((row: any) => ({ id: String(row.id || ''), label: String(row.label || row.id || '') })).filter((row: RolOption) => row.id));
+    } catch {
+      setOptions(perfiles);
+    } finally {
+      setLoadingOptions(false);
+    }
+  }, [perfiles]);
+
+  useEffect(() => {
+    if (!open) { setForm(initial); setPerfilSelectOpen(false); return; }
+    void cargarOpciones();
+  }, [open, cargarOpciones]);
+
+  useGobernanzaRealtime(async (evento) => {
+    if (!open) return;
+    const scopes = new Set(evento?.scopes || []);
+    if (!scopes.has('usuariosTenant') && !scopes.has('jerarquiaUsuarios') && !scopes.has('selects')) return;
+    // Actualiza los arreglos sin desmontar el modal ni reiniciar los valores elegidos.
+    await cargarOpciones();
+  });
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -84,7 +110,13 @@ export function RegisUsuDirectoModal({ open, onClose, perfiles, onCreated }: Pro
           </div>
           <div className="space-y-2">
             <Label>Perfil SuperAdmin *</Label>
-            <Select value={form.perfilSuperAdmin} onValueChange={(value) => setForm({ ...form, perfilSuperAdmin: value })} required>
+            <Select
+              open={perfilSelectOpen}
+              onOpenChange={setPerfilSelectOpen}
+              value={form.perfilSuperAdmin}
+              onValueChange={(value) => setForm({ ...form, perfilSuperAdmin: value })}
+              required
+            >
               <SelectTrigger><SelectValue placeholder="Selecciona un perfil SuperAdmin" /></SelectTrigger>
               <SelectContent>{options.map((perfil) => <SelectItem key={perfil.id} value={perfil.id} disabled={perfil.disponible === false}>{perfil.label}{perfil.usuarioVinculado ? ` · vinculado a ${perfil.usuarioVinculado}` : ''}</SelectItem>)}</SelectContent>
             </Select>

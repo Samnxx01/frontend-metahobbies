@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { RefreshCw, Shield, Building2, Globe, Plus, Loader2, Trash2, Edit, Settings2, Users, List, X, CircleHelp } from 'lucide-react';
+import { RefreshCw, Shield, Building2, Globe, Plus, Loader2, Trash2, Edit, Settings2, Users, List, X, CircleHelp, Radio } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { GovernedButton, TENANT_USERS_ACTION_IDS } from '@/app/presentation/actions';
 import { BTN_GHOST_ACCENT } from '@/app/utils/buttonStyles';
@@ -41,6 +41,8 @@ import type {
     TenantSuperTenantSinCorporativoItem,
 } from '@/app/services/tenantUsuariosService';
 import { useAuth } from '@/app/providers/AuthProvider';
+import { useRealtimeConnectionStatus } from '@/app/realtime/useRealtimeConnectionStatus';
+import { reconectarSocket } from '@/app/socket/socketService';
 import {
     encodePublicIdForPath,
     normalizePublicIdForApi,
@@ -152,6 +154,7 @@ function SaLibreTreeNode({
 
 export default function UsuariosTenant(): React.ReactElement {
     const { token } = useAuth();
+    const realtimeConnected = useRealtimeConnectionStatus();
     const {
         jerarquia,
         loadingJerarquia,
@@ -697,6 +700,22 @@ export default function UsuariosTenant(): React.ReactElement {
                         </Badge>
                     )}
                     <OrganigramaLegendaInfoButton />
+                    {scope && (
+                        <Button
+                            className={`${RESPONSIVE_ACTION_BUTTON} ${realtimeConnected ? 'border-emerald-500 text-emerald-700' : 'border-amber-500 text-amber-700'}`}
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                                if (!realtimeConnected) reconectarSocket();
+                                toast.info(realtimeConnected
+                                    ? 'Usuarios y formularios sincronizados en tiempo real.'
+                                    : 'Reconectando la visualización en tiempo real...');
+                            }}
+                        >
+                            <Radio className={`mr-2 h-4 w-4 ${realtimeConnected ? 'animate-pulse' : ''}`} />
+                            Tiempo real
+                        </Button>
+                    )}
                     {scope && (
                         <Button className={RESPONSIVE_ACTION_BUTTON} variant="outline" size="sm" onClick={refetch}>
                             <RefreshCw className="h-4 w-4 mr-2" />

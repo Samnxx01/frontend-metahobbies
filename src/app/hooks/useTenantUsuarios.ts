@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/app/providers/AuthProvider';
+import { useGobernanzaRealtime } from '@/app/realtime/useGobernanzaRealtime';
 import {
     getJerarquiaUsuarios,
     createUsuarioGlobal,
@@ -66,6 +67,13 @@ export const useTenantUsuarios = () => {
     useEffect(() => {
         fetchJerarquia();
     }, [fetchJerarquia]);
+
+    useGobernanzaRealtime(async (evento) => {
+        const scopes = new Set(evento?.scopes || []);
+        if (!scopes.has('usuariosTenant') && !scopes.has('jerarquiaUsuarios')) return;
+        // Refresco silencioso: conserva ruta, modales y estado de la SPA.
+        await fetchJerarquia();
+    });
 
     // --- LÓGICA DE CREAR USUARIO GLOBAL ---
     const crearUsuarioGlobal = async (data: CreateUsuarioGlobalData) => {

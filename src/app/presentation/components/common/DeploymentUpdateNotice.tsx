@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { RefreshCw, Rocket } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { DEPLOYMENT_UPDATE_BROWSER_EVENT } from '@/app/realtime/dataRealtime';
 
 declare const __APP_BUILD_ID__: string;
 
@@ -40,6 +41,12 @@ export default function DeploymentUpdateNotice(): React.ReactElement | null {
       document.removeEventListener('visibilitychange', onVisibilityChange);
     };
   }, [checkVersion]);
+
+  useEffect(() => {
+    const notifyUpdate = (): void => setUpdateAvailable(true);
+    window.addEventListener(DEPLOYMENT_UPDATE_BROWSER_EVENT, notifyUpdate);
+    return () => window.removeEventListener(DEPLOYMENT_UPDATE_BROWSER_EVENT, notifyUpdate);
+  }, []);
 
   if (!updateAvailable) return null;
 

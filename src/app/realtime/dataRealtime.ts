@@ -1,5 +1,4 @@
 import type { Socket } from 'socket.io-client';
-import { toast } from 'react-toastify';
 import type { GobernanzaInvalidadaEvent, InventarioInvalidadoEvent, PedidosAprobadosInvalidadoEvent } from './realtimeEventTypes';
 
 export const INVENTARIO_SOCKET_EVENT = 'inventario:invalidado';
@@ -10,7 +9,7 @@ export const PEDIDOS_APROBADOS_SOCKET_EVENT = 'pedidos-aprobados:invalidado';
 export const PEDIDOS_APROBADOS_BROWSER_EVENT = 'mabs:pedidos-aprobados-invalidado';
 const DEPLOYMENT_SOCKET_EVENT = 'deployment-version';
 const DEPLOYMENT_STORAGE_KEY = 'mabs:deployment-version';
-const DEPLOYMENT_TOAST_ID = 'mabs:nuevo-despliegue';
+export const DEPLOYMENT_UPDATE_BROWSER_EVENT = 'mabs:deployment-update-available';
 
 interface DeploymentVersionEvent {
   version: string;
@@ -27,7 +26,7 @@ export const observarDatosRealtime = (socket: Socket): void => {
         detail: { eventId: `reconnect-${Date.now()}`, occurredAt: new Date().toISOString(), scopes: ['configuracion'], method: 'RECONNECT', resource: 'socket', changedBy: null },
       }));
       window.dispatchEvent(new CustomEvent<GobernanzaInvalidadaEvent>(GOBERNANZA_BROWSER_EVENT, {
-        detail: { eventId: `reconnect-${Date.now()}`, occurredAt: new Date().toISOString(), scopes: ['reglas', 'herencias', 'vistas', 'acciones', 'selects', 'jerarquiaRutas', 'jerarquiaUsuarios'], method: 'RECONNECT', resource: 'socket', changedBy: null },
+        detail: { eventId: `reconnect-${Date.now()}`, occurredAt: new Date().toISOString(), scopes: ['reglas', 'herencias', 'vistas', 'acciones', 'selects', 'jerarquiaRutas', 'jerarquiaUsuarios', 'usuariosTenant'], method: 'RECONNECT', resource: 'socket', changedBy: null },
       }));
       window.dispatchEvent(new CustomEvent<PedidosAprobadosInvalidadoEvent>(PEDIDOS_APROBADOS_BROWSER_EVENT, {
         detail: { eventId: `reconnect-${Date.now()}`, occurredAt: new Date().toISOString(), scopes: ['pedidos', 'auditorias-pago', 'ventas-referenciadas'], method: 'RECONNECT', resource: 'socket', changedBy: null },
@@ -52,10 +51,8 @@ export const observarDatosRealtime = (socket: Socket): void => {
     localStorage.setItem(DEPLOYMENT_STORAGE_KEY, incomingVersion);
     if (!previousVersion || previousVersion === incomingVersion) return;
 
-    toast.warn('Hay una nueva versión disponible. Guarda tu trabajo y recarga la página cuando estés listo.', {
-      toastId: DEPLOYMENT_TOAST_ID,
-      autoClose: false,
-      closeOnClick: false,
-    });
+    window.dispatchEvent(new CustomEvent<DeploymentVersionEvent>(DEPLOYMENT_UPDATE_BROWSER_EVENT, {
+      detail: despliegue,
+    }));
   });
 };
