@@ -339,10 +339,10 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
                 <Button
                     variant="ghost"
                     size="icon"
-                    className="h-9 w-9 rounded-full border border-primary/25 bg-popover/80 p-0 shadow-sm transition-colors hover:border-primary/45 hover:bg-accent/40"
+                    className="h-9 w-9 rounded-full border border-button/60 bg-popover/80 p-0 shadow-sm transition-colors hover:border-button hover:bg-button/20"
                 >
                     <Avatar className="h-full w-full">
-                        <AvatarFallback className="bg-primary text-primary-foreground text-sm font-semibold">
+                        <AvatarFallback className="bg-button text-button-foreground text-sm font-semibold">
                             {getUserInitials()}
                         </AvatarFallback>
                     </Avatar>
@@ -357,7 +357,7 @@ export default function Navbar({ transparent = false }: NavbarProps = {}): React
                 <div className="border-b border-primary/15 bg-[linear-gradient(135deg,hsl(var(--primary)/0.14),hsl(var(--accent)/0.38),hsl(var(--secondary)/0.28))] px-3.5 py-3">
                     <div className="flex items-center gap-3">
                         <Avatar className="h-10 w-10 shrink-0 ring-1 ring-primary/25">
-                            <AvatarFallback className="bg-primary text-primary-foreground text-sm">
+                            <AvatarFallback className="bg-button text-button-foreground text-sm">
                                 {getUserInitials()}
                             </AvatarFallback>
                         </Avatar>

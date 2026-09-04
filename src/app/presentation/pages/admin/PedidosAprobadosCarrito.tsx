@@ -369,6 +369,15 @@ export default function PedidosAprobadosCarrito(): React.ReactElement {
                           </React.Fragment>
                         ))}
                       </div>
+                      {proceso.tercero && (
+                        <div className="mt-2 rounded-md border border-border bg-muted/30 px-3 py-2 text-xs text-foreground">
+                          <span className="font-semibold">Tercero: {proceso.tercero.nombre || 'Sin nombre'}</span>
+                          <span className="ml-2 text-muted-foreground">
+                            {proceso.tercero.tipoDocumento} {proceso.tercero.numeroDocumento}
+                            {proceso.tercero.email ? ` · ${proceso.tercero.email}` : ''}
+                          </span>
+                        </div>
+                      )}
                     </div>
                     <div className="text-right text-xs">
                       <div className="font-semibold">{formatCOP(proceso.total)}</div>

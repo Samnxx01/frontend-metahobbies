@@ -44,33 +44,6 @@ export function hexToHsl(hex: string): string {
     return `${hDeg} ${sPct}% ${lPct}%`;
 }
 
-const hexToRgb = (hex: string): [number, number, number] => {
-    const clean = String(hex || '').replace('#', '');
-    const full = clean.length === 3 ? clean.split('').map(c => c + c).join('') : clean.padEnd(6, '0');
-    return [0, 2, 4].map(offset => parseInt(full.slice(offset, offset + 2), 16) || 0) as [number, number, number];
-};
-
-const luminancia = (hex: string): number => {
-    const rgb = hexToRgb(hex).map(value => {
-        const channel = value / 255;
-        return channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
-    });
-    return (0.2126 * rgb[0]) + (0.7152 * rgb[1]) + (0.0722 * rgb[2]);
-};
-
-const contraste = (a: string, b: string): number => {
-    const [claro, oscuro] = [luminancia(a), luminancia(b)].sort((x, y) => y - x);
-    return (claro + 0.05) / (oscuro + 0.05);
-};
-
-/** Conserva COLOR_TEXT cuando es legible; si no, elige negro o blanco con contraste WCAG. */
-const textoLegible = (fondo: string, preferido: string): string => {
-    if (contraste(fondo, preferido) >= 4.5) return hexToHsl(preferido);
-    return contraste(fondo, '#000000') >= contraste(fondo, '#FFFFFF')
-        ? hexToHsl('#000000')
-        : hexToHsl('#FFFFFF');
-};
-
 /**
  * Mapeo de colores del email (PaletaColores) → variables CSS de la app.
  * Cada entrada: [variableCSS, valorHSL]
@@ -93,7 +66,18 @@ export interface ColoresPaleta {
     COLOR_CHAMPAGNE: string;
     COLOR_SUNSET: string;
     COLOR_TEXT: string;
+    FONT_FAMILY: string;
 }
+
+const FONT_STACKS: Record<string, string> = {
+    Poppins: '"Poppins", system-ui, sans-serif',
+    Arial: 'Arial, Helvetica, sans-serif',
+    Verdana: 'Verdana, Geneva, sans-serif',
+    Georgia: 'Georgia, "Times New Roman", serif',
+    'Times New Roman': '"Times New Roman", Times, serif',
+    'Trebuchet MS': '"Trebuchet MS", Arial, sans-serif',
+    'Courier New': '"Courier New", Courier, monospace',
+};
 
 /**
  * Aplica los colores de una paleta como CSS variables en :root.
@@ -103,33 +87,38 @@ export function aplicarPaletaEnApp(colores: ColoresPaleta): void {
     const root = document.documentElement;
 
     const hsl: any = (key: PaletaColorKey) => hexToHsl(colores[key]);
+    const colorTexto = hsl('COLOR_TEXT');
+    const fuenteGlobal = FONT_STACKS[colores.FONT_FAMILY] || FONT_STACKS.Poppins;
+
+    root.style.setProperty('--font-family-base', fuenteGlobal);
+    root.style.setProperty('--font-family-heading', fuenteGlobal);
 
     root.style.setProperty('--background', hsl('COLOR_BG'));
 
     // COLOR_TEXT → color de texto principal en toda la app
-    root.style.setProperty('--foreground', textoLegible(colores.COLOR_BG, colores.COLOR_TEXT));
-    root.style.setProperty('--card-foreground', textoLegible(colores.COLOR_CHAMPAGNE, colores.COLOR_TEXT));
-    root.style.setProperty('--popover-foreground', textoLegible(colores.COLOR_CHAMPAGNE, colores.COLOR_TEXT));
+    root.style.setProperty('--foreground', colorTexto);
+    root.style.setProperty('--card-foreground', colorTexto);
+    root.style.setProperty('--popover-foreground', colorTexto);
 
     // COLOR_PRIMARY → color dominante de la app
     root.style.setProperty('--primary', hsl('COLOR_PRIMARY'));
     root.style.setProperty('--ring', hsl('COLOR_PRIMARY'));
-    root.style.setProperty('--primary-foreground', textoLegible(colores.COLOR_PRIMARY, colores.COLOR_TEXT));
+    root.style.setProperty('--primary-foreground', colorTexto);
 
     // COLOR_ACCENT → acento y secondary
     root.style.setProperty('--accent', hsl('COLOR_ACCENT'));
-    root.style.setProperty('--accent-foreground', textoLegible(colores.COLOR_ACCENT, colores.COLOR_TEXT));
+    root.style.setProperty('--accent-foreground', colorTexto);
 
     // COLOR_SUNSET → botones de acción y tono secundario complementario
     const sunsetHsl = hsl('COLOR_SUNSET');
     root.style.setProperty('--button', sunsetHsl);
-    root.style.setProperty('--button-foreground', textoLegible(colores.COLOR_SUNSET, colores.COLOR_TEXT));
+    root.style.setProperty('--button-foreground', colorTexto);
     root.style.setProperty('--secondary', sunsetHsl);
-    root.style.setProperty('--secondary-foreground', textoLegible(colores.COLOR_SUNSET, colores.COLOR_TEXT));
+    root.style.setProperty('--secondary-foreground', colorTexto);
 
     // COLOR_LIGHT → muted, border, input
     root.style.setProperty('--muted', hsl('COLOR_LIGHT'));
-    root.style.setProperty('--muted-foreground', textoLegible(colores.COLOR_LIGHT, colores.COLOR_TEXT));
+    root.style.setProperty('--muted-foreground', colorTexto);
     root.style.setProperty('--border', hsl('COLOR_LIGHT'));
     root.style.setProperty('--input', hsl('COLOR_LIGHT'));
 
@@ -139,16 +128,16 @@ export function aplicarPaletaEnApp(colores: ColoresPaleta): void {
 
     // COLOR_PRIMARY también como destructive (tono de marca)
     root.style.setProperty('--destructive', hsl('COLOR_PRIMARY'));
-    root.style.setProperty('--destructive-foreground', textoLegible(colores.COLOR_PRIMARY, colores.COLOR_TEXT));
+    root.style.setProperty('--destructive-foreground', colorTexto);
 
     // Estados semánticos — mapeados a la paleta para que nada quede quemado:
     // success→ACCENT, warning→SUNSET, info→LIGHT; texto de estado con COLOR_TEXT.
     root.style.setProperty('--success', hsl('COLOR_ACCENT'));
-    root.style.setProperty('--success-foreground', textoLegible(colores.COLOR_ACCENT, colores.COLOR_TEXT));
+    root.style.setProperty('--success-foreground', colorTexto);
     root.style.setProperty('--warning', hsl('COLOR_SUNSET'));
-    root.style.setProperty('--warning-foreground', textoLegible(colores.COLOR_SUNSET, colores.COLOR_TEXT));
+    root.style.setProperty('--warning-foreground', colorTexto);
     root.style.setProperty('--info', hsl('COLOR_LIGHT'));
-    root.style.setProperty('--info-foreground', textoLegible(colores.COLOR_LIGHT, colores.COLOR_TEXT));
+    root.style.setProperty('--info-foreground', colorTexto);
 
     // Persistir en localStorage para restaurar al recargar
     localStorage.setItem('mabs_paleta_activa', JSON.stringify(colores));
@@ -176,6 +165,7 @@ export function restaurarPaletaLocal(): boolean {
 export function limpiarPaletaApp(): void {
     const root = document.documentElement;
     const vars = [
+        '--font-family-base', '--font-family-heading',
         '--background',
         '--foreground', '--card-foreground', '--popover-foreground',
         '--primary', '--primary-foreground', '--ring',

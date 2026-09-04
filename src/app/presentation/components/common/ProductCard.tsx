@@ -93,7 +93,7 @@ export default function ProductCard({ product, onAddToCart }: ProductCardProps):
                         "
                         variant="outline"
                     >
-                        {`${product.discount}% off`}
+                        {`${product.discount}% de descuento`}
                     </Badge>
                 )}
 
@@ -197,17 +197,15 @@ export default function ProductCard({ product, onAddToCart }: ProductCardProps):
                     {product.name}
                 </h3>
 
-                {/* Precio */}
-                <p className="text-base font-bold text-foreground">
-                    {formatCOP(product.price)}
-                </p>
-
                 {/* Precio Original (Si existe) */}
                 {product.originalPrice && (
                     <p className="text-sm text-muted-foreground line-through mt-0.5">
                         {formatCOP(product.originalPrice)}
                     </p>
                 )}
+                <p className="text-base font-bold text-foreground">
+                    {formatCOP(product.price)}
+                </p>
             </CardContent>
         </Card>
     );

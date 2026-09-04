@@ -3,6 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { CheckCircle2, Sparkles, ArrowRight, Mail, KeyRound, ShieldCheck, ShieldAlert } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { getGovernedAccountActivationPath } from '@/app/services/governedNavigation';
+import { apiFetch } from '@/app/services/api';
 
 const resolveRedirectPath = (params: URLSearchParams): string => {
     const requestedPath = String(
@@ -20,6 +21,8 @@ export default function ActivacionCuenta() {
     const [params] = useSearchParams();
     const navigate = useNavigate();
     const [visible, setVisible] = useState(false);
+    const [razonSocialPublica, setRazonSocialPublica] = useState('');
+    const [correoCorporativoPublico, setCorreoCorporativoPublico] = useState('');
 
     const nombre = params.get('nombre') ?? '';
     const error = params.get('error'); // 'token-invalido' | 'ya-verificado' | 'servidor' | null
@@ -30,6 +33,36 @@ export default function ActivacionCuenta() {
         const t = setTimeout(() => setVisible(true), 8000);
         return () => clearTimeout(t);
     }, []);
+
+    useEffect(() => {
+        let active = true;
+        void apiFetch('/api/configuracion/listar/coporativo/perfil/publico', {
+            method: 'GET',
+            useAuth: false,
+            logoutOn401: false,
+        })
+            .then((response) => {
+                if (!active) return;
+                setRazonSocialPublica(String(response?.perfil?.razon_social || '').trim());
+                setCorreoCorporativoPublico(
+                    String(response?.perfil?.direccion_empresa_relacion?.correo_empresa || '').trim(),
+                );
+            })
+            .catch(() => {
+                if (active) setRazonSocialPublica('');
+            });
+        return () => {
+            active = false;
+        };
+    }, []);
+
+    const tituloBienvenida = razonSocialPublica
+        ? nombre
+            ? `¡Bienvenido a ${razonSocialPublica}, ${nombre}!`
+            : `¡Bienvenido a ${razonSocialPublica}!`
+        : nombre
+            ? `¡Bienvenido, ${nombre}!`
+            : '¡Tu cuenta ha sido activada!';
 
     if (error) {
         const esYaVerificado = error === 'ya-verificado';
@@ -69,10 +102,10 @@ export default function ActivacionCuenta() {
                             {redirectLabel || (redirectPath ? 'Continuar' : 'Destino no configurado')}
                             <ArrowRight className="w-4 h-4" />
                         </Button>
-                        {!esYaVerificado && (
+                        {!esYaVerificado && correoCorporativoPublico && (
                             <p className="text-[11px] text-muted-foreground">
                                 ¿Necesitas ayuda?{' '}
-                                <a href="mailto:soporte@mabs.com" className="text-primary hover:underline font-medium">
+                                <a href={`mailto:${correoCorporativoPublico}`} className="text-primary hover:underline font-medium">
                                     Contacta soporte
                                 </a>
                             </p>
@@ -99,7 +132,7 @@ export default function ActivacionCuenta() {
 
                 <div className={`space-y-3 transition-all duration-500 delay-100 ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
                     <h1 className="text-2xl font-bold text-foreground leading-tight">
-                        {nombre ? `¡Bienvenido a Mabs, ${nombre}!` : '¡Tu cuenta ha sido activada!'}
+                        {tituloBienvenida}
                     </h1>
                     <p className="text-sm text-muted-foreground leading-relaxed max-w-xs mx-auto">
                         Tu cuenta fue verificada correctamente. Ya puedes ingresar a la plataforma
@@ -137,12 +170,12 @@ export default function ActivacionCuenta() {
                         {redirectLabel || (redirectPath ? 'Continuar' : 'Destino no configurado')}
                         <ArrowRight className="w-4 h-4" />
                     </Button>
-                    <p className="text-[11px] text-muted-foreground">
+                    {correoCorporativoPublico ? <p className="text-[11px] text-muted-foreground">
                         ¿No recibiste la contraseña temporal?{' '}
-                        <a href="mailto:soporte@mabs.com" className="text-primary hover:underline font-medium">
+                        <a href={`mailto:${correoCorporativoPublico}`} className="text-primary hover:underline font-medium">
                             Contacta soporte
                         </a>
-                    </p>
+                    </p> : null}
                 </div>
             </div>
         </div>

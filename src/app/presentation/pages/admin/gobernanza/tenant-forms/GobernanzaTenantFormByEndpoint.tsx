@@ -8,11 +8,14 @@ import { TenantDesactivarGlobalForm } from './TenantDesactivarGlobalForm';
 import { TenantEliminarGlobalForm } from './TenantEliminarGlobalForm';
 import { TenantListarLibresForm } from './TenantListarLibresForm';
 import { TenantSuperAdminInsertForm } from './TenantSuperAdminInsertForm';
+import { TenantSuperAdminEstadoForm } from './TenantSuperAdminEstadoForm';
 import { ENDPOINT_ID_BY_TENANT_COMPONENT } from './gobernanzaTenantFormRegistry';
 import { TENANT_SUPERADMIN_INSERT_ENDPOINT_ID_SET } from '../tenantSuperAdminInsertEndpoints';
 
 const REGISTRY_BY_ENDPOINT: Record<string, React.ComponentType<GobernanzaTenantFormProps>> = {
   'tenant-actualizar-global': TenantActualizarGlobalForm,
+  'tenant-superadmin-desactivar': TenantSuperAdminEstadoForm,
+  'tenant-superadmin-eliminar': TenantSuperAdminEstadoForm,
   'tenant-global-actualizar-propio': TenantGlobalActualizarPropioForm,
   'tenant-crear-global-admin': TenantCrearGlobalAdminForm,
   'tenant-crear-global-usuario': TenantCrearGlobalUsuarioForm,
@@ -34,6 +37,7 @@ const REGISTRY_BY_COMPONENT: Record<string, React.ComponentType<GobernanzaTenant
   TenantCrearGlobalAdminForm,
   TenantCrearGlobalUsuarioForm,
   TenantSuperAdminInsertForm,
+  TenantSuperAdminEstadoForm,
   TenantDesactivarGlobalForm,
   TenantEliminarGlobalForm,
   TenantListarLibresForm,

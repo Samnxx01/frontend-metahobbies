@@ -33,6 +33,7 @@ import {
     obtenerColoresPublico,
     guardarColoresApp,
     fusionarColoresApp,
+    FUENTES_APP,
 } from '@/app/services/coloresAppService';
 import type { ColoresApp } from '@/app/services/coloresAppService';
 import { adminEntityId, adminEntityIdForPath, matchesAdminEntityRef, sameAdminEntityId } from '@/app/utils/adminEntityId';
@@ -451,7 +452,7 @@ export default function Dashboard(): React.ReactElement {
         }
         setUserEditSaving(true);
         try {
-            await apiFetch(`/api/seguridad/pruebas/actualizar/registro/${adminEntityIdForPath(id)}`, { method: 'PUT', body: JSON.stringify(body) });
+            await apiFetch(`/api/seguridad/pruebas/actualizar/registro/${adminEntityIdForPath(id)}`, { method: 'PUT', body });
             setUsuarios((prev) => prev.map((u) => (
                 sameAdminEntityId(u, id) ? { ...u, ...body, iud: adminEntityId(u) || id } : u
             )));
@@ -1235,6 +1236,28 @@ export default function Dashboard(): React.ReactElement {
                                         </div>
                                     </div>
                                 ))}
+                            </div>
+
+                            <div className="rounded-lg border border-border bg-card p-3 text-card-foreground">
+                                <Label htmlFor="fuente-global-dashboard">Fuente global de la aplicación</Label>
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                    Se aplica en vistas públicas, administración, modales, formularios y botones.
+                                </p>
+                                <Select
+                                    value={paletaColores.FONT_FAMILY}
+                                    onValueChange={(fuente) => handleColorChange('FONT_FAMILY', fuente)}
+                                >
+                                    <SelectTrigger id="fuente-global-dashboard" className="mt-3" style={{ fontFamily: paletaColores.FONT_FAMILY }}>
+                                        <SelectValue placeholder="Selecciona una fuente" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {FUENTES_APP.map((fuente) => (
+                                            <SelectItem key={fuente} value={fuente} style={{ fontFamily: fuente }}>
+                                                {fuente} — Texto de ejemplo
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
                             </div>
 
                         </div>

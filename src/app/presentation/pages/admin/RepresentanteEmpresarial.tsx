@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'react-toastify';
+import DesactivarRepresentante from './DesactivarRepresentante';
 
 const emptyRepresentativeForm = {
   nombre_representante_legal: '',
@@ -30,11 +31,29 @@ export default function RepresentanteEmpresarial() {
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [updateForm, setUpdateForm] = useState({ ...emptyRepresentativeForm });
+  const [representanteSeleccionadoId, setRepresentanteSeleccionadoId] = useState('');
 
   const [tiposDocumento, setTiposDocumento] = useState<any[]>([]);
   const [nacionalidades, setNacionalidades] = useState<any[]>([]);
   const [prefijos, setPrefijos] = useState<any[]>([]);
   const [loadingParams, setLoadingParams] = useState(true);
+
+  const cargarRepresentanteEnFormulario = (rep: any) => {
+    if (!rep) {
+      setUpdateForm({ ...emptyRepresentativeForm });
+      return;
+    }
+    setUpdateForm({
+      nombre_representante_legal: rep.nombre_representante_legal || '',
+      cargo_representante_legal: rep.cargo_representante_legal || '',
+      tipoDocument: rep.tipoDocument?.iud || rep.tipoDocument?._id || rep.tipoDocument || '',
+      documentoidentidad: rep.documentoidentidad || '',
+      correo_representante: rep.correo_representante || '',
+      telefono_representante: rep.telefono_representante || '',
+      nacionalidads: rep.nacionalidads?.iud || rep.nacionalidads?._id || rep.nacionalidads || '',
+      prefijo: rep.prefijo?.iud || rep.prefijo?._id || rep.prefijo || '',
+    });
+  };
 
   const refreshRepresentantes = async () => {
     const res = await apiFetch('/api/config/listar/represente/empresarial', {
@@ -45,21 +64,17 @@ export default function RepresentanteEmpresarial() {
     setData(res);
 
     if (res?.representantes?.length > 0) {
-      const rep = res.representantes[0];
-      setUpdateForm({
-        nombre_representante_legal: rep.nombre_representante_legal || '',
-        cargo_representante_legal: rep.cargo_representante_legal || '',
-        tipoDocument: rep.tipoDocument?.iud || rep.tipoDocument || '',
-        documentoidentidad: rep.documentoidentidad || '',
-        correo_representante: rep.correo_representante || '',
-        telefono_representante: rep.telefono_representante || '',
-        nacionalidads: rep.nacionalidads?.iud || rep.nacionalidads || '',
-        prefijo: rep.prefijo?.iud || rep.prefijo || '',
-      });
+      const seleccionadoActual = res.representantes.find(
+        (rep: any) => String(rep.iud || rep._id) === representanteSeleccionadoId,
+      );
+      const rep = seleccionadoActual || res.representantes[0];
+      setRepresentanteSeleccionadoId(String(rep.iud || rep._id || ''));
+      cargarRepresentanteEnFormulario(rep);
       return;
     }
 
     setUpdateForm({ ...emptyRepresentativeForm });
+    setRepresentanteSeleccionadoId('');
   };
 
   useEffect(() => {
@@ -129,15 +144,14 @@ export default function RepresentanteEmpresarial() {
 
   const handleUpdateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!data?.representantes?.[0]?._id) {
+    if (!representanteSeleccionadoId) {
       toast.error('No se encontro ID del representante');
       return;
     }
 
     setUpdating(true);
     try {
-      const id = data.representantes[0]._id;
-      await apiFetch(`/api/config/parametrizacion/actualizar/represe/coporativa/${id}`, {
+      await apiFetch(`/api/config/parametrizacion/actualizar/represe/coporativa/${representanteSeleccionadoId}`, {
         method: 'PUT',
         body: updateForm,
         useAuth: true,
@@ -157,7 +171,7 @@ export default function RepresentanteEmpresarial() {
   const getPrefLabel = () => prefijos.find((p) => p.iud === updateForm.prefijo)?.prefijoTelefonicoPais || '';
 
   return (
-    <Card className="mx-auto mt-8 max-w-2xl">
+    <Card className="mx-auto mt-8 max-w-2xl text-foreground">
       <CardHeader>
         <CardTitle>Representante Empresarial</CardTitle>
       </CardHeader>
@@ -189,6 +203,14 @@ export default function RepresentanteEmpresarial() {
                   <Button type="button" onClick={() => setIsUpdateModalOpen(true)} className="w-44">
                     Actualizar Representante
                   </Button>
+                  <DesactivarRepresentante
+                    idRepresentante={representanteSeleccionadoId}
+                    representantes={data.representantes}
+                    showScopeDescription={false}
+                    onSuccess={() => {
+                      void refreshRepresentantes();
+                    }}
+                  />
                 </div>
               </div>
             ) : (
@@ -198,7 +220,7 @@ export default function RepresentanteEmpresarial() {
             {data?.representantes?.length > 0 && <div className="my-6 border-t" />}
 
             <form onSubmit={handleSubmit} className="mt-4 space-y-2">
-              <h3 className="mb-2 text-sm font-semibold">Registrar Nuevo Representante</h3>
+              <h3 className="mb-2 text-sm font-semibold text-foreground">Registrar Nuevo Representante</h3>
               <Input name="nombre_representante_legal" value={form.nombre_representante_legal} onChange={handleChange} placeholder="Nombre completo" required />
               <Input name="cargo_representante_legal" value={form.cargo_representante_legal} onChange={handleChange} placeholder="Cargo" required />
               <Select value={form.tipoDocument} onValueChange={(val) => setForm({ ...form, tipoDocument: val })} disabled={loadingParams}>
@@ -248,11 +270,42 @@ export default function RepresentanteEmpresarial() {
         )}
 
         <Dialog open={isUpdateModalOpen} onOpenChange={setIsUpdateModalOpen}>
-          <DialogContent className="max-w-md">
+          <DialogContent className="max-w-md text-foreground">
             <DialogHeader>
               <DialogTitle>Actualizar Representante</DialogTitle>
             </DialogHeader>
             <form onSubmit={handleUpdateSubmit} className="mt-2 space-y-3">
+              {data?.representantes?.length > 1 ? (
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-foreground">Representante a actualizar</label>
+                  <Select
+                    value={representanteSeleccionadoId}
+                    onValueChange={(id) => {
+                      const representante = data.representantes.find(
+                        (rep: any) => String(rep.iud || rep._id) === id,
+                      );
+                      setRepresentanteSeleccionadoId(id);
+                      cargarRepresentanteEnFormulario(representante);
+                    }}
+                    disabled={updating}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecciona un representante" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {data.representantes.map((rep: any) => {
+                        const id = String(rep.iud || rep._id || '');
+                        return (
+                          <SelectItem key={id} value={id}>
+                            {rep.nombre_representante_legal || rep.documentoidentidad || id}
+                            {rep.cargo_representante_legal ? ` · ${rep.cargo_representante_legal}` : ''}
+                          </SelectItem>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : null}
               <Input name="nombre_representante_legal" value={updateForm.nombre_representante_legal} onChange={handleUpdateChange} placeholder="Nombre completo" required />
               <Input name="cargo_representante_legal" value={updateForm.cargo_representante_legal} onChange={handleUpdateChange} placeholder="Cargo" required />
 

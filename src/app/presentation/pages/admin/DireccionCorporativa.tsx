@@ -190,9 +190,10 @@ export default function DireccionCorporativa() {
     }
 
     const payload = {
-      departamento_estado: updateForm.depObjectId,
-      ciudad: updateForm.ciudadObjectId,
-      prefijo: updateForm.prefijoObjectId,
+      paisId: updateForm.paisId,
+      depId: updateForm.depId,
+      ciudadId: updateForm.ciudadId,
+      prefijoId: updateForm.prefijoId,
       telefono_empresa: updateForm.telefono_empresa,
       correo_empresa: updateForm.correo_empresa,
       horario_atencion: updateForm.horario_atencion,

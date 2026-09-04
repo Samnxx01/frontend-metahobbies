@@ -7,10 +7,12 @@ import BrandingProvider from './app/providers/BrandingProvider';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { Toaster } from './components/ui/sonner';
+import CorporateFavicon from './app/presentation/components/common/CorporateFavicon';
 
 function App(): React.ReactElement {
   return (
     <AuthProvider>
+      <CorporateFavicon />
       <CartProvider>
         <MembershipProvider>
           <BrowserRouter>

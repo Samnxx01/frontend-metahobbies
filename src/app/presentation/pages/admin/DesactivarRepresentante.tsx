@@ -29,6 +29,7 @@ interface DesactivarProps {
     idRepresentante?: string;
     representantes?: RepresentanteItem[];
     onSuccess?: () => void;
+    showScopeDescription?: boolean;
 }
 
 type RepresentativeAction = 'DESACTIVAR' | 'ELIMINAR';
@@ -37,6 +38,7 @@ export default function DesactivarRepresentante({
     idRepresentante,
     representantes = [],
     onSuccess,
+    showScopeDescription = true,
 }: DesactivarProps) {
     const { user } = useAuth();
     const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -80,7 +82,11 @@ export default function DesactivarRepresentante({
 
     useEffect(() => {
         const fallbackId = String(idRepresentante || representativeOptions[0]?.id || '').trim();
-        setSelectedRepresentativeId((current) => current || fallbackId);
+        setSelectedRepresentativeId((current) => {
+            if (idRepresentante) return fallbackId;
+            const currentExists = representativeOptions.some((item) => item.id === current);
+            return currentExists ? current : fallbackId;
+        });
     }, [idRepresentante, representativeOptions]);
 
     useEffect(() => {
@@ -148,8 +154,8 @@ export default function DesactivarRepresentante({
     }
 
     return (
-        <div className="space-y-3">
-            {scopeInfo.showDescription && (
+        <div className="space-y-3 text-foreground">
+            {showScopeDescription && scopeInfo.showDescription && (
                 <div className="rounded-md border border-info/20 bg-info/10 px-3 py-2 text-xs text-info">
                     <div className="font-medium">Scope activo: tenantSuperAdmin</div>
                     <div className="mt-1">Puede desactivar o eliminar representantes visibles dentro de la parametrizacion corporativa.</div>
@@ -162,7 +168,7 @@ export default function DesactivarRepresentante({
             </Button>
 
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                <DialogContent className="max-w-md">
+                <DialogContent className="max-w-md text-foreground">
                     <DialogHeader>
                         <DialogTitle>Gestion de representante</DialogTitle>
                         <DialogDescription>
@@ -192,7 +198,7 @@ export default function DesactivarRepresentante({
                             <div className={`grid gap-2 ${scopeInfo.canDelete ? 'sm:grid-cols-2' : 'sm:grid-cols-1'}`}>
                                 <button
                                     type="button"
-                                    className={`rounded-md border px-3 py-3 text-left text-sm ${selectedAction === 'DESACTIVAR' ? 'border-info/30 bg-info/10 text-info' : 'border-slate-200 bg-card text-muted-foreground'}`}
+                                    className={`rounded-md border px-3 py-3 text-left text-sm ${selectedAction === 'DESACTIVAR' ? 'border-info/30 bg-info/10 text-info-foreground' : 'border-border bg-card text-foreground'}`}
                                     onClick={() => setSelectedAction('DESACTIVAR')}
                                 >
                                     <div className="font-medium">Desactivar</div>
@@ -201,7 +207,7 @@ export default function DesactivarRepresentante({
                                 {scopeInfo.canDelete && (
                                     <button
                                         type="button"
-                                        className={`rounded-md border px-3 py-3 text-left text-sm ${selectedAction === 'ELIMINAR' ? 'border-destructive/30 bg-destructive/10 text-destructive' : 'border-slate-200 bg-card text-muted-foreground'}`}
+                                        className={`rounded-md border px-3 py-3 text-left text-sm ${selectedAction === 'ELIMINAR' ? 'border-destructive/30 bg-destructive/10 text-destructive' : 'border-border bg-card text-foreground'}`}
                                         onClick={() => setSelectedAction('ELIMINAR')}
                                     >
                                         <div className="font-medium">Eliminar</div>
@@ -231,7 +237,7 @@ export default function DesactivarRepresentante({
             </Dialog>
 
             <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-                <AlertDialogContent>
+                <AlertDialogContent className="text-foreground">
                     <AlertDialogHeader>
                         <AlertDialogTitle className="flex items-center gap-2">
                             <AlertTriangle className="h-5 w-5 text-destructive" />

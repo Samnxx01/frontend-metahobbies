@@ -9,6 +9,7 @@ import { toast } from 'react-toastify';
 import { format, isValid, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { useAuth } from '@/app/providers/AuthProvider';
+import { CORPORATE_LOGO_UPDATED_EVENT } from '@/app/presentation/components/common/CorporateFavicon';
 
 const ITEMS_PER_PAGE = 10;
 
@@ -29,6 +30,13 @@ const getReadableErrorMessage = (error: unknown, fallback: string) => {
 
   const cleaned = rawMessage.replace(/^\[\d+\]\s*/, '').trim();
   return cleaned || fallback;
+};
+
+const getLogoId = (logo: any): string =>
+  String(logo?.iud || logo?.id || logo?._id || '').trim();
+
+const notifyCorporateLogoUpdated = (): void => {
+  window.dispatchEvent(new Event(CORPORATE_LOGO_UPDATED_EVENT));
 };
 
 export default function LogosCorporativos() {
@@ -140,6 +148,10 @@ export default function LogosCorporativos() {
   }, [isTenantSuperAdmin]);
 
   const handleViewLogo = async (id: string) => {
+    if (!id) {
+      toast.error('No fue posible identificar el logo seleccionado. Recarga la página e intenta nuevamente.');
+      return;
+    }
     setViewLoading(id);
     try {
       const res = await apiFetch(`/api/config/parametrizacion/listar/logos/coporativa/${id}`, {
@@ -149,7 +161,7 @@ export default function LogosCorporativos() {
       if (res?.ok && res?.logo?.base64) {
         const dataUri = `data:${res.logo.mimetype};base64,${res.logo.base64}`;
         setSelectedLogo({
-          id: res.logo.id || id,
+          id: getLogoId(res.logo) || id,
           url: dataUri,
           nombre: res.logo.nombre,
           estadoActivo: !!res.logo.estadoActivo,
@@ -181,6 +193,7 @@ export default function LogosCorporativos() {
       }
 
       toast.success('Logo activado correctamente.');
+      notifyCorporateLogoUpdated();
       setSelectedLogo((prev: any) => (prev ? { ...prev, estadoActivo: true } : prev));
       await fetchLogos();
     } catch (error) {
@@ -206,6 +219,7 @@ export default function LogosCorporativos() {
       }
 
       toast.success('Logo eliminado correctamente.');
+      notifyCorporateLogoUpdated();
       setSelectedLogo(null);
       await fetchLogos();
     } catch (error) {
@@ -231,6 +245,7 @@ export default function LogosCorporativos() {
       }
 
       toast.success('Logo eliminado correctamente.');
+      notifyCorporateLogoUpdated();
       if (selectedLogo?.id === logoId) setSelectedLogo(null);
       await fetchLogos();
     } catch (error) {
@@ -294,6 +309,10 @@ export default function LogosCorporativos() {
   };
 
   const handleToggleEstadoPublico = async (logoId: string, nextValue: boolean) => {
+    if (!logoId) {
+      toast.error('No fue posible identificar el logo seleccionado. Recarga la página e intenta nuevamente.');
+      return;
+    }
     setUpdatingPublicoId(logoId);
     try {
       const res = await apiFetch(`/api/config/parametrizacion/publico/logos/coporativa/${logoId}`, {
@@ -320,6 +339,7 @@ export default function LogosCorporativos() {
         setSelectedLogo((prev: any) => (prev ? { ...prev, estadoPublico: nextValue } : prev));
       }
       toast.success(nextValue ? 'Logo publicado correctamente.' : 'Logo marcado como no publico.');
+      notifyCorporateLogoUpdated();
     } catch (error) {
       console.error('Error al actualizar estado publico:', error);
       toast.error(getReadableErrorMessage(error, 'No pudimos cambiar el estado publico del logo.'));
@@ -355,6 +375,7 @@ export default function LogosCorporativos() {
       });
 
       toast.success('Logo subido correctamente');
+      notifyCorporateLogoUpdated();
       setFile(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
       await fetchLogos();
@@ -380,14 +401,14 @@ export default function LogosCorporativos() {
   const logosPaginados = logosList.slice(startIndex, startIndex + ITEMS_PER_PAGE);
 
   const renderRow = (logo: any) => {
-    const logoId = logo._id || logo.id;
+    const logoId = getLogoId(logo);
     return (
-      <tr key={logoId} className="border-t hover:bg-muted/20 transition-colors">
+      <tr key={logoId || `${logo.nombre_documento || logo.nombre || 'logo'}-${logo.usuCreacion || ''}`} className="border-t hover:bg-muted/20 transition-colors">
         <td className="px-4 py-3 truncate max-w-[220px]" title={logo.nombre_documento || logo.nombre}>
           <div className="flex items-center gap-2">
             <span>{logo.nombre_documento || logo.nombre || 'Sin nombre'}</span>
             {logo.estadoActivo && (
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-success/10 text-success font-semibold">
+              <span className="text-[10px] px-2 py-0.5 rounded-full border border-success/30 bg-success text-success-foreground font-semibold">
                 Activo
               </span>
             )}
@@ -417,16 +438,16 @@ export default function LogosCorporativos() {
             <Switch
               checked={!!logo.estadoPublico}
               onCheckedChange={(checked) => handleToggleEstadoPublico(logoId, checked)}
-              disabled={updatingPublicoId === logoId}
+              disabled={!logoId || updatingPublicoId === logoId}
             />
             <span
               className={`px-2 py-1 rounded-full text-[10px] font-bold ${
                 logo.estadoPublico
-                  ? 'bg-info/10 text-info'
-                  : 'bg-muted text-muted-foreground'
+                  ? 'border border-info-foreground/20 bg-info text-info-foreground'
+                  : 'border border-muted-foreground/20 bg-muted text-muted-foreground'
               }`}
             >
-              {logo.estadoPublico ? 'Publico' : 'Privado'}
+              {logo.estadoPublico ? 'Público' : 'Privado'}
             </span>
           </div>
         </td>
@@ -440,7 +461,7 @@ export default function LogosCorporativos() {
               size="sm"
               className="h-8 w-8 p-0"
               onClick={() => handleViewLogo(logoId)}
-              disabled={viewLoading === logoId}
+              disabled={!logoId || viewLoading === logoId}
             >
               {viewLoading === logoId ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -453,7 +474,7 @@ export default function LogosCorporativos() {
                 variant="outline"
                 size="sm"
                 onClick={() => handleDeactivateLogoById(logoId)}
-                disabled={submitting}
+                disabled={!logoId || submitting}
                 className="h-8 px-2 text-xs"
               >
                 Desactivar
@@ -464,7 +485,7 @@ export default function LogosCorporativos() {
                 variant="destructive"
                 size="sm"
                 onClick={() => handleDeleteLogoById(logoId)}
-                disabled={submitting}
+                disabled={!logoId || submitting}
                 className="h-8 px-2 text-xs"
               >
                 <Trash2 className="h-3.5 w-3.5" />

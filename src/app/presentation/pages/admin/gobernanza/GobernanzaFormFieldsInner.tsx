@@ -160,7 +160,7 @@ export const GobernanzaFormFieldsInner: React.FC<{
 
   return (    <>
       {(PERM_ADMIN_TENANT_GLOBAL_ACTUALIZAR_IDS.has(endpoint.id) || endpoint.id === 'perm-admin-tenant-global') ? (
-        <div className="rounded-md border border-info/20 bg-info/10 p-3 text-xs text-info">
+        <div className="rounded-md border border-info/20 bg-info/10 p-3 text-xs text-foreground">
           <p className="mb-2 font-medium">Estado de sincronización del catálogo</p>
           {(() => {
             const sync = syncInfoByEndpoint[endpoint.id];
@@ -1319,7 +1319,10 @@ export const GobernanzaFormFieldsInner: React.FC<{
             </div>
           );
         }
-        if (endpoint.id === 'tenant-actualizar-global' && field.name === 'id') {
+        if (
+          ['tenant-actualizar-global', 'tenant-superadmin-desactivar', 'tenant-superadmin-eliminar'].includes(endpoint.id) &&
+          field.name === 'id'
+        ) {
           const actorEsTenantSuperAdminScope = actorEsTenantSuperAdmin();
           const actorEsTenantGlobal = actorEsTenantGlobalScope();
           return (
@@ -1334,7 +1337,7 @@ export const GobernanzaFormFieldsInner: React.FC<{
                 }}
               >
                 <option value="">
-                  {loadingData ? 'Cargando opciones...' : 'Selecciona Tenant SA descendiente'}
+                  {loadingData ? 'Cargando opciones...' : 'Selecciona Tenant SA de tu rama'}
                 </option>
                 {tenantUpdateTargets.map((opt) => (
                   <option key={opt.id} value={opt.id}>{opt.label}</option>
@@ -1349,7 +1352,7 @@ export const GobernanzaFormFieldsInner: React.FC<{
               </p>
               {!loadingData && !tenantUpdateTargets.length ? (
                 <p className="mt-1 text-xs text-warning">
-                  No hay Tenant SA descendientes disponibles para actualizar con tu scope actual.
+                  No hay Tenant SA disponibles para esta acción con tu alcance actual.
                 </p>
               ) : null}
               {tenantActualizarPrefillLoading ? (
@@ -1463,16 +1466,27 @@ export const GobernanzaFormFieldsInner: React.FC<{
               </div>
             );
           }
-          const nvlBloqueaRolDios =
-            endpoint.id !== 'tenant-crear-global-usuario' &&
-            (nvlEsTenantGlobal || nvlEsTenantCorporativo);
           const actorEsTenantSuperAdminScope = actorEsTenantSuperAdmin();
           const actorEsTenantGlobalPuro = actorEsTenantGlobal && !actorEsTenantSuperAdminScope;
+          const actorSaId = String(tenantGlobalActor?.tenantSuperAdminId || '').trim();
+          const actorCounter = jerarquiaSaCounters.find(
+            (row) => String(row?.tenantSuperAdminId || '').trim() === actorSaId,
+          );
+          const actorEsDiosRaiz =
+            String(tenantGlobalActor?.rol || '').trim().toUpperCase() === 'DIOS' &&
+            Boolean(actorCounter) &&
+            actorCounter?.codigoPadre == null;
+          const nvlBloqueaRolDios =
+            !actorEsDiosRaiz &&
+            endpoint.id !== 'tenant-crear-global-usuario' &&
+            (nvlEsTenantGlobal || nvlEsTenantCorporativo);
           const opcionesRolesPorNivel = field.name === 'rolesMabs'
             ? (tenantGlobalSelects.rolesMabs || [])
             : options;
           const optionsRoles = field.name === 'rolesMabs'
-            ? opcionesRolesPorNivel.filter((opt) => !nvlBloqueaRolDios || String(opt.rol || '').toUpperCase() !== 'DIOS')
+            ? opcionesRolesPorNivel.filter(
+                (opt) => !nvlBloqueaRolDios || String(opt.rol || '').trim().toUpperCase() !== 'DIOS',
+              )
             : opcionesRolesPorNivel;
           const ownerTypeBloqueadoPorScope =
             (endpoint.id === 'tenant-actualizar-global' || endpoint.id === 'tenant-global-actualizar-propio') &&

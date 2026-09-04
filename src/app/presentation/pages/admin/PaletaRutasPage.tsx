@@ -11,6 +11,16 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
 import { HelpCircle, ImageIcon, Loader2, Palette, Upload, X } from 'lucide-react';
 import { socketListeners, socketCleanup } from '@/app/socket/socketEvents';
@@ -20,6 +30,7 @@ import {
     obtenerColoresPublico,
     guardarColoresApp,
     fusionarColoresApp,
+    FUENTES_APP,
 } from '@/app/services/coloresAppService';
 import type { ColoresApp } from '@/app/services/coloresAppService';
 import {
@@ -160,6 +171,8 @@ export default function PaletaRutasPage() {
     const [backgroundTarget, setBackgroundTarget] = useState<'login' | 'loading' | 'home'>('login');
     const [imagenesFondo, setImagenesFondo] = useState<ImagenFondo[]>([]);
     const [imagenesLoading, setImagenesLoading] = useState(false);
+    const [imagenAEliminar, setImagenAEliminar] = useState<ImagenFondo | null>(null);
+    const [imagenEliminando, setImagenEliminando] = useState(false);
     const [loginBackgroundUploading, setLoginBackgroundUploading] = useState(false);
     const [loginBackgroundSaving, setLoginBackgroundSaving] = useState(false);
     const [homeImageUrl, setHomeImageUrl] = useState('');
@@ -384,6 +397,7 @@ export default function PaletaRutasPage() {
     };
 
     const eliminarFondo = async (imagen: ImagenFondo): Promise<void> => {
+        setImagenEliminando(true);
         try {
             await eliminarImagenFondo(imagen.id);
             if (loginBackgroundUrl === imagen.url) setLoginBackgroundUrl('');
@@ -393,9 +407,12 @@ export default function PaletaRutasPage() {
                 setHomeImageEnabled(false);
             }
             await cargarImagenesFondo();
+            setImagenAEliminar(null);
             toast.success('Imagen eliminada correctamente.');
         } catch (error: any) {
             toast.error(error?.message || 'No se pudo eliminar la imagen.');
+        } finally {
+            setImagenEliminando(false);
         }
     };
 
@@ -790,7 +807,7 @@ export default function PaletaRutasPage() {
                                                     />
                                                 </label>
                                             </Button>
-                                            <Button type="button" variant="destructive" size="sm" onClick={() => void eliminarFondo(imagen)}>
+                                            <Button type="button" variant="destructive" size="sm" onClick={() => setImagenAEliminar(imagen)}>
                                                 Eliminar
                                             </Button>
                                         </div>
@@ -801,6 +818,37 @@ export default function PaletaRutasPage() {
                     </div>
                 </CardContent>
             </Card>
+
+            <AlertDialog
+                open={Boolean(imagenAEliminar)}
+                onOpenChange={(open) => {
+                    if (!open && !imagenEliminando) setImagenAEliminar(null);
+                }}
+            >
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>¿Eliminar esta imagen?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Se eliminará permanentemente {imagenAEliminar?.nombre || 'la imagen seleccionada'}.
+                            Esta acción no se puede deshacer.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={imagenEliminando}>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction
+                            variant="destructive"
+                            disabled={imagenEliminando || !imagenAEliminar}
+                            onClick={(event) => {
+                                event.preventDefault();
+                                if (imagenAEliminar) void eliminarFondo(imagenAEliminar);
+                            }}
+                        >
+                            {imagenEliminando && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            {imagenEliminando ? 'Eliminando...' : 'Sí, eliminar'}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
 
             <Dialog open={homeImagePickerOpen} onOpenChange={setHomeImagePickerOpen}>
                 <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -939,6 +987,27 @@ export default function PaletaRutasPage() {
                                         </div>
                                     </div>
                                 ))}
+                            </div>
+                            <div className="rounded-lg border border-border bg-card p-3 text-card-foreground">
+                                <label htmlFor="fuente-global-paleta" className="text-sm font-semibold">
+                                    Fuente global de la aplicación
+                                </label>
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                    Se aplica en vistas públicas, administración, modales, formularios y botones.
+                                </p>
+                                <select
+                                    id="fuente-global-paleta"
+                                    value={paletaColores.FONT_FAMILY}
+                                    onChange={(event) => handleColorChange('FONT_FAMILY', event.target.value)}
+                                    className="mt-3 h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground"
+                                    style={{ fontFamily: paletaColores.FONT_FAMILY }}
+                                >
+                                    {FUENTES_APP.map((fuente) => (
+                                        <option key={fuente} value={fuente} style={{ fontFamily: fuente }}>
+                                            {fuente} — Texto de ejemplo
+                                        </option>
+                                    ))}
+                                </select>
                             </div>
                         </div>
                     )}

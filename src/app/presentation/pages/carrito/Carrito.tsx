@@ -392,6 +392,20 @@ export default function Carrito(): React.ReactElement {
                     </div>
                   )}
 
+                  {cartItems.some((item) => Number(item.grossSubtotal || 0) > Number(item.netSubtotal || 0)) && (
+                    <div className="space-y-1 rounded-lg border border-primary/20 bg-primary/5 p-2">
+                      <p className="text-xs font-semibold text-muted-foreground">Descuentos de productos</p>
+                      {cartItems.filter((item) => Number(item.grossSubtotal || 0) > Number(item.netSubtotal || 0)).map((item) => (
+                        <div key={item.backendItemId || String(item.id)} className="flex justify-between gap-3 text-xs">
+                          <span className="truncate">
+                            {item.name} {item.discountType === 'PORCENTAJE' ? `(${item.discountValue}% de descuento)` : ''}
+                          </span>
+                          <span className="font-medium">-{formatCOP(Number(item.grossSubtotal || 0) - Number(item.netSubtotal || 0))}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
                   {detalleImpuestos.length > 0 ? (
                     <div className="space-y-1 rounded-lg border border-primary/20 bg-primary/5 p-2">
                       <p className="text-xs font-semibold text-muted-foreground">Detalle IVA</p>

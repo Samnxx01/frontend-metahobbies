@@ -119,6 +119,9 @@ export default function Checkout(): React.ReactElement {
   const {
     cartItems,
     cartSummary,
+    totalDescuentoCodigo,
+    totalImpuestos,
+    detalleImpuestos,
     totalBackend,
     clearCart,
     ensureBackendCart,
@@ -151,6 +154,21 @@ export default function Checkout(): React.ReactElement {
 
   const totalFinal = totalBackend > 0 ? totalBackend : cartSummary.total;
   const subtotalFinal = cartSummary.subtotal > 0 ? cartSummary.subtotal : totalFinal;
+  const subtotalBruto = cartItems.reduce(
+    (total, item) => total + Number(item.grossSubtotal ?? item.price * item.quantity),
+    0,
+  );
+  const subtotalNetoProductos = cartItems.reduce(
+    (total, item) => total + Number(item.netSubtotal ?? item.price * item.quantity),
+    0,
+  );
+  const descuentoProductos = Math.max(0, subtotalBruto - subtotalNetoProductos);
+  const baseGravable = Math.max(0, subtotalNetoProductos - totalDescuentoCodigo);
+  const nombreTercero = datosFacturacion
+    ? ('razonSocial' in datosFacturacion
+      ? datosFacturacion.razonSocial
+      : datosFacturacion.nombreCompleto)
+    : '';
 
   const finalizarCompraAprobada = useCallback(
     async (carritoIdConfirmacion: string, resultado: ResultadoPago): Promise<void> => {
@@ -692,21 +710,43 @@ export default function Checkout(): React.ReactElement {
                 {cartItems.map((item: CartItem) => (
                   <div
                     key={String(item.id) + (item.color?.pantone || '')}
-                    className="flex items-center gap-3 text-sm"
+                    className="rounded-md border border-border p-3 text-sm"
                   >
-                    <img
-                      src={item.image}
-                      alt={item.name}
-                      className="w-12 h-12 object-cover rounded-md flex-shrink-0"
-                    />
-                    <div className="flex-1">
-                      <p className="font-medium">{item.name}</p>
-                    </div>
-                    <div className="text-right shrink-0">
+                    <div className="flex items-center gap-3">
+                      <img
+                        src={item.image}
+                        alt={item.name}
+                        className="w-12 h-12 object-cover rounded-md flex-shrink-0"
+                      />
+                      <div className="flex-1">
+                        <p className="font-medium">{item.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          ${item.price.toLocaleString('es-CO')} × {item.quantity}
+                        </p>
+                      </div>
                       <p className="font-semibold">
-                        ${(item.price * item.quantity).toLocaleString('es-CO')}
+                        ${Number(item.totalConImpuestos ?? item.netSubtotal ?? item.price * item.quantity).toLocaleString('es-CO')}
                       </p>
-                      <p className="text-xs text-muted-foreground">x{item.quantity}</p>
+                    </div>
+                    <div className="mt-2 space-y-1 border-t border-border pt-2 text-xs text-muted-foreground">
+                      {Number(item.grossSubtotal || 0) > Number(item.netSubtotal || 0) && (
+                        <div className="flex justify-between">
+                          <span>Descuento del producto</span>
+                          <span>- ${(Number(item.grossSubtotal) - Number(item.netSubtotal)).toLocaleString('es-CO')}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between">
+                        <span>Base</span>
+                        <span>${Number(item.baseImponible ?? item.netSubtotal ?? 0).toLocaleString('es-CO')}</span>
+                      </div>
+                      {(item.detalleImpuestos ?? []).length > 0 ? item.detalleImpuestos?.map((impuesto) => (
+                        <div key={`${item.backendItemId}-${impuesto.codigo}`} className="flex justify-between">
+                          <span>{impuesto.nombre || impuesto.codigo} ({Number(impuesto.tarifa || 0).toLocaleString('es-CO')}%)</span>
+                          <span>+ ${Number(impuesto.valor || 0).toLocaleString('es-CO')}</span>
+                        </div>
+                      )) : (
+                        <div className="flex justify-between"><span>IVA</span><span>No aplica</span></div>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -715,6 +755,16 @@ export default function Checkout(): React.ReactElement {
               <Separator className="mb-4" />
 
               <div className="space-y-2 text-sm mb-6">
+                <div className="flex justify-between"><span>Subtotal bruto</span><span>${subtotalBruto.toLocaleString('es-CO')}</span></div>
+                {descuentoProductos > 0 && <div className="flex justify-between"><span>Descuentos de productos</span><span>- ${descuentoProductos.toLocaleString('es-CO')}</span></div>}
+                {totalDescuentoCodigo > 0 && <div className="flex justify-between"><span>Descuento por código</span><span>- ${totalDescuentoCodigo.toLocaleString('es-CO')}</span></div>}
+                <div className="flex justify-between"><span>Base gravable</span><span>${baseGravable.toLocaleString('es-CO')}</span></div>
+                {detalleImpuestos.length > 0 ? detalleImpuestos.map((impuesto) => (
+                  <div key={impuesto.codigo} className="flex justify-between">
+                    <span>{impuesto.nombre || impuesto.codigo} ({Number(impuesto.tarifa || 0).toLocaleString('es-CO')}%)</span>
+                    <span>+ ${Number(impuesto.valor || 0).toLocaleString('es-CO')}</span>
+                  </div>
+                )) : <div className="flex justify-between"><span>IVA</span><span>No aplica ($0)</span></div>}
                 <div className="flex justify-between font-bold text-base pt-1">
                   <span>Total</span>
                   <span className="text-primary">${totalFinal.toLocaleString('es-CO')}</span>
@@ -757,6 +807,16 @@ export default function Checkout(): React.ReactElement {
         {activeStep === 1 && pagoPreparado && (
           <Card className="w-full max-w-2xl shadow-xl border">
             <CardContent className="p-6 sm:p-8">
+              {datosFacturacion && (
+                <div className="mb-6 rounded-md border border-border bg-muted/30 p-4 text-sm text-foreground">
+                  <p className="font-semibold">Tercero que realiza la compra</p>
+                  <p className="mt-1">{nombreTercero}</p>
+                  <p className="text-muted-foreground">
+                    {datosFacturacion.tipoDocumento} {datosFacturacion.numeroDocumento} · {datosFacturacion.email}
+                  </p>
+                  <p className="text-muted-foreground">{datosFacturacion.telefono}</p>
+                </div>
+              )}
               <p className="text-xs uppercase tracking-wide text-primary font-semibold mb-1">
                 Paso 2 de 3
               </p>

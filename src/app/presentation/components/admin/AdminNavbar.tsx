@@ -168,10 +168,10 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
                 <Button
                     variant="ghost"
                     size="icon"
-                    className="h-9 w-9 rounded-full border border-border/70 bg-background/70 p-0 shadow-sm hover:bg-muted"
+                    className="h-9 w-9 rounded-full border border-button/60 bg-background/70 p-0 shadow-sm hover:bg-button/20"
                 >
                     <Avatar className="h-full w-full">
-                        <AvatarFallback className="bg-foreground text-background text-sm font-semibold">
+                        <AvatarFallback className="bg-button text-button-foreground text-sm font-semibold">
                             {getUserInitials()}
                         </AvatarFallback>
                     </Avatar>
@@ -185,7 +185,7 @@ export default function AdminNavbar({ mobileOpen, setMobileOpen }: AdminNavbarPr
                 <div className="border-b border-border bg-muted/35 px-3.5 py-3">
                     <div className="flex items-center gap-3">
                         <Avatar className="h-10 w-10 shrink-0 ring-1 ring-border">
-                            <AvatarFallback className="bg-foreground text-background text-sm font-semibold">
+                            <AvatarFallback className="bg-button text-button-foreground text-sm font-semibold">
                                 {getUserInitials()}
                             </AvatarFallback>
                         </Avatar>

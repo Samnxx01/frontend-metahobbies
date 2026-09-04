@@ -550,17 +550,10 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
   const tenantUpdateTargets = useMemo(() => {
     const actorTenantSuperAdminId = String(tenantGlobalActor?.tenantSuperAdminId || '').trim();
     if (!actorTenantSuperAdminId) return [];
-    const actorCounter = jerarquiaSaCounters.find(
-      (row) => String(row?.tenantSuperAdminId || '').trim() === actorTenantSuperAdminId,
-    );
-    const diosRaizSinCodigoPadre =
-      String(tenantGlobalActor?.rol || '').trim().toUpperCase() === 'DIOS' &&
-      !String(actorCounter?.codigoPadre || '').trim();
-
     return tenantSuperAdminsJerarquiaCounters
       .filter((tenant) => {
         const id = String(tenant?.id || '').trim();
-        return Boolean(id && (diosRaizSinCodigoPadre || id !== actorTenantSuperAdminId));
+        return Boolean(id && id !== actorTenantSuperAdminId);
       })
       .map((tenant) => ({
         id: String(tenant.id),
@@ -571,7 +564,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
           }`,
         meta: { scope: 'tenantSuperAdmin' as const },
       }));
-  }, [jerarquiaSaCounters, tenantGlobalActor, tenantSuperAdminsJerarquiaCounters]);
+  }, [tenantGlobalActor, tenantSuperAdminsJerarquiaCounters]);
 
   const endpointDisponibleParaScope = (endpoint: EndpointSpec) => {
     if (endpoint.actor === 'ambos') return true;
@@ -5381,11 +5374,14 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
       ep === 'tenant-crear-global-admin' ||
       ep === 'tenant-superadmin-insert-documento' ||
       ep === 'tenant-actualizar-global' ||
+      ep === 'tenant-superadmin-desactivar' ||
+      ep === 'tenant-superadmin-eliminar' ||
       ep === 'tenant-global-actualizar-propio';
     if (needsTenantGlobalSelects && !loadingData) {
       const needsBootstrap =
         !tenantGlobalSelectsLoaded ||
-        (ep === 'tenant-actualizar-global' && tenantUpdateTargets.length === 0);
+        (['tenant-actualizar-global', 'tenant-superadmin-desactivar', 'tenant-superadmin-eliminar'].includes(ep) &&
+          tenantUpdateTargets.length === 0);
       if (needsBootstrap) {
         hydrateData();
       }
@@ -5426,12 +5422,15 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
       ep.id === 'tenant-crear-global-admin' ||
       ep.id === 'tenant-superadmin-insert-documento' ||
       ep.id === 'tenant-actualizar-global' ||
+      ep.id === 'tenant-superadmin-desactivar' ||
+      ep.id === 'tenant-superadmin-eliminar' ||
       ep.id === 'tenant-global-actualizar-propio' ||
       isHerenciaAdminPrecargaEndpoint(ep.id);
     if (needsTenantGlobalSelects && !loadingData) {
       const needsBootstrap =
         !tenantGlobalSelectsLoaded ||
-        (ep.id === 'tenant-actualizar-global' && tenantUpdateTargets.length === 0) ||
+        (['tenant-actualizar-global', 'tenant-superadmin-desactivar', 'tenant-superadmin-eliminar'].includes(ep.id) &&
+          tenantUpdateTargets.length === 0) ||
         (isHerenciaAdminPrecargaEndpoint(ep.id) &&
           tenantGlobales.length === 0 &&
           herenciasUsuario.length === 0);
@@ -6491,6 +6490,7 @@ const ParametrosGobernanza: React.FC<ParametrosGobernanzaProps> = ({
                 : 'Conexión en tiempo real inactiva. Intentando reconectar...',
             );
           }}
+          showNvlRestrictionsHelp={inlineModuloResolved?.slug === GOBERNANZA_MODULO_TENANT.slug}
         >
           {esModuloPoliticasRuntime ? (
             <PoliticasRuntimePanel />

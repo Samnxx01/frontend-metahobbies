@@ -2,6 +2,7 @@ import React from 'react';
 import { Loader2, Radio, RefreshCcw, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { GOBERNANZA_INVENTARIO_PAGE } from './gobernanzaInventarioLayout';
+import { NvlRestrictionsHelpDialog } from './NvlRestrictionsHelpDialog';
 
 export type GobernanzaModuloOperativoShellProps = {
   title: string;
@@ -14,6 +15,7 @@ export type GobernanzaModuloOperativoShellProps = {
   hideInfoBanner?: boolean;
   realtimeConnected?: boolean;
   onRealtimeClick?: () => void;
+  showNvlRestrictionsHelp?: boolean;
   children: React.ReactNode;
 };
 
@@ -31,6 +33,7 @@ export function GobernanzaModuloOperativoShell({
   hideInfoBanner = false,
   realtimeConnected,
   onRealtimeClick,
+  showNvlRestrictionsHelp = false,
   children,
 }: GobernanzaModuloOperativoShellProps): React.ReactElement {
   return (
@@ -47,6 +50,7 @@ export function GobernanzaModuloOperativoShell({
           ) : null}
         </div>
         <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-end sm:justify-end">
+          {showNvlRestrictionsHelp ? <NvlRestrictionsHelpDialog /> : null}
           {typeof realtimeConnected === 'boolean' ? (
             <Button
               type="button"

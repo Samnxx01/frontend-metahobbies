@@ -28,6 +28,7 @@ export const TENANT_GOVERNANCE_ACTION_IDS = {
   MANAGE_CORPORATE_ROLES: 'tenant.governance.roles.corporate.manage',
   MANAGE_ROUTE_SCOPES: 'tenant.governance.routes.permissions.manage',
   CREATE_TENANT_USER: 'tenant.superadmin.users.create',
+  VIEW_LEVEL_RESTRICTIONS_HELP: 'tenant.governance.level-restrictions.help',
 } as const satisfies Record<string, ActionId>;
 
 export const PRODUCT_ACTION_IDS = {
@@ -213,6 +214,7 @@ const governanceEndpointConfigureActions: GovernedActionDefinition[] = GOVERNANC
  * Cada migración de botones debe registrar aquí un ID namespaced y estable.
  */
 export const GOVERNED_ACTION_CATALOG = [
+  governedAction(TENANT_GOVERNANCE_ACTION_IDS.VIEW_LEVEL_RESTRICTIONS_HELP, 'Ayuda de restricciones por NVL', 'tenant-governance', 'Gobernanza / TenantSuperAdmin', '/admin/gobernanza/parametros/tenantsuperadmin', 'help', 'Ayuda y alcance', 'VIEW', 'Abre la explicación de restricciones de NVL 0, NVL 1, NVL 2 y la excepción DIOS raíz.'),
   governedAction(PAYMENT_METHOD_ACTION_IDS.VIEW_COLOMBIA_BANKS, 'Catálogo de bancos de Colombia', 'payment-methods', 'Métodos de pago', '/admin/inventory', 'banks', 'Bancos', 'VIEW', 'Consulta y sincroniza las entidades bancarias colombianas disponibles mediante Wompi.'),
   ...governanceEndpointActions,
   ...governanceEndpointConfigureActions,

@@ -6,6 +6,7 @@ export const ENDPOINT_ID_BY_TENANT_COMPONENT: Record<string, string> = {
   TenantCrearGlobalUsuarioForm: 'tenant-crear-global-usuario',
   TenantSuperAdminInsertForm: 'tenant-superadmin-insert-documento',
   TenantActualizarGlobalForm: 'tenant-actualizar-global',
+  TenantSuperAdminEstadoForm: 'tenant-superadmin-desactivar',
   TenantGlobalActualizarPropioForm: 'tenant-global-actualizar-propio',
   TenantDesactivarGlobalForm: 'tenant-desactivar-global',
   TenantEliminarGlobalForm: 'tenant-eliminar-global',

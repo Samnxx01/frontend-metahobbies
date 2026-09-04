@@ -54,6 +54,8 @@ export interface Product {
   name: string;
   description: string;
   price: number;
+  originalPrice?: number;
+  discount?: number;
   image: string;
   category: CategoryId;
   color?: ProductColor;
@@ -73,6 +75,20 @@ export interface CartItem extends Product {
   backendItemId?: string;
   /** Límite de unidades por compra parametrizado en las reglas de venta del producto. null/undefined = sin límite. */
   purchaseLimit?: number | null;
+  discountType?: 'PORCENTAJE' | 'FIJO' | 'NINGUNO';
+  discountValue?: number;
+  grossSubtotal?: number;
+  netSubtotal?: number;
+  baseImponible?: number;
+  totalImpuestos?: number;
+  totalConImpuestos?: number;
+  detalleImpuestos?: Array<{
+    codigo: string;
+    nombre: string;
+    tarifa: number;
+    base: number;
+    valor: number;
+  }>;
 }
 
 // Cart summary interface

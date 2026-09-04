@@ -97,7 +97,7 @@ export interface BackendProducto {
     cantidadColoresRender?: number;
     coloresPermitidos?: Array<{ nombre?: string; valor: string }>;
     reglasContables?: Array<{ codigo: string; aplica?: boolean; reglaContableId?: string | null }>;
-    reglasVentas?: Array<{ codigo: string; aplica?: boolean; reglaVentaId?: string | null; valor?: number }>;
+    reglasVentas?: Array<{ codigo: string; aplica?: boolean; reglaVentaId?: string | null; valor?: number; comportamiento?: string | null }>;
     media?: ProductoVentaMedia[];
     estado: boolean;
   } | null;
@@ -229,12 +229,32 @@ export function mapProducto(p: BackendProducto): ComponentProduct {
     : '';
   const imagenesRelacion = Array.isArray(relacion?.imagenes) ? relacion.imagenes : [];
   const imagenesProducto = Array.isArray(p.imagenes) ? p.imagenes : [];
+  const precioOriginal = Number(relacion?.precio ?? p.precio ?? 0);
+  const reglaDescuento = (relacion?.reglasVentas || []).find((regla) => {
+    const comportamiento = String(regla.comportamiento || '').toUpperCase();
+    const codigo = String(regla.codigo || '').toUpperCase();
+    return regla.aplica !== false && (
+      comportamiento === 'DESCUENTO_PORCENTAJE' ||
+      comportamiento === 'DESCUENTO_FIJO' ||
+      (!comportamiento && codigo.startsWith('DESCUENTO'))
+    );
+  });
+  const valorDescuento = Math.max(0, Number(reglaDescuento?.valor || 0));
+  const esPorcentaje = String(reglaDescuento?.comportamiento || '').toUpperCase() === 'DESCUENTO_PORCENTAJE';
+  const descuentoMonto = reglaDescuento
+    ? Math.min(precioOriginal, esPorcentaje ? precioOriginal * valorDescuento / 100 : valorDescuento)
+    : 0;
+  const porcentajeDescuento = precioOriginal > 0 && descuentoMonto > 0
+    ? Math.round((descuentoMonto / precioOriginal) * 10000) / 100
+    : 0;
 
   return {
     id: String(p.iud || p._id || p.id || ''),
     name: relacion?.nombre || p.nombre,
     description: relacion?.descripcionCorta || relacion?.descripcion || p.descripcionCorta || p.descripcion || '',
-    price: Number(relacion?.precio ?? p.precio ?? 0),
+    price: Math.max(0, precioOriginal - descuentoMonto),
+    originalPrice: descuentoMonto > 0 ? precioOriginal : undefined,
+    discount: porcentajeDescuento > 0 ? porcentajeDescuento : undefined,
     image: imagenesRelacion[0] ? mediaSrc(imagenesRelacion[0]) : imagenesProducto[0] ? mediaSrc(imagenesProducto[0]) : PLACEHOLDER,
     category: nombreSubcategoria,
   };
@@ -306,7 +326,7 @@ export interface AdminProductoPayload {
   cantidadColoresRender?: number;
   coloresPermitidos?: Array<{ nombre?: string; valor: string }>;
   reglasContables?: Array<{ codigo: string; aplica?: boolean; reglaContableId?: string | null }>;
-  reglasVentas?: Array<{ codigo: string; aplica?: boolean; reglaVentaId?: string | null; valor?: number }>;
+  reglasVentas?: Array<{ codigo: string; aplica?: boolean; reglaVentaId?: string | null; valor?: number; comportamiento?: string | null }>;
 }
 
 const productosService = {

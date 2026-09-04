@@ -67,11 +67,14 @@ export default function RecuperarContrasenaToken() {
                     validateStatus: () => true,
                 });
                 const data = res.data ?? {};
+                const payload = data?.data ?? data?.usuario ?? data?.user ?? data;
                 if (res.status < 200 || res.status >= 300) {
                     throw new Error(data?.msg || 'El enlace expiró o no es válido.');
                 }
                 if (!cancelado) {
-                    const correoRegistrado = String(data?.correo || '').trim().toLowerCase();
+                    const correoRegistrado = String(
+                        payload?.correo || payload?.email || data?.correo || data?.email || '',
+                    ).trim().toLowerCase();
                     if (!correoRegistrado) throw new Error('El enlace no tiene un usuario asociado.');
                     form.setValue('correo', correoRegistrado, { shouldValidate: true });
                     setCorreoRegistrado(correoRegistrado);

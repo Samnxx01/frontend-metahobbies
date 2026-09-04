@@ -57,6 +57,10 @@ export interface BackendCartItem {
   descuentoItem: { tipo: 'PORCENTAJE' | 'FIJO' | 'NINGUNO'; valor: number };
   subtotalBruto: number;
   subtotalNeto: number;
+  baseImponible?: number;
+  totalImpuestos?: number;
+  totalConImpuestos?: number;
+  detalleImpuestos?: BackendCartTaxDetail[];
   stockDisponible: number;
   stockSuficiente: boolean;
   /** Límite de unidades por compra parametrizado en las reglas de venta del producto (LIMITE_CANTIDAD). null = sin límite. */
@@ -601,6 +605,15 @@ export interface ProcesoCarrito {
   referencia: string;
   tipoUsuario: 'PUBLICO' | 'AUTENTICADO';
   usuario: string;
+  tercero?: {
+    terceroId?: string | null;
+    tipoPersona?: string | null;
+    nombre?: string | null;
+    tipoDocumento?: string | null;
+    numeroDocumento?: string | null;
+    email?: string | null;
+    telefono?: string | null;
+  } | null;
   etapa: 'CARRITO' | 'DATOS_CLIENTE' | 'PAGO' | 'ABANDONADO';
   estado: string;
   cantidadProductos: number;

@@ -17,6 +17,8 @@ export interface ColoresPaletaSocket {
     COLOR_BG?: string;
     COLOR_CHAMPAGNE?: string;
     COLOR_SUNSET?: string;
+    COLOR_TEXT?: string;
+    FONT_FAMILY?: string;
 }
 
 // Socket events interface - Define all possible socket events

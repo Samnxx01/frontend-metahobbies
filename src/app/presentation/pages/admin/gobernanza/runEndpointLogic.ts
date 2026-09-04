@@ -661,7 +661,8 @@ export async function runEndpointLogic(
             }
           }
           const refsDisponibles = tenantGlobalSelects.tenantGlobalRef || [];
-          const debeExigirTenantGlobalRef = nvlEsTenantCorporativo && refsDisponibles.length > 0;
+          const debeExigirTenantGlobalRef =
+            esTenantGlobal && nvlEsTenantCorporativo && refsDisponibles.length > 0;
           if (debeExigirTenantGlobalRef && !String(body.tenantGlobalRef || '').trim()) {
             throw new Error('Completa: Tenant global ref');
           }
